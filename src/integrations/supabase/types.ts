@@ -58,6 +58,30 @@ export type Database = {
           },
         ]
       }
+      districts: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       quick_notes: {
         Row: {
           created_at: string
@@ -82,23 +106,34 @@ export type Database = {
       streets: {
         Row: {
           created_at: string
+          district_id: string
           id: string
           name: string
           sort_order: number
         }
         Insert: {
           created_at?: string
+          district_id: string
           id?: string
           name: string
           sort_order?: number
         }
         Update: {
           created_at?: string
+          district_id?: string
           id?: string
           name?: string
           sort_order?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "streets_district_id_fkey"
+            columns: ["district_id"]
+            isOneToOne: false
+            referencedRelation: "districts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
-import { frequencyLabels, formatPrice, type Frequency } from "@/lib/klanten";
+import {
+  addDistrict,
+  fetchDistricts,
+  frequencyLabels,
+  formatPrice,
+  type District,
+  type Frequency,
+} from "@/lib/klanten";
 
 export const Route = createFileRoute("/importeren")({
   head: () => ({
@@ -58,6 +65,18 @@ function ImportPagina() {
   const [bestandsnaam, setBestandsnaam] = useState("");
   const [freqPerTabblad, setFreqPerTabblad] = useState<Record<string, Frequency>>({});
   const [bezig, setBezig] = useState(false);
+  const [wijken, setWijken] = useState<District[]>([]);
+  const [wijkId, setWijkId] = useState<string>("");
+  const [nieuweWijk, setNieuweWijk] = useState("");
+
+  useEffect(() => {
+    fetchDistricts()
+      .then((d) => {
+        setWijken(d);
+        setWijkId((huidig) => huidig || d[0]?.id || "__nieuw__");
+      })
+      .catch(() => toast.error("Wijken laden mislukt"));
+  }, []);
 
   const tabbladen = useMemo(() => [...new Set(rijen.map((r) => r.tabblad))], [rijen]);
   const straten = useMemo(() => [...new Set(rijen.map((r) => r.straat))], [rijen]);
@@ -127,7 +146,18 @@ function ImportPagina() {
     if (teImporteren.length === 0) return;
     setBezig(true);
     try {
-      const { data: bestaandeStraten, error: straatFout } = await supabase.from("streets").select("id,name");
+      let districtId = wijkId;
+      if (districtId === "__nieuw__") {
+        if (!nieuweWijk.trim()) throw new Error("Vul een naam voor de nieuwe wijk in.");
+        const wijk = await addDistrict(nieuweWijk.trim());
+        districtId = wijk.id;
+      }
+      if (!districtId) throw new Error("Kies eerst een wijk.");
+
+      const { data: bestaandeStraten, error: straatFout } = await supabase
+        .from("streets")
+        .select("id,name")
+        .eq("district_id", districtId);
       if (straatFout) throw straatFout;
       const map = new Map<string, string>();
       (bestaandeStraten ?? []).forEach((s) => map.set(s.name.toLowerCase(), s.id));
@@ -137,11 +167,12 @@ function ImportPagina() {
         const startOrder = map.size;
         const { data: nieuw, error } = await supabase
           .from("streets")
-          .insert(nieuweNamen.map((name, i) => ({ name, sort_order: startOrder + i })))
+          .insert(nieuweNamen.map((name, i) => ({ name, sort_order: startOrder + i, district_id: districtId! })))
           .select("id,name");
         if (error) throw error;
         (nieuw ?? []).forEach((s) => map.set(s.name.toLowerCase(), s.id));
       }
+
 
       const payload = teImporteren.map((r) => ({
         street_id: map.get(r.straat.toLowerCase())!,
@@ -176,6 +207,31 @@ function ImportPagina() {
       </header>
 
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6">
+        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <Label>In welke wijk komt dit bestand?</Label>
+          <Select value={wijkId} onValueChange={setWijkId}>
+            <SelectTrigger className="max-w-sm">
+              <SelectValue placeholder="Kies een wijk" />
+            </SelectTrigger>
+            <SelectContent>
+              {wijken.map((w) => (
+                <SelectItem key={w.id} value={w.id}>
+                  {w.name}
+                </SelectItem>
+              ))}
+              <SelectItem value="__nieuw__">+ Nieuwe wijk…</SelectItem>
+            </SelectContent>
+          </Select>
+          {wijkId === "__nieuw__" && (
+            <Input
+              className="max-w-sm"
+              placeholder="Naam van de nieuwe wijk"
+              value={nieuweWijk}
+              onChange={(e) => setNieuweWijk(e.target.value)}
+            />
+          )}
+        </div>
+
         <div className="space-y-2 rounded-lg border border-border bg-card p-4">
           <Label htmlFor="bestand">Kies je Excel-bestand (.xlsx)</Label>
           <Input

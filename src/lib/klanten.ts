@@ -2,10 +2,17 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type Frequency = "elke" | "even" | "oneven";
 
+export interface District {
+  id: string;
+  name: string;
+  sort_order: number;
+}
+
 export interface Street {
   id: string;
   name: string;
   sort_order: number;
+  district_id: string;
 }
 
 export interface Customer {
@@ -31,10 +38,40 @@ export const frequencyLabels: Record<Frequency, string> = {
   oneven: "Oneven maand",
 };
 
+export async function fetchDistricts(): Promise<District[]> {
+  const { data, error } = await supabase
+    .from("districts")
+    .select("id,name,sort_order")
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as District[];
+}
+
+export async function addDistrict(name: string): Promise<District> {
+  const { data, error } = await supabase
+    .from("districts")
+    .insert({ name: name.trim(), sort_order: 100 })
+    .select("id,name,sort_order")
+    .single();
+  if (error) throw error;
+  return data as District;
+}
+
+export async function renameDistrict(id: string, name: string) {
+  const { error } = await supabase.from("districts").update({ name: name.trim() }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteDistrict(id: string) {
+  const { error } = await supabase.from("districts").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function fetchStreets(): Promise<Street[]> {
   const { data, error } = await supabase
     .from("streets")
-    .select("id,name,sort_order")
+    .select("id,name,sort_order,district_id")
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
   if (error) throw error;

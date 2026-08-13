@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -21,14 +21,16 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Printer, Upload, Pencil, Trash2, MapPin, Search, GripVertical } from "lucide-react";
+import { Plus, Printer, Upload, Pencil, Trash2, Search, GripVertical } from "lucide-react";
 import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
+import { WijkKiezer } from "@/components/WijkKiezer";
 import { InlineCel } from "@/components/InlineCel";
 import { NotitieCel } from "@/components/NotitieCel";
 import {
   addQuickNote,
   fetchCustomers,
+  fetchDistricts,
   fetchQuickNotes,
   fetchStreets,
   formatNumber,
@@ -39,11 +41,18 @@ import {
   sortCustomers,
   splitEvenOdd,
   type Customer,
+  type District,
   type QuickNote,
   type Street,
 } from "@/lib/klanten";
 
+interface IndexSearch {
+  wijk?: string;
+}
+
 export const Route = createFileRoute("/")({
+  validateSearch: (search: Record<string, unknown>): IndexSearch =>
+    typeof search["wijk"] === "string" && search["wijk"] ? { wijk: search["wijk"] } : {},
   head: () => ({
     meta: [
       { title: "Klantenlijst glazenwasser — straten, prijzen en maandplanning" },
@@ -68,6 +77,8 @@ type MaandFilter = "alles" | "even" | "oneven";
 
 function Index() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { wijk } = Route.useSearch();
   const [filter, setFilter] = useState<MaandFilter>("alles");
   const [zoek, setZoek] = useState("");
   const [prijzenTonen, setPrijzenTonen] = useState(true);
@@ -83,15 +94,27 @@ function Index() {
     street: null,
   });
 
+  const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
   const quickNotesQuery = useQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes });
 
-  const streets = streetsQuery.data ?? [];
+  const districts: District[] = districtsQuery.data ?? [];
+  const actieveWijk = districts.find((d) => d.id === wijk)?.id ?? districts[0]?.id ?? null;
+
+  useEffect(() => {
+    if (actieveWijk && wijk !== actieveWijk) {
+      void navigate({ to: "/", search: { wijk: actieveWijk }, replace: true });
+    }
+  }, [actieveWijk, wijk, navigate]);
+
+  const alleStraten = streetsQuery.data ?? [];
+  const streets = alleStraten.filter((s) => s.district_id === actieveWijk);
   const customers = customersQuery.data ?? [];
   const quickNotes = quickNotesQuery.data ?? [];
 
   function herlaad() {
+    qc.invalidateQueries({ queryKey: ["districts"] });
     qc.invalidateQueries({ queryKey: ["streets"] });
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
@@ -165,6 +188,22 @@ function Index() {
       return;
     }
     qc.invalidateQueries({ queryKey: ["customers"] });
+  }
+
+  async function nieuweStraat(naam: string) {
+    if (!actieveWijk) {
+      toast.error("Maak eerst een wijk aan.");
+      return;
+    }
+    const max = Math.max(0, ...streets.map((s) => s.sort_order));
+    const { error } = await supabase
+      .from("streets")
+      .insert({ name: naam.trim(), sort_order: max + 1, district_id: actieveWijk });
+    if (error) {
+      toast.error("Toevoegen mislukt: " + error.message);
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["streets"] });
   }
 
   function klikSelectie(c: Customer, shift: boolean) {
@@ -258,12 +297,17 @@ function Index() {
             {totaal} {totaal === 1 ? "klant" : "klanten"} in beeld
             {prijzenTonen && omzet > 0 ? ` · ${formatPrice(omzet)}` : ""}
           </p>
+          <div className="mt-3">
+            <WijkKiezer
+              districts={districts}
+              activeId={actieveWijk}
+              onSelect={(id) => void navigate({ to: "/", search: { wijk: id } })}
+              onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
+            />
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={() => setKlantDialog({ open: true, customer: null })}>
               <Plus className="size-4" /> Klant
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setStraatDialog({ open: true, street: null })}>
-              <MapPin className="size-4" /> Straat
             </Button>
             <Button size="sm" variant="outline" asChild>
               <Link to="/importeren">
@@ -274,6 +318,7 @@ function Index() {
               <Link
                 to="/printen"
                 search={{
+                  wijk: actieveWijk ?? "",
                   maand: filter === "alles" ? "even" : filter,
                   prijzen: false,
                   liggend: true,
@@ -325,15 +370,20 @@ function Index() {
           <p className="text-sm text-muted-foreground">Laden…</p>
         )}
 
-        {!streetsQuery.isLoading && streets.length === 0 && (
+        {!streetsQuery.isLoading && districts.length === 0 && (
           <div className="rounded-lg border border-dashed border-border p-8 text-center">
             <p className="text-sm text-muted-foreground">
-              Nog geen straten. Voeg er een toe of importeer je Excel-bestand.
+              Nog geen wijken. Maak hierboven eerst een wijk aan.
             </p>
-            <div className="mt-4 flex justify-center gap-2">
-              <Button size="sm" onClick={() => setStraatDialog({ open: true, street: null })}>
-                Straat toevoegen
-              </Button>
+          </div>
+        )}
+
+        {!streetsQuery.isLoading && districts.length > 0 && streets.length === 0 && (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              Nog geen straten in deze wijk. Typ hieronder een straatnaam of importeer je Excel-bestand.
+            </p>
+            <div className="mt-4 flex justify-center">
               <Button size="sm" variant="outline" asChild>
                 <Link to="/importeren">Excel importeren</Link>
               </Button>
@@ -371,6 +421,9 @@ function Index() {
                   onAddKlant={() => setKlantDialog({ open: true, customer: null, streetId: g.street.id })}
                 />
               ))}
+              {districts.length > 0 && (
+                <NieuweStraat onSubmit={nieuweStraat} />
+              )}
             </div>
           </SortableContext>
           <DragOverlay>
@@ -394,6 +447,7 @@ function Index() {
         onSaved={herlaad}
       />
       <StraatDialog
+        districtId={actieveWijk ?? undefined}
         open={straatDialog.open}
         onOpenChange={(open) => setStraatDialog((s) => ({ ...s, open }))}
         street={straatDialog.street}
@@ -592,6 +646,32 @@ function KlantRij({
       >
         <Trash2 className="size-3" />
       </button>
+    </div>
+  );
+}
+
+function NieuweStraat({ onSubmit }: { onSubmit: (naam: string) => void }) {
+  const [waarde, setWaarde] = useState("");
+  return (
+    <div className="rounded border border-dashed border-border bg-card/50">
+      <input
+        className="w-full bg-transparent px-2 py-2 text-[13px] uppercase tracking-wide text-muted-foreground placeholder:normal-case placeholder:tracking-normal placeholder:text-muted-foreground/70 focus:bg-accent/40 focus:outline-none"
+        placeholder="+ nieuwe straat"
+        value={waarde}
+        onChange={(e) => setWaarde(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && waarde.trim()) {
+            onSubmit(waarde.trim());
+            setWaarde("");
+          }
+        }}
+        onBlur={() => {
+          if (waarde.trim()) {
+            onSubmit(waarde.trim());
+            setWaarde("");
+          }
+        }}
+      />
     </div>
   );
 }
