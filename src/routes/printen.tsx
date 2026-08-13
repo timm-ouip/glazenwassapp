@@ -19,6 +19,7 @@ interface PrintSearch {
   prijzen: boolean;
   liggend: boolean;
   kolommen: number;
+  paginas: number;
 }
 
 export const Route = createFileRoute("/printen")({
@@ -29,7 +30,9 @@ export const Route = createFileRoute("/printen")({
     prijzen: search["prijzen"] === true || search["prijzen"] === "true",
     liggend: search["liggend"] !== false && search["liggend"] !== "false",
     kolommen: [2, 3, 4, 5].includes(Number(search["kolommen"])) ? Number(search["kolommen"]) : 4,
+    paginas: Number(search["paginas"]) === 2 ? 2 : 1,
   }),
+
 
   head: () => ({
     meta: [
