@@ -668,7 +668,111 @@ function ImportPagina() {
           </div>
         )}
 
+
+        <BronVenster
+          straat={bekijk}
+          bron={bekijk ? bronnen[bekijk] : undefined}
+          grid={bekijk && bronnen[bekijk] ? grids[bronnen[bekijk]!.tabblad] : undefined}
+          bestandsnaam={bestandsnaam}
+          onClose={() => setBekijk(null)}
+        />
       </main>
     </div>
   );
 }
+
+function kolomLetter(index: number) {
+  let n = index;
+  let out = "";
+  do {
+    out = String.fromCharCode(65 + (n % 26)) + out;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return out;
+}
+
+function BronVenster({
+  straat,
+  bron,
+  grid,
+  bestandsnaam,
+  onClose,
+}: {
+  straat: string | null;
+  bron?: Bron;
+  grid?: SheetGrid;
+  bestandsnaam: string;
+  onClose: () => void;
+}) {
+  const open = Boolean(straat && bron && grid);
+  const rStart = Math.max(0, (bron?.rij ?? 0) - 4);
+  const rEnd = Math.min((grid?.cellen.length ?? 1) - 1, (bron?.rij ?? 0) + 10);
+  const cStart = Math.max(0, (bron?.kolom ?? 0) - 2);
+  const cEnd = Math.min((grid?.cellen[0]?.length ?? 1) - 1, (bron?.kolom ?? 0) + 4);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>“{straat}” in het originele bestand</DialogTitle>
+          <DialogDescription>
+            {bestandsnaam} — tabblad “{bron?.tabblad}”, cel{" "}
+            {bron ? `${kolomLetter(bron.kolom)}${bron.rij + 1}` : ""}
+          </DialogDescription>
+        </DialogHeader>
+        {grid && bron && (
+          <div className="overflow-auto rounded-md border border-border">
+            <table className="min-w-full border-collapse text-xs">
+              <thead>
+                <tr>
+                  <th className="sticky left-0 z-10 border border-border bg-secondary px-2 py-1" />
+                  {Array.from({ length: cEnd - cStart + 1 }, (_, i) => (
+                    <th key={i} className="border border-border bg-secondary px-2 py-1 font-medium">
+                      {kolomLetter(cStart + i)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: rEnd - rStart + 1 }, (_, ri) => {
+                  const r = rStart + ri;
+                  return (
+                    <tr key={r}>
+                      <td className="sticky left-0 z-10 border border-border bg-secondary px-2 py-1 text-muted-foreground">
+                        {r + 1}
+                      </td>
+                      {Array.from({ length: cEnd - cStart + 1 }, (_, ci) => {
+                        const c = cStart + ci;
+                        const isDoel = r === bron.rij && c === bron.kolom;
+                        const grijs = grid.grijs[r]?.[c];
+                        return (
+                          <td
+                            key={c}
+                            className={`whitespace-nowrap border px-2 py-1 ${
+                              isDoel
+                                ? "border-2 border-amber-500 bg-amber-200 font-semibold text-amber-950"
+                                : grijs
+                                  ? "border-border bg-muted"
+                                  : "border-border"
+                            }`}
+                          >
+                            {grid.cellen[r]?.[c] ?? ""}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Het gemarkeerde vakje is wat als straatnaam is ingelezen. Grijs gearceerde vakjes zijn de
+          vakjes die de app als straatkop ziet.
+        </p>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
