@@ -95,6 +95,7 @@ function Index() {
   const [compact, setCompact] = useState(true);
   const [selectie, setSelectie] = useState<string[]>([]);
   const [sleep, setSleep] = useState<string | null>(null);
+  const [straatSort, setStraatSort] = useState<Record<string, "asc" | "desc">({});
   const [klantDialog, setKlantDialog] = useState<{ open: boolean; customer: Customer | null; streetId?: string }>({
     open: false,
     customer: null,
