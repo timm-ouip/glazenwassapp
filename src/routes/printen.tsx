@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer } from "lucide-react";
 import {
@@ -67,6 +68,36 @@ function PrintPagina() {
     0,
   );
 
+  // --- automatisch passend maken op 1 A4 ---
+  const MM = 96 / 25.4;
+  const paginaB = (liggend ? 297 : 210) - 16;
+  const paginaH = (liggend ? 210 : 297) - 16;
+  const breedtePx = Math.round(paginaB * MM);
+  const hoogtePx = Math.round(paginaH * MM);
+
+  const inhoudRef = useRef<HTMLDivElement>(null);
+  const [schaal, setSchaal] = useState(1);
+
+  useLayoutEffect(() => {
+    setSchaal(1);
+  }, [groepen.length, kolommen, liggend, prijzen, maand, wijk]);
+
+  useEffect(() => {
+    const el = inhoudRef.current;
+    if (!el) return;
+    const id = requestAnimationFrame(() => {
+      const node = inhoudRef.current;
+      if (!node) return;
+      const gerenderd = node.getBoundingClientRect().height;
+      if (gerenderd <= 0) return;
+      const gewenst = Math.min(1, (schaal * hoogtePx) / gerenderd);
+      if (Math.abs(gewenst - schaal) > 0.004) setSchaal(gewenst);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [schaal, hoogtePx, groepen.length, kolommen, prijzen, maand, wijk, liggend]);
+
+
+
   return (
     <div className="min-h-screen bg-background">
       <style>{`@page { size: A4 ${liggend ? "landscape" : "portrait"}; margin: 8mm; }
@@ -114,7 +145,15 @@ function PrintPagina() {
         </div>
       </div>
 
-      <main className="mx-auto max-w-[1400px] px-4 py-5 print:max-w-none print:px-0 print:py-0">
+      <main className="mx-auto w-fit px-4 py-5 print:p-0">
+        {groepen.length === 0 && (
+          <p className="text-sm text-muted-foreground print:hidden">Geen klanten voor deze maand.</p>
+        )}
+        <div
+          ref={inhoudRef}
+          className="origin-top-left overflow-hidden print:overflow-visible"
+          style={{ zoom: schaal, width: Math.round(breedtePx / schaal) }}
+        >
         <div className="mb-2 flex items-baseline justify-between border-b-2 border-foreground pb-1">
           <h1 className="text-[13px] font-bold uppercase tracking-wide">
             Waslijst {actieveWijk ? `${actieveWijk.name} ` : ""}— {maand === "even" ? "even" : "oneven"} maand
@@ -122,11 +161,8 @@ function PrintPagina() {
           {prijzen && <span className="text-[11px] tabular-nums">Totaal {formatPrice(totaal)}</span>}
         </div>
 
-        {groepen.length === 0 && (
-          <p className="text-sm text-muted-foreground print:hidden">Geen klanten voor deze maand.</p>
-        )}
-
         <div style={{ columnCount: kolommen, columnGap: "4mm" }} className="[column-fill:_balance]">
+
           {groepen.map((g) => (
             <div key={g.street.id} className="mb-1 break-inside-avoid border border-foreground/70">
               <h2 className="border-b border-foreground/70 bg-muted px-1 text-[9px] font-bold uppercase leading-[1.25] tracking-wide">
@@ -172,8 +208,9 @@ function PrintPagina() {
             </div>
           ))}
         </div>
-
+        </div>
       </main>
+
     </div>
   );
 }
