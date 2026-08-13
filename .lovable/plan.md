@@ -4,7 +4,7 @@
 
 - Bovenaan het overzicht een **keuzemenu wijken**: je kiest een wijk en ziet alleen de straten en klanten van die wijk.
 - Knop **Wijk toevoegen** (en hernoemen/verwijderen) naast het keuzemenu.
-- Bij het aanmaken of bewerken van een straat kies je bij welke wijk hij hoort.
+- Een nieuwe straat maak je direct in de tabel aan (zoals een nieuw huisnummer, zonder apart scherm); hij valt automatisch onder de wijk die je op dat moment open hebt staan.
 - De **printlijst** print de gekozen wijk (dus één wijk per A4, zoals nu één Excel-bestand per wijk).
 - Bij **importeren** kies je vooraf de wijk waar het Excel-bestand in geladen wordt.
 - Slepen (volgorde van straten en regels) blijft werken, maar dan binnen de gekozen wijk.
