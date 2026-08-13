@@ -313,7 +313,7 @@ function ImportPagina() {
     fetchDistricts()
       .then((d) => {
         setWijken(d);
-        setWijkId((huidig) => huidig || d[0]?.id || "__nieuw__");
+        setWijkId((huidig) => huidig || "__geen__");
       })
       .catch(() => toast.error("Wijken laden mislukt"));
     fetchQuickNotes().then(setQuickNotes).catch(() => undefined);
