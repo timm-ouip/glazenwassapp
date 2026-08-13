@@ -137,15 +137,47 @@ function leesTabblad(sheet: XLSX.WorkSheet, sheetName: string): RijPreview[] {
 }
 
 
+interface ImportRij {
+  id: string;
+  straat: string;
+  huisnummer: number;
+  toevoeging: string;
+  notitie: string;
+  prijs: number;
+  frequency: Frequency;
+}
+
+/** Straatnamen die waarschijnlijk per ongeluk als straat zijn gelezen. */
+function verdachteStraten(lijst: ImportRij[], quickNotes: QuickNote[]) {
+  const perStraat = new Map<string, number>();
+  for (const r of lijst) perStraat.set(r.straat, (perStraat.get(r.straat) ?? 0) + 1);
+  const notities = new Set(quickNotes.map((q) => q.label.toLowerCase()));
+  const uitkomst: { straat: string; aantal: number; redenen: string[] }[] = [];
+  for (const [straat, aantal] of perStraat) {
+    const redenen: string[] = [];
+    const schoon = straat.trim();
+    if (schoon.length < 3) redenen.push("erg korte naam");
+    if (!/[a-zA-Z]{3}/.test(schoon)) redenen.push("bevat nauwelijks letters");
+    if (/^[^a-zA-Z]+$/.test(schoon)) redenen.push("alleen cijfers of tekens");
+    if (notities.has(schoon.toLowerCase())) redenen.push("lijkt op een notitie");
+    if (aantal <= 2) redenen.push(`maar ${aantal} ${aantal === 1 ? "adres" : "adressen"} eronder`);
+    if (redenen.length > 0) uitkomst.push({ straat, aantal, redenen: [...new Set(redenen)] });
+  }
+  return uitkomst;
+}
+
 function ImportPagina() {
   const navigate = useNavigate();
   const [rijen, setRijen] = useState<RijPreview[]>([]);
+  const [lijst, setLijst] = useState<ImportRij[]>([]);
   const [bestandsnaam, setBestandsnaam] = useState("");
   const [freqPerTabblad, setFreqPerTabblad] = useState<Record<string, Frequency>>({});
   const [bezig, setBezig] = useState(false);
   const [wijken, setWijken] = useState<District[]>([]);
   const [wijkId, setWijkId] = useState<string>("");
   const [nieuweWijk, setNieuweWijk] = useState("");
+  const [quickNotes, setQuickNotes] = useState<QuickNote[]>([]);
+  const [hernoemen, setHernoemen] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchDistricts()
@@ -154,26 +186,66 @@ function ImportPagina() {
         setWijkId((huidig) => huidig || d[0]?.id || "__nieuw__");
       })
       .catch(() => toast.error("Wijken laden mislukt"));
+    fetchQuickNotes().then(setQuickNotes).catch(() => undefined);
   }, []);
 
   const tabbladen = useMemo(() => [...new Set(rijen.map((r) => r.tabblad))], [rijen]);
-  const straten = useMemo(() => [...new Set(rijen.map((r) => r.straat))], [rijen]);
+  const straten = useMemo(() => [...new Set(lijst.map((r) => r.straat))], [lijst]);
+  const verdacht = useMemo(() => verdachteStraten(lijst, quickNotes), [lijst, quickNotes]);
 
   /** Adressen die in meerdere tabbladen staan worden samengevoegd tot "elke maand". */
-  const teImporteren = useMemo(() => {
-    const map = new Map<string, RijPreview & { frequency: Frequency }>();
+  useEffect(() => {
+    const map = new Map<string, ImportRij>();
     for (const r of rijen) {
       const sleutel = `${r.straat.toLowerCase()}|${r.huisnummer}|${r.toevoeging.toLowerCase()}`;
       const freq = freqPerTabblad[r.tabblad] ?? "elke";
       const bestaand = map.get(sleutel);
       if (!bestaand) {
-        map.set(sleutel, { ...r, frequency: freq });
+        map.set(sleutel, {
+          id: sleutel,
+          straat: r.straat,
+          huisnummer: r.huisnummer,
+          toevoeging: r.toevoeging,
+          notitie: r.notitie,
+          prijs: r.prijs,
+          frequency: freq,
+        });
       } else if (bestaand.frequency !== freq) {
         map.set(sleutel, { ...bestaand, frequency: "elke" });
       }
     }
-    return [...map.values()];
+    setLijst([...map.values()]);
+    setHernoemen({});
   }, [rijen, freqPerTabblad]);
+
+  function wijzig(id: string, patch: Partial<ImportRij>) {
+    setLijst((l) => l.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  function verwijderRij(id: string) {
+    setLijst((l) => l.filter((r) => r.id !== id));
+  }
+
+  function verwijderStraat(straat: string) {
+    setLijst((l) => l.filter((r) => r.straat !== straat));
+  }
+
+  function hernoemStraat(oud: string, nieuw: string) {
+    const naam = nieuw.trim();
+    if (!naam) return;
+    setLijst((l) => l.map((r) => (r.straat === oud ? { ...r, straat: naam } : r)));
+    setHernoemen((h) => ({ ...h, [oud]: "" }));
+    toast.success(`"${oud}" heet nu "${naam}"`);
+  }
+
+  async function nieuweSnelkeuze(label: string) {
+    try {
+      await addQuickNote(label);
+      setQuickNotes(await fetchQuickNotes());
+    } catch {
+      toast.error("Snelkeuze toevoegen mislukt");
+    }
+  }
 
   async function lees(file: File) {
     try {
@@ -199,7 +271,7 @@ function ImportPagina() {
 
 
   async function importeer() {
-    if (teImporteren.length === 0) return;
+    if (lijst.length === 0) return;
     setBezig(true);
     try {
       let districtId = wijkId;
@@ -230,7 +302,7 @@ function ImportPagina() {
       }
 
 
-      const payload = teImporteren.map((r) => ({
+      const payload = lijst.map((r) => ({
         street_id: map.get(r.straat.toLowerCase())!,
         house_number: r.huisnummer,
         addition: r.toevoeging,
@@ -248,6 +320,7 @@ function ImportPagina() {
       setBezig(false);
     }
   }
+
 
   return (
     <div className="min-h-screen bg-background pb-16">
