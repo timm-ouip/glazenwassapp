@@ -132,6 +132,13 @@ function PrintPagina() {
                     key={kant}
                     className={`w-full table-fixed border-collapse ${i === 0 ? "border-r border-foreground/40" : ""}`}
                   >
+                    <thead>
+                      <tr className="border-b border-foreground/40 text-[8px] uppercase tracking-wide text-foreground/70">
+                        <th className="w-7 px-1 text-left">Nr</th>
+                        <th className="px-1 text-left">Notitie</th>
+                        {prijzen && <th className="w-9 px-1 text-right">€</th>}
+                      </tr>
+                    </thead>
                     <tbody>
                       {g[kant].map((c) => (
                         <tr key={c.id} className="border-b border-foreground/20 last:border-0">

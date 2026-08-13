@@ -465,6 +465,14 @@ function StraatBlok(p: BlokProps) {
             <div className="border-b border-border px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               {kant}
             </div>
+            <div className="flex items-center gap-0.5 border-b border-border/60 px-1 py-0.5 text-[10px] text-muted-foreground">
+              <span className="w-4" />
+              <span className="w-9">Nr</span>
+              <span className="min-w-0 flex-1">Notitie</span>
+              {p.prijzenTonen && <span className="w-12 text-right">€</span>}
+              <span className="min-w-[3.25rem] max-w-[4rem] text-center">Mnd</span>
+              <span className="w-4" />
+            </div>
             <SortableContext
               items={p[kant].map((c) => `c:${c.id}`)}
               strategy={verticalListSortingStrategy}
