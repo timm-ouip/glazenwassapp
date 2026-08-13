@@ -175,6 +175,11 @@ function PrintPagina() {
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       if (vouwen) {
+        const kop = kopRef.current;
+        if (kop) {
+          const h = Math.ceil(kop.getBoundingClientRect().height / schaal);
+          if (h > 0 && Math.abs(h - kopHoogte) > 1) setKopHoogte(h);
+        }
         let ratio = 0;
         for (const el of kwartRefs.current) {
           if (!el || el.clientHeight <= 0) continue;
@@ -183,6 +188,7 @@ function PrintPagina() {
         if (ratio > 1.004) setSchaal((s) => Math.max(0.25, s / ratio));
         return;
       }
+
       const node = inhoudRef.current;
       if (!node) return;
       const gerenderd = node.getBoundingClientRect().height;
