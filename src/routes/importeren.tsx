@@ -7,15 +7,21 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Trash2 } from "lucide-react";
+import { InlineCel } from "@/components/InlineCel";
+import { NotitieCel } from "@/components/NotitieCel";
 import {
   addDistrict,
+  addQuickNote,
   fetchDistricts,
+  fetchQuickNotes,
   frequencyLabels,
   formatPrice,
   type District,
   type Frequency,
+  type QuickNote,
 } from "@/lib/klanten";
+
 
 export const Route = createFileRoute("/importeren")({
   head: () => ({
@@ -137,15 +143,47 @@ function leesTabblad(sheet: XLSX.WorkSheet, sheetName: string): RijPreview[] {
 }
 
 
+interface ImportRij {
+  id: string;
+  straat: string;
+  huisnummer: number;
+  toevoeging: string;
+  notitie: string;
+  prijs: number;
+  frequency: Frequency;
+}
+
+/** Straatnamen die waarschijnlijk per ongeluk als straat zijn gelezen. */
+function verdachteStraten(lijst: ImportRij[], quickNotes: QuickNote[]) {
+  const perStraat = new Map<string, number>();
+  for (const r of lijst) perStraat.set(r.straat, (perStraat.get(r.straat) ?? 0) + 1);
+  const notities = new Set(quickNotes.map((q) => q.label.toLowerCase()));
+  const uitkomst: { straat: string; aantal: number; redenen: string[] }[] = [];
+  for (const [straat, aantal] of perStraat) {
+    const redenen: string[] = [];
+    const schoon = straat.trim();
+    if (schoon.length < 3) redenen.push("erg korte naam");
+    if (!/[a-zA-Z]{3}/.test(schoon)) redenen.push("bevat nauwelijks letters");
+    if (/^[^a-zA-Z]+$/.test(schoon)) redenen.push("alleen cijfers of tekens");
+    if (notities.has(schoon.toLowerCase())) redenen.push("lijkt op een notitie");
+    if (aantal <= 2) redenen.push(`maar ${aantal} ${aantal === 1 ? "adres" : "adressen"} eronder`);
+    if (redenen.length > 0) uitkomst.push({ straat, aantal, redenen: [...new Set(redenen)] });
+  }
+  return uitkomst;
+}
+
 function ImportPagina() {
   const navigate = useNavigate();
   const [rijen, setRijen] = useState<RijPreview[]>([]);
+  const [lijst, setLijst] = useState<ImportRij[]>([]);
   const [bestandsnaam, setBestandsnaam] = useState("");
   const [freqPerTabblad, setFreqPerTabblad] = useState<Record<string, Frequency>>({});
   const [bezig, setBezig] = useState(false);
   const [wijken, setWijken] = useState<District[]>([]);
   const [wijkId, setWijkId] = useState<string>("");
   const [nieuweWijk, setNieuweWijk] = useState("");
+  const [quickNotes, setQuickNotes] = useState<QuickNote[]>([]);
+  const [hernoemen, setHernoemen] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchDistricts()
@@ -154,26 +192,66 @@ function ImportPagina() {
         setWijkId((huidig) => huidig || d[0]?.id || "__nieuw__");
       })
       .catch(() => toast.error("Wijken laden mislukt"));
+    fetchQuickNotes().then(setQuickNotes).catch(() => undefined);
   }, []);
 
   const tabbladen = useMemo(() => [...new Set(rijen.map((r) => r.tabblad))], [rijen]);
-  const straten = useMemo(() => [...new Set(rijen.map((r) => r.straat))], [rijen]);
+  const straten = useMemo(() => [...new Set(lijst.map((r) => r.straat))], [lijst]);
+  const verdacht = useMemo(() => verdachteStraten(lijst, quickNotes), [lijst, quickNotes]);
 
   /** Adressen die in meerdere tabbladen staan worden samengevoegd tot "elke maand". */
-  const teImporteren = useMemo(() => {
-    const map = new Map<string, RijPreview & { frequency: Frequency }>();
+  useEffect(() => {
+    const map = new Map<string, ImportRij>();
     for (const r of rijen) {
       const sleutel = `${r.straat.toLowerCase()}|${r.huisnummer}|${r.toevoeging.toLowerCase()}`;
       const freq = freqPerTabblad[r.tabblad] ?? "elke";
       const bestaand = map.get(sleutel);
       if (!bestaand) {
-        map.set(sleutel, { ...r, frequency: freq });
+        map.set(sleutel, {
+          id: sleutel,
+          straat: r.straat,
+          huisnummer: r.huisnummer,
+          toevoeging: r.toevoeging,
+          notitie: r.notitie,
+          prijs: r.prijs,
+          frequency: freq,
+        });
       } else if (bestaand.frequency !== freq) {
         map.set(sleutel, { ...bestaand, frequency: "elke" });
       }
     }
-    return [...map.values()];
+    setLijst([...map.values()]);
+    setHernoemen({});
   }, [rijen, freqPerTabblad]);
+
+  function wijzig(id: string, patch: Partial<ImportRij>) {
+    setLijst((l) => l.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  function verwijderRij(id: string) {
+    setLijst((l) => l.filter((r) => r.id !== id));
+  }
+
+  function verwijderStraat(straat: string) {
+    setLijst((l) => l.filter((r) => r.straat !== straat));
+  }
+
+  function hernoemStraat(oud: string, nieuw: string) {
+    const naam = nieuw.trim();
+    if (!naam) return;
+    setLijst((l) => l.map((r) => (r.straat === oud ? { ...r, straat: naam } : r)));
+    setHernoemen((h) => ({ ...h, [oud]: "" }));
+    toast.success(`"${oud}" heet nu "${naam}"`);
+  }
+
+  async function nieuweSnelkeuze(label: string) {
+    try {
+      await addQuickNote(label);
+      setQuickNotes(await fetchQuickNotes());
+    } catch {
+      toast.error("Snelkeuze toevoegen mislukt");
+    }
+  }
 
   async function lees(file: File) {
     try {
@@ -199,7 +277,7 @@ function ImportPagina() {
 
 
   async function importeer() {
-    if (teImporteren.length === 0) return;
+    if (lijst.length === 0) return;
     setBezig(true);
     try {
       let districtId = wijkId;
@@ -230,7 +308,7 @@ function ImportPagina() {
       }
 
 
-      const payload = teImporteren.map((r) => ({
+      const payload = lijst.map((r) => ({
         street_id: map.get(r.straat.toLowerCase())!,
         house_number: r.huisnummer,
         addition: r.toevoeging,
@@ -248,6 +326,7 @@ function ImportPagina() {
       setBezig(false);
     }
   }
+
 
   return (
     <div className="min-h-screen bg-background pb-16">
@@ -308,14 +387,14 @@ function ImportPagina() {
 
         </div>
 
-        {rijen.length > 0 && (
+        {lijst.length > 0 && (
           <div className="space-y-4">
             <div className="rounded-lg border border-border bg-card p-4">
               <p className="text-sm">
-                <span className="font-medium">{bestandsnaam}</span> — {teImporteren.length} klanten in{" "}
+                <span className="font-medium">{bestandsnaam}</span> — {lijst.length} klanten in{" "}
                 {straten.length} {straten.length === 1 ? "straat" : "straten"}
-                {rijen.length !== teImporteren.length
-                  ? ` (${rijen.length - teImporteren.length} dubbele adressen samengevoegd)`
+                {rijen.length !== lijst.length
+                  ? ` (${rijen.length - lijst.length} regels samengevoegd of verwijderd)`
                   : ""}
                 .
               </p>
@@ -346,6 +425,58 @@ function ImportPagina() {
               </div>
             </div>
 
+            {verdacht.length > 0 && (
+              <div className="space-y-3 rounded-lg border border-amber-400/60 bg-amber-50 p-4 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <AlertTriangle className="size-4" />
+                  Dit lijkt geen straatnaam — klopt dit?
+                </div>
+                {verdacht.map((v) => (
+                  <div key={v.straat} className="space-y-2 rounded-md border border-amber-400/40 p-3">
+                    <p className="text-sm">
+                      <span className="font-semibold">“{v.straat}”</span>{" "}
+                      <span className="opacity-80">({v.redenen.join(", ")})</span>
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        className="h-8 max-w-56 bg-background text-foreground"
+                        placeholder="Juiste straatnaam"
+                        value={hernoemen[v.straat] ?? ""}
+                        onChange={(e) => setHernoemen((h) => ({ ...h, [v.straat]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") hernoemStraat(v.straat, hernoemen[v.straat] ?? "");
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => hernoemStraat(v.straat, hernoemen[v.straat] ?? "")}
+                      >
+                        Hernoemen
+                      </Button>
+                      <Select value="" onValueChange={(naam) => hernoemStraat(v.straat, naam)}>
+                        <SelectTrigger className="h-8 w-56 bg-background text-foreground">
+                          <SelectValue placeholder="Samenvoegen met…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {straten
+                            .filter((s) => s !== v.straat)
+                            .map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {s}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      <Button size="sm" variant="ghost" onClick={() => verwijderStraat(v.straat)}>
+                        <Trash2 className="size-4" /> {v.aantal} regels weggooien
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="overflow-hidden rounded-lg border border-border bg-card">
               <table className="w-full text-sm">
                 <thead className="bg-secondary text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -355,33 +486,85 @@ function ImportPagina() {
                     <th className="px-3 py-2">Notitie</th>
                     <th className="px-3 py-2">Frequentie</th>
                     <th className="px-3 py-2 text-right">Prijs</th>
+                    <th className="w-10 px-2 py-2" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {teImporteren.slice(0, 100).map((r, i) => (
-                    <tr key={i}>
-                      <td className="px-3 py-1.5">{r.straat}</td>
-                      <td className="px-3 py-1.5 tabular-nums">
-                        {r.huisnummer}
-                        {r.toevoeging}
+                  {lijst.map((r) => (
+                    <tr key={r.id}>
+                      <td className="px-2 py-1">
+                        <InlineCel value={r.straat} onCommit={(v) => wijzig(r.id, { straat: v.trim() })} />
                       </td>
-                      <td className="px-3 py-1.5 text-muted-foreground">{r.notitie}</td>
-                      <td className="px-3 py-1.5 text-muted-foreground">{frequencyLabels[r.frequency]}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">{formatPrice(r.prijs)}</td>
+                      <td className="px-2 py-1">
+                        <InlineCel
+                          value={`${r.huisnummer}${r.toevoeging}`}
+                          inputMode="text"
+                          onCommit={(v) => {
+                            const m = v.trim().match(/^(\d+)\s*([a-zA-Z-]*)$/);
+                            if (!m) {
+                              toast.error("Ongeldig huisnummer");
+                              return;
+                            }
+                            wijzig(r.id, { huisnummer: parseInt(m[1]!, 10), toevoeging: m[2] ?? "" });
+                          }}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <NotitieCel
+                          value={r.notitie}
+                          quickNotes={quickNotes}
+                          onChange={(v) => wijzig(r.id, { notitie: v })}
+                          onAddQuickNote={(l) => void nieuweSnelkeuze(l)}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <Select
+                          value={r.frequency}
+                          onValueChange={(v) => wijzig(r.id, { frequency: v as Frequency })}
+                        >
+                          <SelectTrigger className="h-7 w-36 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(Object.keys(frequencyLabels) as Frequency[]).map((f) => (
+                              <SelectItem key={f} value={f}>
+                                {frequencyLabels[f]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        <InlineCel
+                          align="right"
+                          inputMode="decimal"
+                          value={r.prijs ? String(r.prijs).replace(".", ",") : ""}
+                          placeholder={formatPrice(0)}
+                          onCommit={(v) =>
+                            wijzig(r.id, { prijs: Number(v.replace(",", ".").replace(/[^\d.]/g, "")) || 0 })
+                          }
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7"
+                          aria-label="Regel verwijderen"
+                          onClick={() => verwijderRij(r.id)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {teImporteren.length > 100 && (
-                <p className="px-3 py-2 text-xs text-muted-foreground">
-                  Eerste 100 rijen getoond, alle {teImporteren.length} worden geïmporteerd.
-                </p>
-              )}
             </div>
 
             <div className="flex gap-2">
               <Button onClick={importeer} disabled={bezig}>
-                {bezig ? "Bezig…" : `${teImporteren.length} klanten importeren`}
+                {bezig ? "Bezig…" : `${lijst.length} klanten importeren`}
               </Button>
               <Button variant="outline" onClick={() => setRijen([])} disabled={bezig}>
                 Annuleren
@@ -389,6 +572,7 @@ function ImportPagina() {
             </div>
           </div>
         )}
+
       </main>
     </div>
   );
