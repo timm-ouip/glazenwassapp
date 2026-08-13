@@ -220,6 +220,10 @@ function ImportPagina() {
   const [nieuweWijk, setNieuweWijk] = useState("");
   const [quickNotes, setQuickNotes] = useState<QuickNote[]>([]);
   const [hernoemen, setHernoemen] = useState<Record<string, string>>({});
+  const [bronnen, setBronnen] = useState<Record<string, Bron>>({});
+  const [grids, setGrids] = useState<Record<string, SheetGrid>>({});
+  const [goedgekeurd, setGoedgekeurd] = useState<Set<string>>(new Set());
+  const [bekijk, setBekijk] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDistricts()
@@ -233,7 +237,11 @@ function ImportPagina() {
 
   const tabbladen = useMemo(() => [...new Set(rijen.map((r) => r.tabblad))], [rijen]);
   const straten = useMemo(() => [...new Set(lijst.map((r) => r.straat))], [lijst]);
-  const verdacht = useMemo(() => verdachteStraten(lijst, quickNotes), [lijst, quickNotes]);
+  const verdacht = useMemo(
+    () => verdachteStraten(lijst, quickNotes).filter((v) => !goedgekeurd.has(v.straat)),
+    [lijst, quickNotes, goedgekeurd],
+  );
+
 
   /** Adressen die in meerdere tabbladen staan worden samengevoegd tot "elke maand". */
   useEffect(() => {
