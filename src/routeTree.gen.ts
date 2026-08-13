@@ -10,33 +10,53 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ImporterenRouteImport } from './routes/importeren'
+import { Route as PrintenRouteImport } from './routes/printen'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImporterenRoute = ImporterenRouteImport.update({
+  id: '/importeren',
+  path: '/importeren',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrintenRoute = PrintenRouteImport.update({
+  id: '/printen',
+  path: '/printen',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/importeren': typeof ImporterenRoute
+  '/printen': typeof PrintenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/importeren': typeof ImporterenRoute
+  '/printen': typeof PrintenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/importeren': typeof ImporterenRoute
+  '/printen': typeof PrintenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/importeren' | '/printen'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/importeren' | '/printen'
+  id: '__root__' | '/' | '/importeren' | '/printen'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ImporterenRoute: typeof ImporterenRoute
+  PrintenRoute: typeof PrintenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +68,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/importeren': {
+      id: '/importeren'
+      path: '/importeren'
+      fullPath: '/importeren'
+      preLoaderRoute: typeof ImporterenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/printen': {
+      id: '/printen'
+      path: '/printen'
+      fullPath: '/printen'
+      preLoaderRoute: typeof PrintenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ImporterenRoute: ImporterenRoute,
+  PrintenRoute: PrintenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
