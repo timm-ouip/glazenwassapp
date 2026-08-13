@@ -50,6 +50,7 @@ import {
   matchesMaand,
   persistCustomerOrder,
   persistStreetOrder,
+  setStreetSortDesc,
   sortCustomers,
   splitEvenOdd,
   type Customer,
@@ -97,7 +98,6 @@ function Index() {
   const [compact, setCompact] = useState(true);
   const [selectie, setSelectie] = useState<string[]>([]);
   const [sleep, setSleep] = useState<string | null>(null);
-  const [straatSort, setStraatSort] = useState<{ [id: string]: "asc" | "desc" }>({});
   const [klantDialog, setKlantDialog] = useState<{ open: boolean; customer: Customer | null; streetId?: string }>({
     open: false,
     customer: null,
@@ -161,7 +161,7 @@ function Index() {
     return streets
       .filter((s) => !term || s.name.toLowerCase().includes(term))
       .map((s) => {
-        const order = straatSort[s.id] ?? "asc";
+        const order: "asc" | "desc" = s.sort_desc ? "desc" : "asc";
         const klanten = customers.filter((c) => c.street_id === s.id && matchesMaand(c.frequency, filter));
         return {
           street: s,
@@ -170,7 +170,7 @@ function Index() {
           totaal: klanten.reduce((sum, c) => sum + c.price, 0),
         };
       });
-  }, [streets, customers, filter, zoek, straatSort]);
+  }, [streets, customers, filter, zoek]);
 
   const totaal = groepen.reduce((sum, g) => sum + g.aantal, 0);
   const omzet = groepen.reduce((sum, g) => sum + g.totaal, 0);
@@ -298,6 +298,26 @@ function Index() {
       });
     }
     qc.invalidateQueries({ queryKey: ["streets"] });
+  }
+
+  async function wisselSort(s: Street) {
+    const nieuw = !s.sort_desc;
+    qc.setQueryData<Street[]>(["streets"], (old) =>
+      (old ?? []).map((x) => (x.id === s.id ? { ...x, sort_desc: nieuw } : x)),
+    );
+    try {
+      await setStreetSortDesc(s.id, nieuw);
+      pushUndo({
+        label: `Sortering ${s.name}`,
+        undo: async () => {
+          await setStreetSortDesc(s.id, s.sort_desc);
+          herlaad();
+        },
+      });
+    } catch (e) {
+      toast.error("Opslaan mislukt: " + (e as Error).message);
+      herlaad();
+    }
   }
 
   function klikSelectie(c: Customer, shift: boolean) {
@@ -530,7 +550,7 @@ function Index() {
                   oneven={g.oneven}
                   aantal={g.aantal}
                   totaal={g.totaal}
-                  sort={straatSort[g.street.id] ?? "asc"}
+                  sort={g.street.sort_desc ? "desc" : "asc"}
                   prijzenTonen={prijzenTonen}
                   quickNotes={quickNotes}
                   rowText={rowText}
@@ -544,9 +564,7 @@ function Index() {
                   onEditStreet={() => setStraatDialog({ open: true, street: g.street })}
                   onDeleteStreet={() => verwijderStraat(g.street)}
                   onAddKlant={() => setKlantDialog({ open: true, customer: null, streetId: g.street.id })}
-                  onToggleSort={() =>
-                    setStraatSort((s) => ({ ...s, [g.street.id]: s[g.street.id] === "asc" ? "desc" : "asc" }))
-                  }
+                  onToggleSort={() => void wisselSort(g.street)}
                 />
               ))}
               {districts.length > 0 && (
