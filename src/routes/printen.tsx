@@ -15,7 +15,7 @@ import {
 
 interface PrintSearch {
   wijk: string;
-  maand: "even" | "oneven";
+  maand: "even" | "oneven" | "alles";
   prijzen: boolean;
   liggend: boolean;
   kolommen: number;
@@ -24,11 +24,13 @@ interface PrintSearch {
 export const Route = createFileRoute("/printen")({
   validateSearch: (search: Record<string, unknown>): PrintSearch => ({
     wijk: typeof search["wijk"] === "string" ? search["wijk"] : "",
-    maand: search["maand"] === "oneven" ? "oneven" : "even",
+    maand:
+      search["maand"] === "oneven" ? "oneven" : search["maand"] === "alles" ? "alles" : "even",
     prijzen: search["prijzen"] === true || search["prijzen"] === "true",
     liggend: search["liggend"] !== false && search["liggend"] !== "false",
     kolommen: [2, 3, 4, 5].includes(Number(search["kolommen"])) ? Number(search["kolommen"]) : 4,
   }),
+
   head: () => ({
     meta: [
       { title: "Printlijst maken — klantenlijst glazenwasser" },
