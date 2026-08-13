@@ -270,6 +270,7 @@ function ImportPagina() {
   const [freqPerTabblad, setFreqPerTabblad] = useState<Record<string, Frequency>>({});
   const [skipTabbladen, setSkipTabbladen] = useState<Set<string>>(new Set());
   const [bezig, setBezig] = useState(false);
+  const [sleep, setSleep] = useState(false);
   const [wijken, setWijken] = useState<District[]>([]);
   const [wijkId, setWijkId] = useState<string>("");
   const [nieuweWijk, setNieuweWijk] = useState("");
@@ -492,8 +493,28 @@ function ImportPagina() {
           )}
         </div>
 
-        <div className="space-y-2 rounded-lg border border-border bg-card p-4">
-          <Label htmlFor="bestand">Kies je Excel-bestand (.xlsx)</Label>
+        <div
+          className={`space-y-2 rounded-lg border-2 border-dashed p-4 transition-colors ${
+            sleep ? "border-primary bg-accent/50" : "border-border bg-card"
+          }`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setSleep(true);
+          }}
+          onDragLeave={() => setSleep(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setSleep(false);
+            const file = e.dataTransfer.files?.[0];
+            if (!file) return;
+            if (!/\.xlsx?$/i.test(file.name)) {
+              toast.error("Sleep een Excel-bestand (.xlsx of .xls) hierheen.");
+              return;
+            }
+            void lees(file);
+          }}
+        >
+          <Label htmlFor="bestand">Kies je Excel-bestand (.xlsx) of sleep het hierheen</Label>
           <Input
             id="bestand"
             type="file"
@@ -511,6 +532,7 @@ function ImportPagina() {
           </p>
 
         </div>
+
 
         {lijst.length > 0 && (
           <div className="space-y-4">
