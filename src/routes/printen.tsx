@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Printer } from "lucide-react";
 import {
   fetchCustomers,
@@ -52,6 +53,7 @@ export const Route = createFileRoute("/printen")({
 
 function PrintPagina() {
   const { wijk, maand, prijzen, liggend, kolommen, paginas: paginasRaw } = Route.useSearch();
+  const navigate = Route.useNavigate();
   const paginas = paginasRaw === 2 ? 2 : 1;
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
@@ -145,20 +147,38 @@ function PrintPagina() {
                 Prijzen {prijzen ? "aan" : "uit"}
               </Link>
             </Button>
-            {[1, 2].map((p) => (
-              <Button key={p} size="sm" variant={paginas === p ? "default" : "outline"} asChild>
-                <Link to="/printen" search={{ wijk, maand, prijzen, liggend, kolommen, paginas: p }}>
-                  {p} A4
-                </Link>
-              </Button>
-            ))}
-            {[2, 3, 4, 5].map((k) => (
-              <Button key={k} size="sm" variant={kolommen === k ? "default" : "outline"} asChild>
-                <Link to="/printen" search={{ wijk, maand, prijzen, liggend, kolommen: k, paginas }}>
-                  {k} kol.
-                </Link>
-              </Button>
-            ))}
+            <Select
+              value={String(paginas)}
+              onValueChange={(v) => {
+                const p = Number(v) as 1 | 2;
+                void navigate({ to: "/printen", search: { wijk, maand, prijzen, liggend, kolommen, paginas: p } });
+              }}
+            >
+              <SelectTrigger className="h-8 w-[88px] text-xs">
+                <SelectValue placeholder="A4's" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1 A4</SelectItem>
+                <SelectItem value="2">2 A4</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={String(kolommen)}
+              onValueChange={(v) => {
+                const k = Number(v) as 2 | 3 | 4 | 5;
+                void navigate({ to: "/printen", search: { wijk, maand, prijzen, liggend, kolommen: k, paginas } });
+              }}
+            >
+              <SelectTrigger className="h-8 w-[92px] text-xs">
+                <SelectValue placeholder="Kolommen" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="2">2 kol.</SelectItem>
+                <SelectItem value="3">3 kol.</SelectItem>
+                <SelectItem value="4">4 kol.</SelectItem>
+                <SelectItem value="5">5 kol.</SelectItem>
+              </SelectContent>
+            </Select>
 
             <Button size="sm" onClick={() => window.print()}>
               <Printer className="size-4" /> Afdrukken
