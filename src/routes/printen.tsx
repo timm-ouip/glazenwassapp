@@ -120,17 +120,17 @@ function PrintPagina() {
           </Button>
           <div className="ml-auto flex flex-wrap gap-2">
             <Button size="sm" variant={maand === "even" ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ wijk, maand: "even", prijzen, liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand: "even", prijzen, liggend, kolommen, paginas }}>
                 Even maand
               </Link>
             </Button>
             <Button size="sm" variant={maand === "oneven" ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ wijk, maand: "oneven", prijzen, liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand: "oneven", prijzen, liggend, kolommen, paginas }}>
                 Oneven maand
               </Link>
             </Button>
             <Button size="sm" variant={maand === "alles" ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ wijk, maand: "alles", prijzen, liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand: "alles", prijzen, liggend, kolommen, paginas }}>
                 Alle klanten
               </Link>
             </Button>
