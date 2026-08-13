@@ -207,6 +207,31 @@ function ImportPagina() {
       </header>
 
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6">
+        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <Label>In welke wijk komt dit bestand?</Label>
+          <Select value={wijkId} onValueChange={setWijkId}>
+            <SelectTrigger className="max-w-sm">
+              <SelectValue placeholder="Kies een wijk" />
+            </SelectTrigger>
+            <SelectContent>
+              {wijken.map((w) => (
+                <SelectItem key={w.id} value={w.id}>
+                  {w.name}
+                </SelectItem>
+              ))}
+              <SelectItem value="__nieuw__">+ Nieuwe wijk…</SelectItem>
+            </SelectContent>
+          </Select>
+          {wijkId === "__nieuw__" && (
+            <Input
+              className="max-w-sm"
+              placeholder="Naam van de nieuwe wijk"
+              value={nieuweWijk}
+              onChange={(e) => setNieuweWijk(e.target.value)}
+            />
+          )}
+        </div>
+
         <div className="space-y-2 rounded-lg border border-border bg-card p-4">
           <Label htmlFor="bestand">Kies je Excel-bestand (.xlsx)</Label>
           <Input
