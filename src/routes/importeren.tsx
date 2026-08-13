@@ -268,6 +268,7 @@ interface ImportRij {
   prijs: number;
   frequency: Frequency;
   bron?: Bron | undefined;
+  bronnen: Bron[];
 }
 
 
@@ -307,7 +308,7 @@ function ImportPagina() {
   const [bronnen, setBronnen] = useState<Record<string, Bron>>({});
   const [grids, setGrids] = useState<Record<string, SheetGrid>>({});
   const [goedgekeurd, setGoedgekeurd] = useState<Set<string>>(new Set());
-  const [bekijk, setBekijk] = useState<{ label: string; bron: Bron } | null>(null);
+  const [bekijk, setBekijk] = useState<{ label: string; bronnen: Bron[] } | null>(null);
 
   useEffect(() => {
     fetchDistricts()
@@ -345,6 +346,7 @@ function ImportPagina() {
           prijs: r.prijs,
           frequency: freq,
           bron: r.bron,
+          bronnen: r.bron ? [r.bron] : [],
         });
 
       } else {
@@ -359,6 +361,9 @@ function ImportPagina() {
         map.set(sleutel, {
           ...bestaand,
           notitie: uniek.join(" / "),
+          bronnen: r.bron && !bestaand.bronnen.some((b) => b.tabblad === r.bron!.tabblad)
+            ? [...bestaand.bronnen, r.bron]
+            : bestaand.bronnen,
           prijs: Math.max(bestaand.prijs, r.prijs),
           frequency: bestaand.frequency !== freq ? "elke" : bestaand.frequency,
         });
@@ -695,7 +700,7 @@ function ImportPagina() {
                         <Check className="size-4" /> Klopt wel
                       </Button>
                       {bronnen[v.straat] && (
-                        <Button size="sm" variant="outline" onClick={() => setBekijk({ label: v.straat, bron: bronnen[v.straat]! })}>
+                        <Button size="sm" variant="outline" onClick={() => setBekijk({ label: v.straat, bronnen: [bronnen[v.straat]!] })}>
                           <Eye className="size-4" /> Bekijken in bestand
                         </Button>
                       )}
@@ -779,17 +784,21 @@ function ImportPagina() {
                         />
                       </td>
                       <td className="px-1 py-1">
-                        {r.bron && (
+                        {r.bronnen.length > 0 && (
                           <Button
                             size="icon"
                             variant="ghost"
                             className="size-7"
                             aria-label="Bekijken in origineel bestand"
-                            title="Bekijken in origineel bestand"
+                            title={
+                              r.bronnen.length > 1
+                                ? `Bekijken in origineel bestand (${r.bronnen.length} tabbladen)`
+                                : "Bekijken in origineel bestand"
+                            }
                             onClick={() =>
                               setBekijk({
                                 label: `${r.straat} ${r.huisnummer}${r.toevoeging}`,
-                                bron: r.bron!,
+                                bronnen: r.bronnen,
                               })
                             }
                           >
@@ -826,8 +835,8 @@ function ImportPagina() {
 
         <BronVenster
           straat={bekijk?.label ?? null}
-          bron={bekijk?.bron}
-          grid={bekijk ? grids[bekijk.bron.tabblad] : undefined}
+          bronnen={bekijk?.bronnen ?? []}
+          grids={grids}
           bestandsnaam={bestandsnaam}
           onClose={() => setBekijk(null)}
         />
