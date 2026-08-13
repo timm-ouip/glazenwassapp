@@ -396,7 +396,8 @@ function ImportPagina() {
               <p className="text-sm">
                 <span className="font-medium">{bestandsnaam}</span> — {lijst.length} klanten in{" "}
                 {straten.length} {straten.length === 1 ? "straat" : "straten"}
-                {rijen.length !== lijst.length
+                {skipTabbladen.size > 0 && `, ${skipTabbladen.size} tabblad${skipTabbladen.size === 1 ? "" : "en"} overgeslagen`}
+                {rijen.length !== lijst.length && skipTabbladen.size === 0
                   ? ` (${rijen.length - lijst.length} regels samengevoegd of verwijderd)`
                   : ""}
                 .
