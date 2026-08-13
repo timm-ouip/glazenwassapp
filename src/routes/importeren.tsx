@@ -58,6 +58,18 @@ function ImportPagina() {
   const [bestandsnaam, setBestandsnaam] = useState("");
   const [freqPerTabblad, setFreqPerTabblad] = useState<Record<string, Frequency>>({});
   const [bezig, setBezig] = useState(false);
+  const [wijken, setWijken] = useState<District[]>([]);
+  const [wijkId, setWijkId] = useState<string>("");
+  const [nieuweWijk, setNieuweWijk] = useState("");
+
+  useEffect(() => {
+    fetchDistricts()
+      .then((d) => {
+        setWijken(d);
+        setWijkId((huidig) => huidig || d[0]?.id || "__nieuw__");
+      })
+      .catch(() => toast.error("Wijken laden mislukt"));
+  }, []);
 
   const tabbladen = useMemo(() => [...new Set(rijen.map((r) => r.tabblad))], [rijen]);
   const straten = useMemo(() => [...new Set(rijen.map((r) => r.straat))], [rijen]);
