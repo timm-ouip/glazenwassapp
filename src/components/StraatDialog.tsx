@@ -22,13 +22,11 @@ interface Props {
 
 export function StraatDialog({ open, onOpenChange, street, onSaved }: Props) {
   const [name, setName] = useState("");
-  const [order, setOrder] = useState("0");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setName(street?.name ?? "");
-    setOrder(String(street?.sort_order ?? 0));
   }, [open, street]);
 
   async function save() {
@@ -37,10 +35,10 @@ export function StraatDialog({ open, onOpenChange, street, onSaved }: Props) {
       return;
     }
     setSaving(true);
-    const payload = { name: name.trim(), sort_order: parseInt(order, 10) || 0 };
+    const payload = { name: name.trim() };
     const { error } = street
       ? await supabase.from("streets").update(payload).eq("id", street.id)
-      : await supabase.from("streets").insert(payload);
+      : await supabase.from("streets").insert({ ...payload, sort_order: 0 });
     setSaving(false);
     if (error) {
       toast.error("Opslaan mislukt: " + error.message);
@@ -62,11 +60,6 @@ export function StraatDialog({ open, onOpenChange, street, onSaved }: Props) {
             <Label htmlFor="straat">Straatnaam</Label>
             <Input id="straat" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="volgorde">Volgorde in je route</Label>
-            <Input id="volgorde" inputMode="numeric" value={order} onChange={(e) => setOrder(e.target.value)} />
-            <p className="text-xs text-muted-foreground">Lager getal = eerder in de lijst.</p>
-          </div>
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -80,3 +73,4 @@ export function StraatDialog({ open, onOpenChange, street, onSaved }: Props) {
     </Dialog>
   );
 }
+
