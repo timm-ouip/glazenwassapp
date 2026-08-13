@@ -146,17 +146,15 @@ function PrintPagina() {
                       </tr>
                     </thead>
                     <tbody>
-                      {g[kant].map((c) => {
-                        const lang = c.note.length > 14;
-                        return (
-                          <tr key={c.id} className="border-b border-foreground/20 last:border-0 align-top">
-                            <td className="w-6 px-[2px] text-[8.5px] font-semibold leading-[1.2] tabular-nums">
-                              {formatNumber(c)}
-                            </td>
-                            <td className="px-[2px] text-[8.5px] leading-[1.2] break-words hyphens-auto">
-                              {lang ? "" : c.note}
-                              {lang && <span className="block">{c.note}</span>}
-                            </td>
+                      {g[kant].map((c) => (
+                        <tr key={c.id} className="border-b border-foreground/20 align-top last:border-0">
+                          <td className="w-6 px-[2px] text-[8.5px] font-semibold leading-[1.2] tabular-nums">
+                            {formatNumber(c)}
+                          </td>
+                          <td className="px-[2px] text-[8.5px] leading-[1.2] break-words hyphens-auto">
+                            {c.note}
+                          </td>
+
                             {prijzen && (
                               <td className={`w-8 px-[2px] text-right text-[8.5px] leading-[1.2] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}>
                                 {formatPrice(c.price)}
