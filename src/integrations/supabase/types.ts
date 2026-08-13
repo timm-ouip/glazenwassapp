@@ -109,6 +109,7 @@ export type Database = {
           district_id: string
           id: string
           name: string
+          sort_desc: boolean
           sort_order: number
         }
         Insert: {
@@ -116,6 +117,7 @@ export type Database = {
           district_id: string
           id?: string
           name: string
+          sort_desc?: boolean
           sort_order?: number
         }
         Update: {
@@ -123,6 +125,7 @@ export type Database = {
           district_id?: string
           id?: string
           name?: string
+          sort_desc?: boolean
           sort_order?: number
         }
         Relationships: [
