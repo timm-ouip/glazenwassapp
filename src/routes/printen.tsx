@@ -15,7 +15,7 @@ import {
 
 interface PrintSearch {
   wijk: string;
-  maand: "even" | "oneven";
+  maand: "even" | "oneven" | "alles";
   prijzen: boolean;
   liggend: boolean;
   kolommen: number;
@@ -24,11 +24,13 @@ interface PrintSearch {
 export const Route = createFileRoute("/printen")({
   validateSearch: (search: Record<string, unknown>): PrintSearch => ({
     wijk: typeof search["wijk"] === "string" ? search["wijk"] : "",
-    maand: search["maand"] === "oneven" ? "oneven" : "even",
+    maand:
+      search["maand"] === "oneven" ? "oneven" : search["maand"] === "alles" ? "alles" : "even",
     prijzen: search["prijzen"] === true || search["prijzen"] === "true",
     liggend: search["liggend"] !== false && search["liggend"] !== "false",
     kolommen: [2, 3, 4, 5].includes(Number(search["kolommen"])) ? Number(search["kolommen"]) : 4,
   }),
+
   head: () => ({
     meta: [
       { title: "Printlijst maken — klantenlijst glazenwasser" },
@@ -121,6 +123,12 @@ function PrintPagina() {
                 Oneven maand
               </Link>
             </Button>
+            <Button size="sm" variant={maand === "alles" ? "default" : "outline"} asChild>
+              <Link to="/printen" search={{ wijk, maand: "alles", prijzen, liggend, kolommen }}>
+                Alle klanten
+              </Link>
+            </Button>
+
             <Button size="sm" variant="outline" asChild>
               <Link to="/printen" search={{ wijk, maand, prijzen, liggend: !liggend, kolommen }}>
                 {liggend ? "Liggend" : "Staand"}
@@ -156,8 +164,10 @@ function PrintPagina() {
         >
         <div className="mb-2 flex items-baseline justify-between border-b-2 border-foreground pb-1">
           <h1 className="text-[13px] font-bold uppercase tracking-wide">
-            Waslijst {actieveWijk ? `${actieveWijk.name} ` : ""}— {maand === "even" ? "even" : "oneven"} maand
+            Waslijst {actieveWijk ? `${actieveWijk.name} ` : ""}—{" "}
+            {maand === "alles" ? "alle klanten" : `${maand} maand`}
           </h1>
+
           {prijzen && <span className="text-[11px] tabular-nums">Totaal {formatPrice(totaal)}</span>}
         </div>
 
@@ -181,6 +191,7 @@ function PrintPagina() {
                       <tr className="border-b border-foreground/40 text-[7px] uppercase leading-[1.2] tracking-wide text-foreground/70">
                         <th className="w-6 px-[2px] text-left">nr</th>
                         <th className="px-[2px] text-left">note</th>
+                        {maand === "alles" && <th className="w-8 px-[2px] text-left">freq</th>}
                         {prijzen && <th className="w-10 px-[2px] text-right">€</th>}
                       </tr>
                     </thead>
@@ -193,11 +204,15 @@ function PrintPagina() {
                           <td className="px-[2px] text-[8.5px] leading-[1.2] break-words hyphens-auto">
                             {c.note}
                           </td>
+                          {maand === "alles" && (
+                            <td className="w-8 px-[2px] text-[8.5px] leading-[1.2]">{c.frequency}</td>
+                          )}
                           {prijzen && (
                             <td className={`w-10 px-[2px] text-right text-[8.5px] leading-[1.2] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}>
                               {formatPrice(c.price)}
                             </td>
                           )}
+
                         </tr>
                       ))}
 
