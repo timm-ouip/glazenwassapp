@@ -137,10 +137,14 @@ function SleepbaarBlok({
     id: g.street.id,
   });
   const { setNodeRef: setDropRef } = useDroppable({ id: g.street.id });
-  const setNodeRef = (node: HTMLDivElement | null) => {
-    setSleepRef(node);
-    setDropRef(node);
-  };
+  const setNodeRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      setSleepRef(node);
+      setDropRef(node);
+    },
+    [setSleepRef, setDropRef],
+  );
+
   return (
     <div
       ref={setNodeRef}
