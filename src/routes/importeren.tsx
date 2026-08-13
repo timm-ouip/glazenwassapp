@@ -48,7 +48,9 @@ interface RijPreview {
   toevoeging: string;
   notitie: string;
   prijs: number;
+  bron?: { tabblad: string; rij: number; kolom: number };
 }
+
 
 function parseNummer(value: unknown): { nummer: number; toevoeging: string } | null {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -192,6 +194,19 @@ function leesTabblad(
 
   const rijen: RijPreview[] = [];
   const bronnen: Record<string, Bron> = {};
+
+  /** Telt hoeveel huisnummers er direct onder deze rij staan (tot de volgende tekstcel). */
+  const nummersHieronder = (vanaf: number, c: number) => {
+    let aantal = 0;
+    for (let r = vanaf + 1; r <= range.e.r; r++) {
+      const v = cel(r, c)?.v;
+      if (v === undefined || v === null || String(v).trim() === "") continue;
+      if (parseNummer(v)) aantal++;
+      else break;
+    }
+    return aantal;
+  };
+
   for (const c of kolommen) {
     let straat = "";
     let laatste: RijPreview | null = null;
@@ -201,7 +216,10 @@ function leesTabblad(
       if (waarde === undefined || waarde === null || String(waarde).trim() === "") continue;
       const nummer = parseNummer(waarde);
       if (!nummer) {
-        if (kopKolommen.size === 0 || isGrijs(cell)) {
+        const volgt = nummersHieronder(r, c);
+        // Straatkop: grijs vakje, of er beginnen hieronder nieuwe huisnummers.
+        const isKop = kopKolommen.size === 0 || isGrijs(cell) || volgt >= 2 || !laatste;
+        if (isKop) {
           straat = String(waarde).trim();
           laatste = null;
           if (!bronnen[straat]) bronnen[straat] = { tabblad: sheetName, rij: r, kolom: c };
@@ -210,6 +228,7 @@ function leesTabblad(
           const extra = String(waarde).trim();
           laatste.notitie = laatste.notitie ? `${laatste.notitie} ${extra}` : extra;
         }
+
         continue;
       }
       if (!straat) continue;
@@ -222,11 +241,13 @@ function leesTabblad(
         notitie: tekst(cel(r, c + 1)),
         prijs:
           typeof prijsCel === "number" ? prijsCel : Number(String(prijsCel ?? "").replace(",", ".")) || 0,
+        bron: { tabblad: sheetName, rij: r, kolom: c },
       };
       rijen.push(rij);
       laatste = rij;
     }
   }
+
 
   return { rijen, bronnen, grid };
 }
@@ -241,7 +262,9 @@ interface ImportRij {
   notitie: string;
   prijs: number;
   frequency: Frequency;
+  bron?: Bron | undefined;
 }
+
 
 /** Straatnamen die waarschijnlijk per ongeluk als straat zijn gelezen. */
 function verdachteStraten(lijst: ImportRij[], quickNotes: QuickNote[]) {
@@ -279,7 +302,7 @@ function ImportPagina() {
   const [bronnen, setBronnen] = useState<Record<string, Bron>>({});
   const [grids, setGrids] = useState<Record<string, SheetGrid>>({});
   const [goedgekeurd, setGoedgekeurd] = useState<Set<string>>(new Set());
-  const [bekijk, setBekijk] = useState<string | null>(null);
+  const [bekijk, setBekijk] = useState<{ label: string; bron: Bron } | null>(null);
 
   useEffect(() => {
     fetchDistricts()
@@ -316,7 +339,9 @@ function ImportPagina() {
           notitie: r.notitie,
           prijs: r.prijs,
           frequency: freq,
+          bron: r.bron,
         });
+
       } else {
         // Notities samenvoegen (dubbele tekst niet herhalen), hoogste prijs behouden
         const delen = [bestaand.notitie, r.notitie]
@@ -647,7 +672,7 @@ function ImportPagina() {
                         <Check className="size-4" /> Klopt wel
                       </Button>
                       {bronnen[v.straat] && (
-                        <Button size="sm" variant="outline" onClick={() => setBekijk(v.straat)}>
+                        <Button size="sm" variant="outline" onClick={() => setBekijk({ label: v.straat, bron: bronnen[v.straat]! })}>
                           <Eye className="size-4" /> Bekijken in bestand
                         </Button>
                       )}
@@ -670,7 +695,7 @@ function ImportPagina() {
                     <th className="w-[55%] px-3 py-2">Notitie</th>
                     <th className="w-40 px-3 py-2">Frequentie</th>
                     <th className="w-24 px-3 py-2 text-right">Prijs</th>
-                    <th className="w-10 px-2 py-2" />
+                    <th className="w-20 px-2 py-2" />
                   </tr>
                 </thead>
 
@@ -731,6 +756,23 @@ function ImportPagina() {
                         />
                       </td>
                       <td className="px-1 py-1">
+                        {r.bron && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-7"
+                            aria-label="Bekijken in origineel bestand"
+                            title="Bekijken in origineel bestand"
+                            onClick={() =>
+                              setBekijk({
+                                label: `${r.straat} ${r.huisnummer}${r.toevoeging}`,
+                                bron: r.bron!,
+                              })
+                            }
+                          >
+                            <Eye className="size-3.5" />
+                          </Button>
+                        )}
                         <Button
                           size="icon"
                           variant="ghost"
@@ -760,12 +802,13 @@ function ImportPagina() {
 
 
         <BronVenster
-          straat={bekijk}
-          bron={bekijk ? bronnen[bekijk] : undefined}
-          grid={bekijk && bronnen[bekijk] ? grids[bronnen[bekijk]!.tabblad] : undefined}
+          straat={bekijk?.label ?? null}
+          bron={bekijk?.bron}
+          grid={bekijk ? grids[bekijk.bron.tabblad] : undefined}
           bestandsnaam={bestandsnaam}
           onClose={() => setBekijk(null)}
         />
+
       </main>
     </div>
   );
