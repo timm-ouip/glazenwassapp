@@ -194,6 +194,7 @@ function leesTabblad(
   const bronnen: Record<string, Bron> = {};
   for (const c of kolommen) {
     let straat = "";
+    let laatste: RijPreview | null = null;
     for (let r = range.s.r; r <= range.e.r; r++) {
       const cell = cel(r, c);
       const waarde = cell?.v;
@@ -202,13 +203,18 @@ function leesTabblad(
       if (!nummer) {
         if (kopKolommen.size === 0 || isGrijs(cell)) {
           straat = String(waarde).trim();
+          laatste = null;
           if (!bronnen[straat]) bronnen[straat] = { tabblad: sheetName, rij: r, kolom: c };
+        } else if (laatste) {
+          // Tekst onder een huisnummer = vervolg van de notitie van dat adres
+          const extra = String(waarde).trim();
+          laatste.notitie = laatste.notitie ? `${laatste.notitie} ${extra}` : extra;
         }
         continue;
       }
       if (!straat) continue;
       const prijsCel = cel(r, c + 2)?.v;
-      rijen.push({
+      const rij: RijPreview = {
         tabblad: sheetName,
         straat,
         huisnummer: nummer.nummer,
@@ -216,9 +222,12 @@ function leesTabblad(
         notitie: tekst(cel(r, c + 1)),
         prijs:
           typeof prijsCel === "number" ? prijsCel : Number(String(prijsCel ?? "").replace(",", ".")) || 0,
-      });
+      };
+      rijen.push(rij);
+      laatste = rij;
     }
   }
+
   return { rijen, bronnen, grid };
 }
 
