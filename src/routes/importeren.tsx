@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowLeft, Trash2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { InlineCel } from "@/components/InlineCel";
 import { NotitieCel } from "@/components/NotitieCel";
 import {
@@ -178,6 +179,7 @@ function ImportPagina() {
   const [lijst, setLijst] = useState<ImportRij[]>([]);
   const [bestandsnaam, setBestandsnaam] = useState("");
   const [freqPerTabblad, setFreqPerTabblad] = useState<Record<string, Frequency>>({});
+  const [skipTabbladen, setSkipTabbladen] = useState<Set<string>>(new Set());
   const [bezig, setBezig] = useState(false);
   const [wijken, setWijken] = useState<District[]>([]);
   const [wijkId, setWijkId] = useState<string>("");
@@ -203,6 +205,7 @@ function ImportPagina() {
   useEffect(() => {
     const map = new Map<string, ImportRij>();
     for (const r of rijen) {
+      if (skipTabbladen.has(r.tabblad)) continue;
       const sleutel = `${r.straat.toLowerCase()}|${r.huisnummer}|${r.toevoeging.toLowerCase()}`;
       const freq = freqPerTabblad[r.tabblad] ?? "elke";
       const bestaand = map.get(sleutel);
@@ -222,7 +225,7 @@ function ImportPagina() {
     }
     setLijst([...map.values()]);
     setHernoemen({});
-  }, [rijen, freqPerTabblad]);
+  }, [rijen, freqPerTabblad, skipTabbladen]);
 
   function wijzig(id: string, patch: Partial<ImportRij>) {
     setLijst((l) => l.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -393,35 +396,59 @@ function ImportPagina() {
               <p className="text-sm">
                 <span className="font-medium">{bestandsnaam}</span> — {lijst.length} klanten in{" "}
                 {straten.length} {straten.length === 1 ? "straat" : "straten"}
-                {rijen.length !== lijst.length
+                {skipTabbladen.size > 0 && `, ${skipTabbladen.size} tabblad${skipTabbladen.size === 1 ? "" : "en"} overgeslagen`}
+                {rijen.length !== lijst.length && skipTabbladen.size === 0
                   ? ` (${rijen.length - lijst.length} regels samengevoegd of verwijderd)`
                   : ""}
                 .
               </p>
               <div className="mt-4 space-y-3">
                 <Label>Frequentie per tabblad</Label>
-                {tabbladen.map((t) => (
-                  <div key={t} className="flex items-center gap-3">
-                    <span className="w-40 truncate text-sm text-muted-foreground">{t}</span>
-                    <Select
-                      value={freqPerTabblad[t] ?? "elke"}
-                      onValueChange={(v) =>
-                        setFreqPerTabblad((s) => ({ ...s, [t]: v as Frequency }))
-                      }
-                    >
-                      <SelectTrigger className="max-w-48">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(Object.keys(frequencyLabels) as Frequency[]).map((f) => (
-                          <SelectItem key={f} value={f}>
-                            {frequencyLabels[f]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
+                {tabbladen.map((t) => {
+                  const skipped = skipTabbladen.has(t);
+                  return (
+                    <div key={t} className="flex items-center gap-3">
+                      <span className={`w-40 truncate text-sm ${skipped ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                        {t}
+                      </span>
+                      <Select
+                        value={freqPerTabblad[t] ?? "elke"}
+                        disabled={skipped}
+                        onValueChange={(v) =>
+                          setFreqPerTabblad((s) => ({ ...s, [t]: v as Frequency }))
+                        }
+                      >
+                        <SelectTrigger className="max-w-48">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.keys(frequencyLabels) as Frequency[]).map((f) => (
+                            <SelectItem key={f} value={f}>
+                              {frequencyLabels[f]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`skip-${t}`}
+                          checked={skipped}
+                          onCheckedChange={(checked) => {
+                            setSkipTabbladen((s) => {
+                              const next = new Set(s);
+                              if (checked) next.add(t);
+                              else next.delete(t);
+                              return next;
+                            });
+                          }}
+                        />
+                        <Label htmlFor={`skip-${t}`} className="text-xs font-normal cursor-pointer">
+                          Niet importeren
+                        </Label>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
