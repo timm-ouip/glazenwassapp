@@ -135,16 +135,24 @@ function Index() {
     return streets
       .filter((s) => !term || s.name.toLowerCase().includes(term))
       .map((s) => {
-        const klanten = customers.filter((c) => c.street_id === s.id && matchesMaand(c.frequency, filter));
-        return { street: s, ...splitEvenOdd(klanten), aantal: klanten.length };
+        const order = straatSort[s.id] ?? "asc";
+        const klanten = customers
+          .filter((c) => c.street_id === s.id && matchesMaand(c.frequency, filter))
+          .sort((a, b) => {
+            const diff = a.house_number - b.house_number;
+            return order === "asc" ? diff : -diff;
+          });
+        return {
+          street: s,
+          ...splitEvenOdd(klanten),
+          aantal: klanten.length,
+          totaal: klanten.reduce((sum, c) => sum + c.price, 0),
+        };
       });
-  }, [streets, customers, filter, zoek]);
+  }, [streets, customers, filter, zoek, straatSort]);
 
   const totaal = groepen.reduce((sum, g) => sum + g.aantal, 0);
-  const omzet = groepen.reduce(
-    (sum, g) => sum + [...g.even, ...g.oneven].reduce((s, c) => s + c.price, 0),
-    0,
-  );
+  const omzet = groepen.reduce((sum, g) => sum + g.totaal, 0);
 
   async function patchKlant(c: Customer, patch: Partial<Customer>) {
     qc.setQueryData<Customer[]>(["customers"], (old) =>
