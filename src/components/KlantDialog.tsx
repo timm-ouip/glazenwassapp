@@ -127,16 +127,51 @@ export function KlantDialog({
             <Label htmlFor="notitie">Notitie</Label>
             <Input id="notitie" value={note} onChange={(e) => setNote(e.target.value)} />
             <div className="flex flex-wrap gap-1.5 pt-1">
-              {veelgebruikteNotities.map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setNote(n)}
-                  className="rounded-full border border-border bg-secondary px-2.5 py-1 text-xs text-secondary-foreground transition-colors hover:bg-accent"
-                >
-                  {n}
-                </button>
-              ))}
+              {quickNotes.map((q) => {
+                const aan = noteTokens(note).some((t) => t.toLowerCase() === q.label.toLowerCase());
+                return (
+                  <button
+                    key={q.id}
+                    type="button"
+                    onClick={() => setNote(toggleNoteToken(note, q.label))}
+                    className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                      aan
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-secondary text-secondary-foreground hover:bg-accent"
+                    }`}
+                  >
+                    {q.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex gap-1.5 pt-1">
+              <Input
+                value={nieuweSnelkeuze}
+                placeholder="Nieuwe snelkeuze"
+                className="h-8 text-xs"
+                onChange={(e) => setNieuweSnelkeuze(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && nieuweSnelkeuze.trim()) {
+                    e.preventDefault();
+                    onAddQuickNote(nieuweSnelkeuze.trim());
+                    setNieuweSnelkeuze("");
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 px-2"
+                onClick={() => {
+                  if (!nieuweSnelkeuze.trim()) return;
+                  onAddQuickNote(nieuweSnelkeuze.trim());
+                  setNieuweSnelkeuze("");
+                }}
+              >
+                <Plus className="size-3.5" />
+              </Button>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
