@@ -302,7 +302,7 @@ function ImportPagina() {
   const [bronnen, setBronnen] = useState<Record<string, Bron>>({});
   const [grids, setGrids] = useState<Record<string, SheetGrid>>({});
   const [goedgekeurd, setGoedgekeurd] = useState<Set<string>>(new Set());
-  const [bekijk, setBekijk] = useState<string | null>(null);
+  const [bekijk, setBekijk] = useState<{ label: string; bron: Bron } | null>(null);
 
   useEffect(() => {
     fetchDistricts()
@@ -672,7 +672,7 @@ function ImportPagina() {
                         <Check className="size-4" /> Klopt wel
                       </Button>
                       {bronnen[v.straat] && (
-                        <Button size="sm" variant="outline" onClick={() => setBekijk(v.straat)}>
+                        <Button size="sm" variant="outline" onClick={() => setBekijk({ label: v.straat, bron: bronnen[v.straat]! })}>
                           <Eye className="size-4" /> Bekijken in bestand
                         </Button>
                       )}
@@ -695,7 +695,7 @@ function ImportPagina() {
                     <th className="w-[55%] px-3 py-2">Notitie</th>
                     <th className="w-40 px-3 py-2">Frequentie</th>
                     <th className="w-24 px-3 py-2 text-right">Prijs</th>
-                    <th className="w-10 px-2 py-2" />
+                    <th className="w-20 px-2 py-2" />
                   </tr>
                 </thead>
 
@@ -756,6 +756,23 @@ function ImportPagina() {
                         />
                       </td>
                       <td className="px-1 py-1">
+                        {r.bron && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-7"
+                            aria-label="Bekijken in origineel bestand"
+                            title="Bekijken in origineel bestand"
+                            onClick={() =>
+                              setBekijk({
+                                label: `${r.straat} ${r.huisnummer}${r.toevoeging}`,
+                                bron: r.bron!,
+                              })
+                            }
+                          >
+                            <Eye className="size-3.5" />
+                          </Button>
+                        )}
                         <Button
                           size="icon"
                           variant="ghost"
