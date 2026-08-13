@@ -79,15 +79,8 @@ function StraatBlok({
             key={kant}
             className={`w-full table-fixed border-collapse ${i < arr.length - 1 ? "border-r border-foreground/40" : ""}`}
           >
-            <thead>
-              <tr className="border-b border-foreground/40 text-[7px] uppercase leading-[1.2] tracking-wide text-foreground/70">
-                <th className="w-6 px-[2px] text-left">nr</th>
-                <th className="px-[2px] text-left">note</th>
-                {maand === "alles" && <th className="w-8 px-[2px] text-left">freq</th>}
-                {prijzen && <th className="w-10 px-[2px] text-right">€</th>}
-              </tr>
-            </thead>
             <tbody>
+
               {g[kant].map((c) => (
                 <tr key={c.id} className="border-b border-foreground/20 align-top last:border-0">
                   <td className="w-6 px-[2px] text-[8.5px] font-semibold leading-[1.2] tabular-nums">
