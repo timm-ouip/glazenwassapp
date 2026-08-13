@@ -181,7 +181,7 @@ function PrintPagina() {
                       <tr className="border-b border-foreground/40 text-[7px] uppercase leading-[1.2] tracking-wide text-foreground/70">
                         <th className="w-6 px-[2px] text-left">nr</th>
                         <th className="px-[2px] text-left">note</th>
-                        {prijzen && <th className="w-8 px-[2px] text-right">€</th>}
+                        {prijzen && <th className="w-10 px-[2px] text-right">€</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -194,7 +194,7 @@ function PrintPagina() {
                             {c.note}
                           </td>
                           {prijzen && (
-                            <td className={`w-8 px-[2px] text-right text-[8.5px] leading-[1.2] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}>
+                            <td className={`w-10 px-[2px] text-right text-[8.5px] leading-[1.2] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}>
                               {formatPrice(c.price)}
                             </td>
                           )}

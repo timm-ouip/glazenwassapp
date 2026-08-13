@@ -129,7 +129,13 @@ export function formatNumber(c: Customer) {
 }
 
 export function formatPrice(value: number) {
-  return new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(value);
+  const n = Number(value ?? 0);
+  return new Intl.NumberFormat("nl-NL", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(n);
 }
 
 export function sortCustomers(customers: Customer[]) {
