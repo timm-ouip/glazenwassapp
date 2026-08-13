@@ -20,7 +20,7 @@ Doel: alles compact op één A4 (liggend), bewerken direct in de tabel, en volgo
 
 - Klik op een cel (nummer, notitie of prijs) en typ direct — zoals in Excel.
 - Tab of Enter springt naar de volgende cel, Escape annuleert; wijziging wordt meteen opgeslagen.
-- Notitieveld toont snelkeuzes (H, HD, balkon, …) tijdens het typen.
+- Notitieveld toont snelkeuzes (H, HD, balkon, …) tijdens het typen; je kunt er meerdere tegelijk kiezen en zelf nieuwe snelkeuzes toevoegen die bewaard blijven.
 - Onderaan elke straat een lege regel: daarin typen maakt direct een nieuwe klant aan.
 - Het bestaande scherm om een klant toe te voegen blijft gewoon bestaan.
 
