@@ -145,7 +145,15 @@ function PrintPagina() {
         </div>
       </div>
 
-      <main className="mx-auto max-w-[1400px] px-4 py-5 print:max-w-none print:px-0 print:py-0">
+      <main className="mx-auto w-fit px-4 py-5 print:p-0">
+        {groepen.length === 0 && (
+          <p className="text-sm text-muted-foreground print:hidden">Geen klanten voor deze maand.</p>
+        )}
+        <div
+          ref={inhoudRef}
+          className="origin-top-left overflow-hidden print:overflow-visible"
+          style={{ zoom: schaal, width: Math.round(breedtePx / schaal) }}
+        >
         <div className="mb-2 flex items-baseline justify-between border-b-2 border-foreground pb-1">
           <h1 className="text-[13px] font-bold uppercase tracking-wide">
             Waslijst {actieveWijk ? `${actieveWijk.name} ` : ""}— {maand === "even" ? "even" : "oneven"} maand
@@ -153,11 +161,8 @@ function PrintPagina() {
           {prijzen && <span className="text-[11px] tabular-nums">Totaal {formatPrice(totaal)}</span>}
         </div>
 
-        {groepen.length === 0 && (
-          <p className="text-sm text-muted-foreground print:hidden">Geen klanten voor deze maand.</p>
-        )}
-
         <div style={{ columnCount: kolommen, columnGap: "4mm" }} className="[column-fill:_balance]">
+
           {groepen.map((g) => (
             <div key={g.street.id} className="mb-1 break-inside-avoid border border-foreground/70">
               <h2 className="border-b border-foreground/70 bg-muted px-1 text-[9px] font-bold uppercase leading-[1.25] tracking-wide">
