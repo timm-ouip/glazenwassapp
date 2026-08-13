@@ -8,7 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
-import { frequencyLabels, formatPrice, type Frequency } from "@/lib/klanten";
+import {
+  addDistrict,
+  fetchDistricts,
+  frequencyLabels,
+  formatPrice,
+  type District,
+  type Frequency,
+} from "@/lib/klanten";
 
 export const Route = createFileRoute("/importeren")({
   head: () => ({
