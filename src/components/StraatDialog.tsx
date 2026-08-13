@@ -17,10 +17,11 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   street: Street | null;
+  districtId?: string;
   onSaved: () => void;
 }
 
-export function StraatDialog({ open, onOpenChange, street, onSaved }: Props) {
+export function StraatDialog({ open, onOpenChange, street, districtId, onSaved }: Props) {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -38,7 +39,7 @@ export function StraatDialog({ open, onOpenChange, street, onSaved }: Props) {
     const payload = { name: name.trim() };
     const { error } = street
       ? await supabase.from("streets").update(payload).eq("id", street.id)
-      : await supabase.from("streets").insert({ ...payload, sort_order: 0 });
+      : await supabase.from("streets").insert({ ...payload, sort_order: 0, district_id: districtId! });
     setSaving(false);
     if (error) {
       toast.error("Opslaan mislukt: " + error.message);
