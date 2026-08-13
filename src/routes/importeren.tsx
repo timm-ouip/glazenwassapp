@@ -217,8 +217,13 @@ function leesTabblad(
       const nummer = parseNummer(waarde);
       if (!nummer) {
         const volgt = nummersHieronder(r, c);
-        // Straatkop: grijs vakje, of er beginnen hieronder nieuwe huisnummers.
-        const isKop = kopKolommen.size === 0 || isGrijs(cell) || volgt >= 2 || !laatste;
+        const grijsBekend = kopKolommen.size > 0;
+        // Straatkop: als het bestand grijze koppen heeft, telt alleen grijs.
+        // Anders vallen we terug op "er beginnen hieronder huisnummers".
+        const isKop = grijsBekend
+          ? isGrijs(cell)
+          : volgt >= 1 || !laatste;
+
         if (isKop) {
           straat = String(waarde).trim();
           laatste = null;
