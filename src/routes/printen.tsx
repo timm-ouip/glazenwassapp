@@ -136,22 +136,30 @@ function PrintPagina() {
             </Button>
 
             <Button size="sm" variant="outline" asChild>
-              <Link to="/printen" search={{ wijk, maand, prijzen, liggend: !liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand, prijzen, liggend: !liggend, kolommen, paginas }}>
                 {liggend ? "Liggend" : "Staand"}
               </Link>
             </Button>
             <Button size="sm" variant={prijzen ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ wijk, maand, prijzen: !prijzen, liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand, prijzen: !prijzen, liggend, kolommen, paginas }}>
                 Prijzen {prijzen ? "aan" : "uit"}
               </Link>
             </Button>
+            {[1, 2].map((p) => (
+              <Button key={p} size="sm" variant={paginas === p ? "default" : "outline"} asChild>
+                <Link to="/printen" search={{ wijk, maand, prijzen, liggend, kolommen, paginas: p }}>
+                  {p} A4
+                </Link>
+              </Button>
+            ))}
             {[2, 3, 4, 5].map((k) => (
               <Button key={k} size="sm" variant={kolommen === k ? "default" : "outline"} asChild>
-                <Link to="/printen" search={{ wijk, maand, prijzen, liggend, kolommen: k }}>
+                <Link to="/printen" search={{ wijk, maand, prijzen, liggend, kolommen: k, paginas }}>
                   {k} kol.
                 </Link>
               </Button>
             ))}
+
             <Button size="sm" onClick={() => window.print()}>
               <Printer className="size-4" /> Afdrukken
             </Button>
