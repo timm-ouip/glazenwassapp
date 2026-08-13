@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Printer, RectangleHorizontal, RectangleVertical } from "lucide-react";
 import {
   fetchCustomers,
   fetchDistricts,
@@ -138,7 +138,8 @@ function PrintPagina() {
             </Button>
 
             <Button size="sm" variant="outline" asChild>
-              <Link to="/printen" search={{ wijk, maand, prijzen, liggend: !liggend, kolommen, paginas }}>
+              <Link to="/printen" search={{ wijk, maand, prijzen, liggend: !liggend, kolommen, paginas }} className="gap-1.5">
+                {liggend ? <RectangleHorizontal className="size-4" /> : <RectangleVertical className="size-4" />}
                 {liggend ? "Liggend" : "Staand"}
               </Link>
             </Button>
