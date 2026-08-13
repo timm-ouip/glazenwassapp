@@ -100,37 +100,14 @@ function ImportPagina() {
   async function lees(file: File) {
     try {
       const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: "array" });
+      const wb = XLSX.read(buffer, { type: "array", cellStyles: true });
       const gevonden: RijPreview[] = [];
       const freq: Record<string, Frequency> = {};
       for (const sheetName of wb.SheetNames) {
         const sheet = wb.Sheets[sheetName];
         if (!sheet) continue;
         freq[sheetName] = raadFrequentie(sheetName);
-        const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: true });
-        let straat = "";
-        for (const row of rows) {
-          const a = row?.[0];
-          if (a === undefined || a === null || String(a).trim() === "") continue;
-          const nummer = parseNummer(a);
-          if (!nummer) {
-            straat = String(a).trim();
-            continue;
-          }
-          if (!straat) continue;
-          const prijsCel = row?.[2];
-          gevonden.push({
-            tabblad: sheetName,
-            straat,
-            huisnummer: nummer.nummer,
-            toevoeging: nummer.toevoeging,
-            notitie: row?.[1] === undefined || row?.[1] === null ? "" : String(row[1]).trim(),
-            prijs:
-              typeof prijsCel === "number"
-                ? prijsCel
-                : Number(String(prijsCel ?? "").replace(",", ".")) || 0,
-          });
-        }
+        gevonden.push(...leesTabblad(sheet, sheetName));
       }
       setBestandsnaam(file.name);
       setFreqPerTabblad(freq);
@@ -141,6 +118,7 @@ function ImportPagina() {
       console.error(e);
     }
   }
+
 
   async function importeer() {
     if (teImporteren.length === 0) return;
