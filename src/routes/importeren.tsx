@@ -223,11 +223,12 @@ function leesTabblad(
           straat = String(waarde).trim();
           laatste = null;
           if (!bronnen[straat]) bronnen[straat] = { tabblad: sheetName, rij: r, kolom: c };
-        } else {
+        } else if (laatste) {
           // Tekst onder een huisnummer = vervolg van de notitie van dat adres
           const extra = String(waarde).trim();
           laatste.notitie = laatste.notitie ? `${laatste.notitie} ${extra}` : extra;
         }
+
         continue;
       }
       if (!straat) continue;
