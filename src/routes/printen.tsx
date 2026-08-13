@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Printer, RectangleHorizontal, RectangleVertical } from "lucide-react";
 import {
   fetchCustomers,
   fetchDistricts,
