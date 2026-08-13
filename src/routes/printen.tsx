@@ -68,6 +68,37 @@ function PrintPagina() {
     0,
   );
 
+  // --- automatisch passend maken op 1 A4 ---
+  const MM = 96 / 25.4;
+  const paginaB = (liggend ? 297 : 210) - 16;
+  const paginaH = (liggend ? 210 : 297) - 16;
+  const breedtePx = Math.round(paginaB * MM);
+  const hoogtePx = Math.round(paginaH * MM);
+
+  const inhoudRef = useRef<HTMLDivElement>(null);
+  const [schaal, setSchaal] = useState(1);
+
+  useLayoutEffect(() => {
+    setSchaal(1);
+  }, [groepen.length, kolommen, liggend, prijzen, maand, wijk]);
+
+  useEffect(() => {
+    const el = inhoudRef.current;
+    if (!el) return;
+    let id = 0;
+    const meet = () => {
+      const node = inhoudRef.current;
+      if (!node) return;
+      const echteHoogte = node.scrollHeight / schaal;
+      if (echteHoogte <= 0) return;
+      const gewenst = Math.min(1, hoogtePx / echteHoogte);
+      if (Math.abs(gewenst - schaal) > 0.005) setSchaal(gewenst);
+    };
+    id = requestAnimationFrame(meet);
+    return () => cancelAnimationFrame(id);
+  }, [schaal, hoogtePx, groepen.length, kolommen, prijzen, maand, wijk, liggend]);
+
+
   return (
     <div className="min-h-screen bg-background">
       <style>{`@page { size: A4 ${liggend ? "landscape" : "portrait"}; margin: 8mm; }
