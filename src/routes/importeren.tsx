@@ -52,16 +52,24 @@ interface RijPreview {
 }
 
 
-function parseNummer(value: unknown): { nummer: number; toevoeging: string } | null {
+function parseNummer(value: unknown): { nummer: number; toevoeging: string; markering: string } | null {
   if (typeof value === "number" && Number.isFinite(value)) {
-    return { nummer: Math.trunc(value), toevoeging: "" };
+    return { nummer: Math.trunc(value), toevoeging: "", markering: "" };
   }
   if (typeof value === "string") {
-    const match = value.trim().match(/^(\d+)\s*([a-zA-Z-]*)$/);
-    if (match) return { nummer: parseInt(match[1]!, 10), toevoeging: (match[2] ?? "").trim() };
+    // Ook "61!!", "61 *", "12a!" tellen als huisnummer; de tekens erna zijn een markering.
+    const match = value.trim().match(/^(\d+)\s*([a-zA-Z-]*)\s*([!*?+]*)$/);
+    if (match) {
+      return {
+        nummer: parseInt(match[1]!, 10),
+        toevoeging: (match[2] ?? "").trim(),
+        markering: (match[3] ?? "").trim(),
+      };
+    }
   }
   return null;
 }
+
 
 function raadFrequentie(tabblad: string): Frequency {
   const naam = tabblad.toLowerCase();
@@ -238,16 +246,22 @@ function leesTabblad(
       }
       if (!straat) continue;
       const prijsCel = cel(r, c + 2)?.v;
+      const basisNotitie = tekst(cel(r, c + 1));
       const rij: RijPreview = {
         tabblad: sheetName,
         straat,
         huisnummer: nummer.nummer,
         toevoeging: nummer.toevoeging,
-        notitie: tekst(cel(r, c + 1)),
+        notitie: nummer.markering
+          ? basisNotitie
+            ? `${nummer.markering} ${basisNotitie}`
+            : nummer.markering
+          : basisNotitie,
         prijs:
           typeof prijsCel === "number" ? prijsCel : Number(String(prijsCel ?? "").replace(",", ".")) || 0,
         bron: { tabblad: sheetName, rij: r, kolom: c },
       };
+
       rijen.push(rij);
       laatste = rij;
     }
