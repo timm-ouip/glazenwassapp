@@ -420,6 +420,15 @@ function Index() {
                 <Printer className="size-4" /> Printlijst
               </Link>
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!undoLabel}
+              onClick={() => void doeUndo()}
+              title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
+            >
+              <Undo2 className="size-4" /> Ongedaan maken
+            </Button>
           </div>
         </div>
       </header>
