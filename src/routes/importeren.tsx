@@ -48,7 +48,9 @@ interface RijPreview {
   toevoeging: string;
   notitie: string;
   prijs: number;
+  bron?: { tabblad: string; rij: number; kolom: number };
 }
+
 
 function parseNummer(value: unknown): { nummer: number; toevoeging: string } | null {
   if (typeof value === "number" && Number.isFinite(value)) {
