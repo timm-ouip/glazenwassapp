@@ -19,7 +19,7 @@ interface PrintSearch {
   prijzen: boolean;
   liggend: boolean;
   kolommen: number;
-  paginas: number;
+  paginas?: number;
 }
 
 export const Route = createFileRoute("/printen")({
