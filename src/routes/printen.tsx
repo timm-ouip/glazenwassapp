@@ -162,8 +162,11 @@ function PrintPagina() {
   const maxHoogtePx = hoogtePx * paginas;
 
   const inhoudRef = useRef<HTMLDivElement>(null);
+  const kopRef = useRef<HTMLDivElement>(null);
   const kwartRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [schaal, setSchaal] = useState(1);
+  const [kopHoogte, setKopHoogte] = useState(26);
+
 
   useLayoutEffect(() => {
     setSchaal(1);
