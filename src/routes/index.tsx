@@ -21,7 +21,17 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Printer, Upload, Pencil, Trash2, Search, GripVertical } from "lucide-react";
+import {
+  Plus,
+  Printer,
+  Upload,
+  Pencil,
+  Trash2,
+  Search,
+  GripVertical,
+  ArrowUpNarrowWide,
+  ArrowDownNarrowWide,
+} from "lucide-react";
 import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
 import { WijkKiezer } from "@/components/WijkKiezer";
