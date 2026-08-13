@@ -21,7 +21,17 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Printer, Upload, Pencil, Trash2, Search, GripVertical } from "lucide-react";
+import {
+  Plus,
+  Printer,
+  Upload,
+  Pencil,
+  Trash2,
+  Search,
+  GripVertical,
+  ArrowUpNarrowWide,
+  ArrowDownNarrowWide,
+} from "lucide-react";
 import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
 import { WijkKiezer } from "@/components/WijkKiezer";
@@ -85,6 +95,7 @@ function Index() {
   const [compact, setCompact] = useState(true);
   const [selectie, setSelectie] = useState<string[]>([]);
   const [sleep, setSleep] = useState<string | null>(null);
+  const [straatSort, setStraatSort] = useState<{ [id: string]: "asc" | "desc" }>({});
   const [klantDialog, setKlantDialog] = useState<{ open: boolean; customer: Customer | null; streetId?: string }>({
     open: false,
     customer: null,
@@ -124,16 +135,24 @@ function Index() {
     return streets
       .filter((s) => !term || s.name.toLowerCase().includes(term))
       .map((s) => {
-        const klanten = customers.filter((c) => c.street_id === s.id && matchesMaand(c.frequency, filter));
-        return { street: s, ...splitEvenOdd(klanten), aantal: klanten.length };
+        const order = straatSort[s.id] ?? "asc";
+        const klanten = customers
+          .filter((c) => c.street_id === s.id && matchesMaand(c.frequency, filter))
+          .sort((a, b) => {
+            const diff = a.house_number - b.house_number;
+            return order === "asc" ? diff : -diff;
+          });
+        return {
+          street: s,
+          ...splitEvenOdd(klanten),
+          aantal: klanten.length,
+          totaal: klanten.reduce((sum, c) => sum + c.price, 0),
+        };
       });
-  }, [streets, customers, filter, zoek]);
+  }, [streets, customers, filter, zoek, straatSort]);
 
   const totaal = groepen.reduce((sum, g) => sum + g.aantal, 0);
-  const omzet = groepen.reduce(
-    (sum, g) => sum + [...g.even, ...g.oneven].reduce((s, c) => s + c.price, 0),
-    0,
-  );
+  const omzet = groepen.reduce((sum, g) => sum + g.totaal, 0);
 
   async function patchKlant(c: Customer, patch: Partial<Customer>) {
     qc.setQueryData<Customer[]>(["customers"], (old) =>
@@ -406,6 +425,8 @@ function Index() {
                   even={g.even}
                   oneven={g.oneven}
                   aantal={g.aantal}
+                  totaal={g.totaal}
+                  sort={straatSort[g.street.id] ?? "asc"}
                   prijzenTonen={prijzenTonen}
                   quickNotes={quickNotes}
                   rowText={rowText}
@@ -419,6 +440,9 @@ function Index() {
                   onEditStreet={() => setStraatDialog({ open: true, street: g.street })}
                   onDeleteStreet={() => verwijderStraat(g.street)}
                   onAddKlant={() => setKlantDialog({ open: true, customer: null, streetId: g.street.id })}
+                  onToggleSort={() =>
+                    setStraatSort((s) => ({ ...s, [g.street.id]: s[g.street.id] === "asc" ? "desc" : "asc" }))
+                  }
                 />
               ))}
               {districts.length > 0 && (
@@ -462,6 +486,8 @@ interface BlokProps {
   even: Customer[];
   oneven: Customer[];
   aantal: number;
+  totaal: number;
+  sort: "asc" | "desc";
   prijzenTonen: boolean;
   quickNotes: QuickNote[];
   rowText: string;
@@ -475,6 +501,7 @@ interface BlokProps {
   onEditStreet: () => void;
   onDeleteStreet: () => void;
   onAddKlant: () => void;
+  onToggleSort: () => void;
 }
 
 function StraatBlok(p: BlokProps) {
@@ -502,6 +529,17 @@ function StraatBlok(p: BlokProps) {
           {p.street.name}
         </h2>
         <span className="text-[11px] text-muted-foreground">{p.aantal}</span>
+        {p.prijzenTonen && (
+          <span className="text-[11px] tabular-nums text-muted-foreground">{formatPrice(p.totaal)}</span>
+        )}
+        <button
+          className="rounded p-1 text-muted-foreground hover:bg-accent"
+          onClick={p.onToggleSort}
+          aria-label={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
+          title={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
+        >
+          {p.sort === "asc" ? <ArrowUpNarrowWide className="size-3.5" /> : <ArrowDownNarrowWide className="size-3.5" />}
+        </button>
         <button className="rounded p-1 text-muted-foreground hover:bg-accent" onClick={p.onAddKlant} aria-label="Klant toevoegen">
           <Plus className="size-3.5" />
         </button>
