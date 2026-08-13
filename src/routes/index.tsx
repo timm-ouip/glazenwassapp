@@ -336,8 +336,16 @@ function Index() {
       const next = [...streets];
       const [moved] = next.splice(from, 1);
       next.splice(to, 0, moved!);
+        const vorigeVolgorde = streets.map((s) => ({ ...s }));
       qc.setQueryData<Street[]>(["streets"], next.map((s, i) => ({ ...s, sort_order: i + 1 })));
       await persistStreetOrder(next);
+      pushUndo({
+        label: "Straatvolgorde",
+        undo: async () => {
+          await persistStreetOrder(vorigeVolgorde);
+          herlaad();
+        },
+      });
       qc.invalidateQueries({ queryKey: ["streets"] });
       return;
     }
@@ -375,7 +383,19 @@ function Index() {
         return u ? { ...c, street_id: u.street_id, sort_order: u.sort_order } : c;
       }),
     );
+    const vorigePlek = [...verplaatst, ...doelLijst].map((c) => ({
+      id: c.id,
+      street_id: c.street_id,
+      sort_order: c.sort_order,
+    }));
     await persistCustomerOrder(updates);
+    pushUndo({
+      label: "Verplaatsing",
+      undo: async () => {
+        await persistCustomerOrder(vorigePlek);
+        herlaad();
+      },
+    });
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
 
