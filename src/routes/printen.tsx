@@ -59,7 +59,7 @@ function PrintPagina() {
   const groepen = streets
     .map((s) => {
       const klanten = customers.filter((c) => c.street_id === s.id && matchesMaand(c.frequency, maand));
-      return { street: s, ...splitEvenOdd(klanten), aantal: klanten.length };
+      return { street: s, ...splitEvenOdd(klanten, s.sort_desc ? "desc" : "asc"), aantal: klanten.length };
     })
     .filter((g) => g.aantal > 0);
 
@@ -161,10 +161,10 @@ function PrintPagina() {
           {prijzen && <span className="text-[11px] tabular-nums">Totaal {formatPrice(totaal)}</span>}
         </div>
 
-        <div style={{ columnCount: kolommen, columnGap: "4mm" }} className="[column-fill:_balance]">
+        <div style={{ columnCount: kolommen, columnGap: "2mm" }} className="[column-fill:_balance]">
 
           {groepen.map((g) => (
-            <div key={g.street.id} className="mb-1 break-inside-avoid border border-foreground/70">
+            <div key={g.street.id} className="-mt-px break-inside-avoid border border-foreground/70">
               <h2 className="border-b border-foreground/70 bg-muted px-1 text-[9px] font-bold uppercase leading-[1.25] tracking-wide">
                 {g.street.name}
               </h2>

@@ -13,6 +13,7 @@ export interface Street {
   name: string;
   sort_order: number;
   district_id: string;
+  sort_desc: boolean;
 }
 
 export interface Customer {
@@ -71,7 +72,7 @@ export async function deleteDistrict(id: string) {
 export async function fetchStreets(): Promise<Street[]> {
   const { data, error } = await supabase
     .from("streets")
-    .select("id,name,sort_order,district_id")
+    .select("id,name,sort_order,district_id,sort_desc")
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
   if (error) throw error;
@@ -169,4 +170,9 @@ export async function persistStreetOrder(streets: Street[]) {
   await Promise.all(
     streets.map((s, i) => supabase.from("streets").update({ sort_order: i + 1 }).eq("id", s.id)),
   );
+}
+
+export async function setStreetSortDesc(id: string, desc: boolean) {
+  const { error } = await supabase.from("streets").update({ sort_desc: desc }).eq("id", id);
+  if (error) throw error;
 }

@@ -1,0 +1,1 @@
+ALTER TABLE public.streets ADD COLUMN IF NOT EXISTS sort_desc boolean NOT NULL DEFAULT false;
