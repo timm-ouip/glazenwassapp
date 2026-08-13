@@ -270,18 +270,25 @@ function PrintPagina() {
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       const nieuw: Record<string, number> = {};
-      let anders = false;
       for (const g of groepen) {
         const el = meetRefs.current[g.street.id];
         if (!el) continue;
-        const h = el.getBoundingClientRect().height;
-        nieuw[g.street.id] = h;
-        if (Math.abs((hoogtes[g.street.id] ?? 0) - h) > 0.5) anders = true;
+        nieuw[g.street.id] = el.getBoundingClientRect().height;
       }
-      if (anders || Object.keys(nieuw).length !== Object.keys(hoogtes).length) setHoogtes(nieuw);
+      setHoogtes((oud) => {
+        const sleutels = Object.keys(nieuw);
+        if (
+          sleutels.length === Object.keys(oud).length &&
+          sleutels.every((k) => Math.abs((oud[k] ?? -1) - nieuw[k]) <= 0.5)
+        ) {
+          return oud;
+        }
+        return nieuw;
+      });
     });
     return () => cancelAnimationFrame(id);
-  }, [groepen, hoogtes]);
+  }, [groepen]);
+
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
