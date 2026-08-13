@@ -339,7 +339,9 @@ function ImportPagina() {
           notitie: r.notitie,
           prijs: r.prijs,
           frequency: freq,
+          bron: r.bron,
         });
+
       } else {
         // Notities samenvoegen (dubbele tekst niet herhalen), hoogste prijs behouden
         const delen = [bestaand.notitie, r.notitie]
