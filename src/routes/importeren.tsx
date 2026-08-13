@@ -187,6 +187,7 @@ function ImportPagina() {
         freq[sheetName] = raadFrequentie(sheetName);
         gevonden.push(...leesTabblad(sheet, sheetName));
       }
+      console.log("PARSED", gevonden.length, JSON.stringify(gevonden.slice(0,3)));
       setBestandsnaam(file.name);
       setFreqPerTabblad(freq);
       setRijen(gevonden);
