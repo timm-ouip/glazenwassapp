@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -137,10 +137,14 @@ function SleepbaarBlok({
     id: g.street.id,
   });
   const { setNodeRef: setDropRef } = useDroppable({ id: g.street.id });
-  const setNodeRef = (node: HTMLDivElement | null) => {
-    setSleepRef(node);
-    setDropRef(node);
-  };
+  const setNodeRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      setSleepRef(node);
+      setDropRef(node);
+    },
+    [setSleepRef, setDropRef],
+  );
+
   return (
     <div
       ref={setNodeRef}
