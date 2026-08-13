@@ -192,6 +192,19 @@ function leesTabblad(
 
   const rijen: RijPreview[] = [];
   const bronnen: Record<string, Bron> = {};
+
+  /** Telt hoeveel huisnummers er direct onder deze rij staan (tot de volgende tekstcel). */
+  const nummersHieronder = (vanaf: number, c: number) => {
+    let aantal = 0;
+    for (let r = vanaf + 1; r <= range.e.r; r++) {
+      const v = cel(r, c)?.v;
+      if (v === undefined || v === null || String(v).trim() === "") continue;
+      if (parseNummer(v)) aantal++;
+      else break;
+    }
+    return aantal;
+  };
+
   for (const c of kolommen) {
     let straat = "";
     let laatste: RijPreview | null = null;
@@ -201,11 +214,14 @@ function leesTabblad(
       if (waarde === undefined || waarde === null || String(waarde).trim() === "") continue;
       const nummer = parseNummer(waarde);
       if (!nummer) {
-        if (kopKolommen.size === 0 || isGrijs(cell)) {
+        const volgt = nummersHieronder(r, c);
+        // Straatkop: grijs vakje, of er beginnen hieronder nieuwe huisnummers.
+        const isKop = kopKolommen.size === 0 || isGrijs(cell) || volgt >= 2 || !laatste;
+        if (isKop) {
           straat = String(waarde).trim();
           laatste = null;
           if (!bronnen[straat]) bronnen[straat] = { tabblad: sheetName, rij: r, kolom: c };
-        } else if (laatste) {
+        } else {
           // Tekst onder een huisnummer = vervolg van de notitie van dat adres
           const extra = String(waarde).trim();
           laatste.notitie = laatste.notitie ? `${laatste.notitie} ${extra}` : extra;
@@ -222,11 +238,13 @@ function leesTabblad(
         notitie: tekst(cel(r, c + 1)),
         prijs:
           typeof prijsCel === "number" ? prijsCel : Number(String(prijsCel ?? "").replace(",", ".")) || 0,
+        bron: { tabblad: sheetName, rij: r, kolom: c },
       };
       rijen.push(rij);
       laatste = rij;
     }
   }
+
 
   return { rijen, bronnen, grid };
 }
