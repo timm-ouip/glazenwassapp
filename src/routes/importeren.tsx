@@ -403,28 +403,51 @@ function ImportPagina() {
               </p>
               <div className="mt-4 space-y-3">
                 <Label>Frequentie per tabblad</Label>
-                {tabbladen.map((t) => (
-                  <div key={t} className="flex items-center gap-3">
-                    <span className="w-40 truncate text-sm text-muted-foreground">{t}</span>
-                    <Select
-                      value={freqPerTabblad[t] ?? "elke"}
-                      onValueChange={(v) =>
-                        setFreqPerTabblad((s) => ({ ...s, [t]: v as Frequency }))
-                      }
-                    >
-                      <SelectTrigger className="max-w-48">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(Object.keys(frequencyLabels) as Frequency[]).map((f) => (
-                          <SelectItem key={f} value={f}>
-                            {frequencyLabels[f]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
+                {tabbladen.map((t) => {
+                  const skipped = skipTabbladen.has(t);
+                  return (
+                    <div key={t} className="flex items-center gap-3">
+                      <span className={`w-40 truncate text-sm ${skipped ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                        {t}
+                      </span>
+                      <Select
+                        value={freqPerTabblad[t] ?? "elke"}
+                        disabled={skipped}
+                        onValueChange={(v) =>
+                          setFreqPerTabblad((s) => ({ ...s, [t]: v as Frequency }))
+                        }
+                      >
+                        <SelectTrigger className="max-w-48">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.keys(frequencyLabels) as Frequency[]).map((f) => (
+                            <SelectItem key={f} value={f}>
+                              {frequencyLabels[f]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`skip-${t}`}
+                          checked={skipped}
+                          onCheckedChange={(checked) => {
+                            setSkipTabbladen((s) => {
+                              const next = new Set(s);
+                              if (checked) next.add(t);
+                              else next.delete(t);
+                              return next;
+                            });
+                          }}
+                        />
+                        <Label htmlFor={`skip-${t}`} className="text-xs font-normal cursor-pointer">
+                          Niet importeren
+                        </Label>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
