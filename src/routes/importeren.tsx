@@ -661,18 +661,19 @@ function ImportPagina() {
               </div>
             )}
 
-            <div className="overflow-hidden rounded-lg border border-border bg-card">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-lg border border-border bg-card">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead className="bg-secondary text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">Straat</th>
-                    <th className="px-3 py-2">Nr.</th>
+                    <th className="w-20 px-3 py-2">Nr.</th>
                     <th className="px-3 py-2">Notitie</th>
-                    <th className="px-3 py-2">Frequentie</th>
-                    <th className="px-3 py-2 text-right">Prijs</th>
+                    <th className="w-40 whitespace-nowrap px-3 py-2">Frequentie</th>
+                    <th className="w-24 whitespace-nowrap px-3 py-2 text-right">Prijs</th>
                     <th className="w-10 px-2 py-2" />
                   </tr>
                 </thead>
+
                 <tbody className="divide-y divide-border">
                   {lijst.map((r) => (
                     <tr key={r.id}>
