@@ -279,7 +279,7 @@ function PrintPagina() {
         const sleutels = Object.keys(nieuw);
         if (
           sleutels.length === Object.keys(oud).length &&
-          sleutels.every((k) => Math.abs((oud[k] ?? -1) - nieuw[k]) <= 0.5)
+          sleutels.every((k) => Math.abs((oud[k] ?? -1) - (nieuw[k] ?? 0)) <= 0.5)
         ) {
           return oud;
         }
