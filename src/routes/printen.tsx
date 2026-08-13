@@ -164,8 +164,10 @@ function PrintPagina() {
         >
         <div className="mb-2 flex items-baseline justify-between border-b-2 border-foreground pb-1">
           <h1 className="text-[13px] font-bold uppercase tracking-wide">
-            Waslijst {actieveWijk ? `${actieveWijk.name} ` : ""}— {maand === "even" ? "even" : "oneven"} maand
+            Waslijst {actieveWijk ? `${actieveWijk.name} ` : ""}—{" "}
+            {maand === "alles" ? "alle klanten" : `${maand} maand`}
           </h1>
+
           {prijzen && <span className="text-[11px] tabular-nums">Totaal {formatPrice(totaal)}</span>}
         </div>
 
