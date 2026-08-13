@@ -548,9 +548,22 @@ function ImportPagina() {
                             ))}
                         </SelectContent>
                       </Select>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setGoedgekeurd((s) => new Set(s).add(v.straat))}
+                      >
+                        <Check className="size-4" /> Klopt wel
+                      </Button>
+                      {bronnen[v.straat] && (
+                        <Button size="sm" variant="outline" onClick={() => setBekijk(v.straat)}>
+                          <Eye className="size-4" /> Bekijken in bestand
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => verwijderStraat(v.straat)}>
                         <Trash2 className="size-4" /> {v.aantal} regels weggooien
                       </Button>
+
                     </div>
                   </div>
                 ))}
