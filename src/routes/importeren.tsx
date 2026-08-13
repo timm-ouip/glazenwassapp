@@ -92,11 +92,40 @@ function tekst(cell: XLSX.CellObject | undefined): string {
  * Leest een tabblad met één of meerdere naast elkaar staande tabellen.
  * Elk blok: kolom met huisnummers (grijze straatkop erboven), daarnaast notitie en prijs.
  */
-function leesTabblad(sheet: XLSX.WorkSheet, sheetName: string): RijPreview[] {
+interface Bron {
+  tabblad: string;
+  rij: number;
+  kolom: number;
+}
+
+interface SheetGrid {
+  cellen: string[][];
+  grijs: boolean[][];
+}
+
+function leesTabblad(
+  sheet: XLSX.WorkSheet,
+  sheetName: string,
+): { rijen: RijPreview[]; bronnen: Record<string, Bron>; grid: SheetGrid } {
+  const leeg: SheetGrid = { cellen: [], grijs: [] };
   const ref = sheet["!ref"];
-  if (!ref) return [];
+  if (!ref) return { rijen: [], bronnen: {}, grid: leeg };
   const range = XLSX.utils.decode_range(ref);
   const cel = (r: number, c: number) => sheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
+
+  // Volledige weergave van het tabblad (om later te kunnen "bekijken in origineel")
+  const grid: SheetGrid = { cellen: [], grijs: [] };
+  for (let r = 0; r <= range.e.r; r++) {
+    const rijTekst: string[] = [];
+    const rijGrijs: boolean[] = [];
+    for (let c = 0; c <= range.e.c; c++) {
+      const cell = cel(r, c);
+      rijTekst.push(tekst(cell));
+      rijGrijs.push(isGrijs(cell));
+    }
+    grid.cellen.push(rijTekst);
+    grid.grijs.push(rijGrijs);
+  }
 
   // Kolommen waar een grijze straatkop in staat
   const kopKolommen = new Set<number>();
@@ -116,6 +145,7 @@ function leesTabblad(sheet: XLSX.WorkSheet, sheetName: string): RijPreview[] {
       : [range.s.c];
 
   const rijen: RijPreview[] = [];
+  const bronnen: Record<string, Bron> = {};
   for (const c of kolommen) {
     let straat = "";
     for (let r = range.s.r; r <= range.e.r; r++) {
@@ -124,7 +154,10 @@ function leesTabblad(sheet: XLSX.WorkSheet, sheetName: string): RijPreview[] {
       if (waarde === undefined || waarde === null || String(waarde).trim() === "") continue;
       const nummer = parseNummer(waarde);
       if (!nummer) {
-        if (kopKolommen.size === 0 || isGrijs(cell)) straat = String(waarde).trim();
+        if (kopKolommen.size === 0 || isGrijs(cell)) {
+          straat = String(waarde).trim();
+          if (!bronnen[straat]) bronnen[straat] = { tabblad: sheetName, rij: r, kolom: c };
+        }
         continue;
       }
       if (!straat) continue;
@@ -140,8 +173,9 @@ function leesTabblad(sheet: XLSX.WorkSheet, sheetName: string): RijPreview[] {
       });
     }
   }
-  return rijen;
+  return { rijen, bronnen, grid };
 }
+
 
 
 interface ImportRij {
