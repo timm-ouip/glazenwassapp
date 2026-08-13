@@ -132,11 +132,14 @@ function PrintPagina() {
               <h2 className="border-b border-foreground/70 bg-muted px-1 text-[9px] font-bold uppercase leading-[1.25] tracking-wide">
                 {g.street.name}
               </h2>
-              <div className="grid grid-cols-2">
-                {(["even", "oneven"] as const).map((kant, i) => (
+              <div className={`grid ${g.even.length > 0 && g.oneven.length > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
+                {([
+                  g.even.length > 0 ? "even" : null,
+                  g.oneven.length > 0 ? "oneven" : null,
+                ].filter(Boolean) as ("even" | "oneven")[]).map((kant, i, arr) => (
                   <table
                     key={kant}
-                    className={`w-full table-fixed border-collapse ${i === 0 ? "border-r border-foreground/40" : ""}`}
+                    className={`w-full table-fixed border-collapse ${i < arr.length - 1 ? "border-r border-foreground/40" : ""}`}
                   >
                     <thead>
                       <tr className="border-b border-foreground/40 text-[7px] uppercase leading-[1.2] tracking-wide text-foreground/70">
