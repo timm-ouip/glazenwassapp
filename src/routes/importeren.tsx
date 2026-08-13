@@ -699,8 +699,8 @@ function BronVenster({
   onClose,
 }: {
   straat: string | null;
-  bron?: Bron;
-  grid?: SheetGrid;
+  bron?: Bron | undefined;
+  grid?: SheetGrid | undefined;
   bestandsnaam: string;
   onClose: () => void;
 }) {
