@@ -246,16 +246,22 @@ function leesTabblad(
       }
       if (!straat) continue;
       const prijsCel = cel(r, c + 2)?.v;
+      const basisNotitie = tekst(cel(r, c + 1));
       const rij: RijPreview = {
         tabblad: sheetName,
         straat,
         huisnummer: nummer.nummer,
         toevoeging: nummer.toevoeging,
-        notitie: tekst(cel(r, c + 1)),
+        notitie: nummer.markering
+          ? basisNotitie
+            ? `${nummer.markering} ${basisNotitie}`
+            : nummer.markering
+          : basisNotitie,
         prijs:
           typeof prijsCel === "number" ? prijsCel : Number(String(prijsCel ?? "").replace(",", ".")) || 0,
         bron: { tabblad: sheetName, rij: r, kolom: c },
       };
+
       rijen.push(rij);
       laatste = rij;
     }
