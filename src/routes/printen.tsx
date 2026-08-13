@@ -153,7 +153,7 @@ function PrintPagina() {
                           </td>
                           <td className="truncate px-1 text-[9.5px] leading-[1.35]">{c.note}</td>
                           {prijzen && (
-                            <td className="w-9 px-1 text-right text-[9.5px] leading-[1.35] tabular-nums">
+                            <td className={`w-9 px-1 text-right text-[9.5px] leading-[1.35] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}>
                               {formatPrice(c.price)}
                             </td>
                           )}

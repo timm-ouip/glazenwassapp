@@ -619,13 +619,13 @@ function KlantRij({
         />
       </div>
       {prijzenTonen && (
-        <div className="w-12 shrink-0">
+        <div className={`w-16 shrink-0 ${c.price === 0 ? "text-red-600" : ""}`}>
           <InlineCel
-            value={c.price ? String(c.price).replace(".", ",") : ""}
+            value={formatPrice(c.price)}
             align="right"
             inputMode="decimal"
-            placeholder="0"
-            onCommit={(v) => onPatch(c, { price: Number(v.replace(",", ".")) || 0 })}
+            placeholder={formatPrice(0)}
+            onCommit={(v) => onPatch(c, { price: Number(v.replace(",", ".").replace(/[^\d.]/g, "")) || 0 })}
           />
         </div>
       )}

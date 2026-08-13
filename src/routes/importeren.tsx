@@ -749,11 +749,11 @@ function ImportPagina() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-2 py-1 text-right">
+                      <td className={`px-2 py-1 text-right ${r.prijs === 0 ? "text-red-600" : ""}`}>
                         <InlineCel
                           align="right"
                           inputMode="decimal"
-                          value={r.prijs ? String(r.prijs).replace(".", ",") : ""}
+                          value={formatPrice(r.prijs)}
                           placeholder={formatPrice(0)}
                           onCommit={(v) =>
                             wijzig(r.id, { prijs: Number(v.replace(",", ".").replace(/[^\d.]/g, "")) || 0 })
