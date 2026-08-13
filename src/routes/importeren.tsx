@@ -316,9 +316,23 @@ function ImportPagina() {
           prijs: r.prijs,
           frequency: freq,
         });
-      } else if (bestaand.frequency !== freq) {
-        map.set(sleutel, { ...bestaand, frequency: "elke" });
+      } else {
+        // Notities samenvoegen (dubbele tekst niet herhalen), hoogste prijs behouden
+        const delen = [bestaand.notitie, r.notitie]
+          .map((n) => n.trim())
+          .filter(Boolean);
+        const uniek: string[] = [];
+        for (const d of delen) {
+          if (!uniek.some((u) => u.toLowerCase() === d.toLowerCase())) uniek.push(d);
+        }
+        map.set(sleutel, {
+          ...bestaand,
+          notitie: uniek.join(" / "),
+          prijs: Math.max(bestaand.prijs, r.prijs),
+          frequency: bestaand.frequency !== freq ? "elke" : bestaand.frequency,
+        });
       }
+
     }
     setLijst([...map.values()]);
     setHernoemen({});
