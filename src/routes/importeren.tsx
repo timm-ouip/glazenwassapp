@@ -205,6 +205,7 @@ function ImportPagina() {
   useEffect(() => {
     const map = new Map<string, ImportRij>();
     for (const r of rijen) {
+      if (skipTabbladen.has(r.tabblad)) continue;
       const sleutel = `${r.straat.toLowerCase()}|${r.huisnummer}|${r.toevoeging.toLowerCase()}`;
       const freq = freqPerTabblad[r.tabblad] ?? "elke";
       const bestaand = map.get(sleutel);
@@ -224,7 +225,7 @@ function ImportPagina() {
     }
     setLijst([...map.values()]);
     setHernoemen({});
-  }, [rijen, freqPerTabblad]);
+  }, [rijen, freqPerTabblad, skipTabbladen]);
 
   function wijzig(id: string, patch: Partial<ImportRij>) {
     setLijst((l) => l.map((r) => (r.id === id ? { ...r, ...patch } : r)));
