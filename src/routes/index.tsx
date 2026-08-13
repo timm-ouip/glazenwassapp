@@ -136,15 +136,10 @@ function Index() {
       .filter((s) => !term || s.name.toLowerCase().includes(term))
       .map((s) => {
         const order = straatSort[s.id] ?? "asc";
-        const klanten = customers
-          .filter((c) => c.street_id === s.id && matchesMaand(c.frequency, filter))
-          .sort((a, b) => {
-            const diff = a.house_number - b.house_number;
-            return order === "asc" ? diff : -diff;
-          });
+        const klanten = customers.filter((c) => c.street_id === s.id && matchesMaand(c.frequency, filter));
         return {
           street: s,
-          ...splitEvenOdd(klanten),
+          ...splitEvenOdd(klanten, order),
           aantal: klanten.length,
           totaal: klanten.reduce((sum, c) => sum + c.price, 0),
         };
