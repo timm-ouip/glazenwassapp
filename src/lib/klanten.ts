@@ -2,10 +2,17 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type Frequency = "elke" | "even" | "oneven";
 
+export interface District {
+  id: string;
+  name: string;
+  sort_order: number;
+}
+
 export interface Street {
   id: string;
   name: string;
   sort_order: number;
+  district_id: string;
 }
 
 export interface Customer {
