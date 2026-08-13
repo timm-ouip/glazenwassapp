@@ -270,6 +270,7 @@ function ImportPagina() {
   const [freqPerTabblad, setFreqPerTabblad] = useState<Record<string, Frequency>>({});
   const [skipTabbladen, setSkipTabbladen] = useState<Set<string>>(new Set());
   const [bezig, setBezig] = useState(false);
+  const [sleep, setSleep] = useState(false);
   const [wijken, setWijken] = useState<District[]>([]);
   const [wijkId, setWijkId] = useState<string>("");
   const [nieuweWijk, setNieuweWijk] = useState("");
