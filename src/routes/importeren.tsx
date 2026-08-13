@@ -296,16 +296,27 @@ function ImportPagina() {
       const wb = XLSX.read(buffer, { type: "array", cellStyles: true });
       const gevonden: RijPreview[] = [];
       const freq: Record<string, Frequency> = {};
+      const alleBronnen: Record<string, Bron> = {};
+      const alleGrids: Record<string, SheetGrid> = {};
       for (const sheetName of wb.SheetNames) {
         const sheet = wb.Sheets[sheetName];
         if (!sheet) continue;
         freq[sheetName] = raadFrequentie(sheetName);
-        gevonden.push(...leesTabblad(sheet, sheetName));
+        const res = leesTabblad(sheet, sheetName);
+        gevonden.push(...res.rijen);
+        alleGrids[sheetName] = res.grid;
+        for (const [naam, bron] of Object.entries(res.bronnen)) {
+          if (!alleBronnen[naam]) alleBronnen[naam] = bron;
+        }
       }
       setBestandsnaam(file.name);
       setFreqPerTabblad(freq);
+      setBronnen(alleBronnen);
+      setGrids(alleGrids);
+      setGoedgekeurd(new Set());
       setRijen(gevonden);
       if (gevonden.length === 0) toast.error("Geen klanten herkend in dit bestand.");
+
     } catch (e) {
       toast.error("Bestand kon niet gelezen worden.");
       console.error(e);
