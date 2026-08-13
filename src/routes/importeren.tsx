@@ -7,15 +7,21 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Trash2 } from "lucide-react";
+import { InlineCel } from "@/components/InlineCel";
+import { NotitieCel } from "@/components/NotitieCel";
 import {
   addDistrict,
+  addQuickNote,
   fetchDistricts,
+  fetchQuickNotes,
   frequencyLabels,
   formatPrice,
   type District,
   type Frequency,
+  type QuickNote,
 } from "@/lib/klanten";
+
 
 export const Route = createFileRoute("/importeren")({
   head: () => ({
