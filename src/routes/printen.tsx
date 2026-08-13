@@ -301,7 +301,10 @@ function PrintPagina() {
           className="origin-top-left overflow-hidden print:overflow-visible"
           style={{ zoom: schaal, width: Math.round(breedtePx / schaal) }}
         >
-          <div className="mb-2 flex items-baseline justify-between border-b-2 border-foreground pb-1">
+          <div
+            ref={kopRef}
+            className="mb-1 flex items-baseline justify-between border-b-2 border-foreground pb-[1px]"
+          >
             <h1 className="text-[13px] font-bold uppercase tracking-wide">
               Waslijst {actieveWijk ? `${actieveWijk.name} ` : ""}—{" "}
               {maand === "alles" ? "alle klanten" : `${maand} maand`}
@@ -315,7 +318,7 @@ function PrintPagina() {
               {kwarten.map((kwart, i) => (
                 <div
                   key={i}
-                  className={`overflow-hidden px-[3mm] pb-[3mm] ${i % 2 === 0 ? "border-r border-dashed border-foreground/40" : ""} ${i < 2 ? "border-b border-dashed border-foreground/40" : ""}`}
+                  className={`overflow-hidden px-[1mm] pb-[1mm] ${i % 2 === 0 ? "border-r border-dashed border-foreground/40" : ""} ${i < 2 ? "border-b border-dashed border-foreground/40" : ""}`}
                   style={{ height: kwartHoogte }}
                 >
                   <div
@@ -324,7 +327,7 @@ function PrintPagina() {
                     }}
                     className="h-full overflow-hidden"
                   >
-                    <div style={{ columnCount: kwartKolommen, columnGap: "2mm" }} className="[column-fill:_balance]">
+                    <div style={{ columnCount: kwartKolommen, columnGap: "1mm" }} className="[column-fill:_balance]">
                       {kwart.map((g) => (
                         <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
                       ))}
@@ -334,7 +337,8 @@ function PrintPagina() {
               ))}
             </div>
           ) : (
-            <div style={{ columnCount: kolommen, columnGap: "2mm" }} className="[column-fill:_balance]">
+            <div style={{ columnCount: kolommen, columnGap: "1mm" }} className="[column-fill:_balance]">
+
               {groepen.map((g) => (
                 <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
               ))}
