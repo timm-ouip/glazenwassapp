@@ -154,15 +154,14 @@ function PrintPagina() {
                           <td className="px-[2px] text-[8.5px] leading-[1.2] break-words hyphens-auto">
                             {c.note}
                           </td>
+                          {prijzen && (
+                            <td className={`w-8 px-[2px] text-right text-[8.5px] leading-[1.2] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}>
+                              {formatPrice(c.price)}
+                            </td>
+                          )}
+                        </tr>
+                      ))}
 
-                            {prijzen && (
-                              <td className={`w-8 px-[2px] text-right text-[8.5px] leading-[1.2] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}>
-                                {formatPrice(c.price)}
-                              </td>
-                            )}
-                          </tr>
-                        );
-                      })}
                     </tbody>
                   </table>
                 ))}
