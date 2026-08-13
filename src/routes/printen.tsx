@@ -201,7 +201,7 @@ function PrintPagina() {
 
   const kwarten = vouwen ? verdeelInKwarten(groepen) : [];
   // hoogte per kwart, in niet-geschaalde px (titelbalk wordt gemeten)
-  const kwartHoogte = Math.floor((hoogtePx / schaal - kopHoogte - 4) / 2);
+  const kwartHoogte = Math.floor((hoogtePx / schaal - kopHoogte - 10) / 2);
   const kwartKolommen = Math.max(1, Math.round(kolommen / 2));
 
 
@@ -210,7 +210,7 @@ function PrintPagina() {
   return (
     <div className="min-h-screen bg-background">
       <style>{`@page { size: A4 ${liggend ? "landscape" : "portrait"}; margin: 8mm; }
-@media print { html, body { background: #fff; } }`}</style>
+@media print { html, body { background: #fff; } main { overflow: hidden; } }`}</style>
 
       <div className="border-b border-border bg-card print:hidden">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 py-4">
