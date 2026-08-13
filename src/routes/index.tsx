@@ -36,6 +36,7 @@ import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
 import { WijkKiezer } from "@/components/WijkKiezer";
 import { InlineCel } from "@/components/InlineCel";
+import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { NotitieCel } from "@/components/NotitieCel";
 import {
   addQuickNote,
