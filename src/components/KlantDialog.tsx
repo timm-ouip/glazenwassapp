@@ -14,11 +14,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import {
   frequencyLabels,
-  veelgebruikteNotities,
+  noteTokens,
+  toggleNoteToken,
   type Customer,
   type Frequency,
+  type QuickNote,
   type Street,
 } from "@/lib/klanten";
+import { Plus } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -26,10 +29,22 @@ interface Props {
   streets: Street[];
   customer: Customer | null;
   defaultStreetId?: string | undefined;
+  quickNotes: QuickNote[];
+  onAddQuickNote: (label: string) => void;
   onSaved: () => void;
 }
 
-export function KlantDialog({ open, onOpenChange, streets, customer, defaultStreetId, onSaved }: Props) {
+export function KlantDialog({
+  open,
+  onOpenChange,
+  streets,
+  customer,
+  defaultStreetId,
+  quickNotes,
+  onAddQuickNote,
+  onSaved,
+}: Props) {
+  const [nieuweSnelkeuze, setNieuweSnelkeuze] = useState("");
   const [streetId, setStreetId] = useState("");
   const [number, setNumber] = useState("");
   const [addition, setAddition] = useState("");
