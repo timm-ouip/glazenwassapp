@@ -134,9 +134,9 @@ function PrintPagina() {
                   >
                     <thead>
                       <tr className="border-b border-foreground/40 text-[8px] uppercase tracking-wide text-foreground/70">
-                        <th className="w-7 px-1 text-left">Nr</th>
-                        <th className="px-1 text-left">Notitie</th>
-                        {prijzen && <th className="w-9 px-1 text-right">€</th>}
+                        <th className="w-7 px-1 text-left">nr</th>
+                        <th className="px-1 text-left">note</th>
+                        {prijzen && <th className="w-9 px-1 text-right">prijs</th>}
                       </tr>
                     </thead>
                     <tbody>
