@@ -131,6 +131,29 @@ function Index() {
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
 
+  async function doeUndo() {
+    const label = await undoLaatste();
+    if (label) toast.success("Teruggedraaid: " + label);
+    else toast("Niets om terug te draaien");
+  }
+
+  function meldUndo(bericht: string) {
+    toast(bericht, { action: { label: "Ongedaan maken", onClick: () => void doeUndo() } });
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const doel = e.target as HTMLElement | null;
+      const tikt = doel && (doel.tagName === "INPUT" || doel.tagName === "TEXTAREA" || doel.isContentEditable);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !tikt) {
+        e.preventDefault();
+        void doeUndo();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const groepen = useMemo(() => {
     const term = zoek.trim().toLowerCase();
     return streets
