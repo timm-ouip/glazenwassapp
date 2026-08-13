@@ -197,7 +197,7 @@ function PrintPagina() {
       if (Math.abs(gewenst - schaal) > 0.004) setSchaal(gewenst);
     });
     return () => cancelAnimationFrame(id);
-  }, [schaal, maxHoogtePx, groepen.length, kolommen, prijzen, maand, wijk, liggend, vouwen]);
+  }, [schaal, kopHoogte, maxHoogtePx, groepen.length, kolommen, prijzen, maand, wijk, liggend, vouwen]);
 
   const kwarten = vouwen ? verdeelInKwarten(groepen) : [];
   // hoogte per kwart, in niet-geschaalde px (titelbalk wordt gemeten)
