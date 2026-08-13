@@ -138,7 +138,8 @@ function PrintPagina() {
             </Button>
 
             <Button size="sm" variant="outline" asChild>
-              <Link to="/printen" search={{ wijk, maand, prijzen, liggend: !liggend, kolommen, paginas }}>
+              <Link to="/printen" search={{ wijk, maand, prijzen, liggend: !liggend, kolommen, paginas }} className="gap-1.5">
+                {liggend ? <RectangleHorizontal className="size-4" /> : <RectangleVertical className="size-4" />}
                 {liggend ? "Liggend" : "Staand"}
               </Link>
             </Button>
