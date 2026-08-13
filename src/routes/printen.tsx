@@ -85,18 +85,17 @@ function PrintPagina() {
   useEffect(() => {
     const el = inhoudRef.current;
     if (!el) return;
-    let id = 0;
-    const meet = () => {
+    const id = requestAnimationFrame(() => {
       const node = inhoudRef.current;
       if (!node) return;
-      const echteHoogte = node.scrollHeight / schaal;
-      if (echteHoogte <= 0) return;
-      const gewenst = Math.min(1, hoogtePx / echteHoogte);
-      if (Math.abs(gewenst - schaal) > 0.005) setSchaal(gewenst);
-    };
-    id = requestAnimationFrame(meet);
+      const gerenderd = node.getBoundingClientRect().height;
+      if (gerenderd <= 0) return;
+      const gewenst = Math.min(1, (schaal * hoogtePx) / gerenderd);
+      if (Math.abs(gewenst - schaal) > 0.004) setSchaal(gewenst);
+    });
     return () => cancelAnimationFrame(id);
   }, [schaal, hoogtePx, groepen.length, kolommen, prijzen, maand, wijk, liggend]);
+
 
 
   return (
