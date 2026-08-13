@@ -17,7 +17,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   street: Street | null;
-  districtId?: string;
+  districtId?: string | undefined;
   onSaved: () => void;
 }
 
