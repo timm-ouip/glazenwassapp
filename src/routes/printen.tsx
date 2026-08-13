@@ -191,9 +191,10 @@ function PrintPagina() {
   }, [schaal, maxHoogtePx, groepen.length, kolommen, prijzen, maand, wijk, liggend, vouwen]);
 
   const kwarten = vouwen ? verdeelInKwarten(groepen) : [];
-  // hoogte per kwart, in niet-geschaalde px (titelbalk ~24px)
-  const kwartHoogte = Math.floor((hoogtePx / schaal - 26) / 2);
+  // hoogte per kwart, in niet-geschaalde px (titelbalk wordt gemeten)
+  const kwartHoogte = Math.floor((hoogtePx / schaal - kopHoogte - 4) / 2);
   const kwartKolommen = Math.max(1, Math.round(kolommen / 2));
+
 
   const zoek = { wijk, maand, prijzen, liggend, kolommen, paginas, vouwen };
 
