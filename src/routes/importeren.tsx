@@ -313,7 +313,7 @@ function ImportPagina() {
     fetchDistricts()
       .then((d) => {
         setWijken(d);
-        setWijkId((huidig) => huidig || d[0]?.id || "__nieuw__");
+        setWijkId((huidig) => huidig || "__geen__");
       })
       .catch(() => toast.error("Wijken laden mislukt"));
     fetchQuickNotes().then(setQuickNotes).catch(() => undefined);
@@ -437,7 +437,24 @@ function ImportPagina() {
     setBezig(true);
     try {
       let districtId = wijkId;
-      if (districtId === "__nieuw__") {
+      if (districtId === "__geen__") {
+        const { data: bestaand } = await supabase
+          .from("districts")
+          .select("id")
+          .eq("name", "Geen wijk")
+          .single();
+        if (bestaand) {
+          districtId = bestaand.id;
+        } else {
+          const { data: nieuw, error: wijkFout } = await supabase
+            .from("districts")
+            .insert({ name: "Geen wijk", sort_order: 0 })
+            .select("id")
+            .single();
+          if (wijkFout) throw wijkFout;
+          districtId = nieuw!.id;
+        }
+      } else if (districtId === "__nieuw__") {
         if (!nieuweWijk.trim()) throw new Error("Vul een naam voor de nieuwe wijk in.");
         const wijk = await addDistrict(nieuweWijk.trim());
         districtId = wijk.id;
@@ -505,6 +522,7 @@ function ImportPagina() {
               <SelectValue placeholder="Kies een wijk" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="__geen__">Geen wijk</SelectItem>
               {wijken.map((w) => (
                 <SelectItem key={w.id} value={w.id}>
                   {w.name}
