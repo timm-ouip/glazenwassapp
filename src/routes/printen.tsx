@@ -123,6 +123,12 @@ function PrintPagina() {
                 Oneven maand
               </Link>
             </Button>
+            <Button size="sm" variant={maand === "alles" ? "default" : "outline"} asChild>
+              <Link to="/printen" search={{ wijk, maand: "alles", prijzen, liggend, kolommen }}>
+                Alle klanten
+              </Link>
+            </Button>
+
             <Button size="sm" variant="outline" asChild>
               <Link to="/printen" search={{ wijk, maand, prijzen, liggend: !liggend, kolommen }}>
                 {liggend ? "Liggend" : "Staand"}
