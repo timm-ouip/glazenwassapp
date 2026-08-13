@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer } from "lucide-react";
 import {
   fetchCustomers,
+  fetchDistricts,
   fetchStreets,
   formatNumber,
   formatPrice,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/klanten";
 
 interface PrintSearch {
+  wijk: string;
   maand: "even" | "oneven";
   prijzen: boolean;
   liggend: boolean;
@@ -20,6 +22,7 @@ interface PrintSearch {
 
 export const Route = createFileRoute("/printen")({
   validateSearch: (search: Record<string, unknown>): PrintSearch => ({
+    wijk: typeof search["wijk"] === "string" ? search["wijk"] : "",
     maand: search["maand"] === "oneven" ? "oneven" : "even",
     prijzen: search["prijzen"] === true || search["prijzen"] === "true",
     liggend: search["liggend"] !== false && search["liggend"] !== "false",
@@ -42,11 +45,14 @@ export const Route = createFileRoute("/printen")({
 });
 
 function PrintPagina() {
-  const { maand, prijzen, liggend, kolommen } = Route.useSearch();
+  const { wijk, maand, prijzen, liggend, kolommen } = Route.useSearch();
+  const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
 
-  const streets = streetsQuery.data ?? [];
+  const districts = districtsQuery.data ?? [];
+  const actieveWijk = districts.find((d) => d.id === wijk) ?? districts[0] ?? null;
+  const streets = (streetsQuery.data ?? []).filter((s) => !actieveWijk || s.district_id === actieveWijk.id);
   const customers = customersQuery.data ?? [];
 
   const groepen = streets
@@ -69,34 +75,34 @@ function PrintPagina() {
       <div className="border-b border-border bg-card print:hidden">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 py-4">
           <Button size="sm" variant="ghost" asChild>
-            <Link to="/">
+            <Link to="/" search={{ wijk }}>
               <ArrowLeft className="size-4" /> Terug
             </Link>
           </Button>
           <div className="ml-auto flex flex-wrap gap-2">
             <Button size="sm" variant={maand === "even" ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ maand: "even", prijzen, liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand: "even", prijzen, liggend, kolommen }}>
                 Even maand
               </Link>
             </Button>
             <Button size="sm" variant={maand === "oneven" ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ maand: "oneven", prijzen, liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand: "oneven", prijzen, liggend, kolommen }}>
                 Oneven maand
               </Link>
             </Button>
             <Button size="sm" variant="outline" asChild>
-              <Link to="/printen" search={{ maand, prijzen, liggend: !liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand, prijzen, liggend: !liggend, kolommen }}>
                 {liggend ? "Liggend" : "Staand"}
               </Link>
             </Button>
             <Button size="sm" variant={prijzen ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ maand, prijzen: !prijzen, liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand, prijzen: !prijzen, liggend, kolommen }}>
                 Prijzen {prijzen ? "aan" : "uit"}
               </Link>
             </Button>
             {[2, 3, 4, 5].map((k) => (
               <Button key={k} size="sm" variant={kolommen === k ? "default" : "outline"} asChild>
-                <Link to="/printen" search={{ maand, prijzen, liggend, kolommen: k }}>
+                <Link to="/printen" search={{ wijk, maand, prijzen, liggend, kolommen: k }}>
                   {k} kol.
                 </Link>
               </Button>
@@ -111,7 +117,7 @@ function PrintPagina() {
       <main className="mx-auto max-w-[1400px] px-4 py-5 print:max-w-none print:px-0 print:py-0">
         <div className="mb-2 flex items-baseline justify-between border-b-2 border-foreground pb-1">
           <h1 className="text-[13px] font-bold uppercase tracking-wide">
-            Waslijst — {maand === "even" ? "even" : "oneven"} maand
+            Waslijst {actieveWijk ? `${actieveWijk.name} ` : ""}— {maand === "even" ? "even" : "oneven"} maand
           </h1>
           {prijzen && <span className="text-[11px] tabular-nums">Totaal {formatPrice(totaal)}</span>}
         </div>
