@@ -150,6 +150,10 @@ function Index() {
   const omzet = groepen.reduce((sum, g) => sum + g.totaal, 0);
 
   async function patchKlant(c: Customer, patch: Partial<Customer>) {
+    const vorige: Partial<Customer> = {};
+    for (const key of Object.keys(patch) as (keyof Customer)[]) {
+      (vorige as Record<string, unknown>)[key] = c[key];
+    }
     qc.setQueryData<Customer[]>(["customers"], (old) =>
       (old ?? []).map((x) => (x.id === c.id ? { ...x, ...patch } : x)),
     );
@@ -157,7 +161,15 @@ function Index() {
     if (error) {
       toast.error("Opslaan mislukt: " + error.message);
       qc.invalidateQueries({ queryKey: ["customers"] });
+      return;
     }
+    pushUndo({
+      label: `Wijziging ${formatNumber(c)}`,
+      undo: async () => {
+        await supabase.from("customers").update(vorige).eq("id", c.id);
+        herlaad();
+      },
+    });
   }
 
   async function nieuweSnelkeuze(label: string) {
@@ -177,17 +189,35 @@ function Index() {
       toast.error("Verwijderen mislukt: " + error.message);
       return;
     }
+    pushUndo({
+      label: `Verwijderen ${formatNumber(c)}`,
+      undo: async () => {
+        await supabase.from("customers").insert(c);
+        herlaad();
+      },
+    });
     herlaad();
+    meldUndo(`Klant ${formatNumber(c)} verwijderd`);
   }
 
   async function verwijderStraat(s: Street) {
     if (!confirm(`Straat "${s.name}" en alle klanten daarin verwijderen?`)) return;
+    const klantenInStraat = customers.filter((c) => c.street_id === s.id);
     const { error } = await supabase.from("streets").delete().eq("id", s.id);
     if (error) {
       toast.error("Verwijderen mislukt: " + error.message);
       return;
     }
+    pushUndo({
+      label: `Verwijderen ${s.name}`,
+      undo: async () => {
+        await supabase.from("streets").insert(s);
+        if (klantenInStraat.length > 0) await supabase.from("customers").insert(klantenInStraat);
+        herlaad();
+      },
+    });
     herlaad();
+    meldUndo(`Straat "${s.name}" verwijderd`);
   }
 
   async function nieuweRegel(streetId: string, nummer: string) {
