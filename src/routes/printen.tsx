@@ -7,13 +7,14 @@ import {
   PointerSensor,
   TouchSensor,
   closestCenter,
+  useDraggable,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { SortableContext, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -132,13 +133,18 @@ function SleepbaarBlok({
   prijzen: boolean;
   maand: "even" | "oneven" | "alles";
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef: setSleepRef, transform, isDragging } = useDraggable({
     id: g.street.id,
   });
+  const { setNodeRef: setDropRef } = useDroppable({ id: g.street.id });
+  const setNodeRef = (node: HTMLDivElement | null) => {
+    setSleepRef(node);
+    setDropRef(node);
+  };
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
+      style={{ transform: CSS.Translate.toString(transform) }}
       className={`relative break-inside-avoid ${isDragging ? "opacity-40" : ""}`}
     >
       <button
@@ -512,12 +518,11 @@ function PrintPagina() {
             setSleepVolgorde(null);
           }}
         >
-          <SortableContext items={groepen.map((g) => g.street.id)} strategy={rectSortingStrategy}>
-            <div
-              ref={inhoudRef}
-              className="origin-top-left overflow-hidden print:overflow-visible"
-              style={{ zoom: schaal, width: Math.round(breedtePx / schaal) }}
-            >
+          <div
+            ref={inhoudRef}
+            className="origin-top-left overflow-hidden print:overflow-visible"
+            style={{ zoom: schaal, width: Math.round(breedtePx / schaal) }}
+          >
               <div
                 ref={kopRef}
                 className="mb-1 flex items-baseline justify-between border-b-2 border-foreground pb-[1px]"
@@ -580,8 +585,7 @@ function PrintPagina() {
                   </div>
                 ))}
               </div>
-            </div>
-          </SortableContext>
+          </div>
           <DragOverlay>
             {sleepGroep ? (
               <div className="w-[200px] rounded bg-card px-2 py-1 text-xs font-semibold shadow-lg">
