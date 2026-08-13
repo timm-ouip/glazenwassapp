@@ -749,14 +749,14 @@ function BronVenster({
   onClose: () => void;
 }) {
   const open = Boolean(straat && bron && grid);
-  const rStart = Math.max(0, (bron?.rij ?? 0) - 4);
-  const rEnd = Math.min((grid?.cellen.length ?? 1) - 1, (bron?.rij ?? 0) + 10);
-  const cStart = Math.max(0, (bron?.kolom ?? 0) - 2);
-  const cEnd = Math.min((grid?.cellen[0]?.length ?? 1) - 1, (bron?.kolom ?? 0) + 4);
+  const rStart = Math.max(0, (bron?.rij ?? 0) - 6);
+  const rEnd = Math.min((grid?.cellen.length ?? 1) - 1, (bron?.rij ?? 0) + 16);
+  const cStart = Math.max(0, (bron?.kolom ?? 0) - 3);
+  const cEnd = Math.min((grid?.cellen[0]?.length ?? 1) - 1, (bron?.kolom ?? 0) + 6);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-h-[85vh] max-w-4xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>“{straat}” in het originele bestand</DialogTitle>
           <DialogDescription>
@@ -765,13 +765,20 @@ function BronVenster({
           </DialogDescription>
         </DialogHeader>
         {grid && bron && (
-          <div className="overflow-auto rounded-md border border-border">
-            <table className="min-w-full border-collapse text-xs">
+          <div className="max-h-[60vh] overflow-auto rounded-md border border-border bg-white">
+            <table
+              className="border-collapse font-sans text-[11px] text-black"
+              style={{ fontFamily: "Calibri, Arial, sans-serif" }}
+            >
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 border border-border bg-secondary px-2 py-1" />
+                  <th className="sticky left-0 top-0 z-20 border border-[#c6c6c6] bg-[#f0f0f0] px-1 py-0.5 text-[10px] font-normal text-[#555]" />
                   {Array.from({ length: cEnd - cStart + 1 }, (_, i) => (
-                    <th key={i} className="border border-border bg-secondary px-2 py-1 font-medium">
+                    <th
+                      key={i}
+                      className="sticky top-0 z-10 border border-[#c6c6c6] bg-[#f0f0f0] px-1 py-0.5 text-[10px] font-normal text-[#555]"
+                      style={{ minWidth: Math.min(220, Math.max(40, grid.breedtes[cStart + i] ?? 70)) }}
+                    >
                       {kolomLetter(cStart + i)}
                     </th>
                   ))}
@@ -782,25 +789,28 @@ function BronVenster({
                   const r = rStart + ri;
                   return (
                     <tr key={r}>
-                      <td className="sticky left-0 z-10 border border-border bg-secondary px-2 py-1 text-muted-foreground">
+                      <td className="sticky left-0 z-10 border border-[#c6c6c6] bg-[#f0f0f0] px-1 py-0.5 text-center text-[10px] text-[#555]">
                         {r + 1}
                       </td>
                       {Array.from({ length: cEnd - cStart + 1 }, (_, ci) => {
                         const c = cStart + ci;
+                        const cel = grid.cellen[r]?.[c];
                         const isDoel = r === bron.rij && c === bron.kolom;
-                        const grijs = grid.grijs[r]?.[c];
                         return (
                           <td
                             key={c}
-                            className={`whitespace-nowrap border px-2 py-1 ${
-                              isDoel
-                                ? "border-2 border-amber-500 bg-amber-200 font-semibold text-amber-950"
-                                : grijs
-                                  ? "border-border bg-muted"
-                                  : "border-border"
-                            }`}
+                            className="whitespace-nowrap border border-[#d4d4d4] px-1.5 py-0.5"
+                            style={{
+                              backgroundColor: cel?.vul ?? "#ffffff",
+                              color: cel?.kleur ?? "#000000",
+                              fontWeight: cel?.vet ? 700 : 400,
+                              textAlign: cel?.rechts ? "right" : "left",
+                              ...(isDoel
+                                ? { outline: "3px solid #f59e0b", outlineOffset: "-3px" }
+                                : {}),
+                            }}
                           >
-                            {grid.cellen[r]?.[c] ?? ""}
+                            {cel?.t ?? ""}
                           </td>
                         );
                       })}
@@ -812,11 +822,12 @@ function BronVenster({
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          Het gemarkeerde vakje is wat als straatnaam is ingelezen. Grijs gearceerde vakjes zijn de
-          vakjes die de app als straatkop ziet.
+          Zo staat het in je Excel-bestand, met de originele kleuren. Het oranje omlijnde vakje is wat
+          de app als straatnaam heeft ingelezen.
         </p>
       </DialogContent>
     </Dialog>
   );
+
 }
 
