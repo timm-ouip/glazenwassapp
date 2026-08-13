@@ -19,6 +19,7 @@ interface PrintSearch {
   prijzen: boolean;
   liggend: boolean;
   kolommen: number;
+  paginas?: number;
 }
 
 export const Route = createFileRoute("/printen")({
@@ -29,7 +30,9 @@ export const Route = createFileRoute("/printen")({
     prijzen: search["prijzen"] === true || search["prijzen"] === "true",
     liggend: search["liggend"] !== false && search["liggend"] !== "false",
     kolommen: [2, 3, 4, 5].includes(Number(search["kolommen"])) ? Number(search["kolommen"]) : 4,
+    paginas: Number(search["paginas"]) === 2 ? 2 : 1,
   }),
+
 
   head: () => ({
     meta: [
@@ -48,7 +51,8 @@ export const Route = createFileRoute("/printen")({
 });
 
 function PrintPagina() {
-  const { wijk, maand, prijzen, liggend, kolommen } = Route.useSearch();
+  const { wijk, maand, prijzen, liggend, kolommen, paginas: paginasRaw } = Route.useSearch();
+  const paginas = paginasRaw === 2 ? 2 : 1;
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
@@ -70,19 +74,20 @@ function PrintPagina() {
     0,
   );
 
-  // --- automatisch passend maken op 1 A4 ---
+  // --- automatisch passend maken op 1 of 2 A4's ---
   const MM = 96 / 25.4;
   const paginaB = (liggend ? 297 : 210) - 16;
   const paginaH = (liggend ? 210 : 297) - 16;
   const breedtePx = Math.round(paginaB * MM);
   const hoogtePx = Math.round(paginaH * MM);
+  const maxHoogtePx = hoogtePx * paginas;
 
   const inhoudRef = useRef<HTMLDivElement>(null);
   const [schaal, setSchaal] = useState(1);
 
   useLayoutEffect(() => {
     setSchaal(1);
-  }, [groepen.length, kolommen, liggend, prijzen, maand, wijk]);
+  }, [groepen.length, kolommen, liggend, prijzen, maand, wijk, paginas]);
 
   useEffect(() => {
     const el = inhoudRef.current;
@@ -92,11 +97,12 @@ function PrintPagina() {
       if (!node) return;
       const gerenderd = node.getBoundingClientRect().height;
       if (gerenderd <= 0) return;
-      const gewenst = Math.min(1, (schaal * hoogtePx) / gerenderd);
+      const gewenst = Math.min(1, (schaal * maxHoogtePx) / gerenderd);
       if (Math.abs(gewenst - schaal) > 0.004) setSchaal(gewenst);
     });
     return () => cancelAnimationFrame(id);
-  }, [schaal, hoogtePx, groepen.length, kolommen, prijzen, maand, wijk, liggend]);
+  }, [schaal, maxHoogtePx, groepen.length, kolommen, prijzen, maand, wijk, liggend]);
+
 
 
 
@@ -114,38 +120,46 @@ function PrintPagina() {
           </Button>
           <div className="ml-auto flex flex-wrap gap-2">
             <Button size="sm" variant={maand === "even" ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ wijk, maand: "even", prijzen, liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand: "even", prijzen, liggend, kolommen, paginas }}>
                 Even maand
               </Link>
             </Button>
             <Button size="sm" variant={maand === "oneven" ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ wijk, maand: "oneven", prijzen, liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand: "oneven", prijzen, liggend, kolommen, paginas }}>
                 Oneven maand
               </Link>
             </Button>
             <Button size="sm" variant={maand === "alles" ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ wijk, maand: "alles", prijzen, liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand: "alles", prijzen, liggend, kolommen, paginas }}>
                 Alle klanten
               </Link>
             </Button>
 
             <Button size="sm" variant="outline" asChild>
-              <Link to="/printen" search={{ wijk, maand, prijzen, liggend: !liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand, prijzen, liggend: !liggend, kolommen, paginas }}>
                 {liggend ? "Liggend" : "Staand"}
               </Link>
             </Button>
             <Button size="sm" variant={prijzen ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ wijk, maand, prijzen: !prijzen, liggend, kolommen }}>
+              <Link to="/printen" search={{ wijk, maand, prijzen: !prijzen, liggend, kolommen, paginas }}>
                 Prijzen {prijzen ? "aan" : "uit"}
               </Link>
             </Button>
+            {[1, 2].map((p) => (
+              <Button key={p} size="sm" variant={paginas === p ? "default" : "outline"} asChild>
+                <Link to="/printen" search={{ wijk, maand, prijzen, liggend, kolommen, paginas: p }}>
+                  {p} A4
+                </Link>
+              </Button>
+            ))}
             {[2, 3, 4, 5].map((k) => (
               <Button key={k} size="sm" variant={kolommen === k ? "default" : "outline"} asChild>
-                <Link to="/printen" search={{ wijk, maand, prijzen, liggend, kolommen: k }}>
+                <Link to="/printen" search={{ wijk, maand, prijzen, liggend, kolommen: k, paginas }}>
                   {k} kol.
                 </Link>
               </Button>
             ))}
+
             <Button size="sm" onClick={() => window.print()}>
               <Printer className="size-4" /> Afdrukken
             </Button>
