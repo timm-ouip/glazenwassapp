@@ -126,10 +126,10 @@ function PrintPagina() {
           <p className="text-sm text-muted-foreground print:hidden">Geen klanten voor deze maand.</p>
         )}
 
-        <div style={{ columnCount: kolommen, columnGap: "5mm" }} className="[column-fill:_balance]">
+        <div style={{ columnCount: kolommen, columnGap: "4mm" }} className="[column-fill:_balance]">
           {groepen.map((g) => (
-            <div key={g.street.id} className="mb-1.5 break-inside-avoid border border-foreground/70">
-              <h2 className="border-b border-foreground/70 bg-muted px-1 py-[1px] text-[10px] font-bold uppercase tracking-wide">
+            <div key={g.street.id} className="mb-1 break-inside-avoid border border-foreground/70">
+              <h2 className="border-b border-foreground/70 bg-muted px-1 text-[9px] font-bold uppercase leading-[1.25] tracking-wide">
                 {g.street.name}
               </h2>
               <div className="grid grid-cols-2">
@@ -139,26 +139,32 @@ function PrintPagina() {
                     className={`w-full table-fixed border-collapse ${i === 0 ? "border-r border-foreground/40" : ""}`}
                   >
                     <thead>
-                      <tr className="border-b border-foreground/40 text-[8px] uppercase tracking-wide text-foreground/70">
-                        <th className="w-7 px-1 text-left">nr</th>
-                        <th className="px-1 text-left">note</th>
-                        {prijzen && <th className="w-9 px-1 text-right">prijs</th>}
+                      <tr className="border-b border-foreground/40 text-[7px] uppercase leading-[1.2] tracking-wide text-foreground/70">
+                        <th className="w-6 px-[2px] text-left">nr</th>
+                        <th className="px-[2px] text-left">note</th>
+                        {prijzen && <th className="w-8 px-[2px] text-right">€</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {g[kant].map((c) => (
-                        <tr key={c.id} className="border-b border-foreground/20 last:border-0">
-                          <td className="w-7 px-1 text-[9.5px] font-semibold leading-[1.35] tabular-nums">
-                            {formatNumber(c)}
-                          </td>
-                          <td className="truncate px-1 text-[9.5px] leading-[1.35]">{c.note}</td>
-                          {prijzen && (
-                            <td className={`w-9 px-1 text-right text-[9.5px] leading-[1.35] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}>
-                              {formatPrice(c.price)}
+                      {g[kant].map((c) => {
+                        const lang = c.note.length > 14;
+                        return (
+                          <tr key={c.id} className="border-b border-foreground/20 last:border-0 align-top">
+                            <td className="w-6 px-[2px] text-[8.5px] font-semibold leading-[1.2] tabular-nums">
+                              {formatNumber(c)}
                             </td>
-                          )}
-                        </tr>
-                      ))}
+                            <td className="px-[2px] text-[8.5px] leading-[1.2] break-words hyphens-auto">
+                              {lang ? "" : c.note}
+                              {lang && <span className="block">{c.note}</span>}
+                            </td>
+                            {prijzen && (
+                              <td className={`w-8 px-[2px] text-right text-[8.5px] leading-[1.2] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}>
+                                {formatPrice(c.price)}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 ))}
@@ -166,6 +172,7 @@ function PrintPagina() {
             </div>
           ))}
         </div>
+
       </main>
     </div>
   );
