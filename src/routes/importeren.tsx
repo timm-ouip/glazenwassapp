@@ -300,9 +300,12 @@ function ImportPagina() {
             }}
           />
           <p className="text-xs text-muted-foreground">
-            Verwacht per tabblad: straatnaam in kolom A, daaronder huisnummers in kolom A, notitie in kolom B
-            en prijs in kolom C. Staat een adres in beide tabbladen, dan wordt het automatisch "elke maand".
+            Straatnamen herkent hij aan de grijze vakjes; andere kleuren (zoals roze) worden genegeerd.
+            Onder een straatnaam staan de huisnummers, met daarnaast de notitie en de prijs. Meerdere
+            tabellen naast elkaar op één tabblad worden allemaal ingelezen. Staat een adres in beide
+            tabbladen, dan wordt het automatisch "elke maand".
           </p>
+
         </div>
 
         {rijen.length > 0 && (
