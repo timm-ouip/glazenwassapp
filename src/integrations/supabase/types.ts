@@ -23,6 +23,7 @@ export type Database = {
           id: string
           note: string
           price: number
+          sort_order: number
           street_id: string
         }
         Insert: {
@@ -33,6 +34,7 @@ export type Database = {
           id?: string
           note?: string
           price?: number
+          sort_order?: number
           street_id: string
         }
         Update: {
@@ -43,6 +45,7 @@ export type Database = {
           id?: string
           note?: string
           price?: number
+          sort_order?: number
           street_id?: string
         }
         Relationships: [
@@ -54,6 +57,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      quick_notes: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          sort_order?: number
+        }
+        Relationships: []
       }
       streets: {
         Row: {
