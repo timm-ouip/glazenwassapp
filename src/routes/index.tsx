@@ -486,6 +486,8 @@ interface BlokProps {
   even: Customer[];
   oneven: Customer[];
   aantal: number;
+  totaal: number;
+  sort: "asc" | "desc";
   prijzenTonen: boolean;
   quickNotes: QuickNote[];
   rowText: string;
@@ -499,6 +501,7 @@ interface BlokProps {
   onEditStreet: () => void;
   onDeleteStreet: () => void;
   onAddKlant: () => void;
+  onToggleSort: () => void;
 }
 
 function StraatBlok(p: BlokProps) {
@@ -526,6 +529,17 @@ function StraatBlok(p: BlokProps) {
           {p.street.name}
         </h2>
         <span className="text-[11px] text-muted-foreground">{p.aantal}</span>
+        {p.prijzenTonen && (
+          <span className="text-[11px] tabular-nums text-muted-foreground">{formatPrice(p.totaal)}</span>
+        )}
+        <button
+          className="rounded p-1 text-muted-foreground hover:bg-accent"
+          onClick={p.onToggleSort}
+          aria-label={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
+          title={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
+        >
+          {p.sort === "asc" ? <ArrowUpNarrowWide className="size-3.5" /> : <ArrowDownNarrowWide className="size-3.5" />}
+        </button>
         <button className="rounded p-1 text-muted-foreground hover:bg-accent" onClick={p.onAddKlant} aria-label="Klant toevoegen">
           <Plus className="size-3.5" />
         </button>
