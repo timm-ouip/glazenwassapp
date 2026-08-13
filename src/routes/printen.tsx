@@ -162,8 +162,11 @@ function PrintPagina() {
   const maxHoogtePx = hoogtePx * paginas;
 
   const inhoudRef = useRef<HTMLDivElement>(null);
+  const kopRef = useRef<HTMLDivElement>(null);
   const kwartRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [schaal, setSchaal] = useState(1);
+  const [kopHoogte, setKopHoogte] = useState(26);
+
 
   useLayoutEffect(() => {
     setSchaal(1);
@@ -172,6 +175,11 @@ function PrintPagina() {
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       if (vouwen) {
+        const kop = kopRef.current;
+        if (kop) {
+          const h = Math.ceil(kop.getBoundingClientRect().height / schaal);
+          if (h > 0 && Math.abs(h - kopHoogte) > 1) setKopHoogte(h);
+        }
         let ratio = 0;
         for (const el of kwartRefs.current) {
           if (!el || el.clientHeight <= 0) continue;
@@ -180,6 +188,7 @@ function PrintPagina() {
         if (ratio > 1.004) setSchaal((s) => Math.max(0.25, s / ratio));
         return;
       }
+
       const node = inhoudRef.current;
       if (!node) return;
       const gerenderd = node.getBoundingClientRect().height;
@@ -188,19 +197,20 @@ function PrintPagina() {
       if (Math.abs(gewenst - schaal) > 0.004) setSchaal(gewenst);
     });
     return () => cancelAnimationFrame(id);
-  }, [schaal, maxHoogtePx, groepen.length, kolommen, prijzen, maand, wijk, liggend, vouwen]);
+  }, [schaal, kopHoogte, maxHoogtePx, groepen.length, kolommen, prijzen, maand, wijk, liggend, vouwen]);
 
   const kwarten = vouwen ? verdeelInKwarten(groepen) : [];
-  // hoogte per kwart, in niet-geschaalde px (titelbalk ~24px)
-  const kwartHoogte = Math.floor((hoogtePx / schaal - 26) / 2);
+  // hoogte per kwart, in niet-geschaalde px (titelbalk wordt gemeten)
+  const kwartHoogte = Math.floor((hoogtePx / schaal - kopHoogte - 10) / 2);
   const kwartKolommen = Math.max(1, Math.round(kolommen / 2));
+
 
   const zoek = { wijk, maand, prijzen, liggend, kolommen, paginas, vouwen };
 
   return (
     <div className="min-h-screen bg-background">
       <style>{`@page { size: A4 ${liggend ? "landscape" : "portrait"}; margin: 8mm; }
-@media print { html, body { background: #fff; } }`}</style>
+@media print { html, body { background: #fff; } main { overflow: hidden; } }`}</style>
 
       <div className="border-b border-border bg-card print:hidden">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 py-4">
@@ -291,7 +301,10 @@ function PrintPagina() {
           className="origin-top-left overflow-hidden print:overflow-visible"
           style={{ zoom: schaal, width: Math.round(breedtePx / schaal) }}
         >
-          <div className="mb-2 flex items-baseline justify-between border-b-2 border-foreground pb-1">
+          <div
+            ref={kopRef}
+            className="mb-1 flex items-baseline justify-between border-b-2 border-foreground pb-[1px]"
+          >
             <h1 className="text-[13px] font-bold uppercase tracking-wide">
               Waslijst {actieveWijk ? `${actieveWijk.name} ` : ""}—{" "}
               {maand === "alles" ? "alle klanten" : `${maand} maand`}
@@ -305,7 +318,7 @@ function PrintPagina() {
               {kwarten.map((kwart, i) => (
                 <div
                   key={i}
-                  className={`overflow-hidden px-[3mm] pb-[3mm] ${i % 2 === 0 ? "border-r border-dashed border-foreground/40" : ""} ${i < 2 ? "border-b border-dashed border-foreground/40" : ""}`}
+                  className={`overflow-hidden px-[1mm] pb-[1mm] ${i % 2 === 0 ? "border-r border-dashed border-foreground/40" : ""} ${i < 2 ? "border-b border-dashed border-foreground/40" : ""}`}
                   style={{ height: kwartHoogte }}
                 >
                   <div
@@ -314,7 +327,7 @@ function PrintPagina() {
                     }}
                     className="h-full overflow-hidden"
                   >
-                    <div style={{ columnCount: kwartKolommen, columnGap: "2mm" }} className="[column-fill:_balance]">
+                    <div style={{ columnCount: kwartKolommen, columnGap: "1mm" }} className="[column-fill:_balance]">
                       {kwart.map((g) => (
                         <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
                       ))}
@@ -324,7 +337,8 @@ function PrintPagina() {
               ))}
             </div>
           ) : (
-            <div style={{ columnCount: kolommen, columnGap: "2mm" }} className="[column-fill:_balance]">
+            <div style={{ columnCount: kolommen, columnGap: "1mm" }} className="[column-fill:_balance]">
+
               {groepen.map((g) => (
                 <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
               ))}
