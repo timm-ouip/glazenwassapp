@@ -522,6 +522,7 @@ function ImportPagina() {
               <SelectValue placeholder="Kies een wijk" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="__geen__">Geen wijk</SelectItem>
               {wijken.map((w) => (
                 <SelectItem key={w.id} value={w.id}>
                   {w.name}
