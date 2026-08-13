@@ -17,7 +17,7 @@ De lege ruimte komt niet doordat het "moet" voor de A4: de tekst wordt alleen oo
 - Je kunt een straat oppakken en op een andere plek neerzetten, ook in een ander kwart of een andere kolom.
 - De nieuwe volgorde wordt opgeslagen als de vaste routevolgorde, dus het overzichtsscherm laat daarna dezelfde volgorde zien.
 - "Ongedaan maken" (knop en Ctrl/Cmd+Z) werkt ook voor slepen op de printpagina.
-- Na het slepen wordt de indeling opnieuw doorgerekend zodat het weer strak op één vel past.
+- Tijdens het slepen schuift de rest van de straten live mee, zodat je meteen ziet hoe de indeling eruitziet; zodra je loslaat wordt alles strak op één vel doorgerekend.
 
 ## Technisch
 - `src/routes/printen.tsx`: `verdeelInKwarten` vervangen door een verdeling op gemeten straathoogtes (meting in een verborgen laag, daarna verdelen); schaalzoekfunctie toestaan boven 1 met binaire benadering in plaats van alleen verkleinen.
