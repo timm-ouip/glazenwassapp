@@ -262,7 +262,9 @@ interface ImportRij {
   notitie: string;
   prijs: number;
   frequency: Frequency;
+  bron?: Bron | undefined;
 }
+
 
 /** Straatnamen die waarschijnlijk per ongeluk als straat zijn gelezen. */
 function verdachteStraten(lijst: ImportRij[], quickNotes: QuickNote[]) {
