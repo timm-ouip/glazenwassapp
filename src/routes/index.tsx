@@ -31,11 +31,13 @@ import {
   GripVertical,
   ArrowUpNarrowWide,
   ArrowDownNarrowWide,
+  Undo2,
 } from "lucide-react";
 import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
 import { WijkKiezer } from "@/components/WijkKiezer";
 import { InlineCel } from "@/components/InlineCel";
+import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { NotitieCel } from "@/components/NotitieCel";
 import {
   addQuickNote,
@@ -123,6 +125,7 @@ function Index() {
   const streets = alleStraten.filter((s) => s.district_id === actieveWijk);
   const customers = customersQuery.data ?? [];
   const quickNotes = quickNotesQuery.data ?? [];
+  const undoLabel = useLaatsteUndoLabel();
 
   function herlaad() {
     qc.invalidateQueries({ queryKey: ["districts"] });
@@ -130,21 +133,39 @@ function Index() {
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
 
+  async function doeUndo() {
+    const label = await undoLaatste();
+    if (label) toast.success("Teruggedraaid: " + label);
+    else toast("Niets om terug te draaien");
+  }
+
+  function meldUndo(bericht: string) {
+    toast(bericht, { action: { label: "Ongedaan maken", onClick: () => void doeUndo() } });
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const doel = e.target as HTMLElement | null;
+      const tikt = doel && (doel.tagName === "INPUT" || doel.tagName === "TEXTAREA" || doel.isContentEditable);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !tikt) {
+        e.preventDefault();
+        void doeUndo();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const groepen = useMemo(() => {
     const term = zoek.trim().toLowerCase();
     return streets
       .filter((s) => !term || s.name.toLowerCase().includes(term))
       .map((s) => {
         const order = straatSort[s.id] ?? "asc";
-        const klanten = customers
-          .filter((c) => c.street_id === s.id && matchesMaand(c.frequency, filter))
-          .sort((a, b) => {
-            const diff = a.house_number - b.house_number;
-            return order === "asc" ? diff : -diff;
-          });
+        const klanten = customers.filter((c) => c.street_id === s.id && matchesMaand(c.frequency, filter));
         return {
           street: s,
-          ...splitEvenOdd(klanten),
+          ...splitEvenOdd(klanten, order),
           aantal: klanten.length,
           totaal: klanten.reduce((sum, c) => sum + c.price, 0),
         };
@@ -155,6 +176,10 @@ function Index() {
   const omzet = groepen.reduce((sum, g) => sum + g.totaal, 0);
 
   async function patchKlant(c: Customer, patch: Partial<Customer>) {
+    const vorige: Partial<Customer> = {};
+    for (const key of Object.keys(patch) as (keyof Customer)[]) {
+      (vorige as Record<string, unknown>)[key] = c[key];
+    }
     qc.setQueryData<Customer[]>(["customers"], (old) =>
       (old ?? []).map((x) => (x.id === c.id ? { ...x, ...patch } : x)),
     );
@@ -162,7 +187,15 @@ function Index() {
     if (error) {
       toast.error("Opslaan mislukt: " + error.message);
       qc.invalidateQueries({ queryKey: ["customers"] });
+      return;
     }
+    pushUndo({
+      label: `Wijziging ${formatNumber(c)}`,
+      undo: async () => {
+        await supabase.from("customers").update(vorige).eq("id", c.id);
+        herlaad();
+      },
+    });
   }
 
   async function nieuweSnelkeuze(label: string) {
@@ -182,29 +215,59 @@ function Index() {
       toast.error("Verwijderen mislukt: " + error.message);
       return;
     }
+    pushUndo({
+      label: `Verwijderen ${formatNumber(c)}`,
+      undo: async () => {
+        await supabase.from("customers").insert(c);
+        herlaad();
+      },
+    });
     herlaad();
+    meldUndo(`Klant ${formatNumber(c)} verwijderd`);
   }
 
   async function verwijderStraat(s: Street) {
     if (!confirm(`Straat "${s.name}" en alle klanten daarin verwijderen?`)) return;
+    const klantenInStraat = customers.filter((c) => c.street_id === s.id);
     const { error } = await supabase.from("streets").delete().eq("id", s.id);
     if (error) {
       toast.error("Verwijderen mislukt: " + error.message);
       return;
     }
+    pushUndo({
+      label: `Verwijderen ${s.name}`,
+      undo: async () => {
+        await supabase.from("streets").insert(s);
+        if (klantenInStraat.length > 0) await supabase.from("customers").insert(klantenInStraat);
+        herlaad();
+      },
+    });
     herlaad();
+    meldUndo(`Straat "${s.name}" verwijderd`);
   }
 
   async function nieuweRegel(streetId: string, nummer: string) {
     const huisnummer = parseInt(nummer, 10);
     if (Number.isNaN(huisnummer)) return;
     const max = Math.max(0, ...customers.filter((c) => c.street_id === streetId).map((c) => c.sort_order));
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("customers")
-      .insert({ street_id: streetId, house_number: huisnummer, sort_order: max + 1 });
+      .insert({ street_id: streetId, house_number: huisnummer, sort_order: max + 1 })
+      .select("id")
+      .single();
     if (error) {
       toast.error("Toevoegen mislukt: " + error.message);
       return;
+    }
+    const nieuwId = (data as { id: string } | null)?.id;
+    if (nieuwId) {
+      pushUndo({
+        label: `Toevoegen nr ${huisnummer}`,
+        undo: async () => {
+          await supabase.from("customers").delete().eq("id", nieuwId);
+          herlaad();
+        },
+      });
     }
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
@@ -215,12 +278,24 @@ function Index() {
       return;
     }
     const max = Math.max(0, ...streets.map((s) => s.sort_order));
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("streets")
-      .insert({ name: naam.trim(), sort_order: max + 1, district_id: actieveWijk });
+      .insert({ name: naam.trim(), sort_order: max + 1, district_id: actieveWijk })
+      .select("id")
+      .single();
     if (error) {
       toast.error("Toevoegen mislukt: " + error.message);
       return;
+    }
+    const nieuwId = (data as { id: string } | null)?.id;
+    if (nieuwId) {
+      pushUndo({
+        label: `Toevoegen straat ${naam.trim()}`,
+        undo: async () => {
+          await supabase.from("streets").delete().eq("id", nieuwId);
+          herlaad();
+        },
+      });
     }
     qc.invalidateQueries({ queryKey: ["streets"] });
   }
@@ -261,8 +336,16 @@ function Index() {
       const next = [...streets];
       const [moved] = next.splice(from, 1);
       next.splice(to, 0, moved!);
+        const vorigeVolgorde = streets.map((s) => ({ ...s }));
       qc.setQueryData<Street[]>(["streets"], next.map((s, i) => ({ ...s, sort_order: i + 1 })));
       await persistStreetOrder(next);
+      pushUndo({
+        label: "Straatvolgorde",
+        undo: async () => {
+          await persistStreetOrder(vorigeVolgorde);
+          herlaad();
+        },
+      });
       qc.invalidateQueries({ queryKey: ["streets"] });
       return;
     }
@@ -300,7 +383,19 @@ function Index() {
         return u ? { ...c, street_id: u.street_id, sort_order: u.sort_order } : c;
       }),
     );
+    const vorigePlek = [...verplaatst, ...doelLijst].map((c) => ({
+      id: c.id,
+      street_id: c.street_id,
+      sort_order: c.sort_order,
+    }));
     await persistCustomerOrder(updates);
+    pushUndo({
+      label: "Verplaatsing",
+      undo: async () => {
+        await persistCustomerOrder(vorigePlek);
+        herlaad();
+      },
+    });
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
 
@@ -346,6 +441,15 @@ function Index() {
               >
                 <Printer className="size-4" /> Printlijst
               </Link>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!undoLabel}
+              onClick={() => void doeUndo()}
+              title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
+            >
+              <Undo2 className="size-4" /> Ongedaan maken
             </Button>
           </div>
         </div>

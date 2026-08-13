@@ -148,11 +148,12 @@ export function sortCustomers(customers: Customer[]) {
 }
 
 /** Splits klanten in even en oneven huisnummers, elk in de ingestelde volgorde. */
-export function splitEvenOdd(customers: Customer[]) {
+export function splitEvenOdd(customers: Customer[], order: "asc" | "desc" = "asc") {
   const sorted = sortCustomers(customers);
+  const lijst = order === "desc" ? [...sorted].reverse() : sorted;
   return {
-    even: sorted.filter((c) => c.house_number % 2 === 0),
-    oneven: sorted.filter((c) => c.house_number % 2 !== 0),
+    even: lijst.filter((c) => c.house_number % 2 === 0),
+    oneven: lijst.filter((c) => c.house_number % 2 !== 0),
   };
 }
 
