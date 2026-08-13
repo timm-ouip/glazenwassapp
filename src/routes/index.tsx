@@ -425,6 +425,8 @@ function Index() {
                   even={g.even}
                   oneven={g.oneven}
                   aantal={g.aantal}
+                  totaal={g.totaal}
+                  sort={straatSort[g.street.id] ?? "asc"}
                   prijzenTonen={prijzenTonen}
                   quickNotes={quickNotes}
                   rowText={rowText}
@@ -438,6 +440,9 @@ function Index() {
                   onEditStreet={() => setStraatDialog({ open: true, street: g.street })}
                   onDeleteStreet={() => verwijderStraat(g.street)}
                   onAddKlant={() => setKlantDialog({ open: true, customer: null, streetId: g.street.id })}
+                  onToggleSort={() =>
+                    setStraatSort((s) => ({ ...s, [g.street.id]: s[g.street.id] === "asc" ? "desc" : "asc" }))
+                  }
                 />
               ))}
               {districts.length > 0 && (
