@@ -208,8 +208,9 @@ function PrintPagina() {
             </div>
           ))}
         </div>
-
+        </div>
       </main>
+
     </div>
   );
 }
