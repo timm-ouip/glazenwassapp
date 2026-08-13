@@ -127,7 +127,18 @@ function ImportPagina() {
     if (teImporteren.length === 0) return;
     setBezig(true);
     try {
-      const { data: bestaandeStraten, error: straatFout } = await supabase.from("streets").select("id,name");
+      let districtId = wijkId;
+      if (districtId === "__nieuw__") {
+        if (!nieuweWijk.trim()) throw new Error("Vul een naam voor de nieuwe wijk in.");
+        const wijk = await addDistrict(nieuweWijk.trim());
+        districtId = wijk.id;
+      }
+      if (!districtId) throw new Error("Kies eerst een wijk.");
+
+      const { data: bestaandeStraten, error: straatFout } = await supabase
+        .from("streets")
+        .select("id,name")
+        .eq("district_id", districtId);
       if (straatFout) throw straatFout;
       const map = new Map<string, string>();
       (bestaandeStraten ?? []).forEach((s) => map.set(s.name.toLowerCase(), s.id));
@@ -137,11 +148,12 @@ function ImportPagina() {
         const startOrder = map.size;
         const { data: nieuw, error } = await supabase
           .from("streets")
-          .insert(nieuweNamen.map((name, i) => ({ name, sort_order: startOrder + i })))
+          .insert(nieuweNamen.map((name, i) => ({ name, sort_order: startOrder + i, district_id: districtId! })))
           .select("id,name");
         if (error) throw error;
         (nieuw ?? []).forEach((s) => map.set(s.name.toLowerCase(), s.id));
       }
+
 
       const payload = teImporteren.map((r) => ({
         street_id: map.get(r.straat.toLowerCase())!,
