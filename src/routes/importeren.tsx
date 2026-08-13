@@ -90,6 +90,27 @@ function tekst(cell: XLSX.CellObject | undefined): string {
   return String(cell.v).trim();
 }
 
+/** Weergavetekst zoals Excel het toont (inclusief opmaak zoals € en decimalen). */
+function weergave(cell: XLSX.CellObject | undefined): string {
+  if (!cell) return "";
+  const w = (cell as { w?: string }).w;
+  if (w !== undefined) return String(w).trim();
+  return tekst(cell);
+}
+
+interface CelStijl {
+  patternType?: string;
+  fgColor?: { rgb?: string };
+  font?: { color?: { rgb?: string }; bold?: boolean; sz?: number };
+  alignment?: { horizontal?: string };
+}
+
+function hex6(rgb?: string): string | undefined {
+  if (!rgb) return undefined;
+  const hex = rgb.length === 8 ? rgb.slice(2) : rgb;
+  return hex.length === 6 ? `#${hex}` : undefined;
+}
+
 /**
  * Leest een tabblad met één of meerdere naast elkaar staande tabellen.
  * Elk blok: kolom met huisnummers (grijze straatkop erboven), daarnaast notitie en prijs.
@@ -100,34 +121,57 @@ interface Bron {
   kolom: number;
 }
 
+interface GridCel {
+  t: string;
+  vul?: string;
+  kleur?: string;
+  vet?: boolean;
+  rechts?: boolean;
+  grijs?: boolean;
+}
+
 interface SheetGrid {
-  cellen: string[][];
-  grijs: boolean[][];
+  cellen: GridCel[][];
+  breedtes: number[];
 }
 
 function leesTabblad(
   sheet: XLSX.WorkSheet,
   sheetName: string,
 ): { rijen: RijPreview[]; bronnen: Record<string, Bron>; grid: SheetGrid } {
-  const leeg: SheetGrid = { cellen: [], grijs: [] };
+  const leeg: SheetGrid = { cellen: [], breedtes: [] };
   const ref = sheet["!ref"];
   if (!ref) return { rijen: [], bronnen: {}, grid: leeg };
   const range = XLSX.utils.decode_range(ref);
   const cel = (r: number, c: number) => sheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
 
   // Volledige weergave van het tabblad (om later te kunnen "bekijken in origineel")
-  const grid: SheetGrid = { cellen: [], grijs: [] };
+  const kolInfo = (sheet["!cols"] ?? []) as { wch?: number; width?: number }[];
+  const grid: SheetGrid = {
+    cellen: [],
+    breedtes: Array.from(
+      { length: range.e.c + 1 },
+      (_, c) => Math.round((kolInfo[c]?.wch ?? kolInfo[c]?.width ?? 9) * 7.5),
+    ),
+  };
   for (let r = 0; r <= range.e.r; r++) {
-    const rijTekst: string[] = [];
-    const rijGrijs: boolean[] = [];
+    const rij: GridCel[] = [];
     for (let c = 0; c <= range.e.c; c++) {
       const cell = cel(r, c);
-      rijTekst.push(tekst(cell));
-      rijGrijs.push(isGrijs(cell));
+      const s = (cell as { s?: CelStijl } | undefined)?.s;
+      const vul = s?.patternType && s.patternType !== "none" ? hex6(s.fgColor?.rgb) : undefined;
+      const item: GridCel = { t: weergave(cell) };
+      if (vul) item.vul = vul;
+      const kleur = hex6(s?.font?.color?.rgb);
+      if (kleur) item.kleur = kleur;
+      if (s?.font?.bold) item.vet = true;
+      if (s?.alignment?.horizontal === "right" || typeof cell?.v === "number") item.rechts = true;
+      if (isGrijs(cell)) item.grijs = true;
+      rij.push(item);
     }
-    grid.cellen.push(rijTekst);
-    grid.grijs.push(rijGrijs);
+    grid.cellen.push(rij);
   }
+
 
   // Kolommen waar een grijze straatkop in staat
   const kopKolommen = new Set<number>();
