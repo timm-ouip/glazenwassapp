@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Printer, Upload, Pencil, Trash2, MapPin, Search, GripVertical } from "lucide-react";
+import { Plus, Printer, Upload, Pencil, Trash2, Search, GripVertical } from "lucide-react";
 import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
 import { WijkKiezer } from "@/components/WijkKiezer";
@@ -190,6 +190,22 @@ function Index() {
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
 
+  async function nieuweStraat(naam: string) {
+    if (!actieveWijk) {
+      toast.error("Maak eerst een wijk aan.");
+      return;
+    }
+    const max = Math.max(0, ...streets.map((s) => s.sort_order));
+    const { error } = await supabase
+      .from("streets")
+      .insert({ name: naam.trim(), sort_order: max + 1, district_id: actieveWijk });
+    if (error) {
+      toast.error("Toevoegen mislukt: " + error.message);
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["streets"] });
+  }
+
   function klikSelectie(c: Customer, shift: boolean) {
     const lijst = sortCustomers(customers.filter((x) => x.street_id === c.street_id)).map((x) => x.id);
     setSelectie((huidig) => {
@@ -354,15 +370,20 @@ function Index() {
           <p className="text-sm text-muted-foreground">Laden…</p>
         )}
 
-        {!streetsQuery.isLoading && streets.length === 0 && (
+        {!streetsQuery.isLoading && districts.length === 0 && (
           <div className="rounded-lg border border-dashed border-border p-8 text-center">
             <p className="text-sm text-muted-foreground">
-              Nog geen straten. Voeg er een toe of importeer je Excel-bestand.
+              Nog geen wijken. Maak hierboven eerst een wijk aan.
             </p>
-            <div className="mt-4 flex justify-center gap-2">
-              <Button size="sm" onClick={() => setStraatDialog({ open: true, street: null })}>
-                Straat toevoegen
-              </Button>
+          </div>
+        )}
+
+        {!streetsQuery.isLoading && districts.length > 0 && streets.length === 0 && (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              Nog geen straten in deze wijk. Typ hieronder een straatnaam of importeer je Excel-bestand.
+            </p>
+            <div className="mt-4 flex justify-center">
               <Button size="sm" variant="outline" asChild>
                 <Link to="/importeren">Excel importeren</Link>
               </Button>
@@ -400,6 +421,9 @@ function Index() {
                   onAddKlant={() => setKlantDialog({ open: true, customer: null, streetId: g.street.id })}
                 />
               ))}
+              {districts.length > 0 && (
+                <NieuweStraat onSubmit={nieuweStraat} />
+              )}
             </div>
           </SortableContext>
           <DragOverlay>
@@ -622,6 +646,32 @@ function KlantRij({
       >
         <Trash2 className="size-3" />
       </button>
+    </div>
+  );
+}
+
+function NieuweStraat({ onSubmit }: { onSubmit: (naam: string) => void }) {
+  const [waarde, setWaarde] = useState("");
+  return (
+    <div className="rounded border border-dashed border-border bg-card/50">
+      <input
+        className="w-full bg-transparent px-2 py-2 text-[13px] uppercase tracking-wide text-muted-foreground placeholder:normal-case placeholder:tracking-normal placeholder:text-muted-foreground/70 focus:bg-accent/40 focus:outline-none"
+        placeholder="+ nieuwe straat"
+        value={waarde}
+        onChange={(e) => setWaarde(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && waarde.trim()) {
+            onSubmit(waarde.trim());
+            setWaarde("");
+          }
+        }}
+        onBlur={() => {
+          if (waarde.trim()) {
+            onSubmit(waarde.trim());
+            setWaarde("");
+          }
+        }}
+      />
     </div>
   );
 }
