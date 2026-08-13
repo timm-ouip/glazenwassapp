@@ -856,99 +856,139 @@ function kolomLetter(index: number) {
   return out;
 }
 
+function BronRaster({ bron, grid }: { bron: Bron; grid: SheetGrid }) {
+  const rStart = Math.max(0, bron.rij - 6);
+  const rEnd = Math.min(grid.cellen.length - 1, bron.rij + 16);
+  const cStart = Math.max(0, bron.kolom - 3);
+  const cEnd = Math.min((grid.cellen[0]?.length ?? 1) - 1, bron.kolom + 6);
+
+  return (
+    <div className="min-w-0 flex-1">
+      <p className="mb-1 text-xs font-medium">
+        Tabblad “{bron.tabblad}” — cel {kolomLetter(bron.kolom)}
+        {bron.rij + 1}
+      </p>
+      <div className="max-h-[60vh] overflow-auto rounded-md border border-border bg-white">
+        <table
+          className="border-collapse font-sans text-[11px] text-black"
+          style={{ fontFamily: "Calibri, Arial, sans-serif" }}
+        >
+          <thead>
+            <tr>
+              <th className="sticky left-0 top-0 z-20 border border-[#c6c6c6] bg-[#f0f0f0] px-1 py-0.5 text-[10px] font-normal text-[#555]" />
+              {Array.from({ length: cEnd - cStart + 1 }, (_, i) => (
+                <th
+                  key={i}
+                  className="sticky top-0 z-10 border border-[#c6c6c6] bg-[#f0f0f0] px-1 py-0.5 text-[10px] font-normal text-[#555]"
+                  style={{ minWidth: Math.min(220, Math.max(40, grid.breedtes[cStart + i] ?? 70)) }}
+                >
+                  {kolomLetter(cStart + i)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: rEnd - rStart + 1 }, (_, ri) => {
+              const r = rStart + ri;
+              return (
+                <tr key={r}>
+                  <td className="sticky left-0 z-10 border border-[#c6c6c6] bg-[#f0f0f0] px-1 py-0.5 text-center text-[10px] text-[#555]">
+                    {r + 1}
+                  </td>
+                  {Array.from({ length: cEnd - cStart + 1 }, (_, ci) => {
+                    const c = cStart + ci;
+                    const cel = grid.cellen[r]?.[c];
+                    const isDoel = r === bron.rij && c === bron.kolom;
+                    return (
+                      <td
+                        key={c}
+                        className="whitespace-nowrap border border-[#d4d4d4] px-1.5 py-0.5"
+                        style={{
+                          backgroundColor: cel?.vul ?? "#ffffff",
+                          color: cel?.kleur ?? "#000000",
+                          fontWeight: cel?.vet ? 700 : 400,
+                          textAlign: cel?.rechts ? "right" : "left",
+                          ...(isDoel ? { outline: "3px solid #f59e0b", outlineOffset: "-3px" } : {}),
+                        }}
+                      >
+                        {cel?.t ?? ""}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function BronVenster({
   straat,
-  bron,
-  grid,
+  bronnen,
+  grids,
   bestandsnaam,
   onClose,
 }: {
   straat: string | null;
-  bron?: Bron | undefined;
-  grid?: SheetGrid | undefined;
+  bronnen: Bron[];
+  grids: Record<string, SheetGrid>;
   bestandsnaam: string;
   onClose: () => void;
 }) {
-  const open = Boolean(straat && bron && grid);
-  const rStart = Math.max(0, (bron?.rij ?? 0) - 6);
-  const rEnd = Math.min((grid?.cellen.length ?? 1) - 1, (bron?.rij ?? 0) + 16);
-  const cStart = Math.max(0, (bron?.kolom ?? 0) - 3);
-  const cEnd = Math.min((grid?.cellen[0]?.length ?? 1) - 1, (bron?.kolom ?? 0) + 6);
+  const bruikbaar = bronnen.filter((b) => grids[b.tabblad]);
+  const open = Boolean(straat) && bruikbaar.length > 0;
+  const [actief, setActief] = useState(0);
+  const [naast, setNaast] = useState(true);
+  const index = Math.min(actief, Math.max(0, bruikbaar.length - 1));
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[85vh] max-w-4xl overflow-hidden">
+      <DialogContent className="max-h-[85vh] max-w-6xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>“{straat}” in het originele bestand</DialogTitle>
           <DialogDescription>
-            {bestandsnaam} — tabblad “{bron?.tabblad}”, cel{" "}
-            {bron ? `${kolomLetter(bron.kolom)}${bron.rij + 1}` : ""}
+            {bestandsnaam} —{" "}
+            {bruikbaar.length > 1
+              ? `staat in ${bruikbaar.length} tabbladen`
+              : `tabblad “${bruikbaar[0]?.tabblad ?? ""}”`}
           </DialogDescription>
         </DialogHeader>
-        {grid && bron && (
-          <div className="max-h-[60vh] overflow-auto rounded-md border border-border bg-white">
-            <table
-              className="border-collapse font-sans text-[11px] text-black"
-              style={{ fontFamily: "Calibri, Arial, sans-serif" }}
-            >
-              <thead>
-                <tr>
-                  <th className="sticky left-0 top-0 z-20 border border-[#c6c6c6] bg-[#f0f0f0] px-1 py-0.5 text-[10px] font-normal text-[#555]" />
-                  {Array.from({ length: cEnd - cStart + 1 }, (_, i) => (
-                    <th
-                      key={i}
-                      className="sticky top-0 z-10 border border-[#c6c6c6] bg-[#f0f0f0] px-1 py-0.5 text-[10px] font-normal text-[#555]"
-                      style={{ minWidth: Math.min(220, Math.max(40, grid.breedtes[cStart + i] ?? 70)) }}
-                    >
-                      {kolomLetter(cStart + i)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {Array.from({ length: rEnd - rStart + 1 }, (_, ri) => {
-                  const r = rStart + ri;
-                  return (
-                    <tr key={r}>
-                      <td className="sticky left-0 z-10 border border-[#c6c6c6] bg-[#f0f0f0] px-1 py-0.5 text-center text-[10px] text-[#555]">
-                        {r + 1}
-                      </td>
-                      {Array.from({ length: cEnd - cStart + 1 }, (_, ci) => {
-                        const c = cStart + ci;
-                        const cel = grid.cellen[r]?.[c];
-                        const isDoel = r === bron.rij && c === bron.kolom;
-                        return (
-                          <td
-                            key={c}
-                            className="whitespace-nowrap border border-[#d4d4d4] px-1.5 py-0.5"
-                            style={{
-                              backgroundColor: cel?.vul ?? "#ffffff",
-                              color: cel?.kleur ?? "#000000",
-                              fontWeight: cel?.vet ? 700 : 400,
-                              textAlign: cel?.rechts ? "right" : "left",
-                              ...(isDoel
-                                ? { outline: "3px solid #f59e0b", outlineOffset: "-3px" }
-                                : {}),
-                            }}
-                          >
-                            {cel?.t ?? ""}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+
+        {bruikbaar.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant={naast ? "default" : "outline"} onClick={() => setNaast(true)}>
+              Naast elkaar
+            </Button>
+            {bruikbaar.map((b, i) => (
+              <Button
+                key={b.tabblad}
+                size="sm"
+                variant={!naast && i === index ? "default" : "outline"}
+                onClick={() => {
+                  setNaast(false);
+                  setActief(i);
+                }}
+              >
+                {b.tabblad}
+              </Button>
+            ))}
           </div>
         )}
+
+        <div className="flex gap-3 overflow-x-auto">
+          {(bruikbaar.length > 1 && naast ? bruikbaar : bruikbaar.slice(index, index + 1)).map((b) => (
+            <BronRaster key={b.tabblad} bron={b} grid={grids[b.tabblad]!} />
+          ))}
+        </div>
+
         <p className="text-xs text-muted-foreground">
           Zo staat het in je Excel-bestand, met de originele kleuren. Het oranje omlijnde vakje is wat
-          de app als straatnaam heeft ingelezen.
+          de app heeft ingelezen.
         </p>
       </DialogContent>
     </Dialog>
   );
-
 }
-
