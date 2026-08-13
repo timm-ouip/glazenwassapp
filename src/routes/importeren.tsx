@@ -661,15 +661,15 @@ function ImportPagina() {
               </div>
             )}
 
-            <div className="overflow-x-auto rounded-lg border border-border bg-card">
-              <table className="w-full min-w-[720px] text-sm">
+            <div className="rounded-lg border border-border bg-card">
+              <table className="w-full table-fixed text-sm">
                 <thead className="bg-secondary text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th className="px-3 py-2">Straat</th>
+                    <th className="w-[15%] px-3 py-2">Straat</th>
                     <th className="w-20 px-3 py-2">Nr.</th>
-                    <th className="px-3 py-2">Notitie</th>
-                    <th className="w-40 whitespace-nowrap px-3 py-2">Frequentie</th>
-                    <th className="w-24 whitespace-nowrap px-3 py-2 text-right">Prijs</th>
+                    <th className="w-[55%] px-3 py-2">Notitie</th>
+                    <th className="w-40 px-3 py-2">Frequentie</th>
+                    <th className="w-24 px-3 py-2 text-right">Prijs</th>
                     <th className="w-10 px-2 py-2" />
                   </tr>
                 </thead>
@@ -707,7 +707,7 @@ function ImportPagina() {
                           value={r.frequency}
                           onValueChange={(v) => wijzig(r.id, { frequency: v as Frequency })}
                         >
-                          <SelectTrigger className="h-7 w-36 text-xs">
+                          <SelectTrigger className="h-7 w-full text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
