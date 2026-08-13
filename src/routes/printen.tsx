@@ -53,6 +53,7 @@ export const Route = createFileRoute("/printen")({
 
 function PrintPagina() {
   const { wijk, maand, prijzen, liggend, kolommen, paginas: paginasRaw } = Route.useSearch();
+  const navigate = Route.useNavigate();
   const paginas = paginasRaw === 2 ? 2 : 1;
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
