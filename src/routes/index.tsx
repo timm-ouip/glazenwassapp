@@ -573,12 +573,12 @@ function KlantRij({
       <select
         value={c.frequency}
         onChange={(e) => onPatch(c, { frequency: e.target.value as Customer["frequency"] })}
-        className="w-8 shrink-0 cursor-pointer appearance-none bg-transparent text-center text-[10px] text-muted-foreground focus:outline-none"
+        className="min-w-[3.25rem] max-w-[4rem] shrink-0 cursor-pointer appearance-none bg-transparent text-center text-[10px] text-muted-foreground focus:outline-none"
         aria-label="Frequentie"
       >
-        <option value="elke">M</option>
-        <option value="even">E</option>
-        <option value="oneven">O</option>
+        <option value="elke">Elke</option>
+        <option value="even">Even</option>
+        <option value="oneven">Oneven</option>
       </select>
       <button
         className="shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:!text-destructive"
