@@ -224,12 +224,24 @@ function Index() {
     const huisnummer = parseInt(nummer, 10);
     if (Number.isNaN(huisnummer)) return;
     const max = Math.max(0, ...customers.filter((c) => c.street_id === streetId).map((c) => c.sort_order));
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("customers")
-      .insert({ street_id: streetId, house_number: huisnummer, sort_order: max + 1 });
+      .insert({ street_id: streetId, house_number: huisnummer, sort_order: max + 1 })
+      .select("id")
+      .single();
     if (error) {
       toast.error("Toevoegen mislukt: " + error.message);
       return;
+    }
+    const nieuwId = (data as { id: string } | null)?.id;
+    if (nieuwId) {
+      pushUndo({
+        label: `Toevoegen nr ${huisnummer}`,
+        undo: async () => {
+          await supabase.from("customers").delete().eq("id", nieuwId);
+          herlaad();
+        },
+      });
     }
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
@@ -240,12 +252,24 @@ function Index() {
       return;
     }
     const max = Math.max(0, ...streets.map((s) => s.sort_order));
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("streets")
-      .insert({ name: naam.trim(), sort_order: max + 1, district_id: actieveWijk });
+      .insert({ name: naam.trim(), sort_order: max + 1, district_id: actieveWijk })
+      .select("id")
+      .single();
     if (error) {
       toast.error("Toevoegen mislukt: " + error.message);
       return;
+    }
+    const nieuwId = (data as { id: string } | null)?.id;
+    if (nieuwId) {
+      pushUndo({
+        label: `Toevoegen straat ${naam.trim()}`,
+        undo: async () => {
+          await supabase.from("streets").delete().eq("id", nieuwId);
+          herlaad();
+        },
+      });
     }
     qc.invalidateQueries({ queryKey: ["streets"] });
   }
