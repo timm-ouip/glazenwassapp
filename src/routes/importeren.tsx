@@ -785,12 +785,13 @@ function ImportPagina() {
 
 
         <BronVenster
-          straat={bekijk}
-          bron={bekijk ? bronnen[bekijk] : undefined}
-          grid={bekijk && bronnen[bekijk] ? grids[bronnen[bekijk]!.tabblad] : undefined}
+          straat={bekijk?.label ?? null}
+          bron={bekijk?.bron}
+          grid={bekijk ? grids[bekijk.bron.tabblad] : undefined}
           bestandsnaam={bestandsnaam}
           onClose={() => setBekijk(null)}
         />
+
       </main>
     </div>
   );
