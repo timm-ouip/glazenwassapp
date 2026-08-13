@@ -59,6 +59,84 @@ function raadFrequentie(tabblad: string): Frequency {
   return "elke";
 }
 
+/** Grijs = straatkop. Roze/blauw/geel e.d. worden genegeerd. */
+function isGrijs(cell: XLSX.CellObject | undefined): boolean {
+  const style = (cell as { s?: { patternType?: string; fgColor?: { rgb?: string } } } | undefined)?.s;
+  if (!style || !style.patternType || style.patternType === "none") return false;
+  const rgb = style.fgColor?.rgb;
+  if (!rgb) return false;
+  const hex = rgb.length === 8 ? rgb.slice(2) : rgb;
+  if (hex.length !== 6) return false;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max - min > 24) return false; // gekleurd, geen grijs
+  return max < 246 && max > 24; // niet wit, niet zwart
+}
+
+function tekst(cell: XLSX.CellObject | undefined): string {
+  if (!cell || cell.v === undefined || cell.v === null) return "";
+  return String(cell.v).trim();
+}
+
+/**
+ * Leest een tabblad met één of meerdere naast elkaar staande tabellen.
+ * Elk blok: kolom met huisnummers (grijze straatkop erboven), daarnaast notitie en prijs.
+ */
+function leesTabblad(sheet: XLSX.WorkSheet, sheetName: string): RijPreview[] {
+  const ref = sheet["!ref"];
+  if (!ref) return [];
+  const range = XLSX.utils.decode_range(ref);
+  const cel = (r: number, c: number) => sheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
+
+  // Kolommen waar een grijze straatkop in staat
+  const kopKolommen = new Set<number>();
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      const cell = cel(r, c);
+      if (cell && tekst(cell) && !parseNummer(cell.v) && isGrijs(cell)) {
+        kopKolommen.add(c);
+        break;
+      }
+    }
+  }
+  // Terugval: geen kleuren gevonden → eerste kolom met tekst + nummers
+  const kolommen =
+    kopKolommen.size > 0
+      ? [...kopKolommen].sort((a, b) => a - b)
+      : [range.s.c];
+
+  const rijen: RijPreview[] = [];
+  for (const c of kolommen) {
+    let straat = "";
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      const cell = cel(r, c);
+      const waarde = cell?.v;
+      if (waarde === undefined || waarde === null || String(waarde).trim() === "") continue;
+      const nummer = parseNummer(waarde);
+      if (!nummer) {
+        if (kopKolommen.size === 0 || isGrijs(cell)) straat = String(waarde).trim();
+        continue;
+      }
+      if (!straat) continue;
+      const prijsCel = cel(r, c + 2)?.v;
+      rijen.push({
+        tabblad: sheetName,
+        straat,
+        huisnummer: nummer.nummer,
+        toevoeging: nummer.toevoeging,
+        notitie: tekst(cel(r, c + 1)),
+        prijs:
+          typeof prijsCel === "number" ? prijsCel : Number(String(prijsCel ?? "").replace(",", ".")) || 0,
+      });
+    }
+  }
+  return rijen;
+}
+
+
 function ImportPagina() {
   const navigate = useNavigate();
   const [rijen, setRijen] = useState<RijPreview[]>([]);
