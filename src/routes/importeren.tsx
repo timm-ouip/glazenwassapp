@@ -7,8 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Eye, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+
 import { InlineCel } from "@/components/InlineCel";
 import { NotitieCel } from "@/components/NotitieCel";
 import {
@@ -92,11 +94,40 @@ function tekst(cell: XLSX.CellObject | undefined): string {
  * Leest een tabblad met één of meerdere naast elkaar staande tabellen.
  * Elk blok: kolom met huisnummers (grijze straatkop erboven), daarnaast notitie en prijs.
  */
-function leesTabblad(sheet: XLSX.WorkSheet, sheetName: string): RijPreview[] {
+interface Bron {
+  tabblad: string;
+  rij: number;
+  kolom: number;
+}
+
+interface SheetGrid {
+  cellen: string[][];
+  grijs: boolean[][];
+}
+
+function leesTabblad(
+  sheet: XLSX.WorkSheet,
+  sheetName: string,
+): { rijen: RijPreview[]; bronnen: Record<string, Bron>; grid: SheetGrid } {
+  const leeg: SheetGrid = { cellen: [], grijs: [] };
   const ref = sheet["!ref"];
-  if (!ref) return [];
+  if (!ref) return { rijen: [], bronnen: {}, grid: leeg };
   const range = XLSX.utils.decode_range(ref);
   const cel = (r: number, c: number) => sheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
+
+  // Volledige weergave van het tabblad (om later te kunnen "bekijken in origineel")
+  const grid: SheetGrid = { cellen: [], grijs: [] };
+  for (let r = 0; r <= range.e.r; r++) {
+    const rijTekst: string[] = [];
+    const rijGrijs: boolean[] = [];
+    for (let c = 0; c <= range.e.c; c++) {
+      const cell = cel(r, c);
+      rijTekst.push(tekst(cell));
+      rijGrijs.push(isGrijs(cell));
+    }
+    grid.cellen.push(rijTekst);
+    grid.grijs.push(rijGrijs);
+  }
 
   // Kolommen waar een grijze straatkop in staat
   const kopKolommen = new Set<number>();
@@ -116,6 +147,7 @@ function leesTabblad(sheet: XLSX.WorkSheet, sheetName: string): RijPreview[] {
       : [range.s.c];
 
   const rijen: RijPreview[] = [];
+  const bronnen: Record<string, Bron> = {};
   for (const c of kolommen) {
     let straat = "";
     for (let r = range.s.r; r <= range.e.r; r++) {
@@ -124,7 +156,10 @@ function leesTabblad(sheet: XLSX.WorkSheet, sheetName: string): RijPreview[] {
       if (waarde === undefined || waarde === null || String(waarde).trim() === "") continue;
       const nummer = parseNummer(waarde);
       if (!nummer) {
-        if (kopKolommen.size === 0 || isGrijs(cell)) straat = String(waarde).trim();
+        if (kopKolommen.size === 0 || isGrijs(cell)) {
+          straat = String(waarde).trim();
+          if (!bronnen[straat]) bronnen[straat] = { tabblad: sheetName, rij: r, kolom: c };
+        }
         continue;
       }
       if (!straat) continue;
@@ -140,8 +175,9 @@ function leesTabblad(sheet: XLSX.WorkSheet, sheetName: string): RijPreview[] {
       });
     }
   }
-  return rijen;
+  return { rijen, bronnen, grid };
 }
+
 
 
 interface ImportRij {
@@ -186,6 +222,10 @@ function ImportPagina() {
   const [nieuweWijk, setNieuweWijk] = useState("");
   const [quickNotes, setQuickNotes] = useState<QuickNote[]>([]);
   const [hernoemen, setHernoemen] = useState<Record<string, string>>({});
+  const [bronnen, setBronnen] = useState<Record<string, Bron>>({});
+  const [grids, setGrids] = useState<Record<string, SheetGrid>>({});
+  const [goedgekeurd, setGoedgekeurd] = useState<Set<string>>(new Set());
+  const [bekijk, setBekijk] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDistricts()
@@ -199,7 +239,11 @@ function ImportPagina() {
 
   const tabbladen = useMemo(() => [...new Set(rijen.map((r) => r.tabblad))], [rijen]);
   const straten = useMemo(() => [...new Set(lijst.map((r) => r.straat))], [lijst]);
-  const verdacht = useMemo(() => verdachteStraten(lijst, quickNotes), [lijst, quickNotes]);
+  const verdacht = useMemo(
+    () => verdachteStraten(lijst, quickNotes).filter((v) => !goedgekeurd.has(v.straat)),
+    [lijst, quickNotes, goedgekeurd],
+  );
+
 
   /** Adressen die in meerdere tabbladen staan worden samengevoegd tot "elke maand". */
   useEffect(() => {
@@ -262,16 +306,27 @@ function ImportPagina() {
       const wb = XLSX.read(buffer, { type: "array", cellStyles: true });
       const gevonden: RijPreview[] = [];
       const freq: Record<string, Frequency> = {};
+      const alleBronnen: Record<string, Bron> = {};
+      const alleGrids: Record<string, SheetGrid> = {};
       for (const sheetName of wb.SheetNames) {
         const sheet = wb.Sheets[sheetName];
         if (!sheet) continue;
         freq[sheetName] = raadFrequentie(sheetName);
-        gevonden.push(...leesTabblad(sheet, sheetName));
+        const res = leesTabblad(sheet, sheetName);
+        gevonden.push(...res.rijen);
+        alleGrids[sheetName] = res.grid;
+        for (const [naam, bron] of Object.entries(res.bronnen)) {
+          if (!alleBronnen[naam]) alleBronnen[naam] = bron;
+        }
       }
       setBestandsnaam(file.name);
       setFreqPerTabblad(freq);
+      setBronnen(alleBronnen);
+      setGrids(alleGrids);
+      setGoedgekeurd(new Set());
       setRijen(gevonden);
       if (gevonden.length === 0) toast.error("Geen klanten herkend in dit bestand.");
+
     } catch (e) {
       toast.error("Bestand kon niet gelezen worden.");
       console.error(e);
@@ -495,9 +550,22 @@ function ImportPagina() {
                             ))}
                         </SelectContent>
                       </Select>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setGoedgekeurd((s) => new Set(s).add(v.straat))}
+                      >
+                        <Check className="size-4" /> Klopt wel
+                      </Button>
+                      {bronnen[v.straat] && (
+                        <Button size="sm" variant="outline" onClick={() => setBekijk(v.straat)}>
+                          <Eye className="size-4" /> Bekijken in bestand
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => verwijderStraat(v.straat)}>
                         <Trash2 className="size-4" /> {v.aantal} regels weggooien
                       </Button>
+
                     </div>
                   </div>
                 ))}
@@ -600,7 +668,111 @@ function ImportPagina() {
           </div>
         )}
 
+
+        <BronVenster
+          straat={bekijk}
+          bron={bekijk ? bronnen[bekijk] : undefined}
+          grid={bekijk && bronnen[bekijk] ? grids[bronnen[bekijk]!.tabblad] : undefined}
+          bestandsnaam={bestandsnaam}
+          onClose={() => setBekijk(null)}
+        />
       </main>
     </div>
   );
 }
+
+function kolomLetter(index: number) {
+  let n = index;
+  let out = "";
+  do {
+    out = String.fromCharCode(65 + (n % 26)) + out;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return out;
+}
+
+function BronVenster({
+  straat,
+  bron,
+  grid,
+  bestandsnaam,
+  onClose,
+}: {
+  straat: string | null;
+  bron?: Bron | undefined;
+  grid?: SheetGrid | undefined;
+  bestandsnaam: string;
+  onClose: () => void;
+}) {
+  const open = Boolean(straat && bron && grid);
+  const rStart = Math.max(0, (bron?.rij ?? 0) - 4);
+  const rEnd = Math.min((grid?.cellen.length ?? 1) - 1, (bron?.rij ?? 0) + 10);
+  const cStart = Math.max(0, (bron?.kolom ?? 0) - 2);
+  const cEnd = Math.min((grid?.cellen[0]?.length ?? 1) - 1, (bron?.kolom ?? 0) + 4);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>“{straat}” in het originele bestand</DialogTitle>
+          <DialogDescription>
+            {bestandsnaam} — tabblad “{bron?.tabblad}”, cel{" "}
+            {bron ? `${kolomLetter(bron.kolom)}${bron.rij + 1}` : ""}
+          </DialogDescription>
+        </DialogHeader>
+        {grid && bron && (
+          <div className="overflow-auto rounded-md border border-border">
+            <table className="min-w-full border-collapse text-xs">
+              <thead>
+                <tr>
+                  <th className="sticky left-0 z-10 border border-border bg-secondary px-2 py-1" />
+                  {Array.from({ length: cEnd - cStart + 1 }, (_, i) => (
+                    <th key={i} className="border border-border bg-secondary px-2 py-1 font-medium">
+                      {kolomLetter(cStart + i)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: rEnd - rStart + 1 }, (_, ri) => {
+                  const r = rStart + ri;
+                  return (
+                    <tr key={r}>
+                      <td className="sticky left-0 z-10 border border-border bg-secondary px-2 py-1 text-muted-foreground">
+                        {r + 1}
+                      </td>
+                      {Array.from({ length: cEnd - cStart + 1 }, (_, ci) => {
+                        const c = cStart + ci;
+                        const isDoel = r === bron.rij && c === bron.kolom;
+                        const grijs = grid.grijs[r]?.[c];
+                        return (
+                          <td
+                            key={c}
+                            className={`whitespace-nowrap border px-2 py-1 ${
+                              isDoel
+                                ? "border-2 border-amber-500 bg-amber-200 font-semibold text-amber-950"
+                                : grijs
+                                  ? "border-border bg-muted"
+                                  : "border-border"
+                            }`}
+                          >
+                            {grid.cellen[r]?.[c] ?? ""}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Het gemarkeerde vakje is wat als straatnaam is ingelezen. Grijs gearceerde vakjes zijn de
+          vakjes die de app als straatkop ziet.
+        </p>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
