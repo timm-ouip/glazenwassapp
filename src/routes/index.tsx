@@ -32,7 +32,12 @@ import {
   ArrowUpNarrowWide,
   ArrowDownNarrowWide,
   Undo2,
+  Droplets,
+  Users,
+  Euro,
+  Milestone as Route2,
 } from "lucide-react";
+
 import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
 import { DubbeleStraten } from "@/components/DubbeleStraten";
@@ -427,64 +432,101 @@ function Index() {
   return (
     <div className="min-h-screen bg-background pb-20">
       <header className="border-b border-border bg-card">
-        <div className="mx-auto max-w-[1600px] px-4 py-4">
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Klantenlijst</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {totaal} {totaal === 1 ? "klant" : "klanten"} in beeld
-            {prijzenTonen && omzet > 0 ? ` · ${formatPrice(omzet)}` : ""}
-          </p>
-          <div className="mt-3">
+        <div className="mx-auto max-w-[1600px] px-5 py-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand text-brand-foreground shadow-card">
+              <Droplets className="size-5" />
+            </div>
+            <div className="mr-auto min-w-0">
+              <h1 className="truncate text-lg font-semibold leading-tight text-foreground">Klantenlijst</h1>
+              <p className="text-xs text-muted-foreground">Glazenwasser · routebeheer</p>
+            </div>
             <WijkKiezer
               districts={districts}
               activeId={actieveWijk}
               onSelect={(id) => void navigate({ to: "/", search: { wijk: id } })}
               onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
             />
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={() => setKlantDialog({ open: true, customer: null })}>
-              <Plus className="size-4" /> Klant
-            </Button>
-            <Button size="sm" variant="outline" asChild>
-              <Link to="/importeren">
-                <Upload className="size-4" /> Importeren
-              </Link>
-            </Button>
-            <Button size="sm" variant="outline" asChild>
-              <Link
-                to="/printen"
-                search={{
-                  wijk: actieveWijk ?? "",
-                  maand: filter === "alles" ? "even" : filter,
-                  prijzen: false,
-                  liggend: true,
-                  kolommen: 4,
-                }}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={!undoLabel}
+                onClick={() => void doeUndo()}
+                title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
               >
-                <Printer className="size-4" /> Printlijst
-              </Link>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!undoLabel}
-              onClick={() => void doeUndo()}
-              title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
-            >
-              <Undo2 className="size-4" /> Ongedaan maken
-            </Button>
+                <Undo2 className="size-4" /> Ongedaan
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link to="/importeren">
+                  <Upload className="size-4" /> Importeren
+                </Link>
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link
+                  to="/printen"
+                  search={{
+                    wijk: actieveWijk ?? "",
+                    maand: filter === "alles" ? "even" : filter,
+                    prijzen: false,
+                    liggend: true,
+                    kolommen: 4,
+                  }}
+                >
+                  <Printer className="size-4" /> Printlijst
+                </Link>
+              </Button>
+              <Button
+                size="sm"
+                className="bg-brand text-brand-foreground hover:bg-brand/90"
+                onClick={() => setKlantDialog({ open: true, customer: null })}
+              >
+                <Plus className="size-4" /> Klant
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {[
+              { label: "Klanten in beeld", waarde: String(totaal), icon: Users },
+              { label: "Straten", waarde: String(groepen.length), icon: Route2 },
+              { label: "Omzet per ronde", waarde: formatPrice(omzet), icon: Euro, verberg: !prijzenTonen },
+            ]
+              .filter((s) => !s.verberg)
+              .map((s) => (
+                <div
+                  key={s.label}
+                  className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 shadow-card"
+                >
+                  <s.icon className="size-4 shrink-0 text-brand" />
+                  <div className="min-w-0">
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{s.label}</p>
+                    <p className="font-display text-base font-semibold tabular-nums text-foreground">{s.waarde}</p>
+                  </div>
+                </div>
+              ))}
           </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1600px] space-y-3 px-4 py-4">
-        <div className="flex flex-wrap items-center gap-2">
-          {(["alles", "even", "oneven"] as MaandFilter[]).map((f) => (
-            <Button key={f} size="sm" variant={filter === f ? "default" : "outline"} onClick={() => setFilter(f)}>
-              {f === "alles" ? "Alles" : f === "even" ? "Even maand" : "Oneven maand"}
-            </Button>
-          ))}
-          <div className="flex items-center gap-2 pl-1">
+      <div className="mx-auto max-w-[1600px] space-y-3 px-5 py-4">
+        <div className="sticky top-0 z-20 -mx-5 flex flex-wrap items-center gap-3 border-b border-border/70 bg-background/85 px-5 py-2.5 backdrop-blur">
+          <div className="inline-flex rounded-lg border border-border bg-card p-0.5 shadow-card">
+            {(["alles", "even", "oneven"] as MaandFilter[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  filter === f
+                    ? "bg-brand text-brand-foreground shadow-card"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {f === "alles" ? "Alles" : f === "even" ? "Even maand" : "Oneven maand"}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
             <Switch id="prijzen" checked={prijzenTonen} onCheckedChange={setPrijzenTonen} />
             <Label htmlFor="prijzen" className="text-sm text-muted-foreground">
               Prijzen
@@ -496,11 +538,12 @@ function Index() {
               Extra compact
             </Label>
           </div>
-          <div className="relative ml-auto w-full sm:w-56">
+          <div className="relative ml-auto w-full sm:w-60">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-8" placeholder="Zoek straat" value={zoek} onChange={(e) => setZoek(e.target.value)} />
+            <Input className="bg-card pl-8" placeholder="Zoek straat" value={zoek} onChange={(e) => setZoek(e.target.value)} />
           </div>
         </div>
+
 
         {selectie.length > 1 && (
           <p className="text-xs text-muted-foreground">
@@ -641,9 +684,9 @@ function StraatBlok(p: BlokProps) {
     <section
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`overflow-hidden rounded border border-border bg-card ${isDragging ? "opacity-50" : ""}`}
+      className={`overflow-hidden rounded-lg border border-border bg-card shadow-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
     >
-      <div className="flex items-center gap-1 bg-secondary px-2 py-1">
+      <div className="flex items-center gap-1 border-b border-border bg-surface px-2 py-1.5">
         <button
           className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing"
           aria-label="Straat verslepen"
@@ -652,13 +695,14 @@ function StraatBlok(p: BlokProps) {
         >
           <GripVertical className="size-3.5" />
         </button>
-        <h2 className="flex-1 truncate text-[13px] font-semibold uppercase tracking-wide text-secondary-foreground">
+        <h2 className="flex-1 truncate font-display text-[13px] font-semibold uppercase tracking-wide text-foreground">
           {p.street.name}
         </h2>
-        <span className="text-[11px] text-muted-foreground">{p.aantal}</span>
+        <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">{p.aantal}</span>
         {p.prijzenTonen && (
-          <span className="text-[11px] tabular-nums text-muted-foreground">{formatPrice(p.totaal)}</span>
+          <span className="text-[11px] font-medium tabular-nums text-brand">{formatPrice(p.totaal)}</span>
         )}
+
         <button
           className="rounded p-1 text-muted-foreground hover:bg-accent"
           onClick={p.onToggleSort}
