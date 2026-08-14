@@ -345,19 +345,24 @@ function PrintPagina() {
 
   const kwartKolommen = Math.max(1, Math.round(kolommen / 2));
   const schatting = (g: Groep) => 14 + 11 * Math.max(g.even.length, g.oneven.length);
-  // Verdeel over alle kolommen (2 per kwart) en voeg ze per kwart samen,
-  // zodat elke kolom van elk kwart even vol raakt.
+  const blokHoogte = (g: Groep) => hoogtes[g.street.id] ?? schatting(g);
+  // hoogte per kwart, in niet-geschaalde px (titelbalk wordt gemeten)
+  const kwartHoogte = Math.floor((hoogtePx / schaal - kopHoogte - 10) / 2);
+  const kolomCap = Math.max(20, kwartHoogte - 4);
+  const totaalKolommen = 4 * kwartKolommen;
+  // Vul elke kolom tot aan de vouwlijn; overloop schuift door naar rechts.
   const kolomBlokken = vouwen
-    ? verdeelInBlokken(groepen, (g) => hoogtes[g.street.id] ?? schatting(g), 4 * kwartKolommen)
+    ? verdeelVullend(groepen, blokHoogte, kolomCap, totaalKolommen)
     : [];
   const kwarten = vouwen
     ? Array.from({ length: 4 }, (_, i) =>
         kolomBlokken.slice(i * kwartKolommen, (i + 1) * kwartKolommen).flat(),
       )
     : [];
-  // hoogte per kwart, in niet-geschaalde px (titelbalk wordt gemeten)
-  const kwartHoogte = Math.floor((hoogtePx / schaal - kopHoogte - 10) / 2);
+  // Kleinst mogelijke kolomhoogte waarbij alles nog past -> grootste schaal.
+  const capMin = vouwen ? minCapaciteit(groepen.map(blokHoogte), totaalKolommen) : 0;
   const meetBreedte = Math.round(breedtePx / schaal / (vouwen ? 2 * kwartKolommen : kolommen)) - 6;
+
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
