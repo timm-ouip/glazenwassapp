@@ -338,6 +338,8 @@ function PrintPagina() {
           }
         }
         if (capMin <= 0) return;
+        console.log("DBG", { schaal, capMin, kwartHoogte, kopHoogte, hoogtePx, n: Object.keys(hoogtes).length });
+
         // Schaal waarbij de kolomhoogte exact gelijk wordt aan de minimale
         // benodigde hoogte: kwartHoogte(schaal) == capMin.
         let gewenst = hoogtePx / (2 * (capMin + 4) + kopHoogte + 10);
