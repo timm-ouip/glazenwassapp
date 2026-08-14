@@ -165,51 +165,56 @@ function SleepbaarBlok({
   );
 }
 
-/**
- * Verdeelt de straten in `k` blokken op basis van gemeten hoogtes, met behoud
- * van de routevolgorde. Binair zoeken naar de kleinst mogelijke blokhoogte.
- */
-function verdeelInBlokken(groepen: Groep[], hoogte: (g: Groep) => number, k = 4): Groep[][] {
-  if (groepen.length === 0) return Array.from({ length: k }, () => []);
-  const h = groepen.map(hoogte);
-  const totaal = h.reduce((s, x) => s + x, 0);
-
-  const past = (cap: number) => {
-    let bins = 1;
-    let som = 0;
-    for (const x of h) {
-      if (som + x > cap && som > 0) {
-        bins += 1;
-        som = 0;
-      }
-      som += x;
+/** Aantal kolommen dat nodig is als je elke kolom tot `cap` volstopt. */
+function kolommenNodig(h: number[], cap: number): number {
+  let kolommen = 1;
+  let som = 0;
+  for (const x of h) {
+    if (som > 0 && som + x > cap) {
+      kolommen += 1;
+      som = 0;
     }
-    return bins <= k;
-  };
+    som += x;
+  }
+  return kolommen;
+}
 
+/** Kleinste kolomhoogte waarbij alles nog in `k` kolommen past. */
+function minCapaciteit(h: number[], k: number): number {
+  if (h.length === 0) return 1;
   let laag = Math.max(...h);
-  let hoog = Math.max(totaal, laag);
+  let hoog = Math.max(
+    h.reduce((s, x) => s + x, 0),
+    laag,
+  );
   for (let i = 0; i < 40; i++) {
     const mid = (laag + hoog) / 2;
-    if (past(mid)) hoog = mid;
+    if (kolommenNodig(h, mid) <= k) hoog = mid;
     else laag = mid;
   }
+  return hoog;
+}
 
-  const cap = hoog;
+/**
+ * Vult kolommen tot `cap` vol (routevolgorde blijft behouden); wat niet meer
+ * past schuift door naar de volgende kolom. Overloop komt in de laatste kolom.
+ */
+function verdeelVullend(groepen: Groep[], hoogte: (g: Groep) => number, cap: number, k: number): Groep[][] {
   const blokken: Groep[][] = Array.from({ length: k }, () => []);
   let i = 0;
   let som = 0;
-  groepen.forEach((g, idx) => {
-    const x = h[idx]!;
+  for (const g of groepen) {
+    const x = hoogte(g);
     if (i < k - 1 && som > 0 && som + x > cap) {
       i += 1;
       som = 0;
     }
     blokken[i]!.push(g);
     som += x;
-  });
+  }
   return blokken;
 }
+
 
 const MAX_SCHAAL = 1.6;
 const MIN_SCHAAL = 0.25;
