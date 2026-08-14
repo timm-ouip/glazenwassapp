@@ -327,6 +327,7 @@ function PrintPagina() {
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
+      console.log("DBG", { stap: stappen.current, schaal, capMin, kwartHoogte, kopHoogte, n: Object.keys(hoogtes).length });
       if (stappen.current > 18) return;
       if (vouwen) {
         const kop = kopRef.current;
@@ -338,7 +339,6 @@ function PrintPagina() {
           }
         }
         if (capMin <= 0) return;
-        console.log("DBG", { schaal, capMin, kwartHoogte, kopHoogte, hoogtePx, n: Object.keys(hoogtes).length });
 
         // Schaal waarbij de kolomhoogte exact gelijk wordt aan de minimale
         // benodigde hoogte: kwartHoogte(schaal) == capMin.
