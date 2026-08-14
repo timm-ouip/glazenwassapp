@@ -305,44 +305,6 @@ function PrintPagina() {
   }, [groepen]);
 
 
-  useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      if (stappen.current > 14) return;
-      if (vouwen) {
-        const kop = kopRef.current;
-        if (kop) {
-          const h = Math.ceil(kop.getBoundingClientRect().height / schaal);
-          if (h > 0 && Math.abs(h - kopHoogte) > 1) setKopHoogte(h);
-        }
-        let ratio = 0;
-        for (const el of kwartRefs.current) {
-          if (!el || !el.parentElement) continue;
-          const beschikbaar = el.parentElement.getBoundingClientRect().height;
-          if (beschikbaar <= 0) continue;
-          ratio = Math.max(ratio, el.getBoundingClientRect().height / beschikbaar);
-        }
-        if (ratio <= 0) return;
-        const gewenst = Math.min(MAX_SCHAAL, Math.max(MIN_SCHAAL, schaal / ratio));
-        if (Math.abs(gewenst - schaal) > 0.006) {
-          stappen.current += 1;
-          setSchaal(gewenst);
-        }
-        return;
-      }
-
-      const node = inhoudRef.current;
-      if (!node) return;
-      const gerenderd = node.getBoundingClientRect().height;
-      if (gerenderd <= 0) return;
-      const gewenst = Math.min(MAX_SCHAAL, Math.max(MIN_SCHAAL, (schaal * maxHoogtePx) / gerenderd));
-      if (Math.abs(gewenst - schaal) > 0.006) {
-        stappen.current += 1;
-        setSchaal(gewenst);
-      }
-    });
-    return () => cancelAnimationFrame(id);
-  }, [schaal, kopHoogte, maxHoogtePx, hoogtes, sleutel, vouwen]);
-
   const kwartKolommen = Math.max(1, Math.round(kolommen / 2));
   const schatting = (g: Groep) => 14 + 11 * Math.max(g.even.length, g.oneven.length);
   const blokHoogte = (g: Groep) => hoogtes[g.street.id] ?? schatting(g);
@@ -362,6 +324,53 @@ function PrintPagina() {
   // Kleinst mogelijke kolomhoogte waarbij alles nog past -> grootste schaal.
   const capMin = vouwen ? minCapaciteit(groepen.map(blokHoogte), totaalKolommen) : 0;
   const meetBreedte = Math.round(breedtePx / schaal / (vouwen ? 2 * kwartKolommen : kolommen)) - 6;
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      if (stappen.current > 18) return;
+      if (vouwen) {
+        const kop = kopRef.current;
+        if (kop) {
+          const h = Math.ceil(kop.getBoundingClientRect().height / schaal);
+          if (h > 0 && Math.abs(h - kopHoogte) > 1) {
+            setKopHoogte(h);
+            return;
+          }
+        }
+        if (capMin <= 0) return;
+        // Schaal waarbij de kolomhoogte exact gelijk wordt aan de minimale
+        // benodigde hoogte: kwartHoogte(schaal) == capMin.
+        let gewenst = hoogtePx / (2 * (capMin + 4) + kopHoogte + 10);
+        // Veiligheidscheck: loopt een kwart in de praktijk toch over, dan krimpen.
+        let ratio = 0;
+        for (const el of kwartRefs.current) {
+          if (!el || !el.parentElement) continue;
+          const beschikbaar = el.parentElement.getBoundingClientRect().height;
+          if (beschikbaar <= 0) continue;
+          ratio = Math.max(ratio, el.getBoundingClientRect().height / beschikbaar);
+        }
+        if (ratio > 1.001) gewenst = Math.min(gewenst, schaal / ratio);
+        gewenst = Math.min(MAX_SCHAAL, Math.max(MIN_SCHAAL, gewenst));
+        if (Math.abs(gewenst - schaal) > 0.008) {
+          stappen.current += 1;
+          setSchaal(gewenst);
+        }
+        return;
+      }
+
+      const node = inhoudRef.current;
+      if (!node) return;
+      const gerenderd = node.getBoundingClientRect().height;
+      if (gerenderd <= 0) return;
+      const gewenst = Math.min(MAX_SCHAAL, Math.max(MIN_SCHAAL, (schaal * maxHoogtePx) / gerenderd));
+      if (Math.abs(gewenst - schaal) > 0.006) {
+        stappen.current += 1;
+        setSchaal(gewenst);
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [schaal, kopHoogte, maxHoogtePx, hoogtes, sleutel, vouwen, capMin, hoogtePx]);
+
 
 
   const sensors = useSensors(
