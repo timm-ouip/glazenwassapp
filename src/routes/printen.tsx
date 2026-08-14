@@ -570,17 +570,14 @@ function PrintPagina() {
                         ref={(el) => {
                           kwartRefs.current[i] = el;
                         }}
+                        style={{ columnCount: kwartKolommen, columnGap: "1mm", height: kolomCap }}
+                        className="[column-fill:_auto]"
                       >
-                        <div
-                          style={{ columnCount: kwartKolommen, columnGap: "1mm", height: kwartHoogte }}
-                          className="[column-fill:_auto]"
-
-                        >
-                          {kwart.map((g) => (
-                            <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
-                          ))}
-                        </div>
+                        {kwart.map((g) => (
+                          <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                        ))}
                       </div>
+
                     </div>
                   ))}
                 </div>
