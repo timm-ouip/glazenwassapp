@@ -32,7 +32,12 @@ import {
   ArrowUpNarrowWide,
   ArrowDownNarrowWide,
   Undo2,
+  Droplets,
+  Users,
+  Euro,
+  Milestone as Route2,
 } from "lucide-react";
+
 import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
 import { DubbeleStraten } from "@/components/DubbeleStraten";
