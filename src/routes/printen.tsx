@@ -341,15 +341,15 @@ function PrintPagina() {
         // Schaal waarbij de kolomhoogte exact gelijk wordt aan de minimale
         // benodigde hoogte: kwartHoogte(schaal) == capMin.
         let gewenst = hoogtePx / (2 * (capMin + 4) + kopHoogte + 10);
-        // Veiligheidscheck: loopt een kwart in de praktijk toch over, dan krimpen.
-        let ratio = 0;
+        // Veiligheidscheck: loopt een kwart in de praktijk toch over (extra
+        // kolom buiten beeld), dan iets verder krimpen.
+        let over = 1;
         for (const el of kwartRefs.current) {
-          if (!el || !el.parentElement) continue;
-          const beschikbaar = el.parentElement.getBoundingClientRect().height;
-          if (beschikbaar <= 0) continue;
-          ratio = Math.max(ratio, el.getBoundingClientRect().height / beschikbaar);
+          if (!el || el.clientWidth <= 0) continue;
+          over = Math.max(over, el.scrollWidth / el.clientWidth);
         }
-        if (ratio > 1.001) gewenst = Math.min(gewenst, schaal / ratio);
+        if (over > 1.02) gewenst = Math.min(gewenst, schaal / over);
+
         gewenst = Math.min(MAX_SCHAAL, Math.max(MIN_SCHAAL, gewenst));
         if (Math.abs(gewenst - schaal) > 0.008) {
           stappen.current += 1;
