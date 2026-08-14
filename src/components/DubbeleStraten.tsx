@@ -41,7 +41,7 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
     }
     return [...map.values()]
       .filter((lijst) => lijst.length > 1)
-      .map((lijst) => ({ naam: lijst[0].name, straten: lijst }));
+      .map((lijst) => ({ naam: lijst[0]!.name, straten: lijst }));
   }, [streets]);
 
   const klantenVanGroep = (g: Groep) =>
@@ -59,11 +59,10 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
   async function samenvoegen(g: Groep) {
     setBezig(true);
     try {
-      const doel = g.straten[0];
+      const doel = g.straten[0]!;
       const overige = g.straten.slice(1);
       const teVerplaatsen = sortCustomers(
         overige.flatMap((s) => customers.filter((c) => c.street_id === s.id)),
-        "asc",
       );
       const origineel = teVerplaatsen.map((c) => ({
         id: c.id,
@@ -167,8 +166,8 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
                   </p>
                   <ul className="mt-1 space-y-0.5 text-xs">
                     {dubbels.map((lijst) => (
-                      <li key={lijst[0].id}>
-                        <span className="font-medium">nr {formatNumber(lijst[0])}</span> — {lijst.length}× (
+                      <li key={lijst[0]!.id}>
+                        <span className="font-medium">nr {formatNumber(lijst[0]!)}</span> — {lijst.length}× (
                         {lijst
                           .map((c) => `€ ${c.price}${c.note ? ` · ${c.note}` : ""}`)
                           .join(" / ")}
