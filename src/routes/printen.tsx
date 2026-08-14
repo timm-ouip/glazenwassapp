@@ -288,13 +288,13 @@ function PrintPagina() {
       for (const g of groepen) {
         const el = meetRefs.current[g.street.id];
         if (!el) continue;
-        nieuw[g.street.id] = el.getBoundingClientRect().height;
+        nieuw[g.street.id] = el.getBoundingClientRect().height / (schaal || 1);
       }
       setHoogtes((oud) => {
         const sleutels = Object.keys(nieuw);
         if (
           sleutels.length === Object.keys(oud).length &&
-          sleutels.every((k) => Math.abs((oud[k] ?? -1) - (nieuw[k] ?? 0)) <= 0.5)
+          sleutels.every((k) => Math.abs((oud[k] ?? -1) - (nieuw[k] ?? 0)) <= 1)
         ) {
           return oud;
         }
@@ -302,7 +302,8 @@ function PrintPagina() {
       });
     });
     return () => cancelAnimationFrame(id);
-  }, [groepen]);
+  }, [groepen, schaal]);
+
 
 
   const kwartKolommen = Math.max(1, Math.round(kolommen / 2));
