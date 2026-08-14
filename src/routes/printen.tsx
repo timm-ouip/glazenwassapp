@@ -273,12 +273,14 @@ function PrintPagina() {
   const [kopHoogte, setKopHoogte] = useState(26);
   const [hoogtes, setHoogtes] = useState<Record<string, number>>({});
   const stappen = useRef(0);
+  const plafond = useRef(MAX_SCHAAL);
 
   const sleutel = `${wijk}|${maand}|${prijzen}|${liggend}|${kolommen}|${paginas}|${vouwen}|${groepen.length}`;
 
   useLayoutEffect(() => {
     setSchaal(1);
     stappen.current = 0;
+    plafond.current = MAX_SCHAAL;
   }, [sleutel]);
 
   // Meet de hoogte van elk straatblok op kolombreedte.
@@ -328,7 +330,6 @@ function PrintPagina() {
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
-      console.log("DBG", { stap: stappen.current, schaal, capMin, kwartHoogte, kopHoogte, n: Object.keys(hoogtes).length });
       if (stappen.current > 18) return;
       if (vouwen) {
         const kop = kopRef.current;
@@ -343,15 +344,17 @@ function PrintPagina() {
 
         // Schaal waarbij de kolomhoogte exact gelijk wordt aan de minimale
         // benodigde hoogte: kwartHoogte(schaal) == capMin.
-        let gewenst = hoogtePx / (2 * (capMin + 4) + kopHoogte + 10);
+        let gewenst = hoogtePx / (2 * (capMin * 1.04 + 4) + kopHoogte + 10);
         // Veiligheidscheck: loopt een kwart in de praktijk toch over (extra
-        // kolom buiten beeld), dan iets verder krimpen.
+        // kolom buiten beeld), dan een tandje kleiner en dit als plafond
+        // onthouden, zodat we niet heen en weer blijven springen.
         let over = 1;
         for (const el of kwartRefs.current) {
           if (!el || el.clientWidth <= 0) continue;
           over = Math.max(over, el.scrollWidth / el.clientWidth);
         }
-        if (over > 1.02) gewenst = Math.min(gewenst, schaal / over);
+        if (over > 1.02) plafond.current = Math.min(plafond.current, schaal * 0.96);
+        gewenst = Math.min(gewenst, plafond.current);
 
         gewenst = Math.min(MAX_SCHAAL, Math.max(MIN_SCHAAL, gewenst));
         if (Math.abs(gewenst - schaal) > 0.008) {
