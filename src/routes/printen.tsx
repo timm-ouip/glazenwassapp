@@ -84,7 +84,7 @@ function StraatBlok({
 }) {
   return (
     <div className="-mt-px break-inside-avoid border border-foreground/70">
-      <h2 className="border-b border-foreground/70 bg-muted px-1 text-[9px] font-bold uppercase leading-[1.25] tracking-wide">
+      <h2 className="border-b border-foreground/70 bg-muted px-1 text-[9px] font-bold uppercase leading-[1.15] tracking-wide">
         {g.street.name}
       </h2>
       <div className={`grid ${g.even.length > 0 && g.oneven.length > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
@@ -99,16 +99,16 @@ function StraatBlok({
             <tbody>
               {g[kant].map((c) => (
                 <tr key={c.id} className="border-b border-foreground/20 align-top last:border-0">
-                  <td className="w-6 px-[2px] text-[8.5px] font-semibold leading-[1.2] tabular-nums">
+                  <td className="w-6 px-[2px] text-[8.5px] font-semibold leading-[1.1] tabular-nums">
                     {formatNumber(c)}
                   </td>
-                  <td className="px-[2px] text-[8.5px] leading-[1.2] break-words hyphens-auto">{c.note}</td>
+                  <td className="px-[2px] text-[8.5px] leading-[1.1] break-words hyphens-auto">{c.note}</td>
                   {maand === "alles" && (
-                    <td className="w-8 px-[2px] text-[8.5px] leading-[1.2]">{c.frequency}</td>
+                    <td className="w-8 px-[2px] text-[8.5px] leading-[1.1]">{c.frequency}</td>
                   )}
                   {prijzen && (
                     <td
-                      className={`w-10 px-[2px] text-right text-[8.5px] leading-[1.2] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}
+                      className={`w-10 px-[2px] text-right text-[8.5px] leading-[1.1] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}
                     >
                       {formatPrice(c.price)}
                     </td>
@@ -165,51 +165,56 @@ function SleepbaarBlok({
   );
 }
 
-/**
- * Verdeelt de straten in `k` blokken op basis van gemeten hoogtes, met behoud
- * van de routevolgorde. Binair zoeken naar de kleinst mogelijke blokhoogte.
- */
-function verdeelInBlokken(groepen: Groep[], hoogte: (g: Groep) => number, k = 4): Groep[][] {
-  if (groepen.length === 0) return Array.from({ length: k }, () => []);
-  const h = groepen.map(hoogte);
-  const totaal = h.reduce((s, x) => s + x, 0);
-
-  const past = (cap: number) => {
-    let bins = 1;
-    let som = 0;
-    for (const x of h) {
-      if (som + x > cap && som > 0) {
-        bins += 1;
-        som = 0;
-      }
-      som += x;
+/** Aantal kolommen dat nodig is als je elke kolom tot `cap` volstopt. */
+function kolommenNodig(h: number[], cap: number): number {
+  let kolommen = 1;
+  let som = 0;
+  for (const x of h) {
+    if (som > 0 && som + x > cap) {
+      kolommen += 1;
+      som = 0;
     }
-    return bins <= k;
-  };
+    som += x;
+  }
+  return kolommen;
+}
 
+/** Kleinste kolomhoogte waarbij alles nog in `k` kolommen past. */
+function minCapaciteit(h: number[], k: number): number {
+  if (h.length === 0) return 1;
   let laag = Math.max(...h);
-  let hoog = Math.max(totaal, laag);
+  let hoog = Math.max(
+    h.reduce((s, x) => s + x, 0),
+    laag,
+  );
   for (let i = 0; i < 40; i++) {
     const mid = (laag + hoog) / 2;
-    if (past(mid)) hoog = mid;
+    if (kolommenNodig(h, mid) <= k) hoog = mid;
     else laag = mid;
   }
+  return hoog;
+}
 
-  const cap = hoog;
+/**
+ * Vult kolommen tot `cap` vol (routevolgorde blijft behouden); wat niet meer
+ * past schuift door naar de volgende kolom. Overloop komt in de laatste kolom.
+ */
+function verdeelVullend(groepen: Groep[], hoogte: (g: Groep) => number, cap: number, k: number): Groep[][] {
   const blokken: Groep[][] = Array.from({ length: k }, () => []);
   let i = 0;
   let som = 0;
-  groepen.forEach((g, idx) => {
-    const x = h[idx]!;
+  for (const g of groepen) {
+    const x = hoogte(g);
     if (i < k - 1 && som > 0 && som + x > cap) {
       i += 1;
       som = 0;
     }
     blokken[i]!.push(g);
     som += x;
-  });
+  }
   return blokken;
 }
+
 
 const MAX_SCHAAL = 1.6;
 const MIN_SCHAAL = 0.25;
@@ -268,12 +273,14 @@ function PrintPagina() {
   const [kopHoogte, setKopHoogte] = useState(26);
   const [hoogtes, setHoogtes] = useState<Record<string, number>>({});
   const stappen = useRef(0);
+  const plafond = useRef(MAX_SCHAAL);
 
   const sleutel = `${wijk}|${maand}|${prijzen}|${liggend}|${kolommen}|${paginas}|${vouwen}|${groepen.length}`;
 
   useLayoutEffect(() => {
     setSchaal(1);
     stappen.current = 0;
+    plafond.current = MAX_SCHAAL;
   }, [sleutel]);
 
   // Meet de hoogte van elk straatblok op kolombreedte.
@@ -283,13 +290,13 @@ function PrintPagina() {
       for (const g of groepen) {
         const el = meetRefs.current[g.street.id];
         if (!el) continue;
-        nieuw[g.street.id] = el.getBoundingClientRect().height;
+        nieuw[g.street.id] = el.getBoundingClientRect().height / (schaal || 1);
       }
       setHoogtes((oud) => {
         const sleutels = Object.keys(nieuw);
         if (
           sleutels.length === Object.keys(oud).length &&
-          sleutels.every((k) => Math.abs((oud[k] ?? -1) - (nieuw[k] ?? 0)) <= 0.5)
+          sleutels.every((k) => Math.abs((oud[k] ?? -1) - (nieuw[k] ?? 0)) <= 1)
         ) {
           return oud;
         }
@@ -297,28 +304,60 @@ function PrintPagina() {
       });
     });
     return () => cancelAnimationFrame(id);
-  }, [groepen]);
+  }, [groepen, schaal]);
 
+
+
+  const kwartKolommen = Math.max(1, Math.round(kolommen / 2));
+  const schatting = (g: Groep) => 14 + 11 * Math.max(g.even.length, g.oneven.length);
+  const blokHoogte = (g: Groep) => hoogtes[g.street.id] ?? schatting(g);
+  // hoogte per kwart, in niet-geschaalde px (titelbalk wordt gemeten)
+  const kwartHoogte = Math.floor((hoogtePx / schaal - kopHoogte - 10) / 2);
+  const kolomCap = Math.max(20, kwartHoogte - 4);
+  const totaalKolommen = 4 * kwartKolommen;
+  // Vul elke kolom tot aan de vouwlijn; overloop schuift door naar rechts.
+  const kolomBlokken = vouwen
+    ? verdeelVullend(groepen, blokHoogte, kolomCap, totaalKolommen)
+    : [];
+  const kwarten = vouwen
+    ? Array.from({ length: 4 }, (_, i) =>
+        kolomBlokken.slice(i * kwartKolommen, (i + 1) * kwartKolommen).flat(),
+      )
+    : [];
+  // Kleinst mogelijke kolomhoogte waarbij alles nog past -> grootste schaal.
+  const capMin = vouwen ? minCapaciteit(groepen.map(blokHoogte), totaalKolommen) : 0;
+  const meetBreedte = Math.round(breedtePx / schaal / (vouwen ? 2 * kwartKolommen : kolommen)) - 6;
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
-      if (stappen.current > 14) return;
+      if (stappen.current > 18) return;
       if (vouwen) {
         const kop = kopRef.current;
         if (kop) {
           const h = Math.ceil(kop.getBoundingClientRect().height / schaal);
-          if (h > 0 && Math.abs(h - kopHoogte) > 1) setKopHoogte(h);
+          if (h > 0 && Math.abs(h - kopHoogte) > 1) {
+            setKopHoogte(h);
+            return;
+          }
         }
-        let ratio = 0;
+        if (capMin <= 0) return;
+
+        // Schaal waarbij de kolomhoogte exact gelijk wordt aan de minimale
+        // benodigde hoogte: kwartHoogte(schaal) == capMin.
+        let gewenst = hoogtePx / (2 * (capMin * 1.04 + 4) + kopHoogte + 10);
+        // Veiligheidscheck: loopt een kwart in de praktijk toch over (extra
+        // kolom buiten beeld), dan een tandje kleiner en dit als plafond
+        // onthouden, zodat we niet heen en weer blijven springen.
+        let over = 1;
         for (const el of kwartRefs.current) {
-          if (!el || !el.parentElement) continue;
-          const beschikbaar = el.parentElement.getBoundingClientRect().height;
-          if (beschikbaar <= 0) continue;
-          ratio = Math.max(ratio, el.getBoundingClientRect().height / beschikbaar);
+          if (!el || el.clientWidth <= 0) continue;
+          over = Math.max(over, el.scrollWidth / el.clientWidth);
         }
-        if (ratio <= 0) return;
-        const gewenst = Math.min(MAX_SCHAAL, Math.max(MIN_SCHAAL, schaal / ratio));
-        if (Math.abs(gewenst - schaal) > 0.006) {
+        if (over > 1.02) plafond.current = Math.min(plafond.current, schaal * 0.96);
+        gewenst = Math.min(gewenst, plafond.current);
+
+        gewenst = Math.min(MAX_SCHAAL, Math.max(MIN_SCHAAL, gewenst));
+        if (Math.abs(gewenst - schaal) > 0.008) {
           stappen.current += 1;
           setSchaal(gewenst);
         }
@@ -336,23 +375,9 @@ function PrintPagina() {
       }
     });
     return () => cancelAnimationFrame(id);
-  }, [schaal, kopHoogte, maxHoogtePx, hoogtes, sleutel, vouwen]);
+  }, [schaal, kopHoogte, maxHoogtePx, hoogtes, sleutel, vouwen, capMin, hoogtePx]);
 
-  const kwartKolommen = Math.max(1, Math.round(kolommen / 2));
-  const schatting = (g: Groep) => 14 + 11 * Math.max(g.even.length, g.oneven.length);
-  // Verdeel over alle kolommen (2 per kwart) en voeg ze per kwart samen,
-  // zodat elke kolom van elk kwart even vol raakt.
-  const kolomBlokken = vouwen
-    ? verdeelInBlokken(groepen, (g) => hoogtes[g.street.id] ?? schatting(g), 4 * kwartKolommen)
-    : [];
-  const kwarten = vouwen
-    ? Array.from({ length: 4 }, (_, i) =>
-        kolomBlokken.slice(i * kwartKolommen, (i + 1) * kwartKolommen).flat(),
-      )
-    : [];
-  // hoogte per kwart, in niet-geschaalde px (titelbalk wordt gemeten)
-  const kwartHoogte = Math.floor((hoogtePx / schaal - kopHoogte - 10) / 2);
-  const meetBreedte = Math.round(breedtePx / schaal / (vouwen ? 2 * kwartKolommen : kolommen)) - 6;
+
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -551,16 +576,14 @@ function PrintPagina() {
                         ref={(el) => {
                           kwartRefs.current[i] = el;
                         }}
+                        style={{ columnCount: kwartKolommen, columnGap: "1mm", height: kolomCap }}
+                        className="[column-fill:_auto]"
                       >
-                        <div
-                          style={{ columnCount: kwartKolommen, columnGap: "1mm" }}
-                          className="[column-fill:_balance]"
-                        >
-                          {kwart.map((g) => (
-                            <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
-                          ))}
-                        </div>
+                        {kwart.map((g) => (
+                          <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                        ))}
                       </div>
+
                     </div>
                   ))}
                 </div>
