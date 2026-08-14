@@ -12,7 +12,6 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
-  type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
@@ -136,7 +135,12 @@ function SleepbaarBlok({
   const { attributes, listeners, setNodeRef: setSleepRef, transform, isDragging } = useDraggable({
     id: g.street.id,
   });
-  const { setNodeRef: setDropRef } = useDroppable({ id: g.street.id });
+  const { setNodeRef: setDropRef } = useDroppable({
+    id: g.street.id,
+    // De printindeling meet en schaalt zichzelf. Een ResizeObserver per straat
+    // zou daardoor alle dropzones tijdens elke schaalstap opnieuw registreren.
+    resizeObserverConfig: { disabled: true },
+  });
   const setNodeRef = useCallback(
     (node: HTMLDivElement | null) => {
       setSleepRef(node);
@@ -272,18 +276,25 @@ function PrintPagina() {
   const [schaal, setSchaal] = useState(1);
   const [kopHoogte, setKopHoogte] = useState(26);
   const [hoogtes, setHoogtes] = useState<Record<string, number>>({});
+  const [indelingKlaar, setIndelingKlaar] = useState(false);
   const stappen = useRef(0);
   const plafond = useRef(MAX_SCHAAL);
 
   const sleutel = `${wijk}|${maand}|${prijzen}|${liggend}|${kolommen}|${paginas}|${vouwen}|${groepen.length}`;
 
   useLayoutEffect(() => {
+    setIndelingKlaar(false);
     setSchaal(1);
     stappen.current = 0;
     plafond.current = MAX_SCHAAL;
   }, [sleutel]);
 
   // Meet de hoogte van elk straatblok op kolombreedte.
+  const meetSleutel = groepen
+    .map((g) => `${g.street.id}:${g.even.length}:${g.oneven.length}`)
+    .sort()
+    .join("|");
+
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       const nieuw: Record<string, number> = {};
@@ -304,7 +315,7 @@ function PrintPagina() {
       });
     });
     return () => cancelAnimationFrame(id);
-  }, [groepen, schaal]);
+  }, [meetSleutel, schaal, kolommen, vouwen, breedtePx]);
 
 
 
@@ -330,7 +341,10 @@ function PrintPagina() {
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
-      if (stappen.current > 18) return;
+      if (stappen.current > 18) {
+        setIndelingKlaar(true);
+        return;
+      }
       if (vouwen) {
         const kop = kopRef.current;
         if (kop) {
@@ -360,6 +374,8 @@ function PrintPagina() {
         if (Math.abs(gewenst - schaal) > 0.008) {
           stappen.current += 1;
           setSchaal(gewenst);
+        } else {
+          setIndelingKlaar(true);
         }
         return;
       }
@@ -372,6 +388,8 @@ function PrintPagina() {
       if (Math.abs(gewenst - schaal) > 0.006) {
         stappen.current += 1;
         setSchaal(gewenst);
+      } else {
+        setIndelingKlaar(true);
       }
     });
     return () => cancelAnimationFrame(id);
@@ -393,27 +411,19 @@ function PrintPagina() {
     setSleepVolgorde(huidigeVolgorde());
   }
 
-  function onDragOver(e: DragOverEvent) {
-    const overId = e.over ? String(e.over.id) : null;
-    const activeId = String(e.active.id);
-    if (!overId || overId === activeId) return;
-    setSleepVolgorde((huidig) => {
-      const lijst = huidig ?? huidigeVolgorde();
-      const from = lijst.indexOf(activeId);
-      const to = lijst.indexOf(overId);
-      if (from < 0 || to < 0) return lijst;
-      const next = [...lijst];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved!);
-      return next;
-    });
-  }
-
   async function onDragEnd(e: DragEndEvent) {
     setSleepId(null);
-    const nieuweVolgorde = sleepVolgorde;
+    const activeId = String(e.active.id);
+    const overId = e.over ? String(e.over.id) : null;
+    const nieuweVolgorde = [...(sleepVolgorde ?? huidigeVolgorde())];
     setSleepVolgorde(null);
-    if (!nieuweVolgorde || !e.over) return;
+    if (!overId || overId === activeId) return;
+    const van = nieuweVolgorde.indexOf(activeId);
+    const naar = nieuweVolgorde.indexOf(overId);
+    if (van < 0 || naar < 0) return;
+    const [verplaatst] = nieuweVolgorde.splice(van, 1);
+    if (!verplaatst) return;
+    nieuweVolgorde.splice(naar, 0, verplaatst);
 
     const vorige = alleStreets.map((s) => ({ ...s }));
     const gesorteerd = nieuweVolgorde
@@ -540,7 +550,6 @@ function PrintPagina() {
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragStart={onDragStart}
-          onDragOver={onDragOver}
           onDragEnd={(e) => void onDragEnd(e)}
           onDragCancel={() => {
             setSleepId(null);
@@ -579,9 +588,13 @@ function PrintPagina() {
                         style={{ columnCount: kwartKolommen, columnGap: "1mm", height: kolomCap }}
                         className="[column-fill:_auto]"
                       >
-                        {kwart.map((g) => (
-                          <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
-                        ))}
+                        {kwart.map((g) =>
+                          indelingKlaar ? (
+                            <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                          ) : (
+                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                          ),
+                        )}
                       </div>
 
                     </div>
@@ -589,9 +602,13 @@ function PrintPagina() {
                 </div>
               ) : (
                 <div style={{ columnCount: kolommen, columnGap: "1mm" }} className="[column-fill:_balance]">
-                  {groepen.map((g) => (
-                    <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
-                  ))}
+                  {groepen.map((g) =>
+                    indelingKlaar ? (
+                      <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                    ) : (
+                      <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                    ),
+                  )}
                 </div>
               )}
 
