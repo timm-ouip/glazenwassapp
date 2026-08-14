@@ -315,7 +315,7 @@ function PrintPagina() {
       });
     });
     return () => cancelAnimationFrame(id);
-  }, [meetSleutel, meetBreedte, schaal]);
+  }, [meetSleutel, schaal, kolommen, vouwen, breedtePx]);
 
 
 
