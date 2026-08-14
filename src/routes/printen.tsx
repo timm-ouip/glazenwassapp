@@ -84,7 +84,7 @@ function StraatBlok({
 }) {
   return (
     <div className="-mt-px break-inside-avoid border border-foreground/70">
-      <h2 className="border-b border-foreground/70 bg-muted px-1 text-[9px] font-bold uppercase leading-[1.25] tracking-wide">
+      <h2 className="border-b border-foreground/70 bg-muted px-1 text-[9px] font-bold uppercase leading-[1.15] tracking-wide">
         {g.street.name}
       </h2>
       <div className={`grid ${g.even.length > 0 && g.oneven.length > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
@@ -99,16 +99,16 @@ function StraatBlok({
             <tbody>
               {g[kant].map((c) => (
                 <tr key={c.id} className="border-b border-foreground/20 align-top last:border-0">
-                  <td className="w-6 px-[2px] text-[8.5px] font-semibold leading-[1.2] tabular-nums">
+                  <td className="w-6 px-[2px] text-[8.5px] font-semibold leading-[1.1] tabular-nums">
                     {formatNumber(c)}
                   </td>
-                  <td className="px-[2px] text-[8.5px] leading-[1.2] break-words hyphens-auto">{c.note}</td>
+                  <td className="px-[2px] text-[8.5px] leading-[1.1] break-words hyphens-auto">{c.note}</td>
                   {maand === "alles" && (
-                    <td className="w-8 px-[2px] text-[8.5px] leading-[1.2]">{c.frequency}</td>
+                    <td className="w-8 px-[2px] text-[8.5px] leading-[1.1]">{c.frequency}</td>
                   )}
                   {prijzen && (
                     <td
-                      className={`w-10 px-[2px] text-right text-[8.5px] leading-[1.2] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}
+                      className={`w-10 px-[2px] text-right text-[8.5px] leading-[1.1] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}
                     >
                       {formatPrice(c.price)}
                     </td>
