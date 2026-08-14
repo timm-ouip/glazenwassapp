@@ -509,9 +509,12 @@ function Index() {
           </p>
         )}
 
+        <DubbeleStraten streets={streets} customers={customers} onDone={herlaad} />
+
         {(streetsQuery.isLoading || customersQuery.isLoading) && (
           <p className="text-sm text-muted-foreground">Laden…</p>
         )}
+
 
         {!streetsQuery.isLoading && districts.length === 0 && (
           <div className="rounded-lg border border-dashed border-border p-8 text-center">
