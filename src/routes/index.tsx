@@ -35,6 +35,8 @@ import {
 } from "lucide-react";
 import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
+import { DubbeleStraten } from "@/components/DubbeleStraten";
+
 import { WijkKiezer } from "@/components/WijkKiezer";
 import { InlineCel } from "@/components/InlineCel";
 import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
@@ -509,9 +511,12 @@ function Index() {
           </p>
         )}
 
+        <DubbeleStraten streets={streets} customers={customers} onDone={herlaad} />
+
         {(streetsQuery.isLoading || customersQuery.isLoading) && (
           <p className="text-sm text-muted-foreground">Laden…</p>
         )}
+
 
         {!streetsQuery.isLoading && districts.length === 0 && (
           <div className="rounded-lg border border-dashed border-border p-8 text-center">
