@@ -684,9 +684,9 @@ function StraatBlok(p: BlokProps) {
     <section
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`overflow-hidden rounded border border-border bg-card ${isDragging ? "opacity-50" : ""}`}
+      className={`overflow-hidden rounded-lg border border-border bg-card shadow-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
     >
-      <div className="flex items-center gap-1 bg-secondary px-2 py-1">
+      <div className="flex items-center gap-1 border-b border-border bg-surface px-2 py-1.5">
         <button
           className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing"
           aria-label="Straat verslepen"
@@ -695,13 +695,14 @@ function StraatBlok(p: BlokProps) {
         >
           <GripVertical className="size-3.5" />
         </button>
-        <h2 className="flex-1 truncate text-[13px] font-semibold uppercase tracking-wide text-secondary-foreground">
+        <h2 className="flex-1 truncate font-display text-[13px] font-semibold uppercase tracking-wide text-foreground">
           {p.street.name}
         </h2>
-        <span className="text-[11px] text-muted-foreground">{p.aantal}</span>
+        <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">{p.aantal}</span>
         {p.prijzenTonen && (
-          <span className="text-[11px] tabular-nums text-muted-foreground">{formatPrice(p.totaal)}</span>
+          <span className="text-[11px] font-medium tabular-nums text-brand">{formatPrice(p.totaal)}</span>
         )}
+
         <button
           className="rounded p-1 text-muted-foreground hover:bg-accent"
           onClick={p.onToggleSort}
