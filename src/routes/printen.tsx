@@ -621,7 +621,7 @@ function PrintPagina() {
           <div
             ref={inhoudRef}
             className="origin-top-left overflow-hidden print:overflow-visible"
-            style={{ zoom: schaal, width: Math.round(breedtePx / schaal) }}
+            style={{ zoom: eff, width: Math.round(breedtePx / eff) }}
           >
               <div
                 ref={kopRef}
