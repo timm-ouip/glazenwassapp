@@ -130,13 +130,16 @@ function StraatBlok({
             <tbody>
               {g[kant].map((c) => (
                 <tr key={c.id} className="border-b border-foreground/20 align-top last:border-0">
-                  <td className="px-[2px] text-[8.5px] font-semibold leading-[1.1] tabular-nums whitespace-nowrap">
+                  <td className="overflow-hidden px-[2px] text-[8.5px] font-semibold leading-[1.1] tabular-nums break-words">
                     {formatNumber(c)}
                   </td>
                   <td className="px-[2px] text-[8.5px] leading-[1.1] break-words hyphens-auto">{c.note}</td>
                   {maand === "alles" && (
-                    <td className="px-[2px] text-[8.5px] leading-[1.1] whitespace-nowrap">{c.frequency}</td>
+                    <td className="overflow-hidden px-[1px] text-center text-[7px] uppercase leading-[1.1]">
+                      {freqKort(c.frequency)}
+                    </td>
                   )}
+
                   {prijzen && (
                     <td
                       className={`px-[2px] text-right text-[8.5px] leading-[1.1] tabular-nums whitespace-nowrap ${c.price === 0 ? "text-red-600" : ""}`}
