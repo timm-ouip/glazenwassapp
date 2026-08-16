@@ -365,7 +365,7 @@ function PrintPagina() {
       });
     });
     return () => cancelAnimationFrame(id);
-  }, [meetSleutel, schaal, kolommen, vouwen, breedtePx]);
+  }, [meetSleutel, eff, kolommen, vouwen, breedtePx, prijzen, maand]);
 
 
 
