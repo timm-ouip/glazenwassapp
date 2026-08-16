@@ -152,10 +152,12 @@ function SleepbaarBlok({
   g,
   prijzen,
   maand,
+  smal = false,
 }: {
   g: Groep;
   prijzen: boolean;
   maand: "even" | "oneven" | "alles";
+  smal?: boolean;
 }) {
   const { attributes, listeners, setNodeRef: setSleepRef, transform, isDragging } = useDraggable({
     id: g.street.id,
