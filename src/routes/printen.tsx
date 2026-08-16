@@ -327,7 +327,10 @@ function PrintPagina() {
   const stappen = useRef(0);
   const plafond = useRef(MAX_SCHAAL);
 
-  const sleutel = `${wijk}|${maand}|${prijzen}|${liggend}|${kolommen}|${paginas}|${vouwen}|${groepen.length}`;
+  const sleutel = `${wijk}|${maand}|${prijzen}|${liggend}|${kolommen}|${paginas}|${vouwen}|${grootte}|${groepen.length}`;
+  // Werkelijke zoomfactor: automatische pasvorm × handmatige tekstgrootte.
+  const eff = schaal * f;
+
 
   useLayoutEffect(() => {
     setIndelingKlaar(false);
