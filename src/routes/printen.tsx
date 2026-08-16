@@ -440,7 +440,12 @@ function PrintPagina() {
       if (!node) return;
       const gerenderd = node.getBoundingClientRect().height;
       if (gerenderd <= 0) return;
-      const gewenst = Math.min(MAX_SCHAAL, Math.max(MIN_SCHAAL, (schaal * maxHoogtePx) / gerenderd));
+      // gerenderd is gemeten op zoom = schaal * f; corrigeer daarvoor zodat de
+      // handmatige tekstgrootte niet meteen wordt weggeschaald.
+      const gewenst = Math.min(
+        MAX_SCHAAL,
+        Math.max(MIN_SCHAAL, (schaal * maxHoogtePx * f) / gerenderd),
+      );
       if (Math.abs(gewenst - schaal) > 0.006) {
         stappen.current += 1;
         setSchaal(gewenst);
@@ -449,7 +454,8 @@ function PrintPagina() {
       }
     });
     return () => cancelAnimationFrame(id);
-  }, [schaal, kopHoogte, maxHoogtePx, hoogtes, sleutel, vouwen, capMin, hoogtePx]);
+  }, [schaal, kopHoogte, maxHoogtePx, hoogtes, sleutel, vouwen, capMin, hoogtePx, f]);
+
 
 
 
