@@ -516,7 +516,7 @@ function PrintPagina() {
     qc.invalidateQueries({ queryKey: ["streets"] });
   }
 
-  const zoek = { wijk, maand, prijzen, liggend, kolommen, paginas, vouwen };
+  const zoek = { wijk, maand, prijzen, liggend, kolommen, paginas, vouwen, grootte };
   const sleepGroep = groepen.find((g) => g.street.id === sleepId) ?? null;
 
   return (
