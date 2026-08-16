@@ -96,9 +96,13 @@ function StraatBlok({
   // Kolombreedtes in procenten: zo houdt de notitie altijd genoeg ruimte en
   // kunnen prijs/frequentie nooit over de tekst heen vallen.
   const nrPct = 16;
-  const freqPct = maand === "alles" ? 16 : 0;
+  const freqPct = maand === "alles" ? 13 : 0;
   const prijsPct = prijzen ? 20 : 0;
   const notePct = 100 - nrPct - freqPct - prijsPct;
+  // Korte codes voor de frequentie: "oneven" voluit past niet in een smalle kolom.
+  const freqKort = (v: string) =>
+    v === "oneven" ? "onev" : v === "even" ? "even" : v === "elke" ? "elk" : v;
+
 
   return (
     <div className="-mt-px break-inside-avoid border border-foreground/70">
