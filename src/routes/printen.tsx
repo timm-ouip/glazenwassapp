@@ -373,7 +373,7 @@ function PrintPagina() {
   const schatting = (g: Groep) => 14 + 11 * Math.max(g.even.length, g.oneven.length);
   const blokHoogte = (g: Groep) => hoogtes[g.street.id] ?? schatting(g);
   // hoogte per kwart, in niet-geschaalde px (titelbalk wordt gemeten)
-  const kwartHoogte = Math.floor((hoogtePx / schaal - kopHoogte - 10) / 2);
+  const kwartHoogte = Math.floor((hoogtePx / eff - kopHoogte - 10) / 2);
   const kolomCap = Math.max(20, kwartHoogte - 4);
   const totaalKolommen = 4 * kwartKolommen;
   // Vul elke kolom tot aan de vouwlijn; overloop schuift door naar rechts.
@@ -387,7 +387,13 @@ function PrintPagina() {
     : [];
   // Kleinst mogelijke kolomhoogte waarbij alles nog past -> grootste schaal.
   const capMin = vouwen ? minCapaciteit(groepen.map(blokHoogte), totaalKolommen) : 0;
-  const meetBreedte = Math.round(breedtePx / schaal / (vouwen ? 2 * kwartKolommen : kolommen)) - 6;
+  const kolomBreedte = breedtePx / eff / (vouwen ? 2 * kwartKolommen : kolommen);
+  const meetBreedte = Math.round(kolomBreedte) - 6;
+  // Te smal voor even/oneven naast elkaar? Dan onder elkaar, anders krijg je
+  // één letter per regel of tekst die tegen de prijs aan loopt.
+  const nodigPerKant = 52 + (prijzen ? 34 : 0) + (maand === "alles" ? 26 : 0);
+  const smal = meetBreedte < 2 * nodigPerKant;
+
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
