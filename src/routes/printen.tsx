@@ -191,7 +191,8 @@ function SleepbaarBlok({
       >
         <GripVertical className="size-3" />
       </button>
-      <StraatBlok g={g} prijzen={prijzen} maand={maand} />
+      <StraatBlok g={g} prijzen={prijzen} maand={maand} smal={smal} />
+
     </div>
   );
 }
