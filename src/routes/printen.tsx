@@ -271,6 +271,11 @@ function PrintPagina() {
   const qc = useQueryClient();
   const vouwen = vouwenRaw === true;
   const paginas = vouwen ? 1 : paginasRaw === 2 ? 2 : 1;
+  const grootte = Math.min(300, Math.max(50, grootteRaw ?? 100));
+  // In vouwmodus moet alles binnen de vier kwarten blijven; daar geldt de
+  // automatische schaal en heeft handmatig vergroten geen zin.
+  const f = vouwen ? 1 : grootte / 100;
+
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
