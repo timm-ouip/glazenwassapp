@@ -76,38 +76,62 @@ function StraatBlok({
   g,
   prijzen,
   maand,
+  smal = false,
 }: {
   g: Groep;
   prijzen: boolean;
   maand: "even" | "oneven" | "alles";
+  /** Te weinig breedte voor twee kanten naast elkaar: onder elkaar zetten. */
+  smal?: boolean;
 }) {
+  const kanten = ([
+    g.even.length > 0 ? "even" : null,
+    g.oneven.length > 0 ? "oneven" : null,
+  ].filter(Boolean) as ("even" | "oneven")[]);
+  const naast = kanten.length === 2 && !smal;
+  // Kolombreedtes in procenten: zo houdt de notitie altijd genoeg ruimte en
+  // kunnen prijs/frequentie nooit over de tekst heen vallen.
+  const nrPct = 16;
+  const freqPct = maand === "alles" ? 16 : 0;
+  const prijsPct = prijzen ? 20 : 0;
+  const notePct = 100 - nrPct - freqPct - prijsPct;
+
   return (
     <div className="-mt-px break-inside-avoid border border-foreground/70">
       <h2 className="border-b border-foreground/70 bg-muted px-1 text-[9px] font-bold uppercase leading-[1.15] tracking-wide">
         {g.street.name}
       </h2>
-      <div className={`grid ${g.even.length > 0 && g.oneven.length > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
-        {([
-          g.even.length > 0 ? "even" : null,
-          g.oneven.length > 0 ? "oneven" : null,
-        ].filter(Boolean) as ("even" | "oneven")[]).map((kant, i, arr) => (
+      <div className={naast ? "grid grid-cols-2" : "grid grid-cols-1"}>
+        {kanten.map((kant, i, arr) => (
           <table
             key={kant}
-            className={`w-full table-fixed border-collapse ${i < arr.length - 1 ? "border-r border-foreground/40" : ""}`}
+            className={`w-full table-fixed border-collapse ${
+              i < arr.length - 1
+                ? naast
+                  ? "border-r border-foreground/40"
+                  : "border-b border-foreground/40"
+                : ""
+            }`}
           >
+            <colgroup>
+              <col style={{ width: `${nrPct}%` }} />
+              <col style={{ width: `${notePct}%` }} />
+              {maand === "alles" && <col style={{ width: `${freqPct}%` }} />}
+              {prijzen && <col style={{ width: `${prijsPct}%` }} />}
+            </colgroup>
             <tbody>
               {g[kant].map((c) => (
                 <tr key={c.id} className="border-b border-foreground/20 align-top last:border-0">
-                  <td className="w-6 px-[2px] text-[8.5px] font-semibold leading-[1.1] tabular-nums">
+                  <td className="px-[2px] text-[8.5px] font-semibold leading-[1.1] tabular-nums whitespace-nowrap">
                     {formatNumber(c)}
                   </td>
                   <td className="px-[2px] text-[8.5px] leading-[1.1] break-words hyphens-auto">{c.note}</td>
                   {maand === "alles" && (
-                    <td className="w-8 px-[2px] text-[8.5px] leading-[1.1]">{c.frequency}</td>
+                    <td className="px-[2px] text-[8.5px] leading-[1.1] whitespace-nowrap">{c.frequency}</td>
                   )}
                   {prijzen && (
                     <td
-                      className={`w-10 px-[2px] text-right text-[8.5px] leading-[1.1] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}
+                      className={`px-[2px] text-right text-[8.5px] leading-[1.1] tabular-nums whitespace-nowrap ${c.price === 0 ? "text-red-600" : ""}`}
                     >
                       {formatPrice(c.price)}
                     </td>
@@ -121,6 +145,7 @@ function StraatBlok({
     </div>
   );
 }
+
 
 /** Straatblok met sleepgreep (greep alleen op het scherm zichtbaar). */
 function SleepbaarBlok({
