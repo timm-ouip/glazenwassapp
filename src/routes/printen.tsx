@@ -597,6 +597,49 @@ function PrintPagina() {
               </SelectContent>
             </Select>
 
+            <div
+              className="flex items-center gap-1 rounded-md border border-border px-1"
+              title={
+                vouwen
+                  ? "In vouwmodus wordt de tekst automatisch zo groot mogelijk gemaakt"
+                  : "Tekst groter of kleiner maken (kan extra pagina's kosten)"
+              }
+            >
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0 text-xs"
+                disabled={vouwen || grootte <= 50}
+                onClick={() =>
+                  void navigate({
+                    to: "/printen",
+                    search: { ...zoek, grootte: Math.max(50, grootte - 10) },
+                  })
+                }
+              >
+                A−
+              </Button>
+              <span className="w-11 text-center text-xs tabular-nums text-muted-foreground">
+                {vouwen ? "auto" : `${grootte}%`}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0 text-xs"
+                disabled={vouwen || grootte >= 300}
+                onClick={() =>
+                  void navigate({
+                    to: "/printen",
+                    search: { ...zoek, grootte: Math.min(300, grootte + 10) },
+                  })
+                }
+              >
+                A+
+              </Button>
+            </div>
+
+
+
             <Button size="sm" onClick={() => window.print()}>
               <Printer className="size-4" /> Afdrukken
             </Button>
