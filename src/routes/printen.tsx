@@ -40,6 +40,8 @@ interface PrintSearch {
   kolommen: number;
   paginas?: number;
   vouwen?: boolean;
+  /** Handmatige tekstgrootte in % bovenop het automatisch passend maken. */
+  grootte?: number;
 }
 
 export const Route = createFileRoute("/printen")({
@@ -52,7 +54,9 @@ export const Route = createFileRoute("/printen")({
     kolommen: [2, 3, 4, 5].includes(Number(search["kolommen"])) ? Number(search["kolommen"]) : 4,
     paginas: Number(search["paginas"]) === 2 ? 2 : 1,
     vouwen: search["vouwen"] === true || search["vouwen"] === "true",
+    grootte: Math.min(300, Math.max(50, Math.round(Number(search["grootte"]) || 100))),
   }),
+
 
   head: () => ({
     meta: [
