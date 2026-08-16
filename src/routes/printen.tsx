@@ -252,11 +252,21 @@ function verdeelVullend(groepen: Groep[], hoogte: (g: Groep) => number, cap: num
 }
 
 
-const MAX_SCHAAL = 1.6;
+const MAX_SCHAAL = 3;
 const MIN_SCHAAL = 0.25;
 
 function PrintPagina() {
-  const { wijk, maand, prijzen, liggend, kolommen, paginas: paginasRaw, vouwen: vouwenRaw } = Route.useSearch();
+  const {
+    wijk,
+    maand,
+    prijzen,
+    liggend,
+    kolommen,
+    paginas: paginasRaw,
+    vouwen: vouwenRaw,
+    grootte: grootteRaw,
+  } = Route.useSearch();
+
   const navigate = Route.useNavigate();
   const qc = useQueryClient();
   const vouwen = vouwenRaw === true;
