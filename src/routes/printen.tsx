@@ -139,14 +139,14 @@ function StraatBlok({
                       {freqKort(c.frequency)}
                     </td>
                   )}
-
                   {prijzen && (
                     <td
-                      className={`px-[2px] text-right text-[8.5px] leading-[1.1] tabular-nums whitespace-nowrap ${c.price === 0 ? "text-red-600" : ""}`}
+                      className={`overflow-hidden px-[2px] text-right text-[8px] leading-[1.1] tabular-nums whitespace-nowrap ${c.price === 0 ? "text-red-600" : ""}`}
                     >
                       {formatPrice(c.price)}
                     </td>
                   )}
+
                 </tr>
               ))}
             </tbody>
