@@ -688,7 +688,7 @@ function PrintPagina() {
                       meetRefs.current[g.street.id] = el;
                     }}
                   >
-                    <StraatBlok g={g} prijzen={prijzen} maand={maand} />
+                    <StraatBlok g={g} prijzen={prijzen} maand={maand} smal={smal} />
                   </div>
                 ))}
               </div>
