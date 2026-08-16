@@ -40,6 +40,8 @@ interface PrintSearch {
   kolommen: number;
   paginas?: number;
   vouwen?: boolean;
+  /** Handmatige tekstgrootte in % bovenop het automatisch passend maken. */
+  grootte?: number;
 }
 
 export const Route = createFileRoute("/printen")({
@@ -52,7 +54,9 @@ export const Route = createFileRoute("/printen")({
     kolommen: [2, 3, 4, 5].includes(Number(search["kolommen"])) ? Number(search["kolommen"]) : 4,
     paginas: Number(search["paginas"]) === 2 ? 2 : 1,
     vouwen: search["vouwen"] === true || search["vouwen"] === "true",
+    grootte: Math.min(300, Math.max(50, Math.round(Number(search["grootte"]) || 100))),
   }),
+
 
   head: () => ({
     meta: [
@@ -76,42 +80,73 @@ function StraatBlok({
   g,
   prijzen,
   maand,
+  smal = false,
 }: {
   g: Groep;
   prijzen: boolean;
   maand: "even" | "oneven" | "alles";
+  /** Te weinig breedte voor twee kanten naast elkaar: onder elkaar zetten. */
+  smal?: boolean;
 }) {
+  const kanten = ([
+    g.even.length > 0 ? "even" : null,
+    g.oneven.length > 0 ? "oneven" : null,
+  ].filter(Boolean) as ("even" | "oneven")[]);
+  const naast = kanten.length === 2 && !smal;
+  // Kolombreedtes in procenten: zo houdt de notitie altijd genoeg ruimte en
+  // kunnen prijs/frequentie nooit over de tekst heen vallen.
+  const nrPct = 16;
+  const freqPct = maand === "alles" ? 13 : 0;
+  const prijsPct = prijzen ? 20 : 0;
+  const notePct = 100 - nrPct - freqPct - prijsPct;
+  // Korte codes voor de frequentie: "oneven" voluit past niet in een smalle kolom.
+  const freqKort = (v: string) =>
+    v === "oneven" ? "onev" : v === "even" ? "even" : v === "elke" ? "elk" : v;
+
+
   return (
     <div className="-mt-px break-inside-avoid border border-foreground/70">
       <h2 className="border-b border-foreground/70 bg-muted px-1 text-[9px] font-bold uppercase leading-[1.15] tracking-wide">
         {g.street.name}
       </h2>
-      <div className={`grid ${g.even.length > 0 && g.oneven.length > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
-        {([
-          g.even.length > 0 ? "even" : null,
-          g.oneven.length > 0 ? "oneven" : null,
-        ].filter(Boolean) as ("even" | "oneven")[]).map((kant, i, arr) => (
+      <div className={naast ? "grid grid-cols-2" : "grid grid-cols-1"}>
+        {kanten.map((kant, i, arr) => (
           <table
             key={kant}
-            className={`w-full table-fixed border-collapse ${i < arr.length - 1 ? "border-r border-foreground/40" : ""}`}
+            className={`w-full table-fixed border-collapse ${
+              i < arr.length - 1
+                ? naast
+                  ? "border-r border-foreground/40"
+                  : "border-b border-foreground/40"
+                : ""
+            }`}
           >
+            <colgroup>
+              <col style={{ width: `${nrPct}%` }} />
+              <col style={{ width: `${notePct}%` }} />
+              {maand === "alles" && <col style={{ width: `${freqPct}%` }} />}
+              {prijzen && <col style={{ width: `${prijsPct}%` }} />}
+            </colgroup>
             <tbody>
               {g[kant].map((c) => (
                 <tr key={c.id} className="border-b border-foreground/20 align-top last:border-0">
-                  <td className="w-6 px-[2px] text-[8.5px] font-semibold leading-[1.1] tabular-nums">
+                  <td className="overflow-hidden px-[2px] text-[8.5px] font-semibold leading-[1.1] tabular-nums break-words">
                     {formatNumber(c)}
                   </td>
                   <td className="px-[2px] text-[8.5px] leading-[1.1] break-words hyphens-auto">{c.note}</td>
                   {maand === "alles" && (
-                    <td className="w-8 px-[2px] text-[8.5px] leading-[1.1]">{c.frequency}</td>
+                    <td className="overflow-hidden px-[1px] text-center text-[7px] uppercase leading-[1.1]">
+                      {freqKort(c.frequency)}
+                    </td>
                   )}
                   {prijzen && (
                     <td
-                      className={`w-10 px-[2px] text-right text-[8.5px] leading-[1.1] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}
+                      className={`overflow-hidden px-[2px] text-right text-[8px] leading-[1.1] tabular-nums whitespace-nowrap ${c.price === 0 ? "text-red-600" : ""}`}
                     >
                       {formatPrice(c.price)}
                     </td>
                   )}
+
                 </tr>
               ))}
             </tbody>
@@ -122,15 +157,18 @@ function StraatBlok({
   );
 }
 
+
 /** Straatblok met sleepgreep (greep alleen op het scherm zichtbaar). */
 function SleepbaarBlok({
   g,
   prijzen,
   maand,
+  smal = false,
 }: {
   g: Groep;
   prijzen: boolean;
   maand: "even" | "oneven" | "alles";
+  smal?: boolean;
 }) {
   const { attributes, listeners, setNodeRef: setSleepRef, transform, isDragging } = useDraggable({
     id: g.street.id,
@@ -164,7 +202,8 @@ function SleepbaarBlok({
       >
         <GripVertical className="size-3" />
       </button>
-      <StraatBlok g={g} prijzen={prijzen} maand={maand} />
+      <StraatBlok g={g} prijzen={prijzen} maand={maand} smal={smal} />
+
     </div>
   );
 }
@@ -220,15 +259,30 @@ function verdeelVullend(groepen: Groep[], hoogte: (g: Groep) => number, cap: num
 }
 
 
-const MAX_SCHAAL = 1.6;
+const MAX_SCHAAL = 3;
 const MIN_SCHAAL = 0.25;
 
 function PrintPagina() {
-  const { wijk, maand, prijzen, liggend, kolommen, paginas: paginasRaw, vouwen: vouwenRaw } = Route.useSearch();
+  const {
+    wijk,
+    maand,
+    prijzen,
+    liggend,
+    kolommen,
+    paginas: paginasRaw,
+    vouwen: vouwenRaw,
+    grootte: grootteRaw,
+  } = Route.useSearch();
+
   const navigate = Route.useNavigate();
   const qc = useQueryClient();
   const vouwen = vouwenRaw === true;
   const paginas = vouwen ? 1 : paginasRaw === 2 ? 2 : 1;
+  const grootte = Math.min(300, Math.max(50, grootteRaw ?? 100));
+  // In vouwmodus moet alles binnen de vier kwarten blijven; daar geldt de
+  // automatische schaal en heeft handmatig vergroten geen zin.
+  const f = vouwen ? 1 : grootte / 100;
+
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
@@ -280,7 +334,10 @@ function PrintPagina() {
   const stappen = useRef(0);
   const plafond = useRef(MAX_SCHAAL);
 
-  const sleutel = `${wijk}|${maand}|${prijzen}|${liggend}|${kolommen}|${paginas}|${vouwen}|${groepen.length}`;
+  const sleutel = `${wijk}|${maand}|${prijzen}|${liggend}|${kolommen}|${paginas}|${vouwen}|${grootte}|${groepen.length}`;
+  // Werkelijke zoomfactor: automatische pasvorm × handmatige tekstgrootte.
+  const eff = schaal * f;
+
 
   useLayoutEffect(() => {
     setIndelingKlaar(false);
@@ -301,7 +358,7 @@ function PrintPagina() {
       for (const g of groepen) {
         const el = meetRefs.current[g.street.id];
         if (!el) continue;
-        nieuw[g.street.id] = el.getBoundingClientRect().height / (schaal || 1);
+        nieuw[g.street.id] = el.getBoundingClientRect().height / (eff || 1);
       }
       setHoogtes((oud) => {
         const sleutels = Object.keys(nieuw);
@@ -315,7 +372,7 @@ function PrintPagina() {
       });
     });
     return () => cancelAnimationFrame(id);
-  }, [meetSleutel, schaal, kolommen, vouwen, breedtePx]);
+  }, [meetSleutel, eff, kolommen, vouwen, breedtePx, prijzen, maand]);
 
 
 
@@ -323,7 +380,7 @@ function PrintPagina() {
   const schatting = (g: Groep) => 14 + 11 * Math.max(g.even.length, g.oneven.length);
   const blokHoogte = (g: Groep) => hoogtes[g.street.id] ?? schatting(g);
   // hoogte per kwart, in niet-geschaalde px (titelbalk wordt gemeten)
-  const kwartHoogte = Math.floor((hoogtePx / schaal - kopHoogte - 10) / 2);
+  const kwartHoogte = Math.floor((hoogtePx / eff - kopHoogte - 10) / 2);
   const kolomCap = Math.max(20, kwartHoogte - 4);
   const totaalKolommen = 4 * kwartKolommen;
   // Vul elke kolom tot aan de vouwlijn; overloop schuift door naar rechts.
@@ -337,7 +394,13 @@ function PrintPagina() {
     : [];
   // Kleinst mogelijke kolomhoogte waarbij alles nog past -> grootste schaal.
   const capMin = vouwen ? minCapaciteit(groepen.map(blokHoogte), totaalKolommen) : 0;
-  const meetBreedte = Math.round(breedtePx / schaal / (vouwen ? 2 * kwartKolommen : kolommen)) - 6;
+  const kolomBreedte = breedtePx / eff / (vouwen ? 2 * kwartKolommen : kolommen);
+  const meetBreedte = Math.round(kolomBreedte) - 6;
+  // Te smal voor even/oneven naast elkaar? Dan onder elkaar, anders krijg je
+  // één letter per regel of tekst die tegen de prijs aan loopt.
+  const nodigPerKant = 52 + (prijzen ? 34 : 0) + (maand === "alles" ? 26 : 0);
+  const smal = meetBreedte < 2 * nodigPerKant;
+
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -384,7 +447,12 @@ function PrintPagina() {
       if (!node) return;
       const gerenderd = node.getBoundingClientRect().height;
       if (gerenderd <= 0) return;
-      const gewenst = Math.min(MAX_SCHAAL, Math.max(MIN_SCHAAL, (schaal * maxHoogtePx) / gerenderd));
+      // gerenderd is gemeten op zoom = schaal * f; corrigeer daarvoor zodat de
+      // handmatige tekstgrootte niet meteen wordt weggeschaald.
+      const gewenst = Math.min(
+        MAX_SCHAAL,
+        Math.max(MIN_SCHAAL, (schaal * maxHoogtePx * f) / gerenderd),
+      );
       if (Math.abs(gewenst - schaal) > 0.006) {
         stappen.current += 1;
         setSchaal(gewenst);
@@ -393,7 +461,8 @@ function PrintPagina() {
       }
     });
     return () => cancelAnimationFrame(id);
-  }, [schaal, kopHoogte, maxHoogtePx, hoogtes, sleutel, vouwen, capMin, hoogtePx]);
+  }, [schaal, kopHoogte, maxHoogtePx, hoogtes, sleutel, vouwen, capMin, hoogtePx, f]);
+
 
 
 
@@ -454,7 +523,7 @@ function PrintPagina() {
     qc.invalidateQueries({ queryKey: ["streets"] });
   }
 
-  const zoek = { wijk, maand, prijzen, liggend, kolommen, paginas, vouwen };
+  const zoek = { wijk, maand, prijzen, liggend, kolommen, paginas, vouwen, grootte };
   const sleepGroep = groepen.find((g) => g.street.id === sleepId) ?? null;
 
   return (
@@ -535,6 +604,49 @@ function PrintPagina() {
               </SelectContent>
             </Select>
 
+            <div
+              className="flex items-center gap-1 rounded-md border border-border px-1"
+              title={
+                vouwen
+                  ? "In vouwmodus wordt de tekst automatisch zo groot mogelijk gemaakt"
+                  : "Tekst groter of kleiner maken (kan extra pagina's kosten)"
+              }
+            >
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0 text-xs"
+                disabled={vouwen || grootte <= 50}
+                onClick={() =>
+                  void navigate({
+                    to: "/printen",
+                    search: { ...zoek, grootte: Math.max(50, grootte - 10) },
+                  })
+                }
+              >
+                A−
+              </Button>
+              <span className="w-11 text-center text-xs tabular-nums text-muted-foreground">
+                {vouwen ? "auto" : `${grootte}%`}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0 text-xs"
+                disabled={vouwen || grootte >= 300}
+                onClick={() =>
+                  void navigate({
+                    to: "/printen",
+                    search: { ...zoek, grootte: Math.min(300, grootte + 10) },
+                  })
+                }
+              >
+                A+
+              </Button>
+            </div>
+
+
+
             <Button size="sm" onClick={() => window.print()}>
               <Printer className="size-4" /> Afdrukken
             </Button>
@@ -559,7 +671,7 @@ function PrintPagina() {
           <div
             ref={inhoudRef}
             className="origin-top-left overflow-hidden print:overflow-visible"
-            style={{ zoom: schaal, width: Math.round(breedtePx / schaal) }}
+            style={{ zoom: eff, width: Math.round(breedtePx / eff) }}
           >
               <div
                 ref={kopRef}
@@ -590,9 +702,9 @@ function PrintPagina() {
                       >
                         {kwart.map((g) =>
                           indelingKlaar ? (
-                            <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                            <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} smal={smal} />
                           ) : (
-                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} smal={smal} />
                           ),
                         )}
                       </div>
@@ -604,12 +716,13 @@ function PrintPagina() {
                 <div style={{ columnCount: kolommen, columnGap: "1mm" }} className="[column-fill:_balance]">
                   {groepen.map((g) =>
                     indelingKlaar ? (
-                      <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                      <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} smal={smal} />
                     ) : (
-                      <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                      <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} smal={smal} />
                     ),
                   )}
                 </div>
+
               )}
 
               {/* verborgen meetlaag: bepaalt de echte hoogte per straat */}
@@ -625,7 +738,7 @@ function PrintPagina() {
                       meetRefs.current[g.street.id] = el;
                     }}
                   >
-                    <StraatBlok g={g} prijzen={prijzen} maand={maand} />
+                    <StraatBlok g={g} prijzen={prijzen} maand={maand} smal={smal} />
                   </div>
                 ))}
               </div>
