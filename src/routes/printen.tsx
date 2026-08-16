@@ -351,7 +351,7 @@ function PrintPagina() {
       for (const g of groepen) {
         const el = meetRefs.current[g.street.id];
         if (!el) continue;
-        nieuw[g.street.id] = el.getBoundingClientRect().height / (schaal || 1);
+        nieuw[g.street.id] = el.getBoundingClientRect().height / (eff || 1);
       }
       setHoogtes((oud) => {
         const sleutels = Object.keys(nieuw);
