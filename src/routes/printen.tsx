@@ -652,9 +652,9 @@ function PrintPagina() {
                       >
                         {kwart.map((g) =>
                           indelingKlaar ? (
-                            <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                            <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} smal={smal} />
                           ) : (
-                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} smal={smal} />
                           ),
                         )}
                       </div>
@@ -666,12 +666,13 @@ function PrintPagina() {
                 <div style={{ columnCount: kolommen, columnGap: "1mm" }} className="[column-fill:_balance]">
                   {groepen.map((g) =>
                     indelingKlaar ? (
-                      <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                      <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} smal={smal} />
                     ) : (
-                      <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                      <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} smal={smal} />
                     ),
                   )}
                 </div>
+
               )}
 
               {/* verborgen meetlaag: bepaalt de echte hoogte per straat */}
