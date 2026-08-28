@@ -16,6 +16,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
+import { requireSession, useRequireAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -38,6 +39,7 @@ import {
   Milestone as Route2,
 } from "lucide-react";
 
+import { AccountMenu } from "@/components/AccountMenu";
 import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
 import { DubbeleStraten } from "@/components/DubbeleStraten";
@@ -71,6 +73,9 @@ interface IndexSearch {
 }
 
 export const Route = createFileRoute("/")({
+  beforeLoad: async () => {
+    await requireSession();
+  },
   validateSearch: (search: Record<string, unknown>): IndexSearch =>
     typeof search["wijk"] === "string" && search["wijk"] ? { wijk: search["wijk"] } : {},
   head: () => ({
@@ -96,6 +101,7 @@ export const Route = createFileRoute("/")({
 type MaandFilter = "alles" | "even" | "oneven";
 
 function Index() {
+  useRequireAuth();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { wijk } = Route.useSearch();
@@ -470,7 +476,6 @@ function Index() {
                     maand: filter === "alles" ? "even" : filter,
                     prijzen: false,
                     liggend: true,
-                    kolommen: 4,
                   }}
                 >
                   <Printer className="size-4" /> Printlijst
@@ -483,6 +488,7 @@ function Index() {
               >
                 <Plus className="size-4" /> Klant
               </Button>
+              <AccountMenu />
             </div>
           </div>
 
@@ -589,7 +595,7 @@ function Index() {
           onDragEnd={onDragEnd}
         >
           <SortableContext items={groepen.map((g) => `s:${g.street.id}`)} strategy={verticalListSortingStrategy}>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="gap-3 md:columns-2 xl:columns-3">
               {groepen.map((g) => (
                 <StraatBlok
                   key={g.street.id}
@@ -684,7 +690,7 @@ function StraatBlok(p: BlokProps) {
     <section
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`overflow-hidden rounded-lg border border-border bg-card shadow-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
+      className={`mb-3 break-inside-avoid-column overflow-hidden rounded-lg border border-border bg-card shadow-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
     >
       <div className="flex items-center gap-1 border-b border-border bg-surface px-2 py-1.5">
         <button
@@ -862,7 +868,7 @@ function KlantRij({
 function NieuweStraat({ onSubmit }: { onSubmit: (naam: string) => void }) {
   const [waarde, setWaarde] = useState("");
   return (
-    <div className="rounded border border-dashed border-border bg-card/50">
+    <div className="mb-3 break-inside-avoid-column rounded border border-dashed border-border bg-card/50">
       <input
         className="w-full bg-transparent px-2 py-2 text-[13px] uppercase tracking-wide text-muted-foreground placeholder:normal-case placeholder:tracking-normal placeholder:text-muted-foreground/70 focus:bg-accent/40 focus:outline-none"
         placeholder="+ nieuwe straat"

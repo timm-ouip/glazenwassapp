@@ -11,7 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ImporterenRouteImport } from './routes/importeren'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrintenRouteImport } from './routes/printen'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as TeamRouteImport } from './routes/team'
+import { Route as UitnodigingRouteImport } from './routes/uitnodiging'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -23,40 +27,98 @@ const ImporterenRoute = ImporterenRouteImport.update({
   path: '/importeren',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PrintenRoute = PrintenRouteImport.update({
   id: '/printen',
   path: '/printen',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeamRoute = TeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UitnodigingRoute = UitnodigingRouteImport.update({
+  id: '/uitnodiging',
+  path: '/uitnodiging',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/importeren': typeof ImporterenRoute
+  '/login': typeof LoginRoute
   '/printen': typeof PrintenRoute
+  '/signup': typeof SignupRoute
+  '/team': typeof TeamRoute
+  '/uitnodiging': typeof UitnodigingRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/importeren': typeof ImporterenRoute
+  '/login': typeof LoginRoute
   '/printen': typeof PrintenRoute
+  '/signup': typeof SignupRoute
+  '/team': typeof TeamRoute
+  '/uitnodiging': typeof UitnodigingRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/importeren': typeof ImporterenRoute
+  '/login': typeof LoginRoute
   '/printen': typeof PrintenRoute
+  '/signup': typeof SignupRoute
+  '/team': typeof TeamRoute
+  '/uitnodiging': typeof UitnodigingRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/importeren' | '/printen'
+  fullPaths:
+    | '/'
+    | '/importeren'
+    | '/login'
+    | '/printen'
+    | '/signup'
+    | '/team'
+    | '/uitnodiging'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/importeren' | '/printen'
-  id: '__root__' | '/' | '/importeren' | '/printen'
+  to:
+    | '/'
+    | '/importeren'
+    | '/login'
+    | '/printen'
+    | '/signup'
+    | '/team'
+    | '/uitnodiging'
+  id:
+    | '__root__'
+    | '/'
+    | '/importeren'
+    | '/login'
+    | '/printen'
+    | '/signup'
+    | '/team'
+    | '/uitnodiging'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ImporterenRoute: typeof ImporterenRoute
+  LoginRoute: typeof LoginRoute
   PrintenRoute: typeof PrintenRoute
+  SignupRoute: typeof SignupRoute
+  TeamRoute: typeof TeamRoute
+  UitnodigingRoute: typeof UitnodigingRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -75,11 +137,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImporterenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/printen': {
       id: '/printen'
       path: '/printen'
       fullPath: '/printen'
       preLoaderRoute: typeof PrintenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/team': {
+      id: '/team'
+      path: '/team'
+      fullPath: '/team'
+      preLoaderRoute: typeof TeamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/uitnodiging': {
+      id: '/uitnodiging'
+      path: '/uitnodiging'
+      fullPath: '/uitnodiging'
+      preLoaderRoute: typeof UitnodigingRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -88,7 +178,11 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ImporterenRoute: ImporterenRoute,
+  LoginRoute: LoginRoute,
   PrintenRoute: PrintenRoute,
+  SignupRoute: SignupRoute,
+  TeamRoute: TeamRoute,
+  UitnodigingRoute: UitnodigingRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

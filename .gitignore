@@ -16,9 +16,20 @@ dist-ssr
 .nitro
 *.local
 
+# Environment variables (bevat geheime sleutels, nooit committen)
+.env
+.env.*
+!.env.example
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
+
+# Supabase lokale CLI-staat (koppeling aan project, per machine)
+supabase/.temp/
+
+# Claude Code persoonlijke instellingen (bevat lokale paden)
+.claude/settings.local.json
 
 # Editor directories and files
 .vscode/*

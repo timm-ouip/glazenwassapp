@@ -14,9 +14,28 @@ export type Database = {
   }
   public: {
     Tables: {
+      companies: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           addition: string
+          company_id: string
           created_at: string
           frequency: string
           house_number: number
@@ -28,6 +47,7 @@ export type Database = {
         }
         Insert: {
           addition?: string
+          company_id?: string
           created_at?: string
           frequency?: string
           house_number: number
@@ -39,6 +59,7 @@ export type Database = {
         }
         Update: {
           addition?: string
+          company_id?: string
           created_at?: string
           frequency?: string
           house_number?: number
@@ -50,6 +71,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "customers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "customers_street_id_fkey"
             columns: ["street_id"]
             isOneToOne: false
@@ -60,6 +88,7 @@ export type Database = {
       }
       districts: {
         Row: {
+          company_id: string
           created_at: string
           id: string
           name: string
@@ -67,6 +96,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          company_id?: string
           created_at?: string
           id?: string
           name: string
@@ -74,61 +104,132 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          company_id?: string
           created_at?: string
           id?: string
           name?: string
           sort_order?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "districts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employees: {
+        Row: {
+          company_id: string
+          created_at: string
+          email: string
+          id: string
+          naam: string
+          rol: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          email: string
+          id: string
+          naam?: string
+          rol?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          naam?: string
+          rol?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employees_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       quick_notes: {
         Row: {
+          company_id: string
           created_at: string
           id: string
           label: string
           sort_order: number
         }
         Insert: {
+          company_id?: string
           created_at?: string
           id?: string
           label: string
           sort_order?: number
         }
         Update: {
+          company_id?: string
           created_at?: string
           id?: string
           label?: string
           sort_order?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "quick_notes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       streets: {
         Row: {
+          company_id: string
           created_at: string
           district_id: string
           id: string
           name: string
+          print_col: number | null
+          print_row: number | null
           sort_desc: boolean
           sort_order: number
         }
         Insert: {
+          company_id?: string
           created_at?: string
           district_id: string
           id?: string
           name: string
+          print_col?: number | null
+          print_row?: number | null
           sort_desc?: boolean
           sort_order?: number
         }
         Update: {
+          company_id?: string
           created_at?: string
           district_id?: string
           id?: string
           name?: string
+          print_col?: number | null
+          print_row?: number | null
           sort_desc?: boolean
           sort_order?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "streets_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "streets_district_id_fkey"
             columns: ["district_id"]

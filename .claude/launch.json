@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "/Users/Timmie/.bun/bin/bun",
+      "runtimeArgs": [
+        "run",
+        "--bun",
+        "dev"
+      ],
+      "port": 5173
+    }
+  ]
+}

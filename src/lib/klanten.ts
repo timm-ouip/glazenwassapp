@@ -14,6 +14,8 @@ export interface Street {
   sort_order: number;
   district_id: string;
   sort_desc: boolean;
+  print_col: number | null;
+  print_row: number | null;
 }
 
 export interface Customer {
@@ -72,7 +74,7 @@ export async function deleteDistrict(id: string) {
 export async function fetchStreets(): Promise<Street[]> {
   const { data, error } = await supabase
     .from("streets")
-    .select("id,name,sort_order,district_id,sort_desc")
+    .select("id,name,sort_order,district_id,sort_desc,print_col,print_row")
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
   if (error) throw error;
@@ -175,4 +177,22 @@ export async function persistStreetOrder(streets: Street[]) {
 export async function setStreetSortDesc(id: string, desc: boolean) {
   const { error } = await supabase.from("streets").update({ sort_desc: desc }).eq("id", id);
   if (error) throw error;
+}
+
+/** Slaat de vrije rasterpositie (kolom/rij) op de printlijst op voor een groep straten tegelijk. */
+export async function persistPrintPosities(
+  posities: { id: string; print_col: number | null; print_row: number | null }[],
+) {
+  await Promise.all(
+    posities.map((p) =>
+      supabase.from("streets").update({ print_col: p.print_col, print_row: p.print_row }).eq("id", p.id),
+    ),
+  );
+}
+
+/** Zet de printlijst van deze straten terug naar automatische indeling. */
+export async function resetPrintPosities(streetIds: string[]) {
+  await Promise.all(
+    streetIds.map((id) => supabase.from("streets").update({ print_col: null, print_row: null }).eq("id", id)),
+  );
 }

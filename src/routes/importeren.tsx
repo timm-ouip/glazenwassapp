@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
+import { requireSession, useRequireAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { AlertTriangle, ArrowLeft, Check, Eye, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
+import { AccountMenu } from "@/components/AccountMenu";
 import { InlineCel } from "@/components/InlineCel";
 import { NotitieCel } from "@/components/NotitieCel";
 import {
@@ -27,6 +29,9 @@ import {
 
 
 export const Route = createFileRoute("/importeren")({
+  beforeLoad: async () => {
+    await requireSession();
+  },
   head: () => ({
     meta: [
       { title: "Excel importeren — klantenlijst glazenwasser" },
@@ -306,6 +311,7 @@ function verdachteStraten(lijst: ImportRij[], quickNotes: QuickNote[]) {
 }
 
 function ImportPagina() {
+  useRequireAuth();
   const navigate = useNavigate();
   const [rijen, setRijen] = useState<RijPreview[]>([]);
   const [lijst, setLijst] = useState<ImportRij[]>([]);
@@ -530,6 +536,9 @@ function ImportPagina() {
             </Link>
           </Button>
           <h1 className="text-lg font-semibold">Excel importeren</h1>
+          <div className="ml-auto">
+            <AccountMenu />
+          </div>
         </div>
       </header>
 

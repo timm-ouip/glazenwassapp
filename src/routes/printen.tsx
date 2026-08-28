@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -16,9 +16,12 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, GripVertical, Printer } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { AccountMenu } from "@/components/AccountMenu";
+import { ArrowLeft, GripVertical, LayoutGrid, Printer } from "lucide-react";
 import { pushUndo } from "@/lib/undo";
+import { requireSession, useRequireAuth } from "@/lib/auth";
 import {
   fetchCustomers,
   fetchDistricts,
@@ -26,6 +29,7 @@ import {
   formatNumber,
   formatPrice,
   matchesMaand,
+  persistPrintPosities,
   persistStreetOrder,
   splitEvenOdd,
   type Customer,
@@ -37,26 +41,21 @@ interface PrintSearch {
   maand: "even" | "oneven" | "alles";
   prijzen: boolean;
   liggend: boolean;
-  kolommen: number;
-  paginas?: number;
   vouwen?: boolean;
-  /** Handmatige tekstgrootte in % bovenop het automatisch passend maken. */
-  grootte?: number;
 }
 
 export const Route = createFileRoute("/printen")({
+  beforeLoad: async () => {
+    await requireSession();
+  },
   validateSearch: (search: Record<string, unknown>): PrintSearch => ({
     wijk: typeof search["wijk"] === "string" ? search["wijk"] : "",
     maand:
       search["maand"] === "oneven" ? "oneven" : search["maand"] === "alles" ? "alles" : "even",
     prijzen: search["prijzen"] === true || search["prijzen"] === "true",
     liggend: search["liggend"] !== false && search["liggend"] !== "false",
-    kolommen: [2, 3, 4, 5].includes(Number(search["kolommen"])) ? Number(search["kolommen"]) : 4,
-    paginas: Number(search["paginas"]) === 2 ? 2 : 1,
     vouwen: search["vouwen"] === true || search["vouwen"] === "true",
-    grootte: Math.min(300, Math.max(50, Math.round(Number(search["grootte"]) || 100))),
   }),
-
 
   head: () => ({
     meta: [
@@ -80,73 +79,45 @@ function StraatBlok({
   g,
   prijzen,
   maand,
-  smal = false,
+  sleepHandle,
 }: {
   g: Groep;
   prijzen: boolean;
   maand: "even" | "oneven" | "alles";
-  /** Te weinig breedte voor twee kanten naast elkaar: onder elkaar zetten. */
-  smal?: boolean;
+  sleepHandle?: ReactNode;
 }) {
-  const kanten = ([
-    g.even.length > 0 ? "even" : null,
-    g.oneven.length > 0 ? "oneven" : null,
-  ].filter(Boolean) as ("even" | "oneven")[]);
-  const naast = kanten.length === 2 && !smal;
-  // Kolombreedtes in procenten: zo houdt de notitie altijd genoeg ruimte en
-  // kunnen prijs/frequentie nooit over de tekst heen vallen.
-  const nrPct = 16;
-  const freqPct = maand === "alles" ? 13 : 0;
-  const prijsPct = prijzen ? 20 : 0;
-  const notePct = 100 - nrPct - freqPct - prijsPct;
-  // Korte codes voor de frequentie: "oneven" voluit past niet in een smalle kolom.
-  const freqKort = (v: string) =>
-    v === "oneven" ? "onev" : v === "even" ? "even" : v === "elke" ? "elk" : v;
-
-
   return (
     <div className="-mt-px break-inside-avoid border border-foreground/70">
-      <h2 className="border-b border-foreground/70 bg-muted px-1 text-[9px] font-bold uppercase leading-[1.15] tracking-wide">
-        {g.street.name}
+      <h2 className="flex items-center justify-between gap-1 border-b border-foreground/70 bg-muted py-px pl-1 pr-px text-[9px] font-bold uppercase leading-[1.15] tracking-wide">
+        <span className="truncate">{g.street.name}</span>
+        {sleepHandle}
       </h2>
-      <div className={naast ? "grid grid-cols-2" : "grid grid-cols-1"}>
-        {kanten.map((kant, i, arr) => (
+      <div className={`grid ${g.even.length > 0 && g.oneven.length > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
+        {([
+          g.even.length > 0 ? "even" : null,
+          g.oneven.length > 0 ? "oneven" : null,
+        ].filter(Boolean) as ("even" | "oneven")[]).map((kant, i, arr) => (
           <table
             key={kant}
-            className={`w-full table-fixed border-collapse ${
-              i < arr.length - 1
-                ? naast
-                  ? "border-r border-foreground/40"
-                  : "border-b border-foreground/40"
-                : ""
-            }`}
+            className={`w-full table-fixed border-collapse ${i < arr.length - 1 ? "border-r border-foreground/40" : ""}`}
           >
-            <colgroup>
-              <col style={{ width: `${nrPct}%` }} />
-              <col style={{ width: `${notePct}%` }} />
-              {maand === "alles" && <col style={{ width: `${freqPct}%` }} />}
-              {prijzen && <col style={{ width: `${prijsPct}%` }} />}
-            </colgroup>
             <tbody>
               {g[kant].map((c) => (
                 <tr key={c.id} className="border-b border-foreground/20 align-top last:border-0">
-                  <td className="overflow-hidden px-[2px] text-[8.5px] font-semibold leading-[1.1] tabular-nums break-words">
+                  <td className="w-6 px-[2px] text-[9px] font-semibold leading-[1.1] tabular-nums">
                     {formatNumber(c)}
                   </td>
-                  <td className="px-[2px] text-[8.5px] leading-[1.1] break-words hyphens-auto">{c.note}</td>
+                  <td className="px-[2px] text-[9px] leading-[1.1] break-words hyphens-auto">{c.note}</td>
                   {maand === "alles" && (
-                    <td className="overflow-hidden px-[1px] text-center text-[7px] uppercase leading-[1.1]">
-                      {freqKort(c.frequency)}
-                    </td>
+                    <td className="w-8 px-[2px] text-[9px] leading-[1.1]">{c.frequency}</td>
                   )}
                   {prijzen && (
                     <td
-                      className={`overflow-hidden px-[2px] text-right text-[8px] leading-[1.1] tabular-nums whitespace-nowrap ${c.price === 0 ? "text-red-600" : ""}`}
+                      className={`w-10 px-[2px] text-right text-[9px] leading-[1.1] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}
                     >
                       {formatPrice(c.price)}
                     </td>
                   )}
-
                 </tr>
               ))}
             </tbody>
@@ -157,18 +128,15 @@ function StraatBlok({
   );
 }
 
-
 /** Straatblok met sleepgreep (greep alleen op het scherm zichtbaar). */
 function SleepbaarBlok({
   g,
   prijzen,
   maand,
-  smal = false,
 }: {
   g: Groep;
   prijzen: boolean;
   maand: "even" | "oneven" | "alles";
-  smal?: boolean;
 }) {
   const { attributes, listeners, setNodeRef: setSleepRef, transform, isDragging } = useDraggable({
     id: g.street.id,
@@ -191,19 +159,24 @@ function SleepbaarBlok({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform) }}
-      className={`relative break-inside-avoid ${isDragging ? "opacity-40" : ""}`}
+      className={`break-inside-avoid ${isDragging ? "z-10 opacity-40" : ""}`}
     >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        aria-label={`Sleep ${g.street.name}`}
-        className="absolute right-0 top-0 z-10 cursor-grab rounded-bl bg-background/80 p-[1px] text-muted-foreground hover:text-foreground active:cursor-grabbing print:hidden"
-      >
-        <GripVertical className="size-3" />
-      </button>
-      <StraatBlok g={g} prijzen={prijzen} maand={maand} smal={smal} />
-
+      <StraatBlok
+        g={g}
+        prijzen={prijzen}
+        maand={maand}
+        sleepHandle={
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            aria-label={`Sleep ${g.street.name}`}
+            className="shrink-0 cursor-grab rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground active:cursor-grabbing print:hidden"
+          >
+            <GripVertical className="size-3" />
+          </button>
+        }
+      />
     </div>
   );
 }
@@ -259,30 +232,20 @@ function verdeelVullend(groepen: Groep[], hoogte: (g: Groep) => number, cap: num
 }
 
 
-const MAX_SCHAAL = 3;
+const MAX_SCHAAL = 1.6;
 const MIN_SCHAAL = 0.25;
+const KOLOMMEN = 6;
+/** Hoogte (px) van één rasterrij bij het vrij slepen — straatblokken klikken hierop vast. */
+const RIJ_EENHEID = 11;
+
+type Positie = { col: number; row: number };
 
 function PrintPagina() {
-  const {
-    wijk,
-    maand,
-    prijzen,
-    liggend,
-    kolommen,
-    paginas: paginasRaw,
-    vouwen: vouwenRaw,
-    grootte: grootteRaw,
-  } = Route.useSearch();
-
+  useRequireAuth();
+  const { wijk, maand, prijzen, liggend, vouwen: vouwenRaw } = Route.useSearch();
   const navigate = Route.useNavigate();
   const qc = useQueryClient();
   const vouwen = vouwenRaw === true;
-  const paginas = vouwen ? 1 : paginasRaw === 2 ? 2 : 1;
-  const grootte = Math.min(300, Math.max(50, grootteRaw ?? 100));
-  // In vouwmodus moet alles binnen de vier kwarten blijven; daar geldt de
-  // automatische schaal en heeft handmatig vergroten geen zin.
-  const f = vouwen ? 1 : grootte / 100;
-
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
@@ -315,13 +278,12 @@ function PrintPagina() {
     0,
   );
 
-  // --- automatisch passend maken op 1 of 2 A4's ---
+  // --- A4-afmetingen; vaste lettergrootte (geen automatisch schalen meer) ---
   const MM = 96 / 25.4;
   const paginaB = (liggend ? 297 : 210) - 16;
   const paginaH = (liggend ? 210 : 297) - 16;
   const breedtePx = Math.round(paginaB * MM);
   const hoogtePx = Math.round(paginaH * MM);
-  const maxHoogtePx = hoogtePx * paginas;
 
   const inhoudRef = useRef<HTMLDivElement>(null);
   const kopRef = useRef<HTMLDivElement>(null);
@@ -334,17 +296,14 @@ function PrintPagina() {
   const stappen = useRef(0);
   const plafond = useRef(MAX_SCHAAL);
 
-  const sleutel = `${wijk}|${maand}|${prijzen}|${liggend}|${kolommen}|${paginas}|${vouwen}|${grootte}|${groepen.length}`;
-  // Werkelijke zoomfactor: automatische pasvorm × handmatige tekstgrootte.
-  const eff = schaal * f;
-
+  const sleutel = `${wijk}|${maand}|${prijzen}|${liggend}|${vouwen}|${groepen.length}`;
 
   useLayoutEffect(() => {
-    setIndelingKlaar(false);
+    setIndelingKlaar(vouwen ? false : true);
     setSchaal(1);
     stappen.current = 0;
     plafond.current = MAX_SCHAAL;
-  }, [sleutel]);
+  }, [sleutel, vouwen]);
 
   // Meet de hoogte van elk straatblok op kolombreedte.
   const meetSleutel = groepen
@@ -358,7 +317,7 @@ function PrintPagina() {
       for (const g of groepen) {
         const el = meetRefs.current[g.street.id];
         if (!el) continue;
-        nieuw[g.street.id] = el.getBoundingClientRect().height / (eff || 1);
+        nieuw[g.street.id] = el.getBoundingClientRect().height / (schaal || 1);
       }
       setHoogtes((oud) => {
         const sleutels = Object.keys(nieuw);
@@ -372,15 +331,15 @@ function PrintPagina() {
       });
     });
     return () => cancelAnimationFrame(id);
-  }, [meetSleutel, eff, kolommen, vouwen, breedtePx, prijzen, maand]);
+  }, [meetSleutel, schaal, vouwen, breedtePx]);
 
 
 
-  const kwartKolommen = Math.max(1, Math.round(kolommen / 2));
+  const kwartKolommen = Math.max(1, Math.round(KOLOMMEN / 2));
   const schatting = (g: Groep) => 14 + 11 * Math.max(g.even.length, g.oneven.length);
   const blokHoogte = (g: Groep) => hoogtes[g.street.id] ?? schatting(g);
   // hoogte per kwart, in niet-geschaalde px (titelbalk wordt gemeten)
-  const kwartHoogte = Math.floor((hoogtePx / eff - kopHoogte - 10) / 2);
+  const kwartHoogte = Math.floor((hoogtePx / schaal - kopHoogte - 10) / 2);
   const kolomCap = Math.max(20, kwartHoogte - 4);
   const totaalKolommen = 4 * kwartKolommen;
   // Vul elke kolom tot aan de vouwlijn; overloop schuift door naar rechts.
@@ -394,66 +353,43 @@ function PrintPagina() {
     : [];
   // Kleinst mogelijke kolomhoogte waarbij alles nog past -> grootste schaal.
   const capMin = vouwen ? minCapaciteit(groepen.map(blokHoogte), totaalKolommen) : 0;
-  const kolomBreedte = breedtePx / eff / (vouwen ? 2 * kwartKolommen : kolommen);
-  const meetBreedte = Math.round(kolomBreedte) - 6;
-  // Te smal voor even/oneven naast elkaar? Dan onder elkaar, anders krijg je
-  // één letter per regel of tekst die tegen de prijs aan loopt.
-  const nodigPerKant = 52 + (prijzen ? 34 : 0) + (maand === "alles" ? 26 : 0);
-  const smal = meetBreedte < 2 * nodigPerKant;
+  const meetBreedte = Math.round(breedtePx / schaal / (vouwen ? 2 * kwartKolommen : KOLOMMEN)) - 6;
 
-
+  // Buiten vouwmodus staat de lettergrootte vast en is er niets te schalen;
+  // alleen "Vouwen in 4" moet zich naar een vast vouwvak persen.
   useEffect(() => {
+    if (!vouwen) return;
     const id = requestAnimationFrame(() => {
       if (stappen.current > 18) {
         setIndelingKlaar(true);
         return;
       }
-      if (vouwen) {
-        const kop = kopRef.current;
-        if (kop) {
-          const h = Math.ceil(kop.getBoundingClientRect().height / schaal);
-          if (h > 0 && Math.abs(h - kopHoogte) > 1) {
-            setKopHoogte(h);
-            return;
-          }
+      const kop = kopRef.current;
+      if (kop) {
+        const h = Math.ceil(kop.getBoundingClientRect().height / schaal);
+        if (h > 0 && Math.abs(h - kopHoogte) > 1) {
+          setKopHoogte(h);
+          return;
         }
-        if (capMin <= 0) return;
-
-        // Schaal waarbij de kolomhoogte exact gelijk wordt aan de minimale
-        // benodigde hoogte: kwartHoogte(schaal) == capMin.
-        let gewenst = hoogtePx / (2 * (capMin * 1.04 + 4) + kopHoogte + 10);
-        // Veiligheidscheck: loopt een kwart in de praktijk toch over (extra
-        // kolom buiten beeld), dan een tandje kleiner en dit als plafond
-        // onthouden, zodat we niet heen en weer blijven springen.
-        let over = 1;
-        for (const el of kwartRefs.current) {
-          if (!el || el.clientWidth <= 0) continue;
-          over = Math.max(over, el.scrollWidth / el.clientWidth);
-        }
-        if (over > 1.02) plafond.current = Math.min(plafond.current, schaal * 0.96);
-        gewenst = Math.min(gewenst, plafond.current);
-
-        gewenst = Math.min(MAX_SCHAAL, Math.max(MIN_SCHAAL, gewenst));
-        if (Math.abs(gewenst - schaal) > 0.008) {
-          stappen.current += 1;
-          setSchaal(gewenst);
-        } else {
-          setIndelingKlaar(true);
-        }
-        return;
       }
+      if (capMin <= 0) return;
 
-      const node = inhoudRef.current;
-      if (!node) return;
-      const gerenderd = node.getBoundingClientRect().height;
-      if (gerenderd <= 0) return;
-      // gerenderd is gemeten op zoom = schaal * f; corrigeer daarvoor zodat de
-      // handmatige tekstgrootte niet meteen wordt weggeschaald.
-      const gewenst = Math.min(
-        MAX_SCHAAL,
-        Math.max(MIN_SCHAAL, (schaal * maxHoogtePx * f) / gerenderd),
-      );
-      if (Math.abs(gewenst - schaal) > 0.006) {
+      // Schaal waarbij de kolomhoogte exact gelijk wordt aan de minimale
+      // benodigde hoogte: kwartHoogte(schaal) == capMin.
+      let gewenst = hoogtePx / (2 * (capMin * 1.04 + 4) + kopHoogte + 10);
+      // Veiligheidscheck: loopt een kwart in de praktijk toch over (extra
+      // kolom buiten beeld), dan een tandje kleiner en dit als plafond
+      // onthouden, zodat we niet heen en weer blijven springen.
+      let over = 1;
+      for (const el of kwartRefs.current) {
+        if (!el || el.clientWidth <= 0) continue;
+        over = Math.max(over, el.scrollWidth / el.clientWidth);
+      }
+      if (over > 1.02) plafond.current = Math.min(plafond.current, schaal * 0.96);
+      gewenst = Math.min(gewenst, plafond.current);
+
+      gewenst = Math.min(MAX_SCHAAL, Math.max(MIN_SCHAAL, gewenst));
+      if (Math.abs(gewenst - schaal) > 0.008) {
         stappen.current += 1;
         setSchaal(gewenst);
       } else {
@@ -461,8 +397,50 @@ function PrintPagina() {
       }
     });
     return () => cancelAnimationFrame(id);
-  }, [schaal, kopHoogte, maxHoogtePx, hoogtes, sleutel, vouwen, capMin, hoogtePx, f]);
+  }, [schaal, kopHoogte, sleutel, vouwen, capMin, hoogtePx]);
 
+  // Buiten vouwmodus: verdeel de straten (zoals gemeten in de meetlaag)
+  // over zoveel volle A4-pagina's van vaste KOLOMMEN kolommen als nodig.
+  const printCap = Math.max(20, hoogtePx - kopHoogte - 10);
+  const printHoogtes = groepen.map(blokHoogte);
+  const printKolommenNodig = vouwen ? 0 : kolommenNodig(printHoogtes, printCap);
+  const printPaginasNodig = vouwen ? 0 : Math.max(1, Math.ceil(printKolommenNodig / KOLOMMEN));
+  const printTotaalSlots = printPaginasNodig * KOLOMMEN;
+  // Een kolomhoogte-cap die precies alle straten evenredig over alle
+  // beschikbare kolommen verspreidt (i.p.v. te stoppen zodra het past,
+  // wat de laatste kolommen leeg zou laten).
+  const printTightCap =
+    !vouwen && printHoogtes.length > 0 ? minCapaciteit(printHoogtes, printTotaalSlots) : printCap;
+  const printKolomBlokken = vouwen
+    ? []
+    : verdeelVullend(groepen, blokHoogte, printTightCap, printTotaalSlots);
+  const printPaginas = vouwen
+    ? []
+    : Array.from({ length: printPaginasNodig }, (_, i) =>
+        printKolomBlokken.slice(i * KOLOMMEN, (i + 1) * KOLOMMEN),
+      );
+
+  // Rasterpositie (kolom/rij) waarop elk blok zou staan als het nog nooit
+  // met de hand versleept is — dient als startpunt zodra je gaat slepen.
+  const rijSpan = (g: Groep) => Math.max(1, Math.ceil(blokHoogte(g) / RIJ_EENHEID));
+  const rijenPerPagina = Math.max(1, Math.round(hoogtePx / RIJ_EENHEID));
+  const seedPosities: Record<string, Positie> = {};
+  if (!vouwen) {
+    printKolomBlokken.forEach((kolom, slot) => {
+      const col = slot % KOLOMMEN;
+      const pagina = Math.floor(slot / KOLOMMEN);
+      let rij = pagina * rijenPerPagina;
+      for (const g of kolom) {
+        seedPosities[g.street.id] = { col, row: rij };
+        rij += rijSpan(g);
+      }
+    });
+  }
+  const effectievePositie = (s: Street): Positie =>
+    s.print_col != null && s.print_row != null
+      ? { col: s.print_col, row: s.print_row }
+      : (seedPosities[s.id] ?? { col: 0, row: 0 });
+  const vrijeIndeling = !vouwen && groepen.length > 0 && groepen.every((g) => g.street.print_col != null && g.street.print_row != null);
 
 
 
@@ -480,12 +458,11 @@ function PrintPagina() {
     setSleepVolgorde(huidigeVolgorde());
   }
 
-  async function onDragEnd(e: DragEndEvent) {
-    setSleepId(null);
+  /** "Vouwen in 4": straten wisselen van plek in de lijst (bestaand gedrag). */
+  async function onDragEndVouwen(e: DragEndEvent) {
     const activeId = String(e.active.id);
     const overId = e.over ? String(e.over.id) : null;
     const nieuweVolgorde = [...(sleepVolgorde ?? huidigeVolgorde())];
-    setSleepVolgorde(null);
     if (!overId || overId === activeId) return;
     const van = nieuweVolgorde.indexOf(activeId);
     const naar = nieuweVolgorde.indexOf(overId);
@@ -523,7 +500,84 @@ function PrintPagina() {
     qc.invalidateQueries({ queryKey: ["streets"] });
   }
 
-  const zoek = { wijk, maand, prijzen, liggend, kolommen, paginas, vouwen, grootte };
+  /**
+   * Normale weergave: straat verplaatst naar een vrije rastercel (kolom/rij),
+   * los van de andere straten. Bij de eerste keer slepen wordt de huidige
+   * (automatische) indeling van de hele wijk "bevroren" naar vaste posities.
+   */
+  async function onDragEndVrij(e: DragEndEvent) {
+    const activeId = String(e.active.id);
+    const kolomBreedte = breedtePx / KOLOMMEN;
+    const deltaCol = Math.round(e.delta.x / kolomBreedte);
+    const deltaRow = Math.round(e.delta.y / RIJ_EENHEID);
+    if (deltaCol === 0 && deltaRow === 0) return;
+
+    const vorige = alleStreets.map((s) => ({ ...s }));
+    const updates = groepen.map((g) => {
+      const pos = effectievePositie(g.street);
+      if (g.street.id === activeId) {
+        return {
+          id: g.street.id,
+          print_col: Math.min(KOLOMMEN - 1, Math.max(0, pos.col + deltaCol)),
+          print_row: Math.max(0, pos.row + deltaRow),
+        };
+      }
+      return { id: g.street.id, print_col: pos.col, print_row: pos.row };
+    });
+
+    qc.setQueryData<Street[]>(
+      ["streets"],
+      alleStreets.map((s) => {
+        const u = updates.find((u) => u.id === s.id);
+        return u ? { ...s, print_col: u.print_col, print_row: u.print_row } : s;
+      }),
+    );
+    await persistPrintPosities(updates);
+    pushUndo({
+      label: "Straat verplaatst",
+      undo: async () => {
+        await persistPrintPosities(
+          updates.map((u) => {
+            const orig = vorige.find((s) => s.id === u.id)!;
+            return { id: u.id, print_col: orig.print_col, print_row: orig.print_row };
+          }),
+        );
+        qc.invalidateQueries({ queryKey: ["streets"] });
+      },
+    });
+    qc.invalidateQueries({ queryKey: ["streets"] });
+  }
+
+  async function onDragEnd(e: DragEndEvent) {
+    setSleepId(null);
+    setSleepVolgorde(null);
+    if (vouwen) await onDragEndVouwen(e);
+    else await onDragEndVrij(e);
+  }
+
+  async function indelingResetten() {
+    const ids = groepen.map((g) => g.street.id);
+    const vorige = alleStreets.map((s) => ({ ...s }));
+    qc.setQueryData<Street[]>(
+      ["streets"],
+      alleStreets.map((s) => (ids.includes(s.id) ? { ...s, print_col: null, print_row: null } : s)),
+    );
+    await persistPrintPosities(ids.map((id) => ({ id, print_col: null, print_row: null })));
+    pushUndo({
+      label: "Indeling teruggezet",
+      undo: async () => {
+        await persistPrintPosities(
+          vorige
+            .filter((s) => ids.includes(s.id))
+            .map((s) => ({ id: s.id, print_col: s.print_col, print_row: s.print_row })),
+        );
+        qc.invalidateQueries({ queryKey: ["streets"] });
+      },
+    });
+    qc.invalidateQueries({ queryKey: ["streets"] });
+  }
+
+  const zoek = { wijk, maand, prijzen, liggend, vouwen };
   const sleepGroep = groepen.find((g) => g.street.id === sleepId) ?? null;
 
   return (
@@ -532,124 +586,81 @@ function PrintPagina() {
 @media print { html, body { background: #fff; } main { overflow: hidden; } }`}</style>
 
       <div className="border-b border-border bg-card print:hidden">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 py-4">
-          <Button size="sm" variant="ghost" asChild>
-            <Link to="/" search={{ wijk }}>
-              <ArrowLeft className="size-4" /> Terug
-            </Link>
-          </Button>
-          <div className="ml-auto flex flex-wrap gap-2">
-            <Button size="sm" variant={maand === "even" ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ ...zoek, maand: "even" }}>
-                Even maand
+        <div className="mx-auto max-w-[1600px] px-5 py-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="sm" variant="ghost" asChild>
+              <Link to="/" search={{ wijk }}>
+                <ArrowLeft className="size-4" /> Terug
               </Link>
             </Button>
-            <Button size="sm" variant={maand === "oneven" ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ ...zoek, maand: "oneven" }}>
-                Oneven maand
-              </Link>
-            </Button>
-            <Button size="sm" variant={maand === "alles" ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ ...zoek, maand: "alles" }}>
-                Alle klanten
-              </Link>
-            </Button>
-
-            <Button size="sm" variant="outline" asChild>
-              <Link to="/printen" search={{ ...zoek, liggend: !liggend }}>
-                {liggend ? "Liggend" : "Staand"}
-              </Link>
-            </Button>
-            <Button size="sm" variant={prijzen ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ ...zoek, prijzen: !prijzen }}>
-                Prijzen {prijzen ? "aan" : "uit"}
-              </Link>
-            </Button>
-            <Button size="sm" variant={vouwen ? "default" : "outline"} asChild>
-              <Link to="/printen" search={{ ...zoek, vouwen: !vouwen, paginas: 1 }}>
-                Vouwen in 4
-              </Link>
-            </Button>
-            <Select
-              value={String(paginas)}
-              disabled={vouwen}
-              onValueChange={(v) => {
-                const p = Number(v) as 1 | 2;
-                void navigate({ to: "/printen", search: { ...zoek, paginas: p } });
-              }}
-            >
-              <SelectTrigger className="h-8 w-[88px] text-xs">
-                <SelectValue placeholder="A4's" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1 A4</SelectItem>
-                <SelectItem value="2">2 A4</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              value={String(kolommen)}
-              onValueChange={(v) => {
-                const k = Number(v) as 2 | 3 | 4 | 5;
-                void navigate({ to: "/printen", search: { ...zoek, kolommen: k } });
-              }}
-            >
-              <SelectTrigger className="h-8 w-[92px] text-xs">
-                <SelectValue placeholder="Kolommen" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2">2 kol.</SelectItem>
-                <SelectItem value="3">3 kol.</SelectItem>
-                <SelectItem value="4">4 kol.</SelectItem>
-                <SelectItem value="5">5 kol.</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div
-              className="flex items-center gap-1 rounded-md border border-border px-1"
-              title={
-                vouwen
-                  ? "In vouwmodus wordt de tekst automatisch zo groot mogelijk gemaakt"
-                  : "Tekst groter of kleiner maken (kan extra pagina's kosten)"
-              }
-            >
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 p-0 text-xs"
-                disabled={vouwen || grootte <= 50}
-                onClick={() =>
-                  void navigate({
-                    to: "/printen",
-                    search: { ...zoek, grootte: Math.max(50, grootte - 10) },
-                  })
-                }
-              >
-                A−
-              </Button>
-              <span className="w-11 text-center text-xs tabular-nums text-muted-foreground">
-                {vouwen ? "auto" : `${grootte}%`}
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 p-0 text-xs"
-                disabled={vouwen || grootte >= 300}
-                onClick={() =>
-                  void navigate({
-                    to: "/printen",
-                    search: { ...zoek, grootte: Math.min(300, grootte + 10) },
-                  })
-                }
-              >
-                A+
-              </Button>
+            <div className="mr-auto min-w-0">
+              <h1 className="truncate text-lg font-semibold leading-tight text-foreground">Printlijst</h1>
+              <p className="text-xs text-muted-foreground">
+                {actieveWijk ? actieveWijk.name : "Alle wijken"} · {groepen.length} straten
+              </p>
             </div>
-
-
-
-            <Button size="sm" onClick={() => window.print()}>
+            <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90" onClick={() => window.print()}>
               <Printer className="size-4" /> Afdrukken
             </Button>
+            <span className="print:hidden">
+              <AccountMenu />
+            </span>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-lg border border-border bg-card p-0.5 shadow-card">
+              {(["alles", "even", "oneven"] as const).map((f) => (
+                <Link
+                  key={f}
+                  to="/printen"
+                  search={{ ...zoek, maand: f }}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    maand === f
+                      ? "bg-brand text-brand-foreground shadow-card"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {f === "alles" ? "Alle klanten" : f === "even" ? "Even maand" : "Oneven maand"}
+                </Link>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Switch
+                id="liggend"
+                checked={liggend}
+                onCheckedChange={(v) => void navigate({ to: "/printen", search: { ...zoek, liggend: v } })}
+              />
+              <Label htmlFor="liggend" className="text-sm text-muted-foreground">
+                Liggend
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="prijzen"
+                checked={prijzen}
+                onCheckedChange={(v) => void navigate({ to: "/printen", search: { ...zoek, prijzen: v } })}
+              />
+              <Label htmlFor="prijzen" className="text-sm text-muted-foreground">
+                Prijzen
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="vouwen"
+                checked={vouwen}
+                onCheckedChange={(v) => void navigate({ to: "/printen", search: { ...zoek, vouwen: v } })}
+              />
+              <Label htmlFor="vouwen" className="text-sm text-muted-foreground">
+                Vouwen in 4
+              </Label>
+            </div>
+
+            {vrijeIndeling && (
+              <Button size="sm" variant="outline" onClick={() => void indelingResetten()}>
+                <LayoutGrid className="size-4" /> Automatisch indelen
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -671,7 +682,7 @@ function PrintPagina() {
           <div
             ref={inhoudRef}
             className="origin-top-left overflow-hidden print:overflow-visible"
-            style={{ zoom: eff, width: Math.round(breedtePx / eff) }}
+            style={{ zoom: schaal, width: Math.round(breedtePx / schaal) }}
           >
               <div
                 ref={kopRef}
@@ -702,9 +713,9 @@ function PrintPagina() {
                       >
                         {kwart.map((g) =>
                           indelingKlaar ? (
-                            <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} smal={smal} />
+                            <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
                           ) : (
-                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} smal={smal} />
+                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
                           ),
                         )}
                       </div>
@@ -712,23 +723,52 @@ function PrintPagina() {
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div style={{ columnCount: kolommen, columnGap: "1mm" }} className="[column-fill:_balance]">
-                  {groepen.map((g) =>
-                    indelingKlaar ? (
-                      <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} smal={smal} />
-                    ) : (
-                      <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} smal={smal} />
-                    ),
-                  )}
+              ) : vrijeIndeling ? (
+                <div
+                  className="grid gap-[1mm]"
+                  style={{
+                    gridTemplateColumns: `repeat(${KOLOMMEN}, minmax(0, 1fr))`,
+                    gridAutoRows: `${RIJ_EENHEID}px`,
+                  }}
+                >
+                  {groepen.map((g) => {
+                    const pos = effectievePositie(g.street);
+                    return (
+                      <div
+                        key={g.street.id}
+                        style={{ gridColumn: pos.col + 1, gridRow: `${pos.row + 1} / span ${rijSpan(g)}` }}
+                      >
+                        <SleepbaarBlok g={g} prijzen={prijzen} maand={maand} />
+                      </div>
+                    );
+                  })}
                 </div>
-
+              ) : (
+                printPaginas.map((paginaKolommen, i) => (
+                  <div
+                    key={i}
+                    className={`grid gap-[1mm] ${i < printPaginas.length - 1 ? "mb-6 break-after-page print:mb-0" : ""}`}
+                    style={{ gridTemplateColumns: `repeat(${KOLOMMEN}, minmax(0, 1fr))` }}
+                  >
+                    {paginaKolommen.map((kolom, k) => (
+                      <div key={k}>
+                        {kolom.map((g) =>
+                          indelingKlaar ? (
+                            <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                          ) : (
+                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                          ),
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))
               )}
 
               {/* verborgen meetlaag: bepaalt de echte hoogte per straat */}
               <div
                 aria-hidden
-                className="pointer-events-none invisible absolute -left-[9999px] top-0"
+                className="pointer-events-none invisible absolute -left-[9999px] top-0 print:hidden"
                 style={{ width: meetBreedte }}
               >
                 {groepen.map((g) => (
@@ -738,7 +778,7 @@ function PrintPagina() {
                       meetRefs.current[g.street.id] = el;
                     }}
                   >
-                    <StraatBlok g={g} prijzen={prijzen} maand={maand} smal={smal} />
+                    <StraatBlok g={g} prijzen={prijzen} maand={maand} />
                   </div>
                 ))}
               </div>
