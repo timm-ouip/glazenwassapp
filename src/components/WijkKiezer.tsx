@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { addDistrict, deleteDistrict, renameDistrict, type District } from "@/lib/klanten";
+import { useBevestig } from "@/components/Bevestig";
 
 interface Props {
   districts: District[];
@@ -28,6 +29,7 @@ export function WijkKiezer({ districts, activeId, onSelect, onChanged }: Props) 
   });
   const [naam, setNaam] = useState("");
   const [bezig, setBezig] = useState(false);
+  const bevestig = useBevestig();
 
   const actief = districts.find((d) => d.id === activeId) ?? null;
 
@@ -69,7 +71,12 @@ export function WijkKiezer({ districts, activeId, onSelect, onChanged }: Props) 
 
   async function verwijder() {
     if (!actief) return;
-    if (!confirm(`Wijk "${actief.name}" verwijderen? Alle straten en klanten in deze wijk gaan mee.`)) return;
+    const ja = await bevestig({
+      titel: `Wijk "${actief.name}" verwijderen?`,
+      tekst: "Alle straten en klanten in deze wijk gaan mee. Dit kan niet ongedaan gemaakt worden.",
+      gevaarlijk: true,
+    });
+    if (!ja) return;
     try {
       await deleteDistrict(actief.id);
       const rest = districts.filter((d) => d.id !== actief.id);

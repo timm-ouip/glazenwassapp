@@ -45,6 +45,7 @@ import { StraatDialog } from "@/components/StraatDialog";
 import { DubbeleStraten } from "@/components/DubbeleStraten";
 
 import { WijkKiezer } from "@/components/WijkKiezer";
+import { useBevestig } from "@/components/Bevestig";
 import { InlineCel } from "@/components/InlineCel";
 import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { NotitieCel } from "@/components/NotitieCel";
@@ -103,6 +104,7 @@ type MaandFilter = "alles" | "even" | "oneven";
 function Index() {
   useRequireAuth();
   const qc = useQueryClient();
+  const bevestig = useBevestig();
   const navigate = useNavigate();
   const { wijk } = Route.useSearch();
   const [filter, setFilter] = useState<MaandFilter>("alles");
@@ -222,7 +224,12 @@ function Index() {
   }
 
   async function verwijderKlant(c: Customer) {
-    if (!confirm(`Klant ${formatNumber(c)} verwijderen?`)) return;
+    const ja = await bevestig({
+      titel: `Klant ${formatNumber(c)} verwijderen?`,
+      tekst: "Je kunt dit direct daarna nog ongedaan maken.",
+      gevaarlijk: true,
+    });
+    if (!ja) return;
     const { error } = await supabase.from("customers").delete().eq("id", c.id);
     if (error) {
       toast.error("Verwijderen mislukt: " + error.message);
@@ -240,7 +247,12 @@ function Index() {
   }
 
   async function verwijderStraat(s: Street) {
-    if (!confirm(`Straat "${s.name}" en alle klanten daarin verwijderen?`)) return;
+    const ja = await bevestig({
+      titel: `Straat "${s.name}" verwijderen?`,
+      tekst: "Alle klanten in deze straat gaan mee. Je kunt dit direct daarna nog ongedaan maken.",
+      gevaarlijk: true,
+    });
+    if (!ja) return;
     const klantenInStraat = customers.filter((c) => c.street_id === s.id);
     const { error } = await supabase.from("streets").delete().eq("id", s.id);
     if (error) {

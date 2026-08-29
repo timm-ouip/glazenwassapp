@@ -6,6 +6,7 @@ import { requireSession, useRequireAuth } from "@/lib/auth";
 import { fetchTeam, inviteEmployee, removeEmployee } from "@/lib/team.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useBevestig } from "@/components/Bevestig";
 
 type Collega = { id: string; naam: string; email: string; rol: string; created_at: string };
 
@@ -24,6 +25,7 @@ function TeamPagina() {
   const [collegas, setCollegas] = useState<Collega[]>([]);
   const [nieuweEmail, setNieuweEmail] = useState("");
   const [uitnodigen, setUitnodigen] = useState(false);
+  const bevestig = useBevestig();
 
   async function herlaad() {
     setLaden(true);
@@ -58,7 +60,12 @@ function TeamPagina() {
   }
 
   async function verwijder(c: Collega) {
-    if (!confirm(`${c.naam || c.email} verwijderen uit het team?`)) return;
+    const ja = await bevestig({
+      titel: `${c.naam || c.email} verwijderen uit het team?`,
+      tekst: "Deze medewerker verliest direct toegang tot de klantgegevens.",
+      gevaarlijk: true,
+    });
+    if (!ja) return;
     try {
       await removeEmployee({ data: { employeeId: c.id } });
       toast.success("Medewerker verwijderd");
