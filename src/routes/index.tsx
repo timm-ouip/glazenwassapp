@@ -521,7 +521,7 @@ function Index() {
                   key={s.label}
                   className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 shadow-card"
                 >
-                  <s.icon className="size-4 shrink-0 text-brand" />
+                  <s.icon className="size-4 shrink-0 text-brand-ink" />
                   <div className="min-w-0">
                     <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{s.label}</p>
                     <p className="font-display text-base font-semibold tabular-nums text-foreground">{s.waarde}</p>
@@ -723,7 +723,7 @@ function StraatBlok(p: BlokProps) {
         </h2>
         <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">{p.aantal}</span>
         {p.prijzenTonen && (
-          <span className="text-[11px] font-medium tabular-nums text-brand">{formatPrice(p.totaal)}</span>
+          <span className="text-[11px] font-medium tabular-nums text-brand-ink">{formatPrice(p.totaal)}</span>
         )}
 
         <button

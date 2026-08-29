@@ -113,7 +113,7 @@ function SignupPagina() {
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Al een account?{" "}
-            <Link to="/login" className="font-medium text-brand hover:underline">
+            <Link to="/login" className="font-medium text-brand-ink hover:underline">
               Inloggen
             </Link>
           </p>

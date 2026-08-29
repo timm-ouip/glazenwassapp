@@ -85,7 +85,7 @@ function LoginPagina() {
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Nog geen bedrijfsaccount?{" "}
-            <Link to="/signup" className="font-medium text-brand hover:underline">
+            <Link to="/signup" className="font-medium text-brand-ink hover:underline">
               Bedrijf aanmaken
             </Link>
           </p>

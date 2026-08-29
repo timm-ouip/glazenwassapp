@@ -1,0 +1,48 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Klei" },
+    { "id": "page-2", "name": "Niet gekozen" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html", "page": "page-1", "x": 0, "y": 0, "w": 1440, "h": 900, "title": "Klantenlijst" },
+    { "file": "Ingeklapt.dc.html", "page": "page-1", "x": 1560, "y": 0, "w": 1440, "h": 900, "title": "Navigatie ingeklapt" },
+
+    { "file": "Munt.dc.html", "page": "page-2", "x": 0, "y": 0, "w": 1440, "h": 900, "title": "1 · Munt" },
+    { "file": "Oker.dc.html", "page": "page-2", "x": 1560, "y": 0, "w": 1440, "h": 900, "title": "4 · Oker" },
+    { "file": "Beige.dc.html", "page": "page-2", "x": 3120, "y": 0, "w": 1440, "h": 900, "title": "5 · Beige" },
+    { "file": "Koraal.dc.html", "page": "page-2", "x": 4680, "y": 0, "w": 1440, "h": 900, "title": "7 · Koraal" },
+    { "file": "Roze.dc.html", "page": "page-2", "x": 0, "y": 1180, "w": 1440, "h": 900, "title": "8 · Roze" },
+    { "file": "Lavendel.dc.html", "page": "page-2", "x": 1560, "y": 1180, "w": 1440, "h": 900, "title": "2 · Lavendel" },
+    { "file": "Zeeblauw.dc.html", "page": "page-2", "x": 3120, "y": 1180, "w": 1440, "h": 900, "title": "3 · Zeeblauw" },
+    { "file": "Zonnetje.dc.html", "page": "page-2", "x": 4680, "y": 1180, "w": 1440, "h": 900, "title": "A · Zonnetje" },
+    { "file": "Routeblad.dc.html", "page": "page-2", "x": 0, "y": 2360, "w": 1440, "h": 900, "title": "B · Routeblad" },
+    { "file": "Buitendienst.dc.html", "page": "page-2", "x": 1560, "y": 2360, "w": 1440, "h": 900, "title": "C · Buitendienst" }
+  ],
+  "annotations": [
+    {
+      "id": "gekozen",
+      "page": "page-1",
+      "x": 0,
+      "y": -200,
+      "w": 720,
+      "text": "KLEI — de gekozen richting.\n\nStraatkaarten uit A, vormgeving uit B, lichte inklapbare navigatie met kleur alleen op de selectie. Terracotta ligt het dichtst bij het oranje dat je nu al gebruikt.\n\nDe tellingen bij de prullenbak zijn eruit, links én bovenin. Er staan nu drie cijferkaarten in plaats van vier."
+    },
+    {
+      "id": "ingeklapt-klei",
+      "page": "page-1",
+      "x": 1560,
+      "y": 950,
+      "w": 460,
+      "text": "INGEKLAPT — 68px in plaats van 236px\n\nAlleen pictogrammen. Levert ruim 160px extra breedte op voor de straatkaarten; de pijl klapt hem weer open."
+    },
+    {
+      "id": "archief",
+      "page": "page-2",
+      "x": 0,
+      "y": -160,
+      "w": 620,
+      "text": "Alles wat het niet is geworden, bewaard om op terug te kunnen kijken. Deze staan nog in de oude opzet, met vier cijferkaarten en de prullenbaktellingen erin."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}
