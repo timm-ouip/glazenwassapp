@@ -32,6 +32,11 @@
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-brand-ink: var(--brand-ink);
+  --color-card-header: var(--card-header);
+  --color-tint-amber: var(--tint-amber);
+  --color-tint-amber-ink: var(--tint-amber-ink);
+  --color-tint-groen: var(--tint-groen);
+  --color-tint-groen-ink: var(--tint-groen-ink);
   --shadow-card: var(--shadow-card);
 
   --color-background: var(--background);
@@ -76,6 +81,8 @@
   --surface: oklch(0.963 0.004 92);
   --foreground: oklch(0.18 0.004 285.9);
   --card: oklch(1 0 0);
+  /* Iets lichter dan de pagina: de kopbalk van een straatkaart. */
+  --card-header: oklch(0.984 0.003 92);
   --card-foreground: oklch(0.18 0.004 285.9);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.004 285.9);
@@ -86,6 +93,12 @@
   --brand: oklch(0.82 0.075 232);
   --brand-foreground: oklch(0.28 0.042 252);
   --brand-ink: oklch(0.45 0.1 245);
+  /* Betekeniskleuren, los van het merk: amber voor even maanden en het
+     aantal straten, groen voor bedragen. */
+  --tint-amber: oklch(0.955 0.038 68);
+  --tint-amber-ink: oklch(0.5 0.115 62);
+  --tint-groen: oklch(0.952 0.045 155);
+  --tint-groen-ink: oklch(0.46 0.115 156);
   --secondary: oklch(0.955 0.002 286);
   --secondary-foreground: oklch(0.28 0.004 285.9);
   --muted: oklch(0.958 0.002 286);
@@ -119,6 +132,7 @@
   --surface: oklch(0.2 0.003 286);
   --foreground: oklch(0.97 0 0);
   --card: oklch(0.21 0.003 286);
+  --card-header: oklch(0.24 0.003 286);
   --card-foreground: oklch(0.97 0 0);
   --popover: oklch(0.21 0.003 286);
   --popover-foreground: oklch(0.97 0 0);
@@ -126,6 +140,10 @@
   --primary-foreground: oklch(0.21 0.003 286);
   --brand: oklch(0.68 0.085 235);
   --brand-ink: oklch(0.78 0.075 235);
+  --tint-amber: oklch(0.3 0.04 68);
+  --tint-amber-ink: oklch(0.82 0.1 68);
+  --tint-groen: oklch(0.29 0.045 155);
+  --tint-groen-ink: oklch(0.8 0.11 156);
   --brand-foreground: oklch(0.2 0.03 252);
   --secondary: oklch(0.27 0.003 286);
   --secondary-foreground: oklch(0.97 0 0);

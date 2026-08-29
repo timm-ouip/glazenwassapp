@@ -454,10 +454,19 @@ function Index() {
 
   return (
     <AppLayout
-      titel="Klanten"
-      onderschrift={`${groepen.length} straten · ${totaal} klanten`}
+      titel={districts.find((d) => d.id === actieveWijk)?.name ?? "Klanten"}
+      kruimel="Overzicht / Klanten"
       acties={
         <>
+          <div className="relative w-full sm:w-56">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="h-9 rounded-full bg-card pl-9"
+              placeholder="Zoek straat"
+              value={zoek}
+              onChange={(e) => setZoek(e.target.value)}
+            />
+          </div>
           <WijkKiezer
             districts={districts}
             activeId={actieveWijk}
@@ -466,14 +475,15 @@ function Index() {
           />
           <Button
             size="sm"
-            variant="ghost"
+            variant="outline"
+            className="rounded-full"
             disabled={!undoLabel}
             onClick={() => void doeUndo()}
             title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
           >
             <Undo2 className="size-4" /> Ongedaan
           </Button>
-          <Button size="sm" variant="outline" asChild>
+          <Button size="sm" variant="outline" className="rounded-full" asChild>
             <Link
               to="/printen"
               search={{
@@ -488,7 +498,7 @@ function Index() {
           </Button>
           <Button
             size="sm"
-            className="bg-brand text-brand-foreground hover:bg-brand/90"
+            className="rounded-full"
             onClick={() => setKlantDialog({ open: true, customer: null })}
           >
             <Plus className="size-4" /> Klant
@@ -498,20 +508,40 @@ function Index() {
       kop={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {[
-              { label: "Klanten in beeld", waarde: String(totaal), icon: Users },
-              { label: "Straten", waarde: String(groepen.length), icon: Route2 },
-              { label: "Omzet per ronde", waarde: formatPrice(omzet), icon: Euro, verberg: !prijzenTonen },
+              {
+                label: "Klanten in beeld",
+                waarde: String(totaal),
+                icon: Users,
+                tegel: "bg-accent text-accent-foreground",
+              },
+              {
+                label: "Straten",
+                waarde: String(groepen.length),
+                icon: Route2,
+                tegel: "bg-tint-amber text-tint-amber-ink",
+              },
+              {
+                label: "Omzet per ronde",
+                waarde: formatPrice(omzet),
+                icon: Euro,
+                tegel: "bg-tint-groen text-tint-groen-ink",
+                verberg: !prijzenTonen,
+              },
             ]
               .filter((s) => !s.verberg)
               .map((s) => (
                 <div
                   key={s.label}
-                  className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 shadow-card"
+                  className="flex items-center gap-3 rounded-[14px] border border-border bg-card px-4 py-3.5"
                 >
-                  <s.icon className="size-4 shrink-0 text-brand-ink" />
+                  <div className={`flex size-9 shrink-0 items-center justify-center rounded-[11px] ${s.tegel}`}>
+                    <s.icon className="size-[17px]" />
+                  </div>
                   <div className="min-w-0">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{s.label}</p>
-                    <p className="font-display text-base font-semibold tabular-nums text-foreground">{s.waarde}</p>
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
+                    <p className="font-display text-[22px] font-semibold leading-tight tracking-[-0.02em] tabular-nums">
+                      {s.waarde}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -520,15 +550,15 @@ function Index() {
     >
       <div className="space-y-3">
         <div className="sticky top-[61px] z-10 -mx-6 flex flex-wrap items-center gap-3 border-b border-border/70 bg-background/85 px-6 py-2.5 backdrop-blur">
-          <div className="inline-flex rounded-lg border border-border bg-card p-0.5 shadow-card">
+          <div className="inline-flex gap-0.5 rounded-full border border-border bg-card p-[3px]">
             {(["alles", "even", "oneven"] as MaandFilter[]).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`rounded-full px-4 py-1.5 text-[13px] transition-colors ${
                   filter === f
-                    ? "bg-brand text-brand-foreground shadow-card"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-brand font-semibold text-brand-foreground"
+                    : "text-foreground/80 hover:text-foreground"
                 }`}
               >
                 {f === "alles" ? "Alles" : f === "even" ? "Even maand" : "Oneven maand"}
@@ -547,10 +577,9 @@ function Index() {
               Extra compact
             </Label>
           </div>
-          <div className="relative ml-auto w-full sm:w-60">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="bg-card pl-8" placeholder="Zoek straat" value={zoek} onChange={(e) => setZoek(e.target.value)} />
-          </div>
+          <span className="ml-auto text-[12.5px] text-muted-foreground">
+            {groepen.length} straten · {totaal} klanten
+          </span>
         </div>
 
 
@@ -598,7 +627,7 @@ function Index() {
           onDragEnd={onDragEnd}
         >
           <SortableContext items={groepen.map((g) => `s:${g.street.id}`)} strategy={verticalListSortingStrategy}>
-            <div className="gap-3 md:columns-2 xl:columns-3">
+            <div className="gap-3.5 md:columns-1 xl:columns-2">
               {groepen.map((g) => (
                 <StraatBlok
                   key={g.street.id}
@@ -693,9 +722,9 @@ function StraatBlok(p: BlokProps) {
     <section
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`mb-3 break-inside-avoid-column overflow-hidden rounded-lg border border-border bg-card shadow-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
+      className={`mb-3 break-inside-avoid-column overflow-hidden rounded-[14px] border border-border bg-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
     >
-      <div className="flex items-center gap-1 border-b border-border bg-surface px-2 py-1.5">
+      <div className="flex items-center gap-1 border-b border-border bg-card-header px-2.5 py-2">
         <button
           className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing"
           aria-label="Straat verslepen"
@@ -704,7 +733,7 @@ function StraatBlok(p: BlokProps) {
         >
           <GripVertical className="size-3.5" />
         </button>
-        <h2 className="flex-1 truncate font-display text-[13px] font-semibold uppercase tracking-wide text-foreground">
+        <h2 className="flex-1 truncate font-display text-[14.5px] font-semibold uppercase tracking-[0.01em] text-foreground">
           {p.street.name}
         </h2>
         <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">{p.aantal}</span>
@@ -734,12 +763,12 @@ function StraatBlok(p: BlokProps) {
       <div ref={setZoneRef} className="grid grid-cols-2 gap-px bg-border">
         {(["even", "oneven"] as const).map((kant) => (
           <div key={kant} className="bg-card">
-            <div className="flex items-center gap-0.5 border-b border-border/60 px-1 py-0.5 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-0.5 border-b border-border/60 px-1 py-1 text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
               <span className="w-4" />
-              <span className="w-9">nr</span>
-              <span className="min-w-0 flex-1">note</span>
-              {p.prijzenTonen && <span className="w-12 text-right">prijs</span>}
-              <span className="min-w-[3.25rem] max-w-[4rem] text-center">freq</span>
+              <span className="w-9">NR</span>
+              <span className="min-w-0 flex-1 truncate">NOTITIE</span>
+              {p.prijzenTonen && <span className="w-12 text-right">PRIJS</span>}
+              <span className="min-w-[3.25rem] max-w-[4rem] text-center">FREQ</span>
               <span className="w-4" />
             </div>
             <SortableContext
@@ -784,6 +813,13 @@ interface RijProps {
   onAddQuickNote: (label: string) => void;
   onDelete: (c: Customer) => void;
 }
+
+/** Kleur per frequentie: blauw is het accent, amber de even maanden, grijs de oneven. */
+const FREQ_KLEUR: Record<Customer["frequency"], string> = {
+  elke: "bg-accent text-accent-foreground",
+  even: "bg-tint-amber text-tint-amber-ink",
+  oneven: "bg-muted text-muted-foreground",
+};
 
 function KlantRij({
   customer: c,
@@ -850,7 +886,7 @@ function KlantRij({
       <select
         value={c.frequency}
         onChange={(e) => onPatch(c, { frequency: e.target.value as Customer["frequency"] })}
-        className="min-w-[3.25rem] max-w-[4rem] shrink-0 cursor-pointer appearance-none bg-transparent text-center text-[10px] text-muted-foreground focus:outline-none"
+        className={`min-w-[3.25rem] max-w-[4rem] shrink-0 cursor-pointer appearance-none rounded-full py-[2px] text-center text-[10px] font-semibold focus:outline-none focus:ring-2 focus:ring-ring ${FREQ_KLEUR[c.frequency]}`}
         aria-label="Frequentie"
       >
         <option value="elke">Elke</option>

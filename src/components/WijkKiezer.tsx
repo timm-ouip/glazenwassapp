@@ -91,7 +91,7 @@ export function WijkKiezer({ districts, activeId, onSelect, onChanged }: Props) 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <Select value={activeId ?? ""} onValueChange={onSelect}>
-        <SelectTrigger className="h-9 w-52">
+        <SelectTrigger className="h-9 w-52 rounded-full bg-card">
           <SelectValue placeholder="Kies een wijk" />
         </SelectTrigger>
         <SelectContent>
@@ -102,15 +102,15 @@ export function WijkKiezer({ districts, activeId, onSelect, onChanged }: Props) 
           ))}
         </SelectContent>
       </Select>
-      <Button size="sm" variant="outline" onClick={openNieuw}>
+      <Button size="sm" variant="outline" className="rounded-full" onClick={openNieuw}>
         <Plus className="size-4" /> Wijk
       </Button>
       {actief && (
         <>
-          <Button size="icon" variant="ghost" className="size-9" onClick={openHernoem} aria-label="Wijk hernoemen">
+          <Button size="icon" variant="ghost" className="size-9 rounded-full" onClick={openHernoem} aria-label="Wijk hernoemen">
             <Pencil className="size-4" />
           </Button>
-          <Button size="icon" variant="ghost" className="size-9" onClick={verwijder} aria-label="Wijk verwijderen">
+          <Button size="icon" variant="ghost" className="size-9 rounded-full" onClick={verwijder} aria-label="Wijk verwijderen">
             <Trash2 className="size-4" />
           </Button>
         </>

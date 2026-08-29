@@ -4,6 +4,8 @@ import { Zijbalk } from "@/components/Zijbalk";
 
 type Props = {
   titel: string;
+  /** Klein kruimelpad boven de titel, bijvoorbeeld "Overzicht / Klanten". */
+  kruimel?: string;
   onderschrift?: ReactNode;
   /** Knoppen rechtsboven: de besturing van deze pagina. */
   acties?: ReactNode;
@@ -12,7 +14,7 @@ type Props = {
   children: ReactNode;
 };
 
-export function AppLayout({ titel, onderschrift, acties, kop, children }: Props) {
+export function AppLayout({ titel, kruimel, onderschrift, acties, kop, children }: Props) {
   return (
     <div className="flex min-h-screen bg-background">
       <Zijbalk />
@@ -20,7 +22,12 @@ export function AppLayout({ titel, onderschrift, acties, kop, children }: Props)
         <header className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur print:hidden">
           <div className="flex flex-wrap items-center gap-3 px-6 py-3.5">
             <div className="mr-auto min-w-0">
-              <h1 className="truncate text-xl font-semibold leading-tight">{titel}</h1>
+              {kruimel && (
+                <p className="text-[11.5px] leading-tight text-muted-foreground">{kruimel}</p>
+              )}
+              <h1 className="truncate font-display text-[25px] font-semibold leading-tight tracking-[-0.02em]">
+                {titel}
+              </h1>
               {onderschrift && <p className="text-xs text-muted-foreground">{onderschrift}</p>}
             </div>
             {acties && <div className="flex flex-wrap items-center gap-2">{acties}</div>}
