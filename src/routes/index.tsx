@@ -39,7 +39,7 @@ import {
   Milestone as Route2,
 } from "lucide-react";
 
-import { AccountMenu } from "@/components/AccountMenu";
+import { AppLayout } from "@/components/AppLayout";
 import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
 import { DubbeleStraten } from "@/components/DubbeleStraten";
@@ -453,63 +453,50 @@ function Index() {
   const rowPad = compact ? "py-[2px]" : "py-1";
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto max-w-[1600px] px-5 py-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-brand text-brand-foreground shadow-card">
-              <Droplets className="size-5" />
-            </div>
-            <div className="mr-auto min-w-0">
-              <h1 className="truncate text-lg font-semibold leading-tight text-foreground">Klantenlijst</h1>
-              <p className="text-xs text-muted-foreground">Glazenwasser · routebeheer</p>
-            </div>
-            <WijkKiezer
-              districts={districts}
-              activeId={actieveWijk}
-              onSelect={(id) => void navigate({ to: "/", search: { wijk: id } })}
-              onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={!undoLabel}
-                onClick={() => void doeUndo()}
-                title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
-              >
-                <Undo2 className="size-4" /> Ongedaan
-              </Button>
-              <Button size="sm" variant="outline" asChild>
-                <Link to="/importeren">
-                  <Upload className="size-4" /> Importeren
-                </Link>
-              </Button>
-              <Button size="sm" variant="outline" asChild>
-                <Link
-                  to="/printen"
-                  search={{
-                    wijk: actieveWijk ?? "",
-                    maand: filter === "alles" ? "even" : filter,
-                    prijzen: false,
-                    liggend: true,
-                  }}
-                >
-                  <Printer className="size-4" /> Printlijst
-                </Link>
-              </Button>
-              <Button
-                size="sm"
-                className="bg-brand text-brand-foreground hover:bg-brand/90"
-                onClick={() => setKlantDialog({ open: true, customer: null })}
-              >
-                <Plus className="size-4" /> Klant
-              </Button>
-              <AccountMenu />
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+    <AppLayout
+      titel="Klanten"
+      onderschrift={`${groepen.length} straten · ${totaal} klanten`}
+      acties={
+        <>
+          <WijkKiezer
+            districts={districts}
+            activeId={actieveWijk}
+            onSelect={(id) => void navigate({ to: "/", search: { wijk: id } })}
+            onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!undoLabel}
+            onClick={() => void doeUndo()}
+            title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
+          >
+            <Undo2 className="size-4" /> Ongedaan
+          </Button>
+          <Button size="sm" variant="outline" asChild>
+            <Link
+              to="/printen"
+              search={{
+                wijk: actieveWijk ?? "",
+                maand: filter === "alles" ? "even" : filter,
+                prijzen: false,
+                liggend: true,
+              }}
+            >
+              <Printer className="size-4" /> Printlijst
+            </Link>
+          </Button>
+          <Button
+            size="sm"
+            className="bg-brand text-brand-foreground hover:bg-brand/90"
+            onClick={() => setKlantDialog({ open: true, customer: null })}
+          >
+            <Plus className="size-4" /> Klant
+          </Button>
+        </>
+      }
+      kop={
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {[
               { label: "Klanten in beeld", waarde: String(totaal), icon: Users },
               { label: "Straten", waarde: String(groepen.length), icon: Route2 },
@@ -528,12 +515,11 @@ function Index() {
                   </div>
                 </div>
               ))}
-          </div>
         </div>
-      </header>
-
-      <div className="mx-auto max-w-[1600px] space-y-3 px-5 py-4">
-        <div className="sticky top-0 z-20 -mx-5 flex flex-wrap items-center gap-3 border-b border-border/70 bg-background/85 px-5 py-2.5 backdrop-blur">
+      }
+    >
+      <div className="space-y-3">
+        <div className="sticky top-[61px] z-10 -mx-6 flex flex-wrap items-center gap-3 border-b border-border/70 bg-background/85 px-6 py-2.5 backdrop-blur">
           <div className="inline-flex rounded-lg border border-border bg-card p-0.5 shadow-card">
             {(["alles", "even", "oneven"] as MaandFilter[]).map((f) => (
               <button
@@ -670,7 +656,7 @@ function Index() {
         street={straatDialog.street}
         onSaved={herlaad}
       />
-    </div>
+    </AppLayout>
   );
 }
 

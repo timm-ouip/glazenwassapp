@@ -12,7 +12,7 @@ import { AlertTriangle, ArrowLeft, Check, Eye, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
-import { AccountMenu } from "@/components/AccountMenu";
+import { AppLayout } from "@/components/AppLayout";
 import { InlineCel } from "@/components/InlineCel";
 import { NotitieCel } from "@/components/NotitieCel";
 import {
@@ -527,22 +527,8 @@ function ImportPagina() {
 
 
   return (
-    <div className="min-h-screen bg-background pb-16">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-none items-center gap-2 px-4 py-4">
-          <Button size="sm" variant="ghost" asChild>
-            <Link to="/">
-              <ArrowLeft className="size-4" /> Terug
-            </Link>
-          </Button>
-          <h1 className="text-lg font-semibold">Excel importeren</h1>
-          <div className="ml-auto">
-            <AccountMenu />
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-none space-y-6 px-4 py-6">
+    <AppLayout titel="Importeren" onderschrift="Klanten uit een Excel-bestand inlezen">
+      <div className="space-y-6">
         <div className="space-y-3 rounded-lg border border-border bg-card p-4">
           <Label>In welke wijk komt dit bestand?</Label>
           <Select value={wijkId} onValueChange={setWijkId}>
@@ -864,8 +850,8 @@ function ImportPagina() {
           onClose={() => setBekijk(null)}
         />
 
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
 

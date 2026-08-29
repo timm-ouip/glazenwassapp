@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import { fetchTeam, inviteEmployee, removeEmployee } from "@/lib/team.functions";
 import { Button } from "@/components/ui/button";
+import { AppLayout } from "@/components/AppLayout";
 import { Input } from "@/components/ui/input";
 import { useBevestig } from "@/components/Bevestig";
 
@@ -76,24 +77,8 @@ function TeamPagina() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto max-w-[1600px] px-5 py-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <Button size="sm" variant="ghost" asChild>
-              <Link to="/">
-                <ArrowLeft className="size-4" /> Terug
-              </Link>
-            </Button>
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold leading-tight text-foreground">Team</h1>
-              <p className="text-xs text-muted-foreground">Medewerkers van je bedrijf</p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-[1600px] space-y-4 px-5 py-6">
+    <AppLayout titel="Team" onderschrift="Medewerkers van je bedrijf">
+      <div className="space-y-4">
         {laden ? (
           <p className="text-sm text-muted-foreground">Laden…</p>
         ) : (
@@ -162,6 +147,6 @@ function TeamPagina() {
           </>
         )}
       </div>
-    </div>
+    </AppLayout>
   );
 }
