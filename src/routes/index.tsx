@@ -155,7 +155,12 @@ function Index() {
   }
 
   function meldUndo(bericht: string) {
-    toast(bericht, { action: { label: "Ongedaan maken", onClick: () => void doeUndo() } });
+    // Standaard verdwijnt een melding na ~4 seconden. Dat is te kort om te beslissen
+    // of je een verwijdering terugdraait — de knop is weg voor je hem kunt raken.
+    toast(bericht, {
+      duration: 12000,
+      action: { label: "Ongedaan maken", onClick: () => void doeUndo() },
+    });
   }
 
   useEffect(() => {
