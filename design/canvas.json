@@ -1,6 +1,6 @@
 {
   "pages": [
-    { "id": "page-1", "name": "Klei" },
+    { "id": "page-1", "name": "Zeeblauw" },
     { "id": "page-2", "name": "Niet gekozen" }
   ],
   "artboards": [
@@ -25,7 +25,7 @@
       "x": 0,
       "y": -200,
       "w": 720,
-      "text": "KLEI — de gekozen richting.\n\nStraatkaarten uit A, vormgeving uit B, lichte inklapbare navigatie met kleur alleen op de selectie. Terracotta ligt het dichtst bij het oranje dat je nu al gebruikt.\n\nDe tellingen bij de prullenbak zijn eruit, links én bovenin. Er staan nu drie cijferkaarten in plaats van vier."
+      "text": "ZEEBLAUW — de gekozen richting.\n\nStraatkaarten uit A, vormgeving uit B, lichte inklapbare navigatie met kleur alleen op de selectie. Gedempt blauw op warm gebroken wit; water past bij het vak.\n\nDe tellingen bij de prullenbak zijn eruit, links én bovenin. Er staan nu drie cijferkaarten in plaats van vier."
     },
     {
       "id": "ingeklapt-klei",
