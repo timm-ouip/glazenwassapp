@@ -45,6 +45,7 @@ export async function fetchDistricts(): Promise<District[]> {
   const { data, error } = await supabase
     .from("districts")
     .select("id,name,sort_order")
+    .is("deleted_at", null)
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
   if (error) throw error;
@@ -66,15 +67,42 @@ export async function renameDistrict(id: string, name: string) {
   if (error) throw error;
 }
 
-export async function deleteDistrict(id: string) {
-  const { error } = await supabase.from("districts").delete().eq("id", id);
+/**
+ * Verwijderen is wegleggen: de rij krijgt een stempel en verdwijnt uit de
+ * lijsten, maar blijft in de database staan. Terughalen kan via de
+ * prullenbak, of meteen met de ongedaan-knop.
+ */
+export async function legWeg(tabel: "districts" | "streets" | "customers", ids: string[]) {
+  if (ids.length === 0) return;
+  const { error } = await supabase
+    .from(tabel)
+    .update({ deleted_at: new Date().toISOString() })
+    .in("id", ids);
   if (error) throw error;
+}
+
+export async function haalTerug(tabel: "districts" | "streets" | "customers", ids: string[]) {
+  if (ids.length === 0) return;
+  const { error } = await supabase.from(tabel).update({ deleted_at: null }).in("id", ids);
+  if (error) throw error;
+}
+
+/** Definitief weg — alleen vanuit de prullenbak, en onomkeerbaar. */
+export async function gooiEchtWeg(tabel: "districts" | "streets" | "customers", ids: string[]) {
+  if (ids.length === 0) return;
+  const { error } = await supabase.from(tabel).delete().in("id", ids);
+  if (error) throw error;
+}
+
+export async function deleteDistrict(id: string) {
+  await legWeg("districts", [id]);
 }
 
 export async function fetchStreets(): Promise<Street[]> {
   const { data, error } = await supabase
     .from("streets")
     .select("id,name,sort_order,district_id,sort_desc,print_col,print_row")
+    .is("deleted_at", null)
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
   if (error) throw error;
@@ -85,6 +113,7 @@ export async function fetchCustomers(): Promise<Customer[]> {
   const { data, error } = await supabase
     .from("customers")
     .select("id,street_id,house_number,addition,note,price,frequency,sort_order")
+    .is("deleted_at", null)
     .order("sort_order", { ascending: true })
     .order("house_number", { ascending: true });
   if (error) throw error;

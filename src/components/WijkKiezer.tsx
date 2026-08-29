@@ -12,7 +12,8 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { addDistrict, deleteDistrict, renameDistrict, type District } from "@/lib/klanten";
+import { addDistrict, deleteDistrict, haalTerug, renameDistrict, type District } from "@/lib/klanten";
+import { pushUndo, undoLaatste } from "@/lib/undo";
 import { useBevestig } from "@/components/Bevestig";
 
 interface Props {
@@ -73,16 +74,35 @@ export function WijkKiezer({ districts, activeId, onSelect, onChanged }: Props) 
     if (!actief) return;
     const ja = await bevestig({
       titel: `Wijk "${actief.name}" verwijderen?`,
-      tekst: "Alle straten en klanten in deze wijk gaan mee. Dit kan niet ongedaan gemaakt worden.",
+      tekst: "Alle straten en klanten in deze wijk gaan mee naar de prullenbak. Je kunt ze daar terughalen.",
       gevaarlijk: true,
     });
     if (!ja) return;
+    const weg = actief;
     try {
-      await deleteDistrict(actief.id);
-      const rest = districts.filter((d) => d.id !== actief.id);
+      await deleteDistrict(weg.id);
+      const rest = districts.filter((d) => d.id !== weg.id);
       onChanged();
       if (rest[0]) onSelect(rest[0].id);
-      toast.success("Wijk verwijderd");
+      pushUndo({
+        label: `Verwijderen wijk ${weg.name}`,
+        undo: async () => {
+          await haalTerug("districts", [weg.id]);
+          onChanged();
+          onSelect(weg.id);
+        },
+      });
+      toast(`Wijk "${weg.name}" verwijderd`, {
+        duration: 12000,
+        action: {
+          label: "Ongedaan maken",
+          onClick: () => {
+            void undoLaatste().then((label) => {
+              if (label) toast.success("Teruggedraaid: " + label);
+            });
+          },
+        },
+      });
     } catch (e) {
       toast.error("Verwijderen mislukt: " + (e as Error).message);
     }

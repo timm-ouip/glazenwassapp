@@ -37,6 +37,7 @@ export type Database = {
           addition: string
           company_id: string
           created_at: string
+          deleted_at: string | null
           frequency: string
           house_number: number
           id: string
@@ -49,6 +50,7 @@ export type Database = {
           addition?: string
           company_id?: string
           created_at?: string
+          deleted_at?: string | null
           frequency?: string
           house_number: number
           id?: string
@@ -61,6 +63,7 @@ export type Database = {
           addition?: string
           company_id?: string
           created_at?: string
+          deleted_at?: string | null
           frequency?: string
           house_number?: number
           id?: string
@@ -90,6 +93,7 @@ export type Database = {
         Row: {
           company_id: string
           created_at: string
+          deleted_at: string | null
           id: string
           name: string
           sort_order: number
@@ -98,6 +102,7 @@ export type Database = {
         Insert: {
           company_id?: string
           created_at?: string
+          deleted_at?: string | null
           id?: string
           name: string
           sort_order?: number
@@ -106,6 +111,7 @@ export type Database = {
         Update: {
           company_id?: string
           created_at?: string
+          deleted_at?: string | null
           id?: string
           name?: string
           sort_order?: number
@@ -192,6 +198,7 @@ export type Database = {
         Row: {
           company_id: string
           created_at: string
+          deleted_at: string | null
           district_id: string
           id: string
           name: string
@@ -203,6 +210,7 @@ export type Database = {
         Insert: {
           company_id?: string
           created_at?: string
+          deleted_at?: string | null
           district_id: string
           id?: string
           name: string
@@ -214,6 +222,7 @@ export type Database = {
         Update: {
           company_id?: string
           created_at?: string
+          deleted_at?: string | null
           district_id?: string
           id?: string
           name?: string

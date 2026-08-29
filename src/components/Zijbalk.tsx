@@ -6,6 +6,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Printer,
+  Trash2,
   Upload,
   Users,
   UsersRound,
@@ -30,7 +31,10 @@ const WERK: Pagina[] = [
   { label: "Importeren", to: "/importeren", icon: Upload },
 ];
 
-const BEHEER: Pagina[] = [{ label: "Team", to: "/team", icon: UsersRound, eigenaar: true }];
+const BEHEER: Pagina[] = [
+  { label: "Team", to: "/team", icon: UsersRound, eigenaar: true },
+  { label: "Prullenbak", to: "/prullenbak", icon: Trash2 },
+];
 
 export function Zijbalk() {
   const { employee } = useAuth();

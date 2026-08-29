@@ -51,6 +51,8 @@ import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { NotitieCel } from "@/components/NotitieCel";
 import {
   addQuickNote,
+  haalTerug,
+  legWeg,
   fetchCustomers,
   fetchDistricts,
   fetchQuickNotes,
@@ -235,15 +237,16 @@ function Index() {
       gevaarlijk: true,
     });
     if (!ja) return;
-    const { error } = await supabase.from("customers").delete().eq("id", c.id);
-    if (error) {
-      toast.error("Verwijderen mislukt: " + error.message);
+    try {
+      await legWeg("customers", [c.id]);
+    } catch (e) {
+      toast.error("Verwijderen mislukt: " + (e as Error).message);
       return;
     }
     pushUndo({
       label: `Verwijderen ${formatNumber(c)}`,
       undo: async () => {
-        await supabase.from("customers").insert(c);
+        await haalTerug("customers", [c.id]);
         herlaad();
       },
     });
@@ -258,17 +261,16 @@ function Index() {
       gevaarlijk: true,
     });
     if (!ja) return;
-    const klantenInStraat = customers.filter((c) => c.street_id === s.id);
-    const { error } = await supabase.from("streets").delete().eq("id", s.id);
-    if (error) {
-      toast.error("Verwijderen mislukt: " + error.message);
+    try {
+      await legWeg("streets", [s.id]);
+    } catch (e) {
+      toast.error("Verwijderen mislukt: " + (e as Error).message);
       return;
     }
     pushUndo({
       label: `Verwijderen ${s.name}`,
       undo: async () => {
-        await supabase.from("streets").insert(s);
-        if (klantenInStraat.length > 0) await supabase.from("customers").insert(klantenInStraat);
+        await haalTerug("streets", [s.id]);
         herlaad();
       },
     });

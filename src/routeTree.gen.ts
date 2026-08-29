@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ImporterenRouteImport } from './routes/importeren'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrintenRouteImport } from './routes/printen'
+import { Route as PrullenbakRouteImport } from './routes/prullenbak'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as UitnodigingRouteImport } from './routes/uitnodiging'
@@ -37,6 +38,11 @@ const PrintenRoute = PrintenRouteImport.update({
   path: '/printen',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrullenbakRoute = PrullenbakRouteImport.update({
+  id: '/prullenbak',
+  path: '/prullenbak',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/importeren': typeof ImporterenRoute
   '/login': typeof LoginRoute
   '/printen': typeof PrintenRoute
+  '/prullenbak': typeof PrullenbakRoute
   '/signup': typeof SignupRoute
   '/team': typeof TeamRoute
   '/uitnodiging': typeof UitnodigingRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/importeren': typeof ImporterenRoute
   '/login': typeof LoginRoute
   '/printen': typeof PrintenRoute
+  '/prullenbak': typeof PrullenbakRoute
   '/signup': typeof SignupRoute
   '/team': typeof TeamRoute
   '/uitnodiging': typeof UitnodigingRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/importeren': typeof ImporterenRoute
   '/login': typeof LoginRoute
   '/printen': typeof PrintenRoute
+  '/prullenbak': typeof PrullenbakRoute
   '/signup': typeof SignupRoute
   '/team': typeof TeamRoute
   '/uitnodiging': typeof UitnodigingRoute
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/importeren'
     | '/login'
     | '/printen'
+    | '/prullenbak'
     | '/signup'
     | '/team'
     | '/uitnodiging'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/importeren'
     | '/login'
     | '/printen'
+    | '/prullenbak'
     | '/signup'
     | '/team'
     | '/uitnodiging'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/importeren'
     | '/login'
     | '/printen'
+    | '/prullenbak'
     | '/signup'
     | '/team'
     | '/uitnodiging'
@@ -116,6 +128,7 @@ export interface RootRouteChildren {
   ImporterenRoute: typeof ImporterenRoute
   LoginRoute: typeof LoginRoute
   PrintenRoute: typeof PrintenRoute
+  PrullenbakRoute: typeof PrullenbakRoute
   SignupRoute: typeof SignupRoute
   TeamRoute: typeof TeamRoute
   UitnodigingRoute: typeof UitnodigingRoute
@@ -151,6 +164,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrintenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/prullenbak': {
+      id: '/prullenbak'
+      path: '/prullenbak'
+      fullPath: '/prullenbak'
+      preLoaderRoute: typeof PrullenbakRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -180,6 +200,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImporterenRoute: ImporterenRoute,
   LoginRoute: LoginRoute,
   PrintenRoute: PrintenRoute,
+  PrullenbakRoute: PrullenbakRoute,
   SignupRoute: SignupRoute,
   TeamRoute: TeamRoute,
   UitnodigingRoute: UitnodigingRoute,
