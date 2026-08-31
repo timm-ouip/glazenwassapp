@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addMonths,
@@ -33,8 +33,8 @@ import {
   fetchDistricts,
   fetchStreets,
   formatPrice,
-  wijkHoek,
   wijkKleur,
+  wijkVlak,
   type Customer,
 } from "@/lib/klanten";
 import {
@@ -104,9 +104,9 @@ function Planning() {
 
   /** Kleur en naam per wijk, op volgorde van de wijkenlijst. */
   const wijkInfo = useMemo(() => {
-    const kaart = new Map<string, { naam: string; kleur: string; hoek: string }>();
+    const kaart = new Map<string, { naam: string; kleur: string; index: number }>();
     (districtsQuery.data ?? []).forEach((d, i) =>
-      kaart.set(d.id, { naam: d.name, kleur: wijkKleur(i), hoek: wijkHoek(i) }),
+      kaart.set(d.id, { naam: d.name, kleur: wijkKleur(i), index: i }),
     );
     return kaart;
   }, [districtsQuery.data]);
@@ -119,7 +119,7 @@ function Planning() {
       bedrag: number;
       aantal: number;
       straten: Set<string>;
-      /** In volgorde van binnenkomst: de eerste is de wijk van die dag. */
+      /** Op volgorde van de wijkenlijst; de eerste is de wijk van die dag. */
       wijken: string[];
     }
     const kaart = new Map<string, Dag>();
@@ -142,8 +142,15 @@ function Planning() {
       }
       kaart.set(r.datum, bij);
     }
+
+    // Op volgorde van de wijkenlijst, niet op wie er toevallig als eerste in
+    // de regels stond: zo staan de banen in het vakje en de kopjes in het
+    // dagpaneel in dezelfde volgorde.
+    for (const dag of kaart.values()) {
+      dag.wijken.sort((a, b) => (wijkInfo.get(a)?.index ?? 0) - (wijkInfo.get(b)?.index ?? 0));
+    }
     return kaart;
-  }, [regels, customersQuery.data, streetsQuery.data]);
+  }, [regels, customersQuery.data, streetsQuery.data, wijkInfo]);
 
   // Het balkje in een dagvak is relatief aan de drukste dag van deze maand.
   const drukste = useMemo(
@@ -167,36 +174,66 @@ function Planning() {
   const dagRegels = regels.filter((r) => r.datum === gekozenDag);
   const dagBedrag = dagRegels.reduce((sum, r) => sum + Number(r.prijs), 0);
 
-  const perStraat = useMemo(() => {
-    const customers = customersQuery.data ?? [];
-    const streets = streetsQuery.data ?? [];
-    const adres = new Map(customers.map((c) => [c.id, c]));
-    const straatNaam = new Map(streets.map((s) => [s.id, s.name]));
+  /** De dag uitgesplitst per wijk, en daarbinnen per straat. */
+  const perWijk = useMemo(() => {
+    const adres = new Map((customersQuery.data ?? []).map((c) => [c.id, c]));
+    const straat = new Map((streetsQuery.data ?? []).map((s) => [s.id, s]));
 
-    const groepen = new Map<
-      string,
-      { id: string; naam: string; adressen: Customer[]; bedrag: number }
-    >();
+    interface Straat {
+      id: string;
+      naam: string;
+      aantal: number;
+      bedrag: number;
+    }
+    interface Wijk {
+      id: string;
+      naam: string;
+      kleur: string;
+      bedrag: number;
+      straten: Map<string, Straat>;
+    }
+
+    const wijken = new Map<string, Wijk>();
     let kwijt = { aantal: 0, bedrag: 0 };
+
     for (const r of dagRegels) {
       const c = r.customer_id ? adres.get(r.customer_id) : undefined;
-      if (!c) {
-        // Adres is intussen definitief weggegooid. Wel meetellen, anders klopt
-        // de optelling niet meer met het dagtotaal.
+      const s = c ? straat.get(c.street_id) : undefined;
+      if (!c || !s) {
+        // Adres of straat is intussen definitief weggegooid. Wel meetellen,
+        // anders klopt de optelling niet meer met het dagtotaal.
         kwijt = { aantal: kwijt.aantal + 1, bedrag: kwijt.bedrag + Number(r.prijs) };
         continue;
       }
-      const naam = straatNaam.get(c.street_id) ?? "Onbekende straat";
-      const g = groepen.get(c.street_id) ?? { id: c.street_id, naam, adressen: [], bedrag: 0 };
-      g.adressen.push(c);
-      g.bedrag += Number(r.prijs);
-      groepen.set(c.street_id, g);
+
+      const info = wijkInfo.get(s.district_id);
+      const wijk = wijken.get(s.district_id) ?? {
+        id: s.district_id,
+        naam: info?.naam ?? "Onbekende wijk",
+        kleur: info?.kleur ?? "transparent",
+        bedrag: 0,
+        straten: new Map<string, Straat>(),
+      };
+      wijk.bedrag += Number(r.prijs);
+
+      const rij = wijk.straten.get(s.id) ?? { id: s.id, naam: s.name, aantal: 0, bedrag: 0 };
+      rij.aantal += 1;
+      rij.bedrag += Number(r.prijs);
+      wijk.straten.set(s.id, rij);
+      wijken.set(s.district_id, wijk);
     }
+
     return {
-      straten: [...groepen.values()].sort((a, b) => a.naam.localeCompare(b.naam, "nl")),
+      // Wijken op volgorde van de wijkenlijst, straten daarbinnen op naam.
+      wijken: [...wijken.values()]
+        .sort((a, b) => (wijkInfo.get(a.id)?.index ?? 0) - (wijkInfo.get(b.id)?.index ?? 0))
+        .map((w) => ({
+          ...w,
+          straten: [...w.straten.values()].sort((a, b) => a.naam.localeCompare(b.naam, "nl")),
+        })),
       kwijt,
     };
-  }, [dagRegels, customersQuery.data, streetsQuery.data]);
+  }, [dagRegels, customersQuery.data, streetsQuery.data, wijkInfo]);
 
   function kiesDag(d: Date) {
     void navigate({ to: "/planning", search: { dag: sleutel(d) }, replace: true });
@@ -353,12 +390,16 @@ function Planning() {
               const isGekozen = k === gekozenDag;
               // Voorbij vandaag is het nog een plan; t/m vandaag is het gedaan.
               const isGedaan = k <= nu;
-              // De kleur van de eerste wijk van die dag. Meerdere wijken op
-              // één dag: dan is de eerste leidend, de rest staat als "+1".
-              const hoek =
-                !buitenMaand && info?.wijken.length
-                  ? wijkInfo.get(info.wijken[0]!)?.hoek
-                  : undefined;
+              // Staan er meerdere wijken op één dag, dan krijgt het vak een
+              // baan per wijk in plaats van één kleur.
+              const vlak =
+                buitenMaand || !info?.wijken.length
+                  ? ""
+                  : wijkVlak(
+                      info.wijken
+                        .map((id) => wijkInfo.get(id)?.index)
+                        .filter((i): i is number => i !== undefined),
+                    );
               return (
                 <button
                   key={k}
@@ -372,11 +413,11 @@ function Planning() {
                   // Het hele vakje krijgt de pastelkleur van de wijk die er
                   // die dag aan de beurt is; zo zie je een maand aan de
                   // kleuren, zonder namen te lezen.
-                  style={hoek ? ({ "--wijk-hoek": hoek } as CSSProperties) : undefined}
+                  style={vlak ? { background: vlak } : undefined}
                   className={`relative flex min-h-[4.5rem] flex-col border-b border-r border-border p-1.5 text-left transition-colors [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0 sm:min-h-[6.25rem] ${
-                    buitenMaand ? "bg-card-header" : hoek ? "wijkvak" : "hover:bg-muted/50"
+                    buitenMaand ? "bg-card-header" : vlak ? "" : "hover:bg-muted/50"
                   } ${isGekozen ? "outline outline-2 -outline-offset-2 outline-brand" : ""} ${
-                    isGekozen && !hoek ? "bg-brand/10" : ""
+                    isGekozen && !vlak ? "bg-brand/10" : ""
                   }`}
                 >
                   <span
@@ -451,22 +492,40 @@ function Planning() {
             {dagRegels.length} {dagRegels.length === 1 ? "adres" : "adressen"}
           </p>
 
-          <div className="mt-4 space-y-1.5">
-            {perStraat.straten.map((s) => (
-              <div key={s.id} className="flex items-baseline gap-2 text-[13px]">
-                <span className="min-w-0 flex-1 truncate">{s.naam}</span>
-                <span className="tabular-nums text-muted-foreground">
-                  {s.adressen.length}×
-                </span>
-                <span className="w-16 text-right tabular-nums">{formatPrice(s.bedrag)}</span>
+          <div className="mt-4 space-y-3.5">
+            {perWijk.wijken.map((w) => (
+              <div key={w.id}>
+                {/* De wijk erboven, met zijn kleur: rijd je op één dag twee
+                    wijken, dan zie je meteen welke straten bij welke horen. */}
+                <div className="mb-1 flex items-baseline gap-1.5 border-b border-border pb-1">
+                  <span
+                    className="size-2 shrink-0 translate-y-[-1px] rounded-full"
+                    style={{ background: w.kleur }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">
+                    {w.naam}
+                  </span>
+                  <span className="text-[12px] tabular-nums text-muted-foreground">
+                    {formatPrice(w.bedrag)}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {w.straten.map((s) => (
+                    <div key={s.id} className="flex items-baseline gap-2 text-[13px]">
+                      <span className="min-w-0 flex-1 truncate">{s.naam}</span>
+                      <span className="tabular-nums text-muted-foreground">{s.aantal}×</span>
+                      <span className="w-16 text-right tabular-nums">{formatPrice(s.bedrag)}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
-            {perStraat.kwijt.aantal > 0 && (
+            {perWijk.kwijt.aantal > 0 && (
               <div className="flex items-baseline gap-2 text-[13px] text-muted-foreground">
                 <span className="min-w-0 flex-1 truncate">Verwijderde adressen</span>
-                <span className="tabular-nums">{perStraat.kwijt.aantal}×</span>
+                <span className="tabular-nums">{perWijk.kwijt.aantal}×</span>
                 <span className="w-16 text-right tabular-nums">
-                  {formatPrice(perStraat.kwijt.bedrag)}
+                  {formatPrice(perWijk.kwijt.bedrag)}
                 </span>
               </div>
             )}

@@ -131,18 +131,14 @@
   --sidebar-accent-foreground: oklch(0.45 0.1 245);
   --sidebar-border: oklch(0.905 0.002 286);
   --sidebar-ring: oklch(0.82 0.075 232);
+
+  /* Hoe zacht een wijkkleur is als vlak. De code kent alleen de kleurhoek en
+     bouwt daar `oklch(var(--wijk-l) var(--wijk-c) <hoek>)` mee; of dat licht
+     of donker uitpakt hoort bij het thema, niet bij de code. */
+  --wijk-l: 0.958;
+  --wijk-c: 0.032;
 }
 
-/* Een dagvak in de pastelkleur van zijn wijk. De code geeft alleen de
-   kleurhoek mee als --wijk-hoek; hoe zacht hij moet zijn staat hier, want
-   in het donker hoort hij donker te zijn en niet lichter dan de kaart. */
-.wijkvak {
-  background: oklch(0.958 0.032 var(--wijk-hoek));
-}
-
-.dark .wijkvak {
-  background: oklch(0.29 0.038 var(--wijk-hoek));
-}
 
 .dark {
   --background: oklch(0.16 0.003 286);
@@ -190,6 +186,8 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+  --wijk-l: 0.29;
+  --wijk-c: 0.038;
 }
 
 @layer base {

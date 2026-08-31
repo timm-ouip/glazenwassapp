@@ -95,6 +95,26 @@ export function wijkKleur(index: number): string {
   return `oklch(0.62 0.14 ${wijkHoek(index)})`;
 }
 
+/**
+ * Achtergrond voor een vlak dat bij een of meer wijken hoort — een dag op de
+ * kalender. Bij meerdere wijken wordt het even brede banen naast elkaar, met
+ * harde overgangen: een verloop zou de kleuren juist onherkenbaar maken.
+ *
+ * De lichtheid komt uit `--wijk-l` en `--wijk-c` in styles.css, want die
+ * hoort bij het thema en niet bij de code.
+ */
+export function wijkVlak(indexen: number[]): string {
+  const kleur = (i: number) => `oklch(var(--wijk-l) var(--wijk-c) ${wijkHoek(i)})`;
+  if (indexen.length === 0) return "";
+  if (indexen.length === 1) return kleur(indexen[0]!);
+
+  const breedte = 100 / indexen.length;
+  const banen = indexen.map(
+    (i, n) => `${kleur(i)} ${(n * breedte).toFixed(2)}% ${((n + 1) * breedte).toFixed(2)}%`,
+  );
+  return `linear-gradient(to right, ${banen.join(", ")})`;
+}
+
 export async function fetchDistricts(): Promise<District[]> {
   const { data, error } = await supabase
     .from("districts")
