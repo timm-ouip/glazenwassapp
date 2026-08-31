@@ -106,7 +106,11 @@ export function Zijbalk() {
         {/* Leeg tot het bedrijf geladen is: een placeholder die daarna
             verspringt leest slechter dan even niets. */}
         {!ingeklapt && (
-          <span className="truncate font-display text-base font-bold">{company?.name ?? ""}</span>
+          // Over twee regels: bedrijfsnamen zijn langer dan de 236px die de
+          // balk breed is, en afkappen maakt er "Wassersapp be…" van.
+          <span className="line-clamp-2 min-w-0 flex-1 font-display text-[15px] font-bold leading-tight">
+            {company?.name ?? ""}
+          </span>
         )}
         <button
           type="button"
