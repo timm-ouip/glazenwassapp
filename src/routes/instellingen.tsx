@@ -1,11 +1,23 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Building2, KeyRound, Mail, Plus, Trash2, User, UserPlus } from "lucide-react";
+import {
+  Building2,
+  KeyRound,
+  Mail,
+  Monitor,
+  Moon,
+  Plus,
+  Sun,
+  Trash2,
+  User,
+  UserPlus,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { requireSession, useAuth, useRequireAuth, type Rol } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { addQuickNote, deleteQuickNote, fetchQuickNotes, type QuickNote } from "@/lib/klanten";
+import { bewaarThema, leesThema, themaLabels, type Thema } from "@/lib/thema";
 import {
   fetchTeam,
   inviteEmployee,
@@ -378,6 +390,8 @@ function AccountTab() {
 
   return (
     <div className="grid max-w-3xl gap-4 lg:grid-cols-2">
+      <WeergaveKaart />
+
       <Kaart titel="Je naam" uitleg="Wat je collega's in het team van je zien.">
         <div className="space-y-3">
           <Veld id="eigennaam" label="Naam" waarde={naam} onChange={setNaam} lezen={false} />
@@ -738,5 +752,69 @@ function NotitiesTab() {
         </div>
       </Kaart>
     </div>
+  );
+}
+
+// --- Weergave -------------------------------------------------------------
+
+const THEMA_ICOON: Record<Thema, typeof Monitor> = {
+  systeem: Monitor,
+  licht: Sun,
+  donker: Moon,
+};
+
+/**
+ * Licht of donker. Standaard volgt de app je systeem — zet je hem vast, dan
+ * geldt dat alleen op dit apparaat.
+ */
+function WeergaveKaart() {
+  const [thema, setThema] = useState<Thema>("systeem");
+
+  // Pas na het hydrateren inlezen: op de server bestaat localStorage niet,
+  // en het themascript in de <head> heeft de klasse dan al gezet.
+  useEffect(() => setThema(leesThema()), []);
+
+  // Volgt de app het systeem, dan moet hij meebewegen als je dat 's avonds
+  // omzet zonder de pagina te herladen.
+  useEffect(() => {
+    if (thema !== "systeem") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const luister = () => bewaarThema("systeem");
+    media.addEventListener("change", luister);
+    return () => media.removeEventListener("change", luister);
+  }, [thema]);
+
+  function kies(nieuw: Thema) {
+    setThema(nieuw);
+    bewaarThema(nieuw);
+  }
+
+  return (
+    <Kaart
+      titel="Weergave"
+      uitleg="Standaard volgt de app je systeem. Je kunt hem ook vastzetten; dat geldt dan alleen op dit apparaat."
+    >
+      <div className="flex flex-wrap gap-2">
+        {(Object.keys(themaLabels) as Thema[]).map((t) => {
+          const Icoon = THEMA_ICOON[t];
+          const aan = thema === t;
+          return (
+            <button
+              key={t}
+              onClick={() => kies(t)}
+              aria-pressed={aan}
+              className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[13px] transition-colors ${
+                aan
+                  ? "border-brand bg-brand text-brand-foreground font-medium"
+                  : "border-border bg-card text-foreground hover:bg-accent"
+              }`}
+            >
+              <Icoon className="size-4" />
+              {themaLabels[t]}
+            </button>
+          );
+        })}
+      </div>
+    </Kaart>
   );
 }

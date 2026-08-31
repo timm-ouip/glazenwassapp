@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { Toaster } from "../components/ui/sonner";
 import { AuthProvider } from "../lib/auth";
 import { BevestigProvider } from "../components/Bevestig";
+import { THEMA_SCRIPT } from "../lib/thema";
 
 function NotFoundComponent() {
   return (
@@ -108,6 +109,8 @@ function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        {/* Vóór alles: anders flitst het lichte thema even op. */}
+        <script dangerouslySetInnerHTML={{ __html: THEMA_SCRIPT }} />
         <HeadContent />
       </head>
       <body>
