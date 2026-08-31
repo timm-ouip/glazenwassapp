@@ -1058,6 +1058,7 @@ function ImportPagina() {
                           oneven={r.notitieOneven}
                           onChangeEven={(v) => wijzig(r.id, { notitieEven: v })}
                           onChangeOneven={(v) => wijzig(r.id, { notitieOneven: v })}
+                          frequency={r.frequency}
                           quickNotes={quickNotes}
                           onChange={(v) => wijzig(r.id, { notitie: v })}
                           onAddQuickNote={(l) => void nieuweSnelkeuze(l)}

@@ -1054,16 +1054,18 @@ function Index() {
                   bolletjes: de bedragen hiernaast zijn belangrijker. */}
               <div className="ml-auto flex items-center gap-3">
                 {[
-                  { stip: "bg-tint-amber-ink", tekst: "op deze dag" },
-                  { stip: "bg-tint-groen-ink", tekst: "al gewassen" },
-                  { stip: "bg-tint-paars-ink", tekst: "al ingepland" },
+                  { stip: "bg-tint-amber ring-tint-amber-ink/30", tekst: "op deze dag" },
+                  { stip: "bg-tint-groen ring-tint-groen-ink/30", tekst: "al gewassen" },
+                  { stip: "bg-tint-paars ring-tint-paars-ink/30", tekst: "al ingepland" },
                 ].map((l) => (
                   <span
                     key={l.tekst}
                     className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground"
                     title={l.tekst}
                   >
-                    <span className={`size-2 shrink-0 rounded-full ${l.stip}`} />
+                    <span
+                      className={`size-2.5 shrink-0 rounded-full ring-1 ring-inset ${l.stip}`}
+                    />
                     <span className="hidden sm:inline">{l.tekst}</span>
                   </span>
                 ))}
@@ -1589,6 +1591,10 @@ function KlantRij({
           onClick={(e) => onSelect(c, e.shiftKey)}
           {...attributes}
           {...listeners}
+          // Ná attributes, want dnd-kit zet er zelf tabIndex 0 op. Tab hoort
+          // van vakje naar vakje te springen, niet langs de sleepgreepjes;
+          // er is geen toetsenbordsensor, dus hier gaat niets verloren.
+          tabIndex={-1}
         >
           <GripVertical className="size-3" />
         </button>
@@ -1612,6 +1618,7 @@ function KlantRij({
           oneven={c.note_oneven}
           onChangeEven={(v) => onPatch(c, { note_even: v })}
           onChangeOneven={(v) => onPatch(c, { note_oneven: v })}
+          frequency={c.frequency}
           quickNotes={quickNotes}
           onChange={(v) => onPatch(c, { note: v })}
           onAddQuickNote={onAddQuickNote}
@@ -1646,6 +1653,7 @@ function KlantRij({
         {klantNaam && (
           <Link
             to="/klanten"
+            tabIndex={-1}
             search={{ klant: c.klant_id ?? "" }}
             title={klantNaam}
             aria-label={`Klantgegevens van ${klantNaam}`}
@@ -1656,6 +1664,7 @@ function KlantRij({
         )}
       </span>
       <button
+        tabIndex={-1}
         className="shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:!text-destructive"
         onClick={() => onDelete(c)}
         aria-label="Klant verwijderen"

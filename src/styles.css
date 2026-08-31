@@ -133,6 +133,17 @@
   --sidebar-ring: oklch(0.82 0.075 232);
 }
 
+/* Een dagvak in de pastelkleur van zijn wijk. De code geeft alleen de
+   kleurhoek mee als --wijk-hoek; hoe zacht hij moet zijn staat hier, want
+   in het donker hoort hij donker te zijn en niet lichter dan de kaart. */
+.wijkvak {
+  background: oklch(0.958 0.032 var(--wijk-hoek));
+}
+
+.dark .wijkvak {
+  background: oklch(0.29 0.038 var(--wijk-hoek));
+}
+
 .dark {
   --background: oklch(0.16 0.003 286);
   --surface: oklch(0.2 0.003 286);

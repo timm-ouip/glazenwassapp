@@ -76,6 +76,25 @@ export const frequencyLabels: Record<Frequency, string> = {
   oneven: "Oneven maand",
 };
 
+/**
+ * Vaste kleur per wijk, afgeleid van zijn plek in de lijst — dus zonder dat
+ * je hem ergens hoeft te kiezen. De gulden hoek (137,5°) zorgt dat
+ * opeenvolgende wijken ver uit elkaar liggen op de kleurencirkel, ook als het
+ * er tien zijn.
+ *
+ * `wijkKleur` is het bolletje: verzadigd genoeg om op zes pixels te zien, en
+ * middenlicht zodat het in licht én donker werkt. Voor een heel vlak is dat
+ * te fel; daarvoor geeft `wijkHoek` alleen de kleurhoek, en bepaalt de klasse
+ * `.wijkvak` in styles.css hoe zacht hij is — dat verschilt per thema.
+ */
+export function wijkHoek(index: number): string {
+  return ((index * 137.5) % 360).toFixed(1);
+}
+
+export function wijkKleur(index: number): string {
+  return `oklch(0.62 0.14 ${wijkHoek(index)})`;
+}
+
 export async function fetchDistricts(): Promise<District[]> {
   const { data, error } = await supabase
     .from("districts")

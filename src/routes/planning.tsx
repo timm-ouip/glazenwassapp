@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addMonths,
@@ -30,8 +30,11 @@ import { Button } from "@/components/ui/button";
 import { pushUndo, undoLaatste } from "@/lib/undo";
 import {
   fetchCustomers,
+  fetchDistricts,
   fetchStreets,
   formatPrice,
+  wijkHoek,
+  wijkKleur,
   type Customer,
 } from "@/lib/klanten";
 import {
@@ -95,28 +98,52 @@ function Planning() {
   // alleen nodig om te laten zien wélke straten er op een dag staan.
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
+  const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
 
   const regels = useMemo(() => wasdagenQuery.data ?? [], [wasdagenQuery.data]);
 
+  /** Kleur en naam per wijk, op volgorde van de wijkenlijst. */
+  const wijkInfo = useMemo(() => {
+    const kaart = new Map<string, { naam: string; kleur: string; hoek: string }>();
+    (districtsQuery.data ?? []).forEach((d, i) =>
+      kaart.set(d.id, { naam: d.name, kleur: wijkKleur(i), hoek: wijkHoek(i) }),
+    );
+    return kaart;
+  }, [districtsQuery.data]);
+
   const perDag = useMemo(() => {
     const straatVan = new Map((customersQuery.data ?? []).map((c) => [c.id, c.street_id]));
-    const kaart = new Map<string, { bedrag: number; aantal: number; straten: number }>();
-    const straatSets = new Map<string, Set<string>>();
+    const wijkVan = new Map((streetsQuery.data ?? []).map((s) => [s.id, s.district_id]));
+
+    interface Dag {
+      bedrag: number;
+      aantal: number;
+      straten: Set<string>;
+      /** In volgorde van binnenkomst: de eerste is de wijk van die dag. */
+      wijken: string[];
+    }
+    const kaart = new Map<string, Dag>();
+
     for (const r of regels) {
-      const bij = kaart.get(r.datum) ?? { bedrag: 0, aantal: 0, straten: 0 };
+      const bij = kaart.get(r.datum) ?? {
+        bedrag: 0,
+        aantal: 0,
+        straten: new Set<string>(),
+        wijken: [],
+      };
       bij.bedrag += Number(r.prijs);
       bij.aantal += 1;
+
       const straatId = r.customer_id ? straatVan.get(r.customer_id) : undefined;
       if (straatId) {
-        const set = straatSets.get(r.datum) ?? new Set<string>();
-        set.add(straatId);
-        straatSets.set(r.datum, set);
-        bij.straten = set.size;
+        bij.straten.add(straatId);
+        const wijkId = wijkVan.get(straatId);
+        if (wijkId && !bij.wijken.includes(wijkId)) bij.wijken.push(wijkId);
       }
       kaart.set(r.datum, bij);
     }
     return kaart;
-  }, [regels, customersQuery.data]);
+  }, [regels, customersQuery.data, streetsQuery.data]);
 
   // Het balkje in een dagvak is relatief aan de drukste dag van deze maand.
   const drukste = useMemo(
@@ -326,6 +353,12 @@ function Planning() {
               const isGekozen = k === gekozenDag;
               // Voorbij vandaag is het nog een plan; t/m vandaag is het gedaan.
               const isGedaan = k <= nu;
+              // De kleur van de eerste wijk van die dag. Meerdere wijken op
+              // één dag: dan is de eerste leidend, de rest staat als "+1".
+              const hoek =
+                !buitenMaand && info?.wijken.length
+                  ? wijkInfo.get(info.wijken[0]!)?.hoek
+                  : undefined;
               return (
                 <button
                   key={k}
@@ -336,10 +369,14 @@ function Planning() {
                   title="Klik om te bekijken, dubbelklik om aan te vinken in de wijken"
                   aria-current={isVandaag ? "date" : undefined}
                   aria-pressed={isGekozen}
+                  // Het hele vakje krijgt de pastelkleur van de wijk die er
+                  // die dag aan de beurt is; zo zie je een maand aan de
+                  // kleuren, zonder namen te lezen.
+                  style={hoek ? ({ "--wijk-hoek": hoek } as CSSProperties) : undefined}
                   className={`relative flex min-h-[4.5rem] flex-col border-b border-r border-border p-1.5 text-left transition-colors [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0 sm:min-h-[6.25rem] ${
-                    buitenMaand ? "bg-card-header" : "hover:bg-muted/50"
-                  } ${
-                    isGekozen ? "bg-brand/10 outline outline-2 -outline-offset-2 outline-brand" : ""
+                    buitenMaand ? "bg-card-header" : hoek ? "wijkvak" : "hover:bg-muted/50"
+                  } ${isGekozen ? "outline outline-2 -outline-offset-2 outline-brand" : ""} ${
+                    isGekozen && !hoek ? "bg-brand/10" : ""
                   }`}
                 >
                   <span
@@ -356,12 +393,31 @@ function Planning() {
 
                   {info && (
                     <>
-                      <span className="mt-auto w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.02em] tabular-nums sm:text-[16px]">
+                      {/* De wijk staat boven het bedrag: dat is waar je heen
+                          rijdt. Elke wijk heeft zijn eigen kleur, zodat je
+                          een maand in één oogopslag ziet. */}
+                      {info.wijken.length > 0 && (
+                        <span className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] font-medium">
+                          <span
+                            className="size-1.5 shrink-0 rounded-full"
+                            style={{ background: wijkInfo.get(info.wijken[0]!)?.kleur }}
+                          />
+                          <span className="truncate">
+                            {wijkInfo.get(info.wijken[0]!)?.naam ?? "Onbekende wijk"}
+                            {info.wijken.length > 1 && ` +${info.wijken.length - 1}`}
+                          </span>
+                        </span>
+                      )}
+                      <span
+                        className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.02em] tabular-nums sm:text-[16px] ${
+                          info.wijken.length > 0 ? "mt-0.5" : "mt-auto"
+                        }`}
+                      >
                         {formatPrice(info.bedrag)}
                       </span>
                       <span className="mt-1 hidden truncate text-[10.5px] text-muted-foreground sm:block">
-                        {info.straten > 0
-                          ? `${info.straten} ${info.straten === 1 ? "straat" : "straten"} · ${info.aantal}×`
+                        {info.straten.size > 0
+                          ? `${info.straten.size} ${info.straten.size === 1 ? "straat" : "straten"} · ${info.aantal}×`
                           : `${info.aantal}×`}
                       </span>
                       <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">

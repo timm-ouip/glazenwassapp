@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
-import { noteTokens, toggleNoteToken, type QuickNote } from "@/lib/klanten";
+import { noteTokens, toggleNoteToken, type Frequency, type QuickNote } from "@/lib/klanten";
 
 interface Props {
   value: string;
@@ -17,6 +17,10 @@ interface Props {
   oneven?: string | undefined;
   onChangeEven?: ((value: string) => void) | undefined;
   onChangeOneven?: ((value: string) => void) | undefined;
+  /** Maandnotities hebben alleen zin bij "elke maand": wordt een adres toch
+   *  al maar één van de twee maanden gewassen, dan is de gewone notitie
+   *  genoeg. */
+  frequency?: Frequency | undefined;
 }
 
 /** Notitieveld met meervoudige snelkeuzes en de mogelijkheid nieuwe toe te voegen. */
@@ -30,6 +34,7 @@ export function NotitieCel({
   oneven,
   onChangeEven,
   onChangeOneven,
+  frequency,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [tekst, setTekst] = useState(value);
@@ -38,13 +43,23 @@ export function NotitieCel({
   const [nieuw, setNieuw] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const maandVelden = Boolean(onChangeEven && onChangeOneven);
+  // Alleen bij "elke maand" — behalve als er al iets ingevuld staat, want
+  // dan moet je er nog wel bij kunnen om het weg te halen.
+  const alIngevuld = Boolean(even?.trim() || oneven?.trim());
+  const maandVelden =
+    Boolean(onChangeEven && onChangeOneven) &&
+    (frequency === undefined || frequency === "elke" || alIngevuld);
 
   useEffect(() => setTekst(value), [value]);
   useEffect(() => setTekstEven(even ?? ""), [even]);
   useEffect(() => setTekstOneven(oneven ?? ""), [oneven]);
 
   const actief = noteTokens(tekst).map((t) => t.toLowerCase());
+
+  /** Enter sluit het scherm; het opslaan gebeurt in onOpenChange. */
+  function sluitBijEnter(e: ReactKeyboardEvent) {
+    if (e.key === "Enter") setOpen(false);
+  }
 
   function bewaar(next: string) {
     setTekst(next);
@@ -75,13 +90,13 @@ export function NotitieCel({
               anders zie je dat pas als je het veld opent. */}
           {even?.trim() && (
             <span
-              className="ml-1 inline-block size-1.5 rounded-full bg-tint-amber-ink align-middle"
+              className="ml-1 inline-block size-2 rounded-full bg-tint-amber align-middle ring-1 ring-inset ring-tint-amber-ink/30"
               title={`Even maanden ook: ${even.trim()}`}
             />
           )}
           {oneven?.trim() && (
             <span
-              className="ml-1 inline-block size-1.5 rounded-full bg-muted-foreground align-middle"
+              className="ml-1 inline-block size-2 rounded-full bg-muted align-middle ring-1 ring-inset ring-muted-foreground/40"
               title={`Oneven maanden ook: ${oneven.trim()}`}
             />
           )}
@@ -154,7 +169,11 @@ export function NotitieCel({
           // Alleen wat er die maand bij hoort komt op de printlijst. Boven
           // staat wat er élke keer geldt.
           <div className="space-y-2 border-t border-border pt-3">
-            <p className="text-[11px] text-muted-foreground">Alleen in bepaalde maanden</p>
+            <p className="text-[11px] text-muted-foreground">
+              {frequency === "elke" || frequency === undefined
+                ? "Alleen in bepaalde maanden"
+                : "Alleen in bepaalde maanden — doet niets zolang dit adres niet elke maand gewassen wordt"}
+            </p>
             <div className="flex items-center gap-2">
               <span className="w-14 shrink-0 rounded-full bg-tint-amber px-2 py-0.5 text-center text-[10px] font-semibold text-tint-amber-ink">
                 even
@@ -164,6 +183,7 @@ export function NotitieCel({
                 placeholder="bijv. serre"
                 className="h-8 text-xs"
                 onChange={(e) => setTekstEven(e.target.value)}
+                onKeyDown={sluitBijEnter}
               />
             </div>
             <div className="flex items-center gap-2">
@@ -175,6 +195,7 @@ export function NotitieCel({
                 placeholder="bijv. dakraam"
                 className="h-8 text-xs"
                 onChange={(e) => setTekstOneven(e.target.value)}
+                onKeyDown={sluitBijEnter}
               />
             </div>
           </div>

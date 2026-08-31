@@ -23,6 +23,7 @@ import {
   deleteDistrict,
   haalTerug,
   renameDistrict,
+  wijkKleur,
   type District,
 } from "@/lib/klanten";
 import { pushUndo, undoLaatste } from "@/lib/undo";
@@ -164,9 +165,17 @@ export function WijkKiezer({ districts, activeId, onSelect, onChanged, variant =
           <SelectValue placeholder="Kies een wijk" />
         </SelectTrigger>
         <SelectContent>
-          {districts.map((d) => (
+          {districts.map((d, i) => (
             <SelectItem key={d.id} value={d.id}>
-              {d.name}
+              <span className="flex items-center gap-2">
+                {/* Dezelfde kleur als op de planningskalender, zodat je daar
+                    aan de stip ziet welke wijk er die dag aan de beurt is. */}
+                <span
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ background: wijkKleur(i) }}
+                />
+                {d.name}
+              </span>
             </SelectItem>
           ))}
         </SelectContent>
