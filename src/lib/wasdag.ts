@@ -99,3 +99,18 @@ export async function maakWasdagLeeg(datum: string) {
   const { error } = await supabase.from("wasdag_regels").delete().eq("datum", datum);
   if (error) throw error;
 }
+
+/**
+ * De eerste en laatste dag van de maand waarin `datum` valt. Gebruikt om te
+ * zien wat er die maand al gewassen is: bij een nieuwe maand begint die
+ * telling vanzelf weer op nul.
+ */
+export function maandGrenzen(datum: string): { vanaf: string; tot: string } {
+  const d = new Date(`${datum}T12:00:00`);
+  const laatste = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  const maand = String(d.getMonth() + 1).padStart(2, "0");
+  return {
+    vanaf: `${d.getFullYear()}-${maand}-01`,
+    tot: `${laatste.getFullYear()}-${maand}-${String(laatste.getDate()).padStart(2, "0")}`,
+  };
+}

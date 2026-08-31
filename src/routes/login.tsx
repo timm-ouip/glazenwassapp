@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Droplets } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,11 +13,28 @@ export const Route = createFileRoute("/login")({
   component: LoginPagina,
 });
 
+const ONTHOUDEN_SLEUTEL = "glazenwas.laatste-email";
+
+function bewaardeEmail(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(ONTHOUDEN_SLEUTEL) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function LoginPagina() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [wachtwoord, setWachtwoord] = useState("");
   const [bezig, setBezig] = useState(false);
+
+  // Pas na het hydrateren invullen: op de server bestaat localStorage niet.
+  useEffect(() => {
+    const onthouden = bewaardeEmail();
+    if (onthouden) setEmail(onthouden);
+  }, []);
 
   async function inloggen() {
     if (!email.trim() || !wachtwoord) {
@@ -33,6 +50,11 @@ function LoginPagina() {
     if (error) {
       toast.error("Inloggen mislukt: " + error.message);
       return;
+    }
+    try {
+      window.localStorage.setItem(ONTHOUDEN_SLEUTEL, email.trim());
+    } catch {
+      // Privémodus of geen opslag beschikbaar: dan onthouden we niets.
     }
     void navigate({ to: "/" });
   }
@@ -59,6 +81,7 @@ function LoginPagina() {
               <Label htmlFor="email">E-mailadres</Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
                 autoComplete="email"
                 value={email}
@@ -69,6 +92,7 @@ function LoginPagina() {
               <Label htmlFor="wachtwoord">Wachtwoord</Label>
               <Input
                 id="wachtwoord"
+                name="password"
                 type="password"
                 autoComplete="current-password"
                 value={wachtwoord}

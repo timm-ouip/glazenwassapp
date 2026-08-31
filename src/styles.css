@@ -37,6 +37,8 @@
   --color-tint-amber-ink: var(--tint-amber-ink);
   --color-tint-groen: var(--tint-groen);
   --color-tint-groen-ink: var(--tint-groen-ink);
+  --color-tint-paars: var(--tint-paars);
+  --color-tint-paars-ink: var(--tint-paars-ink);
   --shadow-card: var(--shadow-card);
 
   --color-background: var(--background);
@@ -99,6 +101,10 @@
   --tint-amber-ink: oklch(0.5 0.115 62);
   --tint-groen: oklch(0.952 0.045 155);
   --tint-groen-ink: oklch(0.46 0.115 156);
+  /* Paars: al ingepland op een andere dag. Bewust geen blauw, want dat is
+     het merk, en geen amber, want dat is al gewassen. */
+  --tint-paars: oklch(0.955 0.032 305);
+  --tint-paars-ink: oklch(0.48 0.125 302);
   --secondary: oklch(0.955 0.002 286);
   --secondary-foreground: oklch(0.28 0.004 285.9);
   --muted: oklch(0.958 0.002 286);
@@ -144,6 +150,8 @@
   --tint-amber-ink: oklch(0.82 0.1 68);
   --tint-groen: oklch(0.29 0.045 155);
   --tint-groen-ink: oklch(0.8 0.11 156);
+  --tint-paars: oklch(0.3 0.045 305);
+  --tint-paars-ink: oklch(0.82 0.105 302);
   --brand-foreground: oklch(0.2 0.03 252);
   --secondary: oklch(0.27 0.003 286);
   --secondary-foreground: oklch(0.97 0 0);

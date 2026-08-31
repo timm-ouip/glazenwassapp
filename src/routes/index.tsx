@@ -60,8 +60,10 @@ import { NotitieCel } from "@/components/NotitieCel";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
 import {
   fetchWasdag,
+  fetchWasdagen,
   haalUitWasdag,
   maakWasdagLeeg,
+  maandGrenzen,
   toonDatum,
   vandaag,
   voegToeAanWasdag,
@@ -265,6 +267,33 @@ function Index() {
   // om wat de dag opbrengt, niet om deze ene wijk.
   const dagBedrag = dagRegels.reduce((sum, r) => sum + Number(r.prijs), 0);
   const dagKlaar = planDatum === null || wasdagQuery.isSuccess;
+
+  // Wat er deze maand al op een ándere dag staat. Plan je morgen, dan zie je
+  // zo welke adressen vandaag al gedaan zijn — je wil ze niet twee keer in
+  // dezelfde maand. Verder dan de maand van de dag die je plant kijken we
+  // nooit, dus op de eerste van de maand staat de teller vanzelf weer op nul.
+  const maand = planDatum ? maandGrenzen(planDatum) : null;
+  const maandQuery = useQuery({
+    queryKey: ["wasdagen", maand?.vanaf, maand?.tot],
+    queryFn: () => fetchWasdagen(maand!.vanaf, maand!.tot),
+    enabled: maand !== null,
+  });
+  const nu = vandaag();
+  // Twee losse verzamelingen, want ze betekenen iets anders: wat achter je
+  // ligt is gedaan, wat voor je ligt staat al ergens anders ingepland.
+  const { eerderGewassen, elderGepland } = useMemo(() => {
+    const gewassen = new Set<string>();
+    const gepland = new Set<string>();
+    for (const r of maandQuery.data ?? []) {
+      if (r.datum === planDatum || !r.customer_id) continue;
+      if (r.datum <= nu) gewassen.add(r.customer_id);
+      else gepland.add(r.customer_id);
+    }
+    // Al gewassen weegt zwaarder: dat adres is deze maand klaar, ook als er
+    // verderop nog een dag voor openstaat.
+    for (const id of gewassen) gepland.delete(id);
+    return { eerderGewassen: gewassen, elderGepland: gepland };
+  }, [maandQuery.data, planDatum, nu]);
 
   function planmodus(aan: boolean) {
     setPlanDatum(aan ? vandaag() : null);
@@ -1020,6 +1049,25 @@ function Index() {
                   leegmaken
                 </button>
               )}
+
+              {/* Drie kleuren zonder uitleg is raden. Onder sm alleen de
+                  bolletjes: de bedragen hiernaast zijn belangrijker. */}
+              <div className="ml-auto flex items-center gap-3">
+                {[
+                  { stip: "bg-tint-amber-ink", tekst: "op deze dag" },
+                  { stip: "bg-tint-groen-ink", tekst: "al gewassen" },
+                  { stip: "bg-tint-paars-ink", tekst: "al ingepland" },
+                ].map((l) => (
+                  <span
+                    key={l.tekst}
+                    className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground"
+                    title={l.tekst}
+                  >
+                    <span className={`size-2 shrink-0 rounded-full ${l.stip}`} />
+                    <span className="hidden sm:inline">{l.tekst}</span>
+                  </span>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1109,6 +1157,8 @@ function Index() {
                   planmodus={planDatum !== null}
                   dagKlaar={dagKlaar}
                   opDeDag={opDeDag}
+                  eerderGewassen={eerderGewassen}
+                  elderGepland={elderGepland}
                   onStraatOpDag={(aan) => zetStraatOpDag(g, aan)}
                   onKlantOpDag={(c, aan) => {
                     pasDagAan(aan ? [c] : [], aan ? [] : [c.id]);
@@ -1184,6 +1234,10 @@ interface BlokProps {
   /** Vals zolang de dag nog opgehaald wordt: dan weten we van niets. */
   dagKlaar: boolean;
   opDeDag: Set<string>;
+  /** Adressen die deze maand al op een andere dag gewassen zijn. */
+  eerderGewassen: Set<string>;
+  /** Adressen die deze maand al op een latere dag ingepland staan. */
+  elderGepland: Set<string>;
   onStraatOpDag: (aan: boolean) => void;
   onKlantOpDag: (c: Customer, aan: boolean) => void;
   /** Begint een sleepselectie; `aan` is de kant die de hele streek opgaat. */
@@ -1200,6 +1254,23 @@ function StraatBlok(p: BlokProps) {
 
   const zichtbaar = [...p.even, ...p.oneven];
   const erop = zichtbaar.filter((c) => p.opDeDag.has(c.id)).length;
+  // Al deze maand gedaan, op een andere dag dan die je nu plant.
+  const alGedaan = zichtbaar.filter(
+    (c) => !p.opDeDag.has(c.id) && p.eerderGewassen.has(c.id),
+  ).length;
+  const alGepland = zichtbaar.filter(
+    (c) => !p.opDeDag.has(c.id) && p.elderGepland.has(c.id),
+  ).length;
+  // De kop kleurt pas als de héle straat al rond is: dat is het signaal om
+  // hem over te slaan. Staat er iets van op déze dag, dan wint het groen.
+  const straatRond =
+    zichtbaar.length > 0 && erop === 0 && alGedaan + alGepland === zichtbaar.length;
+  const kopKleur =
+    !p.planmodus || !straatRond
+      ? "bg-card-header"
+      : alGedaan >= alGepland
+        ? "bg-tint-groen"
+        : "bg-tint-paars";
   // "Half" zodra een deel van de zichtbare adressen op de dag staat — zo zie
   // je ingeklapt meteen in welke straat je iets hebt overgeslagen.
   const straatVink: boolean | "indeterminate" =
@@ -1243,11 +1314,11 @@ function StraatBlok(p: BlokProps) {
         style={
           gevuld > 0
             ? {
-                backgroundImage: `linear-gradient(to right, var(--tint-groen) ${gevuld}%, transparent ${gevuld}%)`,
+                backgroundImage: `linear-gradient(to right, var(--tint-amber) ${gevuld}%, transparent ${gevuld}%)`,
               }
             : undefined
         }
-        className={`flex items-center gap-1 border-b border-border bg-card-header px-2.5 py-2 ${
+        className={`flex items-center gap-1 border-b border-border px-2.5 py-2 ${kopKleur} ${
           p.planmodus && zichtbaar.length > 0 && p.dagKlaar ? "cursor-pointer select-none" : ""
         }`}
       >
@@ -1302,6 +1373,22 @@ function StraatBlok(p: BlokProps) {
         <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">
           {p.planmodus && erop > 0 && erop < p.aantal ? `${erop}/${p.aantal}` : p.aantal}
         </span>
+        {p.planmodus && alGedaan > 0 && (
+          <span
+            className="rounded-full bg-tint-groen px-1.5 text-[11px] tabular-nums text-tint-groen-ink"
+            title={`${alGedaan} deze maand al gewassen`}
+          >
+            {alGedaan} gedaan
+          </span>
+        )}
+        {p.planmodus && alGepland > 0 && (
+          <span
+            className="rounded-full bg-tint-paars px-1.5 text-[11px] tabular-nums text-tint-paars-ink"
+            title={`${alGepland} staat al op een andere dag`}
+          >
+            {alGepland} gepland
+          </span>
+        )}
         {p.prijzenTonen && (
           <span className="text-[11px] font-medium tabular-nums text-brand-ink">
             {formatPrice(p.totaal)}
@@ -1377,6 +1464,8 @@ function StraatBlok(p: BlokProps) {
                   geselecteerd={p.selectie.includes(c.id)}
                   planmodus={p.planmodus}
                   opDeDag={p.opDeDag.has(c.id)}
+                  eerderGewassen={p.eerderGewassen.has(c.id)}
+                  elderGepland={p.elderGepland.has(c.id)}
                   dagKlaar={p.dagKlaar}
                   onOpDag={(aan) => p.onKlantOpDag(c, aan)}
                   onVerfStart={p.onVerfStart}
@@ -1411,6 +1500,10 @@ interface RijProps {
   geselecteerd: boolean;
   planmodus: boolean;
   opDeDag: boolean;
+  /** Deze maand al op een andere dag gewassen. */
+  eerderGewassen: boolean;
+  /** Deze maand al op een latere dag ingepland. */
+  elderGepland: boolean;
   dagKlaar: boolean;
   onOpDag: (aan: boolean) => void;
   onVerfStart: (aan: boolean, x: number, y: number) => void;
@@ -1421,10 +1514,12 @@ interface RijProps {
   onDelete: (c: Customer) => void;
 }
 
-/** Kleur per frequentie: blauw is het accent, amber de even maanden, grijs de oneven. */
+/** Kleur per frequentie: blauw is het accent, amber de even maanden, grijs de oneven.
+ *  Het amber badge krijgt een randje: een aangevinkte rij is zelf ook amber,
+ *  en zonder rand valt het badge daar helemaal in weg. */
 const FREQ_KLEUR: Record<Customer["frequency"], string> = {
   elke: "bg-accent text-accent-foreground",
-  even: "bg-tint-amber text-tint-amber-ink",
+  even: "bg-tint-amber text-tint-amber-ink ring-1 ring-inset ring-tint-amber-ink/25",
   oneven: "bg-muted text-muted-foreground",
 };
 
@@ -1438,6 +1533,8 @@ function KlantRij({
   geselecteerd,
   planmodus,
   opDeDag,
+  eerderGewassen,
+  elderGepland,
   dagKlaar,
   onOpDag,
   onVerfStart,
@@ -1457,7 +1554,17 @@ function KlantRij({
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={`group flex items-center gap-0.5 border-b border-border/60 px-0.5 ${rowPad} ${rowText} ${
         isDragging ? "opacity-40" : ""
-      } ${geselecteerd ? "bg-accent" : ""} ${planmodus && opDeDag ? "bg-tint-groen" : ""}`}
+      } ${geselecteerd ? "bg-accent" : ""} ${
+        !planmodus
+          ? ""
+          : opDeDag
+            ? "bg-tint-amber"
+            : eerderGewassen
+              ? "bg-tint-groen"
+              : elderGepland
+                ? "bg-tint-paars"
+                : ""
+      }`}
       {...(planmodus ? { "data-verf-klant": c.id } : {})}
     >
       {planmodus ? (

@@ -99,15 +99,30 @@ function Planning() {
   const regels = useMemo(() => wasdagenQuery.data ?? [], [wasdagenQuery.data]);
 
   const perDag = useMemo(() => {
-    const kaart = new Map<string, { bedrag: number; aantal: number }>();
+    const straatVan = new Map((customersQuery.data ?? []).map((c) => [c.id, c.street_id]));
+    const kaart = new Map<string, { bedrag: number; aantal: number; straten: number }>();
+    const straatSets = new Map<string, Set<string>>();
     for (const r of regels) {
-      const bij = kaart.get(r.datum) ?? { bedrag: 0, aantal: 0 };
+      const bij = kaart.get(r.datum) ?? { bedrag: 0, aantal: 0, straten: 0 };
       bij.bedrag += Number(r.prijs);
       bij.aantal += 1;
+      const straatId = r.customer_id ? straatVan.get(r.customer_id) : undefined;
+      if (straatId) {
+        const set = straatSets.get(r.datum) ?? new Set<string>();
+        set.add(straatId);
+        straatSets.set(r.datum, set);
+        bij.straten = set.size;
+      }
       kaart.set(r.datum, bij);
     }
     return kaart;
-  }, [regels]);
+  }, [regels, customersQuery.data]);
+
+  // Het balkje in een dagvak is relatief aan de drukste dag van deze maand.
+  const drukste = useMemo(
+    () => Math.max(1, ...[...perDag.values()].map((v) => v.bedrag)),
+    [perDag],
+  );
 
   const nu = vandaag();
   // Wat er gedaan is telt t/m vandaag; wat daarna staat is nog een plan. Dat
@@ -255,8 +270,8 @@ function Planning() {
     >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         {/* --- maandkalender --- */}
-        <div className="rounded-[14px] border border-border bg-card p-3">
-          <div className="mb-3 flex items-center gap-2">
+        <div className="overflow-hidden rounded-[14px] border border-border bg-card">
+          <div className="flex items-center gap-2 border-b border-border bg-card-header px-3 py-2.5">
             <Button
               size="icon"
               variant="ghost"
@@ -291,47 +306,73 @@ function Planning() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 border-b border-border bg-card-header">
             {weekdagen.map((d) => (
               <div
                 key={d.toISOString()}
-                className="pb-1 text-center text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground"
+                className="border-l border-border py-2 text-center text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground first:border-l-0"
               >
                 {format(d, "EEEEEE", { locale: nl })}
               </div>
             ))}
+          </div>
 
+          <div className="grid grid-cols-7">
             {dagen.map((d) => {
               const k = sleutel(d);
               const info = perDag.get(k);
               const buitenMaand = !isSameMonth(d, maand);
               const isVandaag = k === nu;
               const isGekozen = k === gekozenDag;
+              // Voorbij vandaag is het nog een plan; t/m vandaag is het gedaan.
+              const isGedaan = k <= nu;
               return (
                 <button
                   key={k}
                   onClick={() => kiesDag(d)}
+                  // Dubbelklikken slaat de tussenstap over en zet je meteen
+                  // in de wijken met die dag aan het aanvinken.
+                  onDoubleClick={() => void navigate({ to: "/", search: { dag: k } })}
+                  title="Klik om te bekijken, dubbelklik om aan te vinken in de wijken"
                   aria-current={isVandaag ? "date" : undefined}
                   aria-pressed={isGekozen}
-                  className={`flex min-h-[3.9rem] flex-col items-start gap-0.5 rounded-[10px] border p-1.5 text-left transition-colors ${
-                    isGekozen
-                      ? "border-brand bg-brand/10"
-                      : "border-transparent hover:border-border hover:bg-muted/60"
-                  } ${buitenMaand ? "opacity-40" : ""}`}
+                  className={`relative flex min-h-[4.5rem] flex-col border-b border-r border-border p-1.5 text-left transition-colors [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0 sm:min-h-[6.25rem] ${
+                    buitenMaand ? "bg-card-header" : "hover:bg-muted/50"
+                  } ${
+                    isGekozen ? "bg-brand/10 outline outline-2 -outline-offset-2 outline-brand" : ""
+                  }`}
                 >
                   <span
-                    className={`text-[12px] tabular-nums ${
+                    className={`self-start rounded-md px-1 text-[12px] font-semibold leading-5 tabular-nums ${
                       isVandaag
-                        ? "flex size-5 items-center justify-center rounded-full bg-brand font-semibold text-brand-foreground"
-                        : "font-medium text-foreground"
+                        ? "bg-brand text-brand-foreground"
+                        : buitenMaand
+                          ? "text-muted-foreground/70"
+                          : "text-foreground"
                     }`}
                   >
                     {format(d, "d")}
                   </span>
+
                   {info && (
-                    <span className="text-[11px] font-semibold leading-tight tabular-nums text-brand-ink">
-                      {formatPrice(info.bedrag)}
-                    </span>
+                    <>
+                      <span className="mt-auto w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.02em] tabular-nums sm:text-[16px]">
+                        {formatPrice(info.bedrag)}
+                      </span>
+                      <span className="mt-1 hidden truncate text-[10.5px] text-muted-foreground sm:block">
+                        {info.straten > 0
+                          ? `${info.straten} ${info.straten === 1 ? "straat" : "straten"} · ${info.aantal}×`
+                          : `${info.aantal}×`}
+                      </span>
+                      <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
+                        <span
+                          className={`block h-full rounded-full ${
+                            isGedaan ? "bg-tint-groen-ink" : "bg-brand"
+                          }`}
+                          style={{ width: `${Math.round((info.bedrag / drukste) * 100)}%` }}
+                        />
+                      </span>
+                    </>
                   )}
                 </button>
               );
