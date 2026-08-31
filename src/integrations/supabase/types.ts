@@ -326,6 +326,48 @@ export type Database = {
           },
         ]
       }
+      wasdag_regels: {
+        Row: {
+          company_id: string
+          created_at: string
+          customer_id: string | null
+          datum: string
+          id: string
+          prijs: number
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          customer_id?: string | null
+          datum: string
+          id?: string
+          prijs?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          customer_id?: string | null
+          datum?: string
+          id?: string
+          prijs?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wasdag_regels_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wasdag_regels_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

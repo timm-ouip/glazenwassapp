@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -38,8 +38,14 @@ import {
   User,
   Euro,
   Milestone as Route2,
+  CalendarCheck,
+  ChevronDown,
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
 } from "lucide-react";
 
+import { Checkbox } from "@/components/ui/checkbox";
 import { AppLayout } from "@/components/AppLayout";
 import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
@@ -52,6 +58,14 @@ import { InlineCel } from "@/components/InlineCel";
 import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { NotitieCel } from "@/components/NotitieCel";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
+import {
+  fetchWasdag,
+  haalUitWasdag,
+  toonDatum,
+  vandaag,
+  voegToeAanWasdag,
+  type WasdagRegel,
+} from "@/lib/wasdag";
 import {
   addQuickNote,
   haalTerug,
@@ -108,6 +122,11 @@ export const Route = createFileRoute("/")({
 
 type MaandFilter = "alles" | "even" | "oneven";
 
+/** Sta je midden in een dag te plannen, dan hoort een herlaadslag — of een
+ *  telefoon die de pagina weggooit — je niet uit die modus te gooien. De
+ *  datum onthouden we niet: dat is bijna altijd vandaag. */
+const PLANMODUS_OPSLAG = "glazenwasapp.dagplanning-aan";
+
 function Index() {
   useRequireAuth();
   const qc = useQueryClient();
@@ -118,6 +137,9 @@ function Index() {
   const [zoek, setZoek] = useState("");
   const [prijzenTonen, setPrijzenTonen] = useState(true);
   const [selectie, setSelectie] = useState<string[]>([]);
+  /** De dag waar je nu aan plant; `null` betekent dat de planmodus uitstaat. */
+  const [planDatum, setPlanDatum] = useState<string | null>(null);
+  const [ingeklapt, setIngeklapt] = useState<Set<string>>(new Set());
   const [sleep, setSleep] = useState<string | null>(null);
   const [klantDialog, setKlantDialog] = useState<{
     open: boolean;
@@ -216,6 +238,131 @@ function Index() {
 
   const totaal = groepen.reduce((sum, g) => sum + g.aantal, 0);
   const omzet = groepen.reduce((sum, g) => sum + g.totaal, 0);
+
+  // --- Dagplanning -------------------------------------------------------
+  // Wat er 's ochtends aanstaat is de planning, wat er 's avonds aanstaat is
+  // wat er gedaan is. Zie src/lib/wasdag.ts.
+  const wasdagQuery = useQuery({
+    queryKey: ["wasdag", planDatum],
+    queryFn: () => fetchWasdag(planDatum!),
+    enabled: planDatum !== null,
+  });
+  const dagRegels = useMemo(() => wasdagQuery.data ?? [], [wasdagQuery.data]);
+  const opDeDag = useMemo(
+    () => new Set(dagRegels.map((r) => r.customer_id).filter(Boolean) as string[]),
+    [dagRegels],
+  );
+  // Het bedrag van de hele dag, dus ook straten uit andere wijken: het gaat
+  // om wat de dag opbrengt, niet om deze ene wijk.
+  const dagBedrag = dagRegels.reduce((sum, r) => sum + Number(r.prijs), 0);
+
+  function planmodus(aan: boolean) {
+    setPlanDatum(aan ? vandaag() : null);
+    // Bij het verlaten alles weer open: dan ga je weer regels bijwerken.
+    if (!aan) setIngeklapt(new Set());
+    try {
+      if (aan) localStorage.setItem(PLANMODUS_OPSLAG, "ja");
+      else localStorage.removeItem(PLANMODUS_OPSLAG);
+    } catch {
+      // Privémodus of geblokkeerde opslag: dan begin je gewoon buiten de modus.
+    }
+  }
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(PLANMODUS_OPSLAG) === "ja") setPlanDatum(vandaag());
+    } catch {
+      /* zie planmodus() */
+    }
+  }, []);
+
+  // Ingeklapt zie je veel straten tegelijk, en dat is precies wat je wil als je
+  // een dag samenstelt. Dit gebeurt zodra de modus aangaat én bij elke wijk die
+  // je daarna opent — maar niet opnieuw bij zoeken of een andere datum, want
+  // dan zou het openklappen dat je zelf deed telkens ongedaan gemaakt worden.
+  const geklaptVoor = useRef<string | null>(null);
+  useEffect(() => {
+    if (planDatum === null) {
+      geklaptVoor.current = null;
+      return;
+    }
+    if (groepen.length === 0 || geklaptVoor.current === actieveWijk) return;
+    geklaptVoor.current = actieveWijk;
+    setIngeklapt(new Set(groepen.map((g) => g.street.id)));
+  }, [planDatum, actieveWijk, groepen]);
+
+  const allesIngeklapt = groepen.length > 0 && groepen.every((g) => ingeklapt.has(g.street.id));
+
+  function klapAlles() {
+    setIngeklapt(allesIngeklapt ? new Set() : new Set(groepen.map((g) => g.street.id)));
+  }
+
+  function klapStraat(id: string) {
+    setIngeklapt((was) => {
+      const nu = new Set(was);
+      if (!nu.delete(id)) nu.add(id);
+      return nu;
+    });
+  }
+
+  /**
+   * Zet adressen op de dag of haalt ze eraf, met één optimistische stap en
+   * daarna de opslag. `label` is leeg voor losse regels: die zet je met
+   * hetzelfde vinkje net zo snel terug, en ze zouden de ongedaan-knop
+   * verstoppen voor de grotere ingrepen.
+   */
+  function pasDagAan(erbij: Customer[], eraf: string[], label?: string) {
+    if (!planDatum) return;
+    const datum = planDatum;
+    const bestaand = qc.getQueryData<WasdagRegel[]>(["wasdag", datum]) ?? [];
+    const alOpDeDag = new Set(bestaand.map((r) => r.customer_id));
+    const toevoegen = erbij
+      .filter((c) => !alOpDeDag.has(c.id))
+      .map((c) => ({ customer_id: c.id, prijs: c.price }));
+    // Alleen wat er echt af gaat, met de prijs zoals die op de dag stond —
+    // die kan afwijken van de huidige prijs van het adres.
+    const weghalen = bestaand.filter((r) => r.customer_id && eraf.includes(r.customer_id));
+    if (toevoegen.length === 0 && weghalen.length === 0) return;
+
+    const wegIds = new Set(weghalen.map((r) => r.customer_id));
+    qc.setQueryData<WasdagRegel[]>(
+      ["wasdag", datum],
+      [...bestaand.filter((r) => !wegIds.has(r.customer_id)), ...toevoegen],
+    );
+
+    if (label) {
+      pushUndo({
+        label,
+        undo: async () => {
+          await Promise.all([
+            haalUitWasdag(datum, toevoegen.map((r) => r.customer_id)),
+            voegToeAanWasdag(
+              datum,
+              weghalen.map((r) => ({ customer_id: r.customer_id!, prijs: Number(r.prijs) })),
+            ),
+          ]);
+          qc.invalidateQueries({ queryKey: ["wasdag", datum] });
+        },
+      });
+    }
+
+    void Promise.all([
+      voegToeAanWasdag(datum, toevoegen),
+      haalUitWasdag(datum, weghalen.map((r) => r.customer_id!)),
+    ])
+      .catch(() => toast.error("Dagplanning opslaan mislukt."))
+      .finally(() => qc.invalidateQueries({ queryKey: ["wasdag", datum] }));
+  }
+
+  function zetStraatOpDag(g: (typeof groepen)[number], aan: boolean) {
+    const zichtbaar = [...g.even, ...g.oneven];
+    if (aan) pasDagAan(zichtbaar, [], `${g.street.name} op de dag`);
+    else pasDagAan([], zichtbaar.map((c) => c.id), `${g.street.name} van de dag af`);
+  }
+
+  function maakDagLeeg() {
+    pasDagAan([], [...opDeDag], "Dag leeggemaakt");
+  }
 
   async function patchKlant(c: Customer, patch: Partial<Customer>) {
     const vorige: Partial<Customer> = {};
@@ -517,6 +664,30 @@ function Index() {
           />
           <Button
             size="sm"
+            variant={planDatum ? "default" : "outline"}
+            className="rounded-full"
+            onClick={() => planmodus(!planDatum)}
+            title="Aanvinken wat er op een dag gewassen wordt"
+          >
+            <CalendarCheck className="size-4" /> Dagplanning
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-full"
+            onClick={klapAlles}
+            disabled={groepen.length === 0}
+            title={allesIngeklapt ? "Alle straten uitklappen" : "Alle straten inklappen"}
+          >
+            {allesIngeklapt ? (
+              <ChevronsUpDown className="size-4" />
+            ) : (
+              <ChevronsDownUp className="size-4" />
+            )}
+            {allesIngeklapt ? "Uitklappen" : "Inklappen"}
+          </Button>
+          <Button
+            size="sm"
             variant="outline"
             className="rounded-full"
             disabled={!undoLabel}
@@ -618,6 +789,36 @@ function Index() {
           <span className="ml-auto text-[12.5px] text-muted-foreground">
             {groepen.length} straten · {totaal} klanten
           </span>
+
+          {planDatum && (
+            // Blijft in beeld terwijl je naar beneden vinkt: het bedrag is
+            // waar je op stuurt bij het samenstellen van een dag.
+            <div className="flex w-full flex-wrap items-center gap-2 border-t border-border/70 pt-2">
+              <CalendarCheck className="size-4 text-brand-ink" />
+              <span className="text-[13px] font-medium">Dagplanning</span>
+              <input
+                type="date"
+                value={planDatum}
+                onChange={(e) => setPlanDatum(e.target.value || vandaag())}
+                className="h-7 rounded-full border border-border bg-card px-2.5 text-[12.5px]"
+                aria-label="Datum van de dagplanning"
+              />
+              <span className="font-display text-[19px] font-semibold tabular-nums tracking-[-0.02em]">
+                {formatPrice(dagBedrag)}
+              </span>
+              <span className="text-[12.5px] text-muted-foreground">
+                {opDeDag.size} {opDeDag.size === 1 ? "adres" : "adressen"} {toonDatum(planDatum)}
+              </span>
+              {opDeDag.size > 0 && (
+                <button
+                  className="text-[12.5px] text-muted-foreground underline"
+                  onClick={maakDagLeeg}
+                >
+                  leegmaken
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {selectie.length > 1 && (
@@ -694,6 +895,12 @@ function Index() {
                     setKlantDialog({ open: true, customer: null, streetId: g.street.id })
                   }
                   onToggleSort={() => void wisselSort(g.street)}
+                  ingeklapt={ingeklapt.has(g.street.id)}
+                  onKlap={() => klapStraat(g.street.id)}
+                  planmodus={planDatum !== null}
+                  opDeDag={opDeDag}
+                  onStraatOpDag={(aan) => zetStraatOpDag(g, aan)}
+                  onKlantOpDag={(c, aan) => pasDagAan(aan ? [c] : [], aan ? [] : [c.id])}
                 />
               ))}
               {districts.length > 0 && <NieuweStraat onSubmit={nieuweStraat} />}
@@ -756,6 +963,13 @@ interface BlokProps {
   onDeleteStreet: () => void;
   onAddKlant: () => void;
   onToggleSort: () => void;
+  ingeklapt: boolean;
+  onKlap: () => void;
+  /** In planmodus tel je adressen voor een dag; bewerken doe je dan niet. */
+  planmodus: boolean;
+  opDeDag: Set<string>;
+  onStraatOpDag: (aan: boolean) => void;
+  onKlantOpDag: (c: Customer, aan: boolean) => void;
 }
 
 function StraatBlok(p: BlokProps) {
@@ -764,6 +978,13 @@ function StraatBlok(p: BlokProps) {
   });
   const { setNodeRef: setZoneRef } = useDroppable({ id: `z:${p.street.id}` });
 
+  const zichtbaar = [...p.even, ...p.oneven];
+  const erop = zichtbaar.filter((c) => p.opDeDag.has(c.id)).length;
+  // "Half" zodra een deel van de zichtbare adressen op de dag staat — zo zie
+  // je ingeklapt meteen in welke straat je iets hebt overgeslagen.
+  const straatVink: boolean | "indeterminate" =
+    erop === 0 ? false : erop === zichtbaar.length ? true : "indeterminate";
+
   return (
     <section
       ref={setNodeRef}
@@ -771,19 +992,41 @@ function StraatBlok(p: BlokProps) {
       className={`mb-3 break-inside-avoid-column overflow-hidden rounded-[14px] border border-border bg-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
     >
       <div className="flex items-center gap-1 border-b border-border bg-card-header px-2.5 py-2">
+        {p.planmodus ? (
+          <Checkbox
+            className="mr-1"
+            checked={straatVink}
+            disabled={zichtbaar.length === 0}
+            onCheckedChange={(v) => p.onStraatOpDag(v !== true ? false : true)}
+            aria-label={`Hele ${p.street.name} op de dag`}
+          />
+        ) : (
+          <button
+            className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing"
+            aria-label="Straat verslepen"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-3.5" />
+          </button>
+        )}
         <button
-          className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing"
-          aria-label="Straat verslepen"
-          {...attributes}
-          {...listeners}
+          className="rounded p-0.5 text-muted-foreground hover:bg-accent"
+          onClick={p.onKlap}
+          aria-label={p.ingeklapt ? "Straat uitklappen" : "Straat inklappen"}
+          aria-expanded={!p.ingeklapt}
         >
-          <GripVertical className="size-3.5" />
+          {p.ingeklapt ? (
+            <ChevronRight className="size-3.5" />
+          ) : (
+            <ChevronDown className="size-3.5" />
+          )}
         </button>
         <h2 className="flex-1 truncate font-display text-[14.5px] font-semibold uppercase tracking-[0.01em] text-foreground">
           {p.street.name}
         </h2>
         <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">
-          {p.aantal}
+          {p.planmodus && erop > 0 && erop < p.aantal ? `${erop}/${p.aantal}` : p.aantal}
         </span>
         {p.prijzenTonen && (
           <span className="text-[11px] font-medium tabular-nums text-brand-ink">
@@ -791,6 +1034,8 @@ function StraatBlok(p: BlokProps) {
           </span>
         )}
 
+        {!p.planmodus && (
+          <>
         <button
           className="rounded p-1 text-muted-foreground hover:bg-accent"
           onClick={p.onToggleSort}
@@ -824,9 +1069,14 @@ function StraatBlok(p: BlokProps) {
         >
           <Trash2 className="size-3.5" />
         </button>
+          </>
+        )}
       </div>
 
-      <div ref={setZoneRef} className="grid grid-cols-2 gap-px bg-border">
+      <div
+        ref={setZoneRef}
+        className={`grid grid-cols-2 gap-px bg-border ${p.ingeklapt ? "hidden" : ""}`}
+      >
         {(["even", "oneven"] as const).map((kant) => (
           <div key={kant} className="bg-card">
             <div className="flex items-center gap-0.5 border-b border-border/60 px-1 py-1 text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
@@ -851,6 +1101,9 @@ function StraatBlok(p: BlokProps) {
                   rowText={p.rowText}
                   rowPad={p.rowPad}
                   geselecteerd={p.selectie.includes(c.id)}
+                  planmodus={p.planmodus}
+                  opDeDag={p.opDeDag.has(c.id)}
+                  onOpDag={(aan) => p.onKlantOpDag(c, aan)}
                   onSelect={p.onSelect}
                   onPatch={p.onPatch}
                   onAddQuickNote={p.onAddQuickNote}
@@ -879,6 +1132,9 @@ interface RijProps {
   rowText: string;
   rowPad: string;
   geselecteerd: boolean;
+  planmodus: boolean;
+  opDeDag: boolean;
+  onOpDag: (aan: boolean) => void;
   onSelect: (c: Customer, shift: boolean) => void;
   onPatch: (c: Customer, patch: Partial<Customer>) => void;
   onAddQuickNote: (label: string) => void;
@@ -900,6 +1156,9 @@ function KlantRij({
   rowText,
   rowPad,
   geselecteerd,
+  planmodus,
+  opDeDag,
+  onOpDag,
   onSelect,
   onPatch,
   onAddQuickNote,
@@ -915,17 +1174,26 @@ function KlantRij({
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={`group flex items-center gap-0.5 border-b border-border/60 px-0.5 ${rowPad} ${rowText} ${
         isDragging ? "opacity-40" : ""
-      } ${geselecteerd ? "bg-accent" : ""}`}
+      } ${geselecteerd ? "bg-accent" : ""} ${planmodus && opDeDag ? "bg-tint-groen" : ""}`}
     >
-      <button
-        className="cursor-grab touch-none text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
-        aria-label="Regel verslepen"
-        onClick={(e) => onSelect(c, e.shiftKey)}
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical className="size-3" />
-      </button>
+      {planmodus ? (
+        <Checkbox
+          className="size-3.5 shrink-0"
+          checked={opDeDag}
+          onCheckedChange={(v) => onOpDag(v === true)}
+          aria-label={`${formatNumber(c)} op de dag`}
+        />
+      ) : (
+        <button
+          className="cursor-grab touch-none text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
+          aria-label="Regel verslepen"
+          onClick={(e) => onSelect(c, e.shiftKey)}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-3" />
+        </button>
+      )}
       <div className="w-9 shrink-0">
         <InlineCel
           value={`${c.house_number}${c.addition ?? ""}`}
