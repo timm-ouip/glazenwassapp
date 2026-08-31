@@ -1608,6 +1608,10 @@ function KlantRij({
       <div className="min-w-0 flex-1">
         <NotitieCel
           value={c.note}
+          even={c.note_even}
+          oneven={c.note_oneven}
+          onChangeEven={(v) => onPatch(c, { note_even: v })}
+          onChangeOneven={(v) => onPatch(c, { note_oneven: v })}
           quickNotes={quickNotes}
           onChange={(v) => onPatch(c, { note: v })}
           onAddQuickNote={onAddQuickNote}

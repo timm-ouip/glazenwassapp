@@ -31,6 +31,10 @@ export interface Customer {
   house_number: number;
   addition: string;
   note: string;
+  /** Werk dat er alleen in even maanden bij komt, bovenop `note`. */
+  note_even: string;
+  /** Idem voor oneven maanden. */
+  note_oneven: string;
   price: number;
   frequency: Frequency;
   sort_order: number;
@@ -157,7 +161,9 @@ export async function fetchStreets(): Promise<Street[]> {
 export async function fetchCustomers(): Promise<Customer[]> {
   const { data, error } = await supabase
     .from("customers")
-    .select("id,street_id,house_number,addition,note,price,frequency,sort_order,klant_id,postcode")
+    .select(
+      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,sort_order,klant_id,postcode",
+    )
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
     .order("house_number", { ascending: true });
@@ -166,6 +172,8 @@ export async function fetchCustomers(): Promise<Customer[]> {
     ...c,
     price: Number(c.price),
     postcode: c.postcode ?? "",
+    note_even: c.note_even ?? "",
+    note_oneven: c.note_oneven ?? "",
   })) as Customer[];
 }
 
@@ -375,6 +383,33 @@ export async function addQuickNote(label: string) {
 export async function deleteQuickNote(id: string) {
   const { error } = await supabase.from("quick_notes").delete().eq("id", id);
   if (error) throw error;
+}
+
+/**
+ * De notitie zoals hij op de printlijst van één maand hoort te staan: wat er
+ * altijd geldt, plus het werk dat alleen in die maand meegaat. Print je
+ * "alle klanten", dan is er geen maand om op te kiezen en gaan ze er allebei
+ * bij met de maand erachter.
+ */
+export function noteVoorMaand(
+  c: Pick<Customer, "note" | "note_even" | "note_oneven">,
+  maand: "even" | "oneven" | "alles",
+): string {
+  const extra =
+    maand === "even"
+      ? c.note_even
+      : maand === "oneven"
+        ? c.note_oneven
+        : [
+            c.note_even.trim() ? `${c.note_even.trim()} (even)` : "",
+            c.note_oneven.trim() ? `${c.note_oneven.trim()} (oneven)` : "",
+          ]
+            .filter(Boolean)
+            .join(", ");
+  return [c.note, extra]
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .join(", ");
 }
 
 /** Notities zijn komma-gescheiden losse labels. */

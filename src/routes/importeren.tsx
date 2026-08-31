@@ -24,6 +24,7 @@ import {
   fetchStreets,
   frequencyLabels,
   formatPrice,
+  noteTokens,
   persistPostcodes,
   persistVolledigeNamen,
   renameDistrict,
@@ -296,17 +297,65 @@ interface ImportRij {
   huisnummer: number;
   toevoeging: string;
   notitie: string;
+  /** Werk dat alleen in de even maand meegaat — de serre, bijvoorbeeld. */
+  notitieEven: string;
+  notitieOneven: string;
   prijs: number;
   frequency: Frequency;
   bron?: Bron | undefined;
   bronnen: Bron[];
 }
 
+/**
+ * Verdeelt de notities van een adres dat in meerdere tabbladen staat over de
+ * drie velden: wat in beide maanden staat geldt altijd, de rest hoort bij de
+ * maand waar het vandaan komt. Zo blijft "elke maand, maar in de even maand
+ * ook de serre" overeind in plaats van "T / serre" te worden.
+ *
+ * Splitsen doen we alleen als er écht een even- én een oneven-tabblad is.
+ * Twee tabellen naast elkaar op hetzelfde tabblad zijn dezelfde maand.
+ */
+function verdeelNotities(delen: { freq: Frequency; notitie: string }[]): {
+  notitie: string;
+  notitieEven: string;
+  notitieOneven: string;
+} {
+  const alles = (freq: Frequency | "alle") =>
+    delen.filter((d) => freq === "alle" || d.freq === freq).flatMap((d) => noteTokens(d.notitie));
+
+  const splitsen = delen.some((d) => d.freq === "even") && delen.some((d) => d.freq === "oneven");
+  if (!splitsen) {
+    return { notitie: uniek(alles("alle")).join(", "), notitieEven: "", notitieOneven: "" };
+  }
+
+  const even = alles("even");
+  const oneven = alles("oneven");
+  const elke = alles("elke");
+  const inBeide = (t: string, lijst: string[]) =>
+    lijst.some((x) => x.toLowerCase() === t.toLowerCase());
+
+  return {
+    // Wat in beide maanden staat — plus alles uit een "elke maand"-tabblad.
+    notitie: uniek([...even.filter((t) => inBeide(t, oneven)), ...elke]).join(", "),
+    notitieEven: uniek(even.filter((t) => !inBeide(t, oneven))).join(", "),
+    notitieOneven: uniek(oneven.filter((t) => !inBeide(t, even))).join(", "),
+  };
+}
+
+/** Dubbele labels eruit, hoofdletterongevoelig, in de volgorde van binnenkomst. */
+function uniek(tokens: string[]): string[] {
+  const uit: string[] = [];
+  for (const t of tokens) {
+    if (!uit.some((u) => u.toLowerCase() === t.toLowerCase())) uit.push(t);
+  }
+  return uit;
+}
 
 /** Staat dit adres in twee tabbladen én is er een notitie? Dan is die tekst
  *  uit twee maanden samengeraapt, of stond hij maar in één van de twee. */
 function uitTweeMaanden(r: ImportRij): boolean {
-  return r.bronnen.length > 1 && r.notitie.trim().length > 0;
+  const iets = (r.notitie + r.notitieEven + r.notitieOneven).trim().length > 0;
+  return r.bronnen.length > 1 && iets;
 }
 
 /** Wat er na het importeren automatisch is opgezocht. */
@@ -418,54 +467,53 @@ function ImportPagina() {
    * twee maanden, of stond maar in één van de twee. Staat er in geen van
    * beide iets, dan valt er ook niets na te kijken.
    */
-  const samengevoegd = useMemo(
-    () => lijst.filter((r) => r.bronnen.length > 1 && r.notitie.trim()).length,
-    [lijst],
-  );
+  const samengevoegd = useMemo(() => lijst.filter(uitTweeMaanden).length, [lijst]);
 
   /** Adressen die in meerdere tabbladen staan worden samengevoegd tot "elke maand". */
   useEffect(() => {
-    const map = new Map<string, ImportRij>();
+    type Verzamel = { rij: ImportRij; delen: { freq: Frequency; notitie: string }[] };
+    const map = new Map<string, Verzamel>();
+
     for (const r of rijen) {
       if (skipTabbladen.has(r.tabblad)) continue;
       const sleutel = `${r.straat.toLowerCase()}|${r.huisnummer}|${r.toevoeging.toLowerCase()}`;
       const freq = freqPerTabblad[r.tabblad] ?? "elke";
       const bestaand = map.get(sleutel);
+
       if (!bestaand) {
         map.set(sleutel, {
-          id: sleutel,
-          straat: r.straat,
-          huisnummer: r.huisnummer,
-          toevoeging: r.toevoeging,
-          notitie: r.notitie,
-          prijs: r.prijs,
-          frequency: freq,
-          bron: r.bron,
-          bronnen: r.bron ? [r.bron] : [],
+          rij: {
+            id: sleutel,
+            straat: r.straat,
+            huisnummer: r.huisnummer,
+            toevoeging: r.toevoeging,
+            notitie: r.notitie,
+            notitieEven: "",
+            notitieOneven: "",
+            prijs: r.prijs,
+            frequency: freq,
+            bron: r.bron,
+            bronnen: r.bron ? [r.bron] : [],
+          },
+          delen: [{ freq, notitie: r.notitie }],
         });
-
-      } else {
-        // Notities samenvoegen (dubbele tekst niet herhalen), hoogste prijs behouden
-        const delen = [bestaand.notitie, r.notitie]
-          .map((n) => n.trim())
-          .filter(Boolean);
-        const uniek: string[] = [];
-        for (const d of delen) {
-          if (!uniek.some((u) => u.toLowerCase() === d.toLowerCase())) uniek.push(d);
-        }
-        map.set(sleutel, {
-          ...bestaand,
-          notitie: uniek.join(" / "),
-          bronnen: r.bron && !bestaand.bronnen.some((b) => b.tabblad === r.bron!.tabblad)
-            ? [...bestaand.bronnen, r.bron]
-            : bestaand.bronnen,
-          prijs: Math.max(bestaand.prijs, r.prijs),
-          frequency: bestaand.frequency !== freq ? "elke" : bestaand.frequency,
-        });
+        continue;
       }
 
+      bestaand.delen.push({ freq, notitie: r.notitie });
+      bestaand.rij = {
+        ...bestaand.rij,
+        bronnen:
+          r.bron && !bestaand.rij.bronnen.some((b) => b.tabblad === r.bron!.tabblad)
+            ? [...bestaand.rij.bronnen, r.bron]
+            : bestaand.rij.bronnen,
+        // Hoogste prijs winnen: een verhoging staat meestal maar in één tabblad.
+        prijs: Math.max(bestaand.rij.prijs, r.prijs),
+        frequency: bestaand.rij.frequency !== freq ? "elke" : bestaand.rij.frequency,
+      };
     }
-    setLijst([...map.values()]);
+
+    setLijst([...map.values()].map(({ rij, delen }) => ({ ...rij, ...verdeelNotities(delen) })));
     setHernoemen({});
   }, [rijen, freqPerTabblad, skipTabbladen]);
 
@@ -664,6 +712,8 @@ function ImportPagina() {
         house_number: r.huisnummer,
         addition: r.toevoeging,
         note: r.notitie,
+        note_even: r.notitieEven,
+        note_oneven: r.notitieOneven,
         price: r.prijs,
         frequency: r.frequency,
       }));
@@ -965,6 +1015,10 @@ function ImportPagina() {
                       >
                         <NotitieCel
                           value={r.notitie}
+                          even={r.notitieEven}
+                          oneven={r.notitieOneven}
+                          onChangeEven={(v) => wijzig(r.id, { notitieEven: v })}
+                          onChangeOneven={(v) => wijzig(r.id, { notitieOneven: v })}
                           quickNotes={quickNotes}
                           onChange={(v) => wijzig(r.id, { notitie: v })}
                           onAddQuickNote={(l) => void nieuweSnelkeuze(l)}

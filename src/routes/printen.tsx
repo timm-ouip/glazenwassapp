@@ -27,6 +27,7 @@ import {
   formatNumber,
   formatPrice,
   matchesMaand,
+  noteVoorMaand,
   persistKolomStart,
   persistStreetOrder,
   splitEvenOdd,
@@ -105,7 +106,9 @@ const StraatBlok = memo(function StraatBlok({
                   <td className="w-6 px-[2px] text-[9px] font-semibold leading-[1.1] tabular-nums">
                     {formatNumber(c)}
                   </td>
-                  <td className="px-[2px] text-[9px] leading-[1.1] break-words hyphens-auto">{c.note}</td>
+                  <td className="px-[2px] text-[9px] leading-[1.1] break-words hyphens-auto">
+                    {noteVoorMaand(c, maand)}
+                  </td>
                   {maand === "alles" && (
                     <td className="w-8 px-[2px] text-[9px] leading-[1.1]">{c.frequency}</td>
                   )}

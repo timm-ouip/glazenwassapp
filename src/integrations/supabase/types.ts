@@ -67,6 +67,8 @@ export type Database = {
           id: string
           klant_id: string | null
           note: string
+          note_even: string
+          note_oneven: string
           postcode: string
           price: number
           sort_order: number
@@ -82,6 +84,8 @@ export type Database = {
           id?: string
           klant_id?: string | null
           note?: string
+          note_even?: string
+          note_oneven?: string
           postcode?: string
           price?: number
           sort_order?: number
@@ -97,6 +101,8 @@ export type Database = {
           id?: string
           klant_id?: string | null
           note?: string
+          note_even?: string
+          note_oneven?: string
           postcode?: string
           price?: number
           sort_order?: number
