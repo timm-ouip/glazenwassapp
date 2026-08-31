@@ -3,10 +3,10 @@ import { useEffect, useState } from "react";
 import {
   Droplets,
   LogOut,
+  CalendarDays,
   Map,
   PanelLeftClose,
   PanelLeftOpen,
-  Printer,
   Trash2,
   Upload,
   Users,
@@ -28,8 +28,10 @@ type Pagina = {
 
 const WERK: Pagina[] = [
   { label: "Wijken", to: "/", icon: Map },
+  // Printen staat bewust niet in dit menu: die knop hoort bij de wijk waar je
+  // op dat moment naar kijkt, en zit daarom op de wijkenpagina zelf.
+  { label: "Planning", to: "/planning", icon: CalendarDays },
   { label: "Klanten", to: "/klanten", icon: Users },
-  { label: "Printen", to: "/printen", icon: Printer },
   { label: "Importeren", to: "/importeren", icon: Upload },
 ];
 

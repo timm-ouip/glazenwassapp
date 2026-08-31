@@ -43,6 +43,22 @@ export async function fetchWasdag(datum: string): Promise<WasdagRegel[]> {
   return (data ?? []) as WasdagRegel[];
 }
 
+/** Eén regel met de dag erbij, voor het maandoverzicht. */
+export interface WasdagDagRegel extends WasdagRegel {
+  datum: string;
+}
+
+/** Alle regels tussen twee datums (beide meegerekend), voor de kalender. */
+export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagDagRegel[]> {
+  const { data, error } = await supabase
+    .from("wasdag_regels")
+    .select("datum,customer_id,prijs")
+    .gte("datum", vanaf)
+    .lte("datum", tot);
+  if (error) throw error;
+  return (data ?? []) as WasdagDagRegel[];
+}
+
 /**
  * Zet adressen op de dag. Upsert op (company_id, datum, customer_id), zodat
  * een adres dat er al op staat geen tweede regel oplevert — je vinkt in de
@@ -62,13 +78,24 @@ export async function voegToeAanWasdag(
   if (error) throw error;
 }
 
-/** Haalt adressen van de dag af. */
+/**
+ * Haalt adressen van de dag af. In stukjes, want de id's gaan als filter mee
+ * in de URL: een hele wijk in één keer (honderden adressen) maakt die te lang.
+ */
 export async function haalUitWasdag(datum: string, customerIds: string[]) {
-  if (customerIds.length === 0) return;
-  const { error } = await supabase
-    .from("wasdag_regels")
-    .delete()
-    .eq("datum", datum)
-    .in("customer_id", customerIds);
+  const PER_KEER = 80;
+  for (let i = 0; i < customerIds.length; i += PER_KEER) {
+    const { error } = await supabase
+      .from("wasdag_regels")
+      .delete()
+      .eq("datum", datum)
+      .in("customer_id", customerIds.slice(i, i + PER_KEER));
+    if (error) throw error;
+  }
+}
+
+/** Veegt een hele dag leeg — op datum, dus zonder lijst met id's. */
+export async function maakWasdagLeeg(datum: string) {
+  const { error } = await supabase.from("wasdag_regels").delete().eq("datum", datum);
   if (error) throw error;
 }

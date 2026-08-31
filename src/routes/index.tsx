@@ -61,6 +61,7 @@ import { useActieveWijk } from "@/lib/wijkgeheugen";
 import {
   fetchWasdag,
   haalUitWasdag,
+  maakWasdagLeeg,
   toonDatum,
   vandaag,
   voegToeAanWasdag,
@@ -91,14 +92,20 @@ import {
 
 interface IndexSearch {
   wijk?: string;
+  /** De dag die je aan het vullen bent, gekozen op /planning. */
+  dag?: string;
 }
 
 export const Route = createFileRoute("/")({
   beforeLoad: async () => {
     await requireSession();
   },
-  validateSearch: (search: Record<string, unknown>): IndexSearch =>
-    typeof search["wijk"] === "string" && search["wijk"] ? { wijk: search["wijk"] } : {},
+  validateSearch: (search: Record<string, unknown>): IndexSearch => ({
+    ...(typeof search["wijk"] === "string" && search["wijk"] ? { wijk: search["wijk"] } : {}),
+    ...(typeof search["dag"] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(search["dag"])
+      ? { dag: search["dag"] }
+      : {}),
+  }),
   head: () => ({
     meta: [
       { title: "Klantenlijst glazenwasser — straten, prijzen en maandplanning" },
@@ -132,7 +139,7 @@ function Index() {
   const qc = useQueryClient();
   const bevestig = useBevestig();
   const navigate = useNavigate();
-  const { wijk } = Route.useSearch();
+  const { wijk, dag } = Route.useSearch();
   const [filter, setFilter] = useState<MaandFilter>("alles");
   const [zoek, setZoek] = useState("");
   const [prijzenTonen, setPrijzenTonen] = useState(true);
@@ -173,7 +180,9 @@ function Index() {
   const actieveWijk = useActieveWijk(
     districts,
     wijk,
-    (id) => void navigate({ to: "/", search: { wijk: id }, replace: true }),
+    // Zoekparameters meenemen: anders gooit deze omleiding de dag weg die je
+    // net op de kalender koos.
+    (id) => void navigate({ to: "/", search: (oud) => ({ ...oud, wijk: id }), replace: true }),
   );
   const wijkPlaats = districts.find((d) => d.id === actieveWijk)?.plaats ?? "";
 
@@ -269,12 +278,23 @@ function Index() {
   }
 
   useEffect(() => {
+    // Kom je van de kalender, dan bepaalt de URL de dag. Anders val je terug
+    // op de onthouden modus, en die begint altijd bij vandaag.
+    if (dag) {
+      setPlanDatum(dag);
+      try {
+        localStorage.setItem(PLANMODUS_OPSLAG, "ja");
+      } catch {
+        /* zie planmodus() */
+      }
+      return;
+    }
     try {
       if (localStorage.getItem(PLANMODUS_OPSLAG) === "ja") setPlanDatum(vandaag());
     } catch {
       /* zie planmodus() */
     }
-  }, []);
+  }, [dag]);
 
   // Ingeklapt zie je veel straten tegelijk, en dat is precies wat je wil als je
   // een dag samenstelt. Dit gebeurt zodra de modus aangaat én bij elke wijk die
@@ -351,7 +371,10 @@ function Index() {
       haalUitWasdag(datum, weghalen.map((r) => r.customer_id!)),
     ])
       .catch(() => toast.error("Dagplanning opslaan mislukt."))
-      .finally(() => qc.invalidateQueries({ queryKey: ["wasdag", datum] }));
+      .finally(() => {
+        qc.invalidateQueries({ queryKey: ["wasdag", datum] });
+        qc.invalidateQueries({ queryKey: ["wasdagen"] });
+      });
   }
 
   function zetStraatOpDag(g: (typeof groepen)[number], aan: boolean) {
@@ -361,7 +384,29 @@ function Index() {
   }
 
   function maakDagLeeg() {
-    pasDagAan([], [...opDeDag], "Dag leeggemaakt");
+    if (!planDatum) return;
+    const datum = planDatum;
+    const terug = (qc.getQueryData<WasdagRegel[]>(["wasdag", datum]) ?? [])
+      .filter((r) => r.customer_id)
+      .map((r) => ({ customer_id: r.customer_id!, prijs: Number(r.prijs) }));
+    if (terug.length === 0) return;
+    qc.setQueryData<WasdagRegel[]>(["wasdag", datum], []);
+    pushUndo({
+      label: "Dag leeggemaakt",
+      undo: async () => {
+        await voegToeAanWasdag(datum, terug);
+        qc.invalidateQueries({ queryKey: ["wasdag", datum] });
+        qc.invalidateQueries({ queryKey: ["wasdagen"] });
+      },
+    });
+    // Op datum, niet op een lijst met id's: dat blijft ook bij een hele wijk
+    // één kort verzoek.
+    void maakWasdagLeeg(datum)
+      .catch(() => toast.error("Leegmaken mislukt."))
+      .finally(() => {
+        qc.invalidateQueries({ queryKey: ["wasdag", datum] });
+        qc.invalidateQueries({ queryKey: ["wasdagen"] });
+      });
   }
 
   async function patchKlant(c: Customer, patch: Partial<Customer>) {
@@ -640,7 +685,7 @@ function Index() {
           variant="titel"
           districts={districts}
           activeId={actieveWijk}
-          onSelect={(id) => void navigate({ to: "/", search: { wijk: id } })}
+          onSelect={(id) => void navigate({ to: "/", search: (oud) => ({ ...oud, wijk: id }) })}
           onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
         />
       }
@@ -795,19 +840,19 @@ function Index() {
             // waar je op stuurt bij het samenstellen van een dag.
             <div className="flex w-full flex-wrap items-center gap-2 border-t border-border/70 pt-2">
               <CalendarCheck className="size-4 text-brand-ink" />
-              <span className="text-[13px] font-medium">Dagplanning</span>
-              <input
-                type="date"
-                value={planDatum}
-                onChange={(e) => setPlanDatum(e.target.value || vandaag())}
-                className="h-7 rounded-full border border-border bg-card px-2.5 text-[12.5px]"
-                aria-label="Datum van de dagplanning"
-              />
+              <Link
+                to="/planning"
+                search={{ dag: planDatum }}
+                className="text-[13px] font-medium underline-offset-2 hover:underline"
+                title="Andere dag kiezen op de kalender"
+              >
+                Dagplanning {toonDatum(planDatum)}
+              </Link>
               <span className="font-display text-[19px] font-semibold tabular-nums tracking-[-0.02em]">
                 {formatPrice(dagBedrag)}
               </span>
               <span className="text-[12.5px] text-muted-foreground">
-                {opDeDag.size} {opDeDag.size === 1 ? "adres" : "adressen"} {toonDatum(planDatum)}
+                {opDeDag.size} {opDeDag.size === 1 ? "adres" : "adressen"}
               </span>
               {opDeDag.size > 0 && (
                 <button

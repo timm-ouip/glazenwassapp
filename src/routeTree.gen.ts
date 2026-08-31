@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ImporterenRouteImport } from './routes/importeren'
 import { Route as KlantenRouteImport } from './routes/klanten'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PlanningRouteImport } from './routes/planning'
 import { Route as PrintenRouteImport } from './routes/printen'
 import { Route as PrullenbakRouteImport } from './routes/prullenbak'
 import { Route as SignupRouteImport } from './routes/signup'
@@ -37,6 +38,11 @@ const KlantenRoute = KlantenRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlanningRoute = PlanningRouteImport.update({
+  id: '/planning',
+  path: '/planning',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrintenRoute = PrintenRouteImport.update({
@@ -70,6 +76,7 @@ export interface FileRoutesByFullPath {
   '/importeren': typeof ImporterenRoute
   '/klanten': typeof KlantenRoute
   '/login': typeof LoginRoute
+  '/planning': typeof PlanningRoute
   '/printen': typeof PrintenRoute
   '/prullenbak': typeof PrullenbakRoute
   '/signup': typeof SignupRoute
@@ -81,6 +88,7 @@ export interface FileRoutesByTo {
   '/importeren': typeof ImporterenRoute
   '/klanten': typeof KlantenRoute
   '/login': typeof LoginRoute
+  '/planning': typeof PlanningRoute
   '/printen': typeof PrintenRoute
   '/prullenbak': typeof PrullenbakRoute
   '/signup': typeof SignupRoute
@@ -93,6 +101,7 @@ export interface FileRoutesById {
   '/importeren': typeof ImporterenRoute
   '/klanten': typeof KlantenRoute
   '/login': typeof LoginRoute
+  '/planning': typeof PlanningRoute
   '/printen': typeof PrintenRoute
   '/prullenbak': typeof PrullenbakRoute
   '/signup': typeof SignupRoute
@@ -106,6 +115,7 @@ export interface FileRouteTypes {
     | '/importeren'
     | '/klanten'
     | '/login'
+    | '/planning'
     | '/printen'
     | '/prullenbak'
     | '/signup'
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
     | '/importeren'
     | '/klanten'
     | '/login'
+    | '/planning'
     | '/printen'
     | '/prullenbak'
     | '/signup'
@@ -128,6 +139,7 @@ export interface FileRouteTypes {
     | '/importeren'
     | '/klanten'
     | '/login'
+    | '/planning'
     | '/printen'
     | '/prullenbak'
     | '/signup'
@@ -140,6 +152,7 @@ export interface RootRouteChildren {
   ImporterenRoute: typeof ImporterenRoute
   KlantenRoute: typeof KlantenRoute
   LoginRoute: typeof LoginRoute
+  PlanningRoute: typeof PlanningRoute
   PrintenRoute: typeof PrintenRoute
   PrullenbakRoute: typeof PrullenbakRoute
   SignupRoute: typeof SignupRoute
@@ -175,6 +188,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/planning': {
+      id: '/planning'
+      path: '/planning'
+      fullPath: '/planning'
+      preLoaderRoute: typeof PlanningRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/printen': {
@@ -220,6 +240,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImporterenRoute: ImporterenRoute,
   KlantenRoute: KlantenRoute,
   LoginRoute: LoginRoute,
+  PlanningRoute: PlanningRoute,
   PrintenRoute: PrintenRoute,
   PrullenbakRoute: PrullenbakRoute,
   SignupRoute: SignupRoute,
