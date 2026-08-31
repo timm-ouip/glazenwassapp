@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { MapPin } from "lucide-react";
-import { formatNumber, persistPostcodes, type Customer, type Street } from "@/lib/klanten";
-import { nummerSleutel, zoekStraatPostcodes } from "@/lib/postcode";
+import { persistPostcodes, type Customer, type Street } from "@/lib/klanten";
+import { haalPostcodesOp, stratenZonderPostcode } from "@/lib/aanvullen";
 import { pushUndo, undoLaatste } from "@/lib/undo";
 
 interface Props {
@@ -29,10 +29,7 @@ export function PostcodesOphalen({ streets, customers, plaats, onSaved }: Props)
 
   // Alleen straten met een officiële naam kunnen opgezocht worden, en alleen
   // adressen die nog geen postcode hebben zijn werk.
-  const teDoen = streets.filter(
-    (s) =>
-      s.volledige_naam.trim() && customers.some((c) => c.street_id === s.id && !c.postcode.trim()),
-  );
+  const teDoen = stratenZonderPostcode(streets, customers);
   const zonderPostcode = customers.filter(
     (c) => !c.postcode.trim() && streets.some((s) => s.id === c.street_id),
   ).length;
@@ -41,36 +38,12 @@ export function PostcodesOphalen({ streets, customers, plaats, onSaved }: Props)
     setBezig(true);
     setVoortgang({ straat: 0, gevonden: 0 });
 
-    const wijzigingen: { id: string; postcode: string }[] = [];
-    const vorig: { id: string; postcode: string }[] = [];
-    let misluktAchtereen = 0;
-    let afgeknepen = false;
-
-    for (const [i, street] of teDoen.entries()) {
-      const kaart = await zoekStraatPostcodes(street.volledige_naam, plaats);
-
-      if (kaart === null) {
-        if (++misluktAchtereen >= 3) {
-          afgeknepen = true;
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 1500));
-        continue;
-      }
-      misluktAchtereen = 0;
-
-      for (const c of customers) {
-        if (c.street_id !== street.id || c.postcode.trim()) continue;
-        const gevonden = kaart.get(nummerSleutel(c.house_number, c.addition));
-        if (gevonden) {
-          wijzigingen.push({ id: c.id, postcode: gevonden });
-          vorig.push({ id: c.id, postcode: c.postcode });
-        }
-      }
-
-      setVoortgang({ straat: i + 1, gevonden: wijzigingen.length });
-      await new Promise((r) => setTimeout(r, 350));
-    }
+    const { wijzigingen, vorig, afgebroken } = await haalPostcodesOp(
+      teDoen,
+      customers,
+      plaats,
+      (v) => setVoortgang({ straat: v.gedaan, gevonden: v.gevonden }),
+    );
 
     if (wijzigingen.length > 0) {
       try {
@@ -91,7 +64,7 @@ export function PostcodesOphalen({ streets, customers, plaats, onSaved }: Props)
     }
 
     setBezig(false);
-    const staart = afgeknepen
+    const staart = afgebroken
       ? " De adressendienst hield ermee op — druk over een paar minuten nog eens voor de rest."
       : "";
     if (wijzigingen.length === 0) {

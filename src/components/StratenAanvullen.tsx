@@ -12,7 +12,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Wand2 } from "lucide-react";
 import { persistVolledigeNamen, type Street } from "@/lib/klanten";
-import { zoekStraten } from "@/lib/postcode";
+import {
+  haalStraatnamenOp,
+  stratenZonderNaam,
+  type StraatVoorstel as Voorstel,
+} from "@/lib/aanvullen";
 import { pushUndo, undoLaatste } from "@/lib/undo";
 
 interface Props {
@@ -20,15 +24,6 @@ interface Props {
   streets: Street[];
   plaats: string;
   onSaved: () => void;
-}
-
-interface Voorstel {
-  street: Street;
-  /** Wat er opgeslagen wordt; leeg betekent overslaan. */
-  waarde: string;
-  /** Andere kandidaten, als PDOK er meer teruggaf. */
-  opties: string[];
-  aan: boolean;
 }
 
 /**
@@ -46,7 +41,7 @@ export function StratenAanvullen({ streets, plaats, onSaved }: Props) {
   const [opslaan, setOpslaan] = useState(false);
   const [afgebroken, setAfgebroken] = useState(false);
 
-  const teDoen = streets.filter((s) => !s.volledige_naam.trim());
+  const teDoen = stratenZonderNaam(streets);
 
   async function zoek() {
     setOpen(true);
@@ -55,37 +50,12 @@ export function StratenAanvullen({ streets, plaats, onSaved }: Props) {
     setVoortgang(0);
     setAfgebroken(false);
 
-    const gevonden: Voorstel[] = [];
-    let misluktAchtereen = 0;
-
-    for (const [i, street] of teDoen.entries()) {
-      const namen = await zoekStraten(street.name, plaats);
-
-      if (namen === null) {
-        // De dienst antwoordde niet. Bij een paar keer achter elkaar zijn we
-        // afgeknepen; dan heeft doorgaan geen zin en houden we wat we hebben.
-        if (++misluktAchtereen >= 3) {
-          setAfgebroken(true);
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 1500));
-        continue;
-      }
-      misluktAchtereen = 0;
-
-      gevonden.push({
-        street,
-        waarde: namen.length === 1 ? namen[0]! : "",
-        opties: namen,
-        // Alleen een eenduidige treffer staat vast aan; de rest kijk je na.
-        aan: namen.length === 1,
-      });
-      setVoorstellen([...gevonden]);
-      setVoortgang(i + 1);
-      // De Locatieserver knijpt af bij tientallen verzoeken achter elkaar,
-      // dus rustig aan.
-      await new Promise((r) => setTimeout(r, 350));
-    }
+    const { voorstellen, afgebroken } = await haalStraatnamenOp(teDoen, plaats, (v, zover) => {
+      setVoortgang(v.gedaan);
+      setVoorstellen(zover);
+    });
+    setVoorstellen(voorstellen);
+    setAfgebroken(afgebroken);
     setBezig(false);
   }
 

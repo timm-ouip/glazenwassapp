@@ -18,14 +18,26 @@ import { NotitieCel } from "@/components/NotitieCel";
 import {
   addDistrict,
   addQuickNote,
+  fetchCustomers,
   fetchDistricts,
   fetchQuickNotes,
+  fetchStreets,
   frequencyLabels,
   formatPrice,
+  persistPostcodes,
+  persistVolledigeNamen,
+  renameDistrict,
   type District,
   type Frequency,
   type QuickNote,
 } from "@/lib/klanten";
+import {
+  haalPostcodesOp,
+  haalStraatnamenOp,
+  stratenZonderNaam,
+  stratenZonderPostcode,
+} from "@/lib/aanvullen";
+import { zoekWoonplaatsen } from "@/lib/postcode";
 
 
 export const Route = createFileRoute("/importeren")({
@@ -291,6 +303,21 @@ interface ImportRij {
 }
 
 
+/** Wat er na het importeren automatisch is opgezocht. */
+interface NaImport {
+  stap: "straten" | "postcodes" | "klaar";
+  districtId: string;
+  gedaan: number;
+  totaal: number;
+  /** Straatnamen die eenduidig waren en dus meteen ingevuld zijn. */
+  straatnamen: number;
+  /** Straten met meerdere kandidaten: die moet je zelf nakijken. */
+  twijfel: number;
+  postcodes: number;
+  /** De adressendienst hield ermee op. */
+  afgebroken: boolean;
+}
+
 /** Straatnamen die waarschijnlijk per ongeluk als straat zijn gelezen. */
 function verdachteStraten(lijst: ImportRij[], quickNotes: QuickNote[]) {
   const perStraat = new Map<string, number>();
@@ -323,12 +350,44 @@ function ImportPagina() {
   const [wijken, setWijken] = useState<District[]>([]);
   const [wijkId, setWijkId] = useState<string>("");
   const [nieuweWijk, setNieuweWijk] = useState("");
+  // Zonder woonplaats is geen postcode op te zoeken, dus die vragen we hier
+  // meteen — een wijknaam als "Madestein" zegt niets over de plaats.
+  const [plaats, setPlaats] = useState("");
+  const [plaatsOpties, setPlaatsOpties] = useState<string[]>([]);
+  const [naImport, setNaImport] = useState<NaImport | null>(null);
   const [quickNotes, setQuickNotes] = useState<QuickNote[]>([]);
   const [hernoemen, setHernoemen] = useState<Record<string, string>>({});
   const [bronnen, setBronnen] = useState<Record<string, Bron>>({});
   const [grids, setGrids] = useState<Record<string, SheetGrid>>({});
   const [goedgekeurd, setGoedgekeurd] = useState<Set<string>>(new Set());
   const [bekijk, setBekijk] = useState<{ label: string; bronnen: Bron[] } | null>(null);
+
+  const gekozenWijk = wijken.find((w) => w.id === wijkId) ?? null;
+  // De plaats van de gekozen wijk als die er al is; anders wat je hier typt.
+  const werkPlaats = (gekozenWijk?.plaats.trim() || plaats.trim()).trim();
+  // Vragen we de plaats? Bij een nieuwe wijk altijd, bij een bestaande alleen
+  // als hij er nog geen heeft.
+  const plaatsVragen =
+    wijkId === "__nieuw__" || (gekozenWijk !== null && !gekozenWijk.plaats.trim());
+
+  // Woonplaatsen voorstellen terwijl je typt, zodat de naam precies zo
+  // geschreven staat als de adressendienst hem kent.
+  useEffect(() => {
+    if (!plaatsVragen || plaats.trim().length < 2) {
+      setPlaatsOpties([]);
+      return;
+    }
+    const ac = new AbortController();
+    const t = setTimeout(() => {
+      void zoekWoonplaatsen(plaats, ac.signal).then((namen) => {
+        if (!ac.signal.aborted) setPlaatsOpties(namen);
+      });
+    }, 300);
+    return () => {
+      clearTimeout(t);
+      ac.abort();
+    };
+  }, [plaats, plaatsVragen]);
 
   useEffect(() => {
     fetchDistricts()
@@ -457,6 +516,80 @@ function ImportPagina() {
   }
 
 
+  /**
+   * Zoekt na het importeren meteen de officiële straatnamen en de postcodes
+   * op. Alleen straten met precies één treffer worden vanzelf ingevuld: de
+   * naamzoekopdracht is fuzzy, en een gok opslaan levert straks een
+   * verkeerde postcode op. De rest laten we staan om na te kijken.
+   */
+  async function vulAan(districtId: string, woonplaats: string) {
+    const straten = (await fetchStreets()).filter((s) => s.district_id === districtId);
+    const teDoen = stratenZonderNaam(straten);
+    setNaImport({
+      stap: "straten",
+      districtId,
+      gedaan: 0,
+      totaal: teDoen.length,
+      straatnamen: 0,
+      twijfel: 0,
+      postcodes: 0,
+      afgebroken: false,
+    });
+
+    let afgebroken = false;
+    let zeker: { id: string; volledige_naam: string }[] = [];
+    let twijfel = 0;
+
+    if (teDoen.length > 0) {
+      const uitkomst = await haalStraatnamenOp(teDoen, woonplaats, (v) =>
+        setNaImport((n) => (n ? { ...n, gedaan: v.gedaan, totaal: v.totaal } : n)),
+      );
+      afgebroken = uitkomst.afgebroken;
+      zeker = uitkomst.voorstellen
+        .filter((v) => v.aan && v.waarde.trim())
+        .map((v) => ({ id: v.street.id, volledige_naam: v.waarde.trim() }));
+      twijfel = uitkomst.voorstellen.filter((v) => !v.aan).length;
+      if (zeker.length > 0) await persistVolledigeNamen(zeker);
+    }
+
+    // De namen die we net opgeslagen hebben meteen meenemen, anders slaat de
+    // postcode-ronde precies de straten over die we net compleet maakten.
+    const bijgewerkt = straten.map((s) => {
+      const nieuw = zeker.find((z) => z.id === s.id);
+      return nieuw ? { ...s, volledige_naam: nieuw.volledige_naam } : s;
+    });
+    const adressen = (await fetchCustomers()).filter((c) =>
+      bijgewerkt.some((s) => s.id === c.street_id),
+    );
+    const metNaam = stratenZonderPostcode(bijgewerkt, adressen);
+
+    setNaImport((n) =>
+      n
+        ? {
+            ...n,
+            stap: "postcodes",
+            gedaan: 0,
+            totaal: metNaam.length,
+            straatnamen: zeker.length,
+            twijfel,
+            afgebroken,
+          }
+        : n,
+    );
+
+    let postcodes = 0;
+    if (!afgebroken && metNaam.length > 0) {
+      const uitkomst = await haalPostcodesOp(metNaam, adressen, woonplaats, (v) =>
+        setNaImport((n) => (n ? { ...n, gedaan: v.gedaan, totaal: v.totaal } : n)),
+      );
+      afgebroken = uitkomst.afgebroken;
+      postcodes = uitkomst.wijzigingen.length;
+      if (postcodes > 0) await persistPostcodes(uitkomst.wijzigingen);
+    }
+
+    setNaImport((n) => (n ? { ...n, stap: "klaar", postcodes, afgebroken } : n));
+  }
+
   async function importeer() {
     if (lijst.length === 0) return;
     setBezig(true);
@@ -481,8 +614,12 @@ function ImportPagina() {
         }
       } else if (districtId === "__nieuw__") {
         if (!nieuweWijk.trim()) throw new Error("Vul een naam voor de nieuwe wijk in.");
-        const wijk = await addDistrict(nieuweWijk.trim());
+        const wijk = await addDistrict(nieuweWijk.trim(), plaats.trim());
         districtId = wijk.id;
+      } else if (gekozenWijk && !gekozenWijk.plaats.trim() && plaats.trim()) {
+        // Bestaande wijk die nog geen plaats had: die vullen we hier meteen,
+        // anders is het aanvullen hierna kansloos.
+        await renameDistrict(gekozenWijk.id, gekozenWijk.name, plaats.trim());
       }
       if (!districtId) throw new Error("Kies eerst een wijk.");
 
@@ -517,7 +654,13 @@ function ImportPagina() {
       const { error } = await supabase.from("customers").insert(payload);
       if (error) throw error;
       toast.success(`${payload.length} klanten geïmporteerd`);
-      navigate({ to: "/" });
+
+      if (!werkPlaats) {
+        // Zonder plaats valt er niets op te zoeken; dan is het klaar.
+        navigate({ to: "/" });
+        return;
+      }
+      await vulAan(districtId, werkPlaats);
     } catch (e) {
       toast.error("Importeren mislukt: " + (e as Error).message);
     } finally {
@@ -552,6 +695,31 @@ function ImportPagina() {
               value={nieuweWijk}
               onChange={(e) => setNieuweWijk(e.target.value)}
             />
+          )}
+          {plaatsVragen && (
+            <div className="max-w-sm space-y-1.5">
+              <Input
+                list="import-plaats-opties"
+                placeholder="In welke plaats ligt deze wijk?"
+                value={plaats}
+                onChange={(e) => setPlaats(e.target.value)}
+              />
+              <datalist id="import-plaats-opties">
+                {plaatsOpties.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
+              <p className="text-xs text-muted-foreground">
+                Hiermee zoeken we na het importeren de straatnamen en postcodes op. Laat je hem
+                leeg, dan kan dat later alsnog vanaf de wijkenpagina.
+              </p>
+            </div>
+          )}
+          {!plaatsVragen && gekozenWijk && (
+            <p className="text-xs text-muted-foreground">
+              Deze wijk ligt in {gekozenWijk.plaats}. Na het importeren zoeken we de straatnamen en
+              postcodes erbij.
+            </p>
           )}
         </div>
 
@@ -838,6 +1006,8 @@ function ImportPagina() {
                 Annuleren
               </Button>
             </div>
+
+            {naImport && <NaImportVerslag stand={naImport} />}
           </div>
         )}
 
@@ -999,5 +1169,54 @@ function BronVenster({
         </p>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Wat er na het importeren gebeurt: eerst de straatnamen, dan de postcodes.
+ * Blijft in beeld staan, want het duurt bij een grote wijk een minuut of wat
+ * en je wil kunnen zien waar het op vastloopt.
+ */
+function NaImportVerslag({ stand }: { stand: NaImport }) {
+  const bezig = stand.stap !== "klaar";
+  return (
+    <div className="max-w-lg space-y-2 rounded-lg border border-border bg-card p-4">
+      <p className="text-sm font-medium">
+        {stand.stap === "straten"
+          ? `Straatnamen opzoeken — ${stand.gedaan}/${stand.totaal}`
+          : stand.stap === "postcodes"
+            ? `Postcodes ophalen — ${stand.gedaan}/${stand.totaal}`
+            : "Klaar"}
+      </p>
+
+      {!bezig && (
+        <ul className="space-y-1 text-[13px] text-muted-foreground">
+          <li>{stand.straatnamen} straatnamen aangevuld</li>
+          <li>{stand.postcodes} postcodes ingevuld</li>
+          {stand.twijfel > 0 && (
+            <li className="text-tint-amber-ink">
+              {stand.twijfel}{" "}
+              {stand.twijfel === 1 ? "straat had meerdere" : "straten hadden meerdere"} mogelijke
+              namen — die hebben we laten staan. Vul ze na met de knop Straatnamen op de
+              wijkenpagina.
+            </li>
+          )}
+          {stand.afgebroken && (
+            <li className="text-tint-amber-ink">
+              De adressendienst hield ermee op. Draai de rest over een paar minuten met de knoppen
+              Straatnamen en Postcodes op de wijkenpagina.
+            </li>
+          )}
+        </ul>
+      )}
+
+      {!bezig && (
+        <Button asChild size="sm" className="mt-1">
+          <Link to="/" search={{ wijk: stand.districtId }}>
+            Naar de wijk
+          </Link>
+        </Button>
+      )}
+    </div>
   );
 }
