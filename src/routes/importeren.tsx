@@ -303,6 +303,12 @@ interface ImportRij {
 }
 
 
+/** Staat dit adres in twee tabbladen én is er een notitie? Dan is die tekst
+ *  uit twee maanden samengeraapt, of stond hij maar in één van de twee. */
+function uitTweeMaanden(r: ImportRij): boolean {
+  return r.bronnen.length > 1 && r.notitie.trim().length > 0;
+}
+
 /** Wat er na het importeren automatisch is opgezocht. */
 interface NaImport {
   stap: "straten" | "postcodes" | "klaar";
@@ -406,6 +412,16 @@ function ImportPagina() {
     [lijst, quickNotes, goedgekeurd],
   );
 
+
+  /**
+   * Adressen uit meer dan één tabblad mét een notitie: die tekst komt uit
+   * twee maanden, of stond maar in één van de twee. Staat er in geen van
+   * beide iets, dan valt er ook niets na te kijken.
+   */
+  const samengevoegd = useMemo(
+    () => lijst.filter((r) => r.bronnen.length > 1 && r.notitie.trim()).length,
+    [lijst],
+  );
 
   /** Adressen die in meerdere tabbladen staan worden samengevoegd tot "elke maand". */
   useEffect(() => {
@@ -891,6 +907,15 @@ function ImportPagina() {
               </div>
             )}
 
+            {samengevoegd > 0 && (
+              <p className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+                <span className="size-3 shrink-0 rounded-sm bg-tint-amber ring-1 ring-inset ring-tint-amber-ink/20" />
+                {samengevoegd} {samengevoegd === 1 ? "adres staat" : "adressen staan"} in meer dan
+                één tabblad. Hun notities zijn samengevoegd — ook als er maar in één maand iets
+                stond. Kijk die even na.
+              </p>
+            )}
+
             <div className="rounded-lg border border-border bg-card">
               <table className="w-full table-fixed text-sm">
                 <thead className="bg-secondary text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -924,7 +949,20 @@ function ImportPagina() {
                           }}
                         />
                       </td>
-                      <td className="px-2 py-1">
+                      <td
+                        className={`px-2 py-1 ${
+                          uitTweeMaanden(r)
+                            ? "bg-tint-amber text-tint-amber-ink ring-1 ring-inset ring-tint-amber-ink/20"
+                            : ""
+                        }`}
+                        title={
+                          uitTweeMaanden(r)
+                            ? `Dit adres staat in ${r.bronnen.length} tabbladen (${r.bronnen
+                                .map((b) => b.tabblad)
+                                .join(", ")}). De notitie komt daaruit samen — kijk hem even na.`
+                            : undefined
+                        }
+                      >
                         <NotitieCel
                           value={r.notitie}
                           quickNotes={quickNotes}

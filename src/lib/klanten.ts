@@ -367,6 +367,16 @@ export async function addQuickNote(label: string) {
   if (error) throw error;
 }
 
+/**
+ * Weggooien kan alleen vanaf de instellingen, niet vanuit het notitieveld:
+ * daar zit je snel te klikken en is een snelkeuze zo weg. De notities die de
+ * snelkeuze al gebruiken blijven gewoon staan — het is maar een knopje.
+ */
+export async function deleteQuickNote(id: string) {
+  const { error } = await supabase.from("quick_notes").delete().eq("id", id);
+  if (error) throw error;
+}
+
 /** Notities zijn komma-gescheiden losse labels. */
 export function noteTokens(note: string): string[] {
   return note

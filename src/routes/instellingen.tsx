@@ -1,10 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Building2, KeyRound, Mail, Trash2, User, UserPlus } from "lucide-react";
+import { Building2, KeyRound, Mail, Plus, Trash2, User, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import { requireSession, useAuth, useRequireAuth, type Rol } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
+import { addQuickNote, deleteQuickNote, fetchQuickNotes, type QuickNote } from "@/lib/klanten";
 import {
   fetchTeam,
   inviteEmployee,
@@ -19,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const TABBLADEN = ["bedrijf", "account", "team"] as const;
+const TABBLADEN = ["bedrijf", "account", "team", "notities"] as const;
 type Tab = (typeof TABBLADEN)[number];
 
 interface InstellingenSearch {
@@ -61,6 +62,7 @@ function Instellingen() {
           <TabsTrigger value="bedrijf">Bedrijf</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="notities">Notities</TabsTrigger>
         </TabsList>
 
         <TabsContent value="bedrijf" className="mt-4">
@@ -71,6 +73,9 @@ function Instellingen() {
         </TabsContent>
         <TabsContent value="team" className="mt-4">
           <TeamTab />
+        </TabsContent>
+        <TabsContent value="notities" className="mt-4">
+          <NotitiesTab />
         </TabsContent>
       </Tabs>
     </AppLayout>
@@ -617,6 +622,121 @@ function TeamTab() {
           Alleen de eigenaar kan medewerkers uitnodigen, verwijderen of hun rol wijzigen.
         </p>
       )}
+    </div>
+  );
+}
+
+// --- Notities -------------------------------------------------------------
+
+/**
+ * De snelkeuzes onder het notitieveld. Toevoegen kan ook daar; weggooien
+ * bewust alleen hier, want in dat popovertje klik je er zo eentje weg terwijl
+ * je een klant zit te bewerken.
+ */
+function NotitiesTab() {
+  const [notities, setNotities] = useState<QuickNote[]>([]);
+  const [laden, setLaden] = useState(true);
+  const [nieuw, setNieuw] = useState("");
+  const [bezig, setBezig] = useState(false);
+  const bevestig = useBevestig();
+
+  async function herlaad() {
+    try {
+      setNotities(await fetchQuickNotes());
+    } catch (err) {
+      toast.error(
+        "Snelkeuzes laden mislukt: " + (err instanceof Error ? err.message : String(err)),
+      );
+    }
+    setLaden(false);
+  }
+
+  useEffect(() => {
+    void herlaad();
+  }, []);
+
+  async function voegToe() {
+    const label = nieuw.trim();
+    if (!label) return;
+    setBezig(true);
+    try {
+      await addQuickNote(label);
+      setNieuw("");
+      await herlaad();
+    } catch (err) {
+      toast.error("Toevoegen mislukt: " + (err instanceof Error ? err.message : String(err)));
+    }
+    setBezig(false);
+  }
+
+  async function gooiWeg(q: QuickNote) {
+    const ja = await bevestig({
+      titel: `Snelkeuze "${q.label}" weggooien?`,
+      tekst: "Notities waar hij al in staat blijven gewoon staan; alleen het knopje verdwijnt.",
+      gevaarlijk: true,
+    });
+    if (!ja) return;
+    try {
+      await deleteQuickNote(q.id);
+      await herlaad();
+    } catch (err) {
+      toast.error("Weggooien mislukt: " + (err instanceof Error ? err.message : String(err)));
+    }
+  }
+
+  if (laden) return <p className="text-sm text-muted-foreground">Laden…</p>;
+
+  return (
+    <div className="max-w-lg">
+      <Kaart
+        titel="Snelkeuzes voor notities"
+        uitleg="De knopjes onder het notitieveld, zoals H, T of HD. Nieuwe maak je ook daar aan; weggooien kan alleen hier."
+      >
+        <div className="space-y-3">
+          {notities.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground">
+              Nog geen snelkeuzes. Voeg er hieronder een toe, of maak ze aan terwijl je een notitie
+              bewerkt.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/60 rounded-lg border border-border">
+              {notities.map((q) => (
+                <li key={q.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+                  <span className="flex-1 truncate">{q.label}</span>
+                  <button
+                    className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
+                    onClick={() => void gooiWeg(q)}
+                    aria-label={`Snelkeuze ${q.label} weggooien`}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void voegToe();
+            }}
+          >
+            <Input
+              placeholder="Nieuwe snelkeuze, bijvoorbeeld VH"
+              value={nieuw}
+              onChange={(e) => setNieuw(e.target.value)}
+            />
+            <Button
+              type="submit"
+              disabled={bezig || !nieuw.trim()}
+              className="shrink-0 rounded-full"
+            >
+              <Plus className="size-4" /> Toevoegen
+            </Button>
+          </form>
+        </div>
+      </Kaart>
     </div>
   );
 }
