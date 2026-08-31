@@ -12,7 +12,13 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { pushUndo } from "@/lib/undo";
-import { formatNumber, sortCustomers, type Customer, type Street } from "@/lib/klanten";
+import {
+  formatNumber,
+  sortCustomers,
+  straatSleutel,
+  type Customer,
+  type Street,
+} from "@/lib/klanten";
 
 interface Props {
   streets: Street[];
@@ -25,10 +31,6 @@ interface Groep {
   straten: Street[];
 }
 
-function normaliseer(naam: string) {
-  return naam.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
 export function DubbeleStraten({ streets, customers, onDone }: Props) {
   const [actief, setActief] = useState<Groep | null>(null);
   const [bezig, setBezig] = useState(false);
@@ -36,7 +38,7 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
   const groepen = useMemo<Groep[]>(() => {
     const map = new Map<string, Street[]>();
     for (const s of streets) {
-      const key = normaliseer(s.name);
+      const key = straatSleutel(s.name);
       map.set(key, [...(map.get(key) ?? []), s]);
     }
     return [...map.values()]

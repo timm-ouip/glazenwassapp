@@ -412,6 +412,19 @@ export function noteVoorMaand(
     .join(", ");
 }
 
+/**
+ * Sleutel waarop twee straatnamen dezelfde straat zijn: hoofdletters, spaties
+ * aan de rand en dubbele spaties tellen niet mee. "Kerkstraat", "KERKSTRAAT"
+ * en "Kerk  straat " horen bij één straat.
+ *
+ * Gebruik deze overal waar straatnamen vergeleken worden. Doet de ene plek
+ * het anders dan de andere, dan maakt de import twee straten waar het
+ * samenvoegscherm er één van maakt — en blijft er eentje leeg achter.
+ */
+export function straatSleutel(naam: string): string {
+  return naam.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 /** Notities zijn komma-gescheiden losse labels. */
 export function noteTokens(note: string): string[] {
   return note

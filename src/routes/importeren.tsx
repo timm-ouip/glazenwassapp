@@ -25,6 +25,7 @@ import {
   frequencyLabels,
   formatPrice,
   noteTokens,
+  straatSleutel,
   persistPostcodes,
   persistVolledigeNamen,
   renameDistrict,
@@ -687,28 +688,66 @@ function ImportPagina() {
       }
       if (!districtId) throw new Error("Kies eerst een wijk.");
 
+      // Alleen straten die er nog zijn. Zonder dit filter matcht een straat
+      // die in de prullenbak ligt, en hangen de nieuwe adressen aan een
+      // weggegooide straat — nergens meer te zien.
       const { data: bestaandeStraten, error: straatFout } = await supabase
         .from("streets")
         .select("id,name")
-        .eq("district_id", districtId);
+        .eq("district_id", districtId)
+        .is("deleted_at", null)
+        .order("sort_order", { ascending: true });
       if (straatFout) throw straatFout;
-      const map = new Map<string, string>();
-      (bestaandeStraten ?? []).forEach((s) => map.set(s.name.toLowerCase(), s.id));
 
-      const nieuweNamen = straten.filter((n) => !map.has(n.toLowerCase()));
+      const map = new Map<string, string>();
+      // Eerste treffer wint: staan er al twee straten met dezelfde naam, dan
+      // is dat de bovenste in de lijst, en niet een willekeurige.
+      for (const s of bestaandeStraten ?? []) {
+        const sleutel = straatSleutel(s.name);
+        if (!map.has(sleutel)) map.set(sleutel, s.id);
+      }
+
+      // Namen die alleen in hoofdletters of spaties verschillen zijn dezelfde
+      // straat. Zonder deze ontdubbeling maakt de import er twee, wint de
+      // laatste in de map, en blijft de eerste leeg achter.
+      const nieuweNamen: string[] = [];
+      const gezien = new Set<string>();
+      for (const naam of straten) {
+        const sleutel = straatSleutel(naam);
+        // De eerste schrijfwijze in het bestand wint: dat is de bovenste in
+        // de lijst, en die herkent de gebruiker.
+        if (map.has(sleutel) || gezien.has(sleutel)) continue;
+        gezien.add(sleutel);
+        nieuweNamen.push(naam);
+      }
+
       if (nieuweNamen.length > 0) {
         const startOrder = map.size;
         const { data: nieuw, error } = await supabase
           .from("streets")
-          .insert(nieuweNamen.map((name, i) => ({ name, sort_order: startOrder + i, district_id: districtId! })))
+          .insert(
+            nieuweNamen.map((name, i) => ({
+              name,
+              sort_order: startOrder + i,
+              district_id: districtId!,
+            })),
+          )
           .select("id,name");
         if (error) throw error;
-        (nieuw ?? []).forEach((s) => map.set(s.name.toLowerCase(), s.id));
+        (nieuw ?? []).forEach((s) => map.set(straatSleutel(s.name), s.id));
       }
 
+      const zonderStraat = lijst.filter((r) => !map.has(straatSleutel(r.straat)));
+      if (zonderStraat.length > 0) {
+        // Kan niet gebeuren, maar als het toch gebeurt hoort het hard te
+        // stoppen: half importeren is erger dan niet importeren.
+        throw new Error(
+          `Geen straat gevonden voor ${zonderStraat.length} adressen (${zonderStraat[0]!.straat}).`,
+        );
+      }
 
       const payload = lijst.map((r) => ({
-        street_id: map.get(r.straat.toLowerCase())!,
+        street_id: map.get(straatSleutel(r.straat))!,
         house_number: r.huisnummer,
         addition: r.toevoeging,
         note: r.notitie,
