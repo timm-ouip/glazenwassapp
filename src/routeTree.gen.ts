@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ImporterenRouteImport } from './routes/importeren'
+import { Route as InstellingenRouteImport } from './routes/instellingen'
 import { Route as KlantenRouteImport } from './routes/klanten'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PlanningRouteImport } from './routes/planning'
@@ -28,6 +29,11 @@ const IndexRoute = IndexRouteImport.update({
 const ImporterenRoute = ImporterenRouteImport.update({
   id: '/importeren',
   path: '/importeren',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InstellingenRoute = InstellingenRouteImport.update({
+  id: '/instellingen',
+  path: '/instellingen',
   getParentRoute: () => rootRouteImport,
 } as any)
 const KlantenRoute = KlantenRouteImport.update({
@@ -74,6 +80,7 @@ const UitnodigingRoute = UitnodigingRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/importeren': typeof ImporterenRoute
+  '/instellingen': typeof InstellingenRoute
   '/klanten': typeof KlantenRoute
   '/login': typeof LoginRoute
   '/planning': typeof PlanningRoute
@@ -86,6 +93,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/importeren': typeof ImporterenRoute
+  '/instellingen': typeof InstellingenRoute
   '/klanten': typeof KlantenRoute
   '/login': typeof LoginRoute
   '/planning': typeof PlanningRoute
@@ -99,6 +107,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/importeren': typeof ImporterenRoute
+  '/instellingen': typeof InstellingenRoute
   '/klanten': typeof KlantenRoute
   '/login': typeof LoginRoute
   '/planning': typeof PlanningRoute
@@ -113,6 +122,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/importeren'
+    | '/instellingen'
     | '/klanten'
     | '/login'
     | '/planning'
@@ -125,6 +135,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/importeren'
+    | '/instellingen'
     | '/klanten'
     | '/login'
     | '/planning'
@@ -137,6 +148,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/importeren'
+    | '/instellingen'
     | '/klanten'
     | '/login'
     | '/planning'
@@ -150,6 +162,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ImporterenRoute: typeof ImporterenRoute
+  InstellingenRoute: typeof InstellingenRoute
   KlantenRoute: typeof KlantenRoute
   LoginRoute: typeof LoginRoute
   PlanningRoute: typeof PlanningRoute
@@ -174,6 +187,13 @@ declare module '@tanstack/react-router' {
       path: '/importeren'
       fullPath: '/importeren'
       preLoaderRoute: typeof ImporterenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/instellingen': {
+      id: '/instellingen'
+      path: '/instellingen'
+      fullPath: '/instellingen'
+      preLoaderRoute: typeof InstellingenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/klanten': {
@@ -238,6 +258,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ImporterenRoute: ImporterenRoute,
+  InstellingenRoute: InstellingenRoute,
   KlantenRoute: KlantenRoute,
   LoginRoute: LoginRoute,
   PlanningRoute: PlanningRoute,

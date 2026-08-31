@@ -154,3 +154,70 @@ export const removeEmployee = createServerFn({ method: "POST" })
 
     return { ok: true };
   });
+
+/** Je eigen naam wijzigen. Employees heeft geen update-policy, dus dit moet
+ *  via de admin-client — vandaar dat het hier staat en niet in de browser. */
+export const updateMyProfile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { naam: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const naam = data.naam.trim();
+    if (!naam) throw new Error("Naam mag niet leeg zijn");
+
+    const { error } = await supabaseAdmin
+      .from("employees")
+      .update({ naam })
+      .eq("id", context.userId);
+    if (error) throw new Error(error.message);
+
+    return { ok: true };
+  });
+
+/**
+ * Eigenaar wijzigt de rol van een collega. Drie dingen die niet mogen, en
+ * alle drie om dezelfde reden: je moet het bedrijf erna nog kunnen beheren.
+ */
+export const updateEmployeeRole = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { employeeId: string; rol: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    if (data.rol !== "eigenaar" && data.rol !== "medewerker") {
+      throw new Error("Onbekende rol");
+    }
+    if (data.employeeId === context.userId) {
+      throw new Error("Je kunt je eigen rol niet wijzigen");
+    }
+
+    const { data: me } = await supabaseAdmin
+      .from("employees")
+      .select("company_id,rol")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (!me || me.rol !== "eigenaar") {
+      throw new Error("Alleen de eigenaar kan rollen wijzigen");
+    }
+
+    // Zonder eigenaar is een bedrijf niet meer te beheren: niemand kan dan
+    // nog uitnodigen, verwijderen of deze rol terugzetten.
+    if (data.rol === "medewerker") {
+      const { count } = await supabaseAdmin
+        .from("employees")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", me.company_id)
+        .eq("rol", "eigenaar");
+      if ((count ?? 0) <= 1) throw new Error("Er moet minstens één eigenaar blijven");
+    }
+
+    const { error } = await supabaseAdmin
+      .from("employees")
+      .update({ rol: data.rol })
+      .eq("id", data.employeeId)
+      .eq("company_id", me.company_id);
+    if (error) throw new Error(error.message);
+
+    return { ok: true };
+  });

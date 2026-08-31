@@ -13,27 +13,50 @@ export type Employee = {
   rol: Rol;
 };
 
+/** Alleen wat de app buiten de instellingenpagina nodig heeft: de naam die
+ *  linksboven in de zijbalk staat. */
+export type Company = {
+  id: string;
+  name: string;
+};
+
 type AuthState = {
   session: Session | null;
   employee: Employee | null;
+  company: Company | null;
   loading: boolean;
-  /** Haalt de employees-rij opnieuw op — nodig vlak nadat die rij is
-   * aangemaakt (bedrijf aanmaken / uitnodiging accepteren), want die acties
-   * veranderen de sessie niet, dus `onAuthStateChange` vuurt daar niet op. */
+  /** Haalt de employees-rij en het bedrijf opnieuw op — nodig vlak nadat die
+   * rij is aangemaakt (bedrijf aanmaken / uitnodiging accepteren), want die
+   * acties veranderen de sessie niet, dus `onAuthStateChange` vuurt daar niet
+   * op. Ook na het wijzigen van je naam of de bedrijfsnaam. */
   refreshEmployee: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState>({
   session: null,
   employee: null,
+  company: null,
   loading: true,
   refreshEmployee: async () => {},
 });
+
+/** Het bedrijf bij een medewerkersrij. RLS laat je alleen je eigen bedrijf
+ *  zien, dus een filter op company_id is genoeg. */
+async function laadBedrijf(employee: Employee | null): Promise<Company | null> {
+  if (!employee) return null;
+  const { data } = await supabase
+    .from("companies")
+    .select("id,name")
+    .eq("id", employee.company_id)
+    .maybeSingle();
+  return (data as Company) ?? null;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<Omit<AuthState, "refreshEmployee">>({
     session: null,
     employee: null,
+    company: null,
     loading: true,
   });
 
@@ -46,12 +69,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
      * /login stuurde (je moest dan een tweede keer inloggen). */
     function zetSessie(session: Session | null) {
       if (!actief) return;
-      setState((vorig) => ({
-        session,
-        employee:
-          session && vorig.employee?.id === session.user.id ? vorig.employee : null,
-        loading: false,
-      }));
+      setState((vorig) => {
+        const zelfde = session && vorig.employee?.id === session.user.id;
+        return {
+          session,
+          employee: zelfde ? vorig.employee : null,
+          company: zelfde ? vorig.company : null,
+          loading: false,
+        };
+      });
     }
 
     async function laadMedewerker(session: Session | null) {
@@ -63,9 +89,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq("id", session.user.id)
         .maybeSingle();
       if (!actief) return;
+      const employee = (data as Employee) ?? null;
+      const company = await laadBedrijf(employee);
+      if (!actief) return;
       setState((vorig) =>
         vorig.session?.user.id === session.user.id
-          ? { ...vorig, employee: (data as Employee) ?? null, loading: false }
+          ? { ...vorig, employee, company, loading: false }
           : vorig,
       );
     }
@@ -94,7 +123,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select("id,company_id,naam,email,rol")
       .eq("id", data.session.user.id)
       .maybeSingle();
-    setState({ session: data.session, employee: (emp as Employee) ?? null, loading: false });
+    const employee = (emp as Employee) ?? null;
+    setState({
+      session: data.session,
+      employee,
+      company: await laadBedrijf(employee),
+      loading: false,
+    });
   }
 
   return <AuthContext.Provider value={{ ...state, refreshEmployee }}>{children}</AuthContext.Provider>;

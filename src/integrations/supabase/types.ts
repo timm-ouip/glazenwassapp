@@ -16,19 +16,43 @@ export type Database = {
     Tables: {
       companies: {
         Row: {
+          adres: string
+          btw: string
           created_at: string
+          email: string
+          iban: string
           id: string
+          kvk: string
           name: string
+          plaats: string
+          postcode: string
+          telefoon: string
         }
         Insert: {
+          adres?: string
+          btw?: string
           created_at?: string
+          email?: string
+          iban?: string
           id?: string
+          kvk?: string
           name: string
+          plaats?: string
+          postcode?: string
+          telefoon?: string
         }
         Update: {
+          adres?: string
+          btw?: string
           created_at?: string
+          email?: string
+          iban?: string
           id?: string
+          kvk?: string
           name?: string
+          plaats?: string
+          postcode?: string
+          telefoon?: string
         }
         Relationships: []
       }

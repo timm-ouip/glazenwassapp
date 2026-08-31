@@ -17,7 +17,7 @@ export function AccountMenu() {
       </div>
       {employee.rol === "eigenaar" && (
         <Button size="sm" variant="ghost" asChild>
-          <Link to="/team">
+          <Link to="/instellingen" search={{ tab: "team" }}>
             <Users className="size-4" /> Team
           </Link>
         </Button>

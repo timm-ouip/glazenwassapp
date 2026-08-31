@@ -7,10 +7,10 @@ import {
   Map,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings,
   Trash2,
   Upload,
   Users,
-  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,12 +36,13 @@ const WERK: Pagina[] = [
 ];
 
 const BEHEER: Pagina[] = [
-  { label: "Team", to: "/team", icon: UsersRound, eigenaar: true },
+  // Zonder `eigenaar`: ook een medewerker moet bij zijn eigen account kunnen.
+  { label: "Instellingen", to: "/instellingen", icon: Settings },
   { label: "Prullenbak", to: "/prullenbak", icon: Trash2 },
 ];
 
 export function Zijbalk() {
-  const { employee } = useAuth();
+  const { employee, company } = useAuth();
   const navigate = useNavigate();
   const pad = useRouterState({ select: (s) => s.location.pathname });
 
@@ -102,8 +103,10 @@ export function Zijbalk() {
         <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[10px] bg-brand text-brand-foreground">
           <Droplets className="size-[19px]" />
         </div>
+        {/* Leeg tot het bedrijf geladen is: een placeholder die daarna
+            verspringt leest slechter dan even niets. */}
         {!ingeklapt && (
-          <span className="truncate font-display text-base font-bold">'t Zonnetje</span>
+          <span className="truncate font-display text-base font-bold">{company?.name ?? ""}</span>
         )}
         <button
           type="button"
