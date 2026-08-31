@@ -40,23 +40,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let actief = true;
 
+    /** Zet de sessie meteen neer; de medewerkersrij komt er zo achteraan.
+     * Wachten met `session` tot die query klaar is zorgde ervoor dat een
+     * pagina met `useRequireAuth` je vlak na het inloggen alsnog naar
+     * /login stuurde (je moest dan een tweede keer inloggen). */
+    function zetSessie(session: Session | null) {
+      if (!actief) return;
+      setState((vorig) => ({
+        session,
+        employee:
+          session && vorig.employee?.id === session.user.id ? vorig.employee : null,
+        loading: false,
+      }));
+    }
+
     async function laadMedewerker(session: Session | null) {
-      if (!session) {
-        if (actief) setState({ session: null, employee: null, loading: false });
-        return;
-      }
+      zetSessie(session);
+      if (!session) return;
       const { data } = await supabase
         .from("employees")
         .select("id,company_id,naam,email,rol")
         .eq("id", session.user.id)
         .maybeSingle();
-      if (actief) setState({ session, employee: (data as Employee) ?? null, loading: false });
+      if (!actief) return;
+      setState((vorig) =>
+        vorig.session?.user.id === session.user.id
+          ? { ...vorig, employee: (data as Employee) ?? null, loading: false }
+          : vorig,
+      );
     }
 
     supabase.auth.getSession().then(({ data }) => void laadMedewerker(data.session));
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      void laadMedewerker(session);
+      // De sessie meteen (synchroon) doorgeven, maar de employees-query pas
+      // ná deze callback: supabase houdt hier zijn auth-lock vast en een
+      // query erbinnen kan blijven hangen.
+      zetSessie(session);
+      setTimeout(() => void laadMedewerker(session), 0);
     });
 
     return () => {

@@ -1,25 +1,23 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
   PointerSensor,
   TouchSensor,
-  closestCenter,
-  useDraggable,
-  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
+import { SortableContext, useSortable } from "@dnd-kit/sortable";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { AccountMenu } from "@/components/AccountMenu";
-import { ArrowLeft, GripVertical, LayoutGrid, Printer } from "lucide-react";
+import { ArrowLeft, ArrowUpToLine, GripVertical, Printer } from "lucide-react";
+import { toast } from "sonner";
 import { pushUndo } from "@/lib/undo";
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import {
@@ -29,7 +27,7 @@ import {
   formatNumber,
   formatPrice,
   matchesMaand,
-  persistPrintPosities,
+  persistKolomStart,
   persistStreetOrder,
   splitEvenOdd,
   type Customer,
@@ -75,7 +73,7 @@ export const Route = createFileRoute("/printen")({
 
 type Groep = { street: Street; even: Customer[]; oneven: Customer[]; aantal: number };
 
-function StraatBlok({
+const StraatBlok = memo(function StraatBlok({
   g,
   prijzen,
   maand,
@@ -90,7 +88,7 @@ function StraatBlok({
     <div className="-mt-px break-inside-avoid border border-foreground/70">
       <h2 className="flex items-center justify-between gap-1 border-b border-foreground/70 bg-muted py-px pl-1 pr-px text-[9px] font-bold uppercase leading-[1.15] tracking-wide">
         <span className="truncate">{g.street.name}</span>
-        {sleepHandle}
+        <span className="flex shrink-0 items-center">{sleepHandle}</span>
       </h2>
       <div className={`grid ${g.even.length > 0 && g.oneven.length > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
         {([
@@ -126,46 +124,54 @@ function StraatBlok({
       </div>
     </div>
   );
-}
+});
 
 /** Straatblok met sleepgreep (greep alleen op het scherm zichtbaar). */
 function SleepbaarBlok({
   g,
   prijzen,
   maand,
+  kolomKop,
+  onKolomKopUit,
 }: {
   g: Groep;
   prijzen: boolean;
   maand: "even" | "oneven" | "alles";
+  kolomKop?: boolean;
+  onKolomKopUit?: () => void;
 }) {
-  const { attributes, listeners, setNodeRef: setSleepRef, transform, isDragging } = useDraggable({
-    id: g.street.id,
-  });
-  const { setNodeRef: setDropRef } = useDroppable({
+  // Geen CSS-transform: de straten wisselen tijdens het slepen echt van plek
+  // in de lijst (zie `bepaalPlek`), zodat de hele indeling meteen meeloopt.
+  const { attributes, listeners, setNodeRef, isDragging } = useSortable({
     id: g.street.id,
     // De printindeling meet en schaalt zichzelf. Een ResizeObserver per straat
     // zou daardoor alle dropzones tijdens elke schaalstap opnieuw registreren.
     resizeObserverConfig: { disabled: true },
   });
-  const setNodeRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      setSleepRef(node);
-      setDropRef(node);
-    },
-    [setSleepRef, setDropRef],
-  );
 
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform) }}
-      className={`break-inside-avoid ${isDragging ? "z-10 opacity-40" : ""}`}
+      data-straat={g.street.id}
+      className={`break-inside-avoid ${isDragging ? "opacity-40" : ""}`}
     >
       <StraatBlok
         g={g}
         prijzen={prijzen}
         maand={maand}
         sleepHandle={
+          <>
+          {kolomKop && (
+            <button
+              type="button"
+              onClick={onKolomKopUit}
+              title="Begint bovenaan een kolom — klik om los te laten"
+              aria-label={`${g.street.name} begint bovenaan een kolom`}
+              className="shrink-0 rounded p-0.5 text-brand-ink hover:bg-background print:hidden"
+            >
+              <ArrowUpToLine className="size-3" />
+            </button>
+          )}
           <button
             type="button"
             {...attributes}
@@ -175,29 +181,41 @@ function SleepbaarBlok({
           >
             <GripVertical className="size-3" />
           </button>
+          </>
         }
       />
     </div>
   );
 }
 
+/** Een hele printkolom als doelgebied: laat je een straat los in de lege
+ * ruimte onder de laatste straat, dan hoort hij onderaan die kolom. */
+function KolomVak({ slot, children }: { slot: number; children: ReactNode }) {
+  return <div data-kolom={slot}>{children}</div>;
+}
+
+/** Eén straat zoals de indeling hem ziet: hoe hoog, en of hij een nieuwe
+ * kolom afdwingt. */
+type Blok = { hoogte: number; breek: boolean };
+
 /** Aantal kolommen dat nodig is als je elke kolom tot `cap` volstopt. */
-function kolommenNodig(h: number[], cap: number): number {
+function kolommenNodig(blokken: Blok[], cap: number): number {
   let kolommen = 1;
   let som = 0;
-  for (const x of h) {
-    if (som > 0 && som + x > cap) {
+  for (const b of blokken) {
+    if (som > 0 && (b.breek || som + b.hoogte > cap)) {
       kolommen += 1;
       som = 0;
     }
-    som += x;
+    som += b.hoogte;
   }
   return kolommen;
 }
 
 /** Kleinste kolomhoogte waarbij alles nog in `k` kolommen past. */
-function minCapaciteit(h: number[], k: number): number {
-  if (h.length === 0) return 1;
+function minCapaciteit(blokken: Blok[], k: number): number {
+  if (blokken.length === 0) return 1;
+  const h = blokken.map((b) => b.hoogte);
   let laag = Math.max(...h);
   let hoog = Math.max(
     h.reduce((s, x) => s + x, 0),
@@ -205,7 +223,7 @@ function minCapaciteit(h: number[], k: number): number {
   );
   for (let i = 0; i < 40; i++) {
     const mid = (laag + hoog) / 2;
-    if (kolommenNodig(h, mid) <= k) hoog = mid;
+    if (kolommenNodig(blokken, mid) <= k) hoog = mid;
     else laag = mid;
   }
   return hoog;
@@ -215,18 +233,23 @@ function minCapaciteit(h: number[], k: number): number {
  * Vult kolommen tot `cap` vol (routevolgorde blijft behouden); wat niet meer
  * past schuift door naar de volgende kolom. Overloop komt in de laatste kolom.
  */
-function verdeelVullend(groepen: Groep[], hoogte: (g: Groep) => number, cap: number, k: number): Groep[][] {
+function verdeelVullend(
+  groepen: Groep[],
+  meet: (g: Groep) => Blok,
+  cap: number,
+  k: number,
+): Groep[][] {
   const blokken: Groep[][] = Array.from({ length: k }, () => []);
   let i = 0;
   let som = 0;
   for (const g of groepen) {
-    const x = hoogte(g);
-    if (i < k - 1 && som > 0 && som + x > cap) {
+    const b = meet(g);
+    if (i < k - 1 && som > 0 && (b.breek || som + b.hoogte > cap)) {
       i += 1;
       som = 0;
     }
     blokken[i]!.push(g);
-    som += x;
+    som += b.hoogte;
   }
   return blokken;
 }
@@ -235,11 +258,6 @@ function verdeelVullend(groepen: Groep[], hoogte: (g: Groep) => number, cap: num
 const MAX_SCHAAL = 1.6;
 const MIN_SCHAAL = 0.25;
 const KOLOMMEN = 6;
-/** Hoogte (px) van één rasterrij bij het vrij slepen — straatblokken klikken hierop vast. */
-const RIJ_EENHEID = 11;
-
-type Positie = { col: number; row: number };
-
 function PrintPagina() {
   useRequireAuth();
   const { wijk, maand, prijzen, liggend, vouwen: vouwenRaw } = Route.useSearch();
@@ -253,25 +271,43 @@ function PrintPagina() {
   const districts = districtsQuery.data ?? [];
   const actieveWijk = districts.find((d) => d.id === wijk) ?? districts[0] ?? null;
   const alleStreets = streetsQuery.data ?? [];
-  const streets = alleStreets.filter((s) => !actieveWijk || s.district_id === actieveWijk.id);
+  const wijkId = actieveWijk?.id ?? null;
+  const streets = useMemo(
+    () => alleStreets.filter((s) => !wijkId || s.district_id === wijkId),
+    [alleStreets, wijkId],
+  );
   const customers = customersQuery.data ?? [];
 
   // Live volgorde tijdens het slepen (ids van straten in deze wijk).
   const [sleepVolgorde, setSleepVolgorde] = useState<string[] | null>(null);
   const [sleepId, setSleepId] = useState<string | null>(null);
+  // Welke straten tijdens het slepen (tijdelijk) wél of juist niet bovenaan
+  // een kolom beginnen.
+  const [sleepVlaggen, setSleepVlaggen] = useState<Record<string, boolean> | null>(null);
 
-  const zichtbaar = streets
-    .map((s) => {
-      const klanten = customers.filter((c) => c.street_id === s.id && matchesMaand(c.frequency, maand));
-      return { street: s, ...splitEvenOdd(klanten, s.sort_desc ? "desc" : "asc"), aantal: klanten.length };
-    })
-    .filter((g) => g.aantal > 0);
+  // Eenmalig groeperen: tijdens het slepen rendert deze pagina vaak, en de
+  // klantenlijst per straat opnieuw uitfilteren maakte dat merkbaar traag.
+  const zichtbaar = useMemo(() => {
+    const perStraat = new Map<string, Customer[]>();
+    for (const c of customers) {
+      if (!matchesMaand(c.frequency, maand)) continue;
+      const rij = perStraat.get(c.street_id);
+      if (rij) rij.push(c);
+      else perStraat.set(c.street_id, [c]);
+    }
+    return streets
+      .map((s) => {
+        const klanten = perStraat.get(s.id) ?? [];
+        return { street: s, ...splitEvenOdd(klanten, s.sort_desc ? "desc" : "asc"), aantal: klanten.length };
+      })
+      .filter((g) => g.aantal > 0);
+  }, [streets, customers, maand]);
 
-  const groepen: Groep[] = sleepVolgorde
-    ? (sleepVolgorde
-        .map((id) => zichtbaar.find((g) => g.street.id === id))
-        .filter(Boolean) as Groep[])
-    : zichtbaar;
+  const groepen: Groep[] = useMemo(() => {
+    if (!sleepVolgorde) return zichtbaar;
+    const perId = new Map(zichtbaar.map((g) => [g.street.id, g]));
+    return sleepVolgorde.map((id) => perId.get(id)).filter(Boolean) as Groep[];
+  }, [zichtbaar, sleepVolgorde]);
 
   const totaal = groepen.reduce(
     (sum, g) => sum + [...g.even, ...g.oneven].reduce((s, c) => s + c.price, 0),
@@ -338,13 +374,19 @@ function PrintPagina() {
   const kwartKolommen = Math.max(1, Math.round(KOLOMMEN / 2));
   const schatting = (g: Groep) => 14 + 11 * Math.max(g.even.length, g.oneven.length);
   const blokHoogte = (g: Groep) => hoogtes[g.street.id] ?? schatting(g);
+  // Tijdens het slepen tellen de vlaggen zoals ze op dat moment zouden worden.
+  const kolomStart = (s: Street) => sleepVlaggen?.[s.id] ?? s.kolom_start;
+  const meetBlok = (g: Groep): Blok => ({
+    hoogte: blokHoogte(g),
+    breek: kolomStart(g.street),
+  });
   // hoogte per kwart, in niet-geschaalde px (titelbalk wordt gemeten)
   const kwartHoogte = Math.floor((hoogtePx / schaal - kopHoogte - 10) / 2);
   const kolomCap = Math.max(20, kwartHoogte - 4);
   const totaalKolommen = 4 * kwartKolommen;
   // Vul elke kolom tot aan de vouwlijn; overloop schuift door naar rechts.
   const kolomBlokken = vouwen
-    ? verdeelVullend(groepen, blokHoogte, kolomCap, totaalKolommen)
+    ? verdeelVullend(groepen, meetBlok, kolomCap, totaalKolommen)
     : [];
   const kwarten = vouwen
     ? Array.from({ length: 4 }, (_, i) =>
@@ -352,7 +394,7 @@ function PrintPagina() {
       )
     : [];
   // Kleinst mogelijke kolomhoogte waarbij alles nog past -> grootste schaal.
-  const capMin = vouwen ? minCapaciteit(groepen.map(blokHoogte), totaalKolommen) : 0;
+  const capMin = vouwen ? minCapaciteit(groepen.map(meetBlok), totaalKolommen) : 0;
   const meetBreedte = Math.round(breedtePx / schaal / (vouwen ? 2 * kwartKolommen : KOLOMMEN)) - 6;
 
   // Buiten vouwmodus staat de lettergrootte vast en is er niets te schalen;
@@ -402,47 +444,49 @@ function PrintPagina() {
   // Buiten vouwmodus: verdeel de straten (zoals gemeten in de meetlaag)
   // over zoveel volle A4-pagina's van vaste KOLOMMEN kolommen als nodig.
   const printCap = Math.max(20, hoogtePx - kopHoogte - 10);
-  const printHoogtes = groepen.map(blokHoogte);
-  const printKolommenNodig = vouwen ? 0 : kolommenNodig(printHoogtes, printCap);
+  const printBlokken = groepen.map(meetBlok);
+  const printKolommenNodig = vouwen ? 0 : kolommenNodig(printBlokken, printCap);
   const printPaginasNodig = vouwen ? 0 : Math.max(1, Math.ceil(printKolommenNodig / KOLOMMEN));
   const printTotaalSlots = printPaginasNodig * KOLOMMEN;
   // Een kolomhoogte-cap die precies alle straten evenredig over alle
   // beschikbare kolommen verspreidt (i.p.v. te stoppen zodra het past,
   // wat de laatste kolommen leeg zou laten).
   const printTightCap =
-    !vouwen && printHoogtes.length > 0 ? minCapaciteit(printHoogtes, printTotaalSlots) : printCap;
+    !vouwen && printBlokken.length > 0 ? minCapaciteit(printBlokken, printTotaalSlots) : printCap;
   const printKolomBlokken = vouwen
     ? []
-    : verdeelVullend(groepen, blokHoogte, printTightCap, printTotaalSlots);
+    : verdeelVullend(groepen, meetBlok, printTightCap, printTotaalSlots);
   const printPaginas = vouwen
     ? []
     : Array.from({ length: printPaginasNodig }, (_, i) =>
         printKolomBlokken.slice(i * KOLOMMEN, (i + 1) * KOLOMMEN),
       );
 
-  // Rasterpositie (kolom/rij) waarop elk blok zou staan als het nog nooit
-  // met de hand versleept is — dient als startpunt zodra je gaat slepen.
-  const rijSpan = (g: Groep) => Math.max(1, Math.ceil(blokHoogte(g) / RIJ_EENHEID));
-  const rijenPerPagina = Math.max(1, Math.round(hoogtePx / RIJ_EENHEID));
-  const seedPosities: Record<string, Positie> = {};
-  if (!vouwen) {
-    printKolomBlokken.forEach((kolom, slot) => {
-      const col = slot % KOLOMMEN;
-      const pagina = Math.floor(slot / KOLOMMEN);
-      let rij = pagina * rijenPerPagina;
-      for (const g of kolom) {
-        seedPosities[g.street.id] = { col, row: rij };
-        rij += rijSpan(g);
-      }
-    });
-  }
-  const effectievePositie = (s: Street): Positie =>
-    s.print_col != null && s.print_row != null
-      ? { col: s.print_col, row: s.print_row }
-      : (seedPosities[s.id] ?? { col: 0, row: 0 });
-  const vrijeIndeling = !vouwen && groepen.length > 0 && groepen.every((g) => g.street.print_col != null && g.street.print_row != null);
+  // Waar de muis staat tijdens het slepen. dnd-kit meldt alleen een nieuw
+  // doel zodra je een ánder blok raakt; schuif je binnen hetzelfde blok van
+  // het midden naar de onderste derde, dan kwam er geen enkel signaal. Daarom
+  // bepalen we de plek zelf, bij elke muisbeweging.
+  const muis = useRef<{ x: number; y: number } | null>(null);
+  const plekRef = useRef<(activeId: string, punt: { x: number; y: number }) => void>(() => {});
 
-
+  useEffect(() => {
+    if (!sleepId) return;
+    let frame = 0;
+    const volg = (e: PointerEvent) => {
+      muis.current = { x: e.clientX, y: e.clientY };
+      if (frame) return;
+      // Hooguit één herberekening per beeldopbouw.
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (muis.current) plekRef.current(sleepId, muis.current);
+      });
+    };
+    window.addEventListener("pointermove", volg);
+    return () => {
+      window.removeEventListener("pointermove", volg);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [sleepId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -458,123 +502,184 @@ function PrintPagina() {
     setSleepVolgorde(huidigeVolgorde());
   }
 
-  /** "Vouwen in 4": straten wisselen van plek in de lijst (bestaand gedrag). */
-  async function onDragEndVouwen(e: DragEndEvent) {
-    const activeId = String(e.active.id);
-    const overId = e.over ? String(e.over.id) : null;
-    const nieuweVolgorde = [...(sleepVolgorde ?? huidigeVolgorde())];
-    if (!overId || overId === activeId) return;
-    const van = nieuweVolgorde.indexOf(activeId);
-    const naar = nieuweVolgorde.indexOf(overId);
-    if (van < 0 || naar < 0) return;
-    const [verplaatst] = nieuweVolgorde.splice(van, 1);
-    if (!verplaatst) return;
-    nieuweVolgorde.splice(naar, 0, verplaatst);
+  /** Zet `activeId` vlak voor of vlak na `overId` in de sleepvolgorde. */
+  function verplaatsNaast(activeId: string, overId: string, ervoor: boolean) {
+    setSleepVolgorde((vorig) => {
+      const volgorde = vorig ?? huidigeVolgorde();
+      const van = volgorde.indexOf(activeId);
+      if (van < 0 || !volgorde.includes(overId)) return vorig;
+      const nieuw = [...volgorde];
+      nieuw.splice(van, 1);
+      const doel = nieuw.indexOf(overId);
+      if (doel < 0) return vorig;
+      nieuw.splice(ervoor ? doel : doel + 1, 0, activeId);
+      return nieuw.join(",") === volgorde.join(",") ? vorig : nieuw;
+    });
+  }
 
-    const vorige = alleStreets.map((s) => ({ ...s }));
+  /** Zet de tijdelijke kolomstart-vlaggen; laat de staat met rust als er
+   * niets verandert, anders zou elke muisbeweging opnieuw tekenen. */
+  function zetVlaggen(nieuw: Record<string, boolean>) {
+    setSleepVlaggen((vorig) => {
+      const sleutels = Object.keys(nieuw);
+      const gelijk =
+        vorig !== null &&
+        Object.keys(vorig).length === sleutels.length &&
+        sleutels.every((k) => vorig[k] === nieuw[k]);
+      return gelijk ? vorig : nieuw;
+    });
+  }
+
+  /** Schuift de straten al tijdens het slepen op, zodat de indeling meteen
+   * meeloopt en het blok op zijn plek "vastklikt".
+   *
+   * Zweef je over de bovenste derde van een straat, dan kom je erboven; over
+   * de onderste derde, dan eronder. Het middenstuk verandert niets: dat is de
+   * rustzone die voorkomt dat twee blokken elkaar eindeloos verdringen.
+   *
+   * Land je boven de bovenste straat van een kolom, dan neem je die kolomkop
+   * over: de volgorde alleen kan dat niet uitdrukken, want in de rij stond je
+   * daar mogelijk al vlak voor.
+   */
+  function bepaalPlek(activeId: string, punt: { x: number; y: number }) {
+    const raakt = (r: DOMRect) =>
+      punt.x >= r.left && punt.x <= r.right && punt.y >= r.top && punt.y <= r.bottom;
+
+    for (const el of document.querySelectorAll<HTMLElement>("[data-straat]")) {
+      const r = el.getBoundingClientRect();
+      if (!raakt(r)) continue;
+      const id = el.dataset["straat"];
+      if (!id || id === activeId) return;
+      const deel = (punt.y - r.top) / Math.max(1, r.height);
+      if (deel > 1 / 3 && deel < 2 / 3) return;
+      const ervoor = deel <= 1 / 3;
+      const kolom = el.closest("[data-kolom]");
+      const isKop = !!kolom && kolom.querySelector("[data-straat]") === el;
+      verplaatsNaast(activeId, id, ervoor);
+      zetVlaggen(ervoor && isKop ? { [activeId]: true, [id]: false } : { [activeId]: false });
+      return;
+    }
+
+    // Geen straat onder de muis: dan de lege ruimte onderaan een kolom.
+    for (const el of document.querySelectorAll<HTMLElement>("[data-kolom]")) {
+      if (!raakt(el.getBoundingClientRect())) continue;
+      zetOnderaanKolom(activeId, Number(el.dataset["kolom"]));
+      zetVlaggen({ [activeId]: false });
+      return;
+    }
+  }
+  plekRef.current = bepaalPlek;
+
+  /** Zet een straat achter de laatste straat van kolom `slot`. Is die kolom
+   * (nog) leeg, dan telt de dichtstbijzijnde gevulde kolom ervoor. */
+  function zetOnderaanKolom(activeId: string, slot: number) {
+    setSleepVolgorde((vorig) => {
+      const volgorde = vorig ?? huidigeVolgorde();
+      const van = volgorde.indexOf(activeId);
+      if (van < 0) return vorig;
+      let laatste: string | null = null;
+      for (let i = Math.min(slot, printKolomBlokken.length - 1); i >= 0 && !laatste; i--) {
+        for (const g of printKolomBlokken[i] ?? []) {
+          if (g.street.id !== activeId) laatste = g.street.id;
+        }
+      }
+      if (!laatste) return vorig;
+      const naar = volgorde.indexOf(laatste);
+      if (naar < 0 || naar === van) return vorig;
+      const nieuw = [...volgorde];
+      const [verplaatst] = nieuw.splice(van, 1);
+      if (!verplaatst) return vorig;
+      nieuw.splice((naar < van ? naar : naar - 1) + 1, 0, verplaatst);
+      return nieuw.join(",") === volgorde.join(",") ? vorig : nieuw;
+    });
+  }
+
+  /** Legt vast wat er tijdens het slepen al te zien was: de volgorde, en
+   * welke straten bovenaan een kolom beginnen. */
+  function bewaarVolgorde(nieuweVolgorde: string[], vlaggen: Record<string, boolean> | null) {
     const gesorteerd = nieuweVolgorde
       .map((id) => alleStreets.find((s) => s.id === id))
       .filter(Boolean) as Street[];
     if (gesorteerd.length === 0) return;
-    // Ongewijzigd? niets doen.
-    const oudeVolgorde = zichtbaar.map((g) => g.street.id).join(",");
-    if (oudeVolgorde === nieuweVolgorde.join(",")) return;
 
+    const vlagWijzigingen = Object.entries(vlaggen ?? {})
+      .map(([id, aan]) => ({ id, kolom_start: aan }))
+      .filter((v) => {
+        const straat = alleStreets.find((s) => s.id === v.id);
+        return !!straat && straat.kolom_start !== v.kolom_start;
+      });
+    const volgordeGelijk =
+      zichtbaar.map((g) => g.street.id).join(",") === nieuweVolgorde.join(",");
+    if (volgordeGelijk && vlagWijzigingen.length === 0) return;
+
+    const vorige = alleStreets.map((s) => ({ ...s }));
     // Straten buiten deze selectie behouden hun plek t.o.v. de rest.
     const gesorteerdIds = new Set(gesorteerd.map((s) => s.id));
     const rest = alleStreets.filter((s) => !gesorteerdIds.has(s.id));
     const compleet = [...gesorteerd, ...rest];
 
+    // Eerst de lijst zelf bijwerken: daarna mag de sleepvolgorde losgelaten
+    // worden zonder dat het blok terugspringt. Het opslaan gebeurt erachteraan.
     qc.setQueryData<Street[]>(
       ["streets"],
-      compleet.map((s, i) => ({ ...s, sort_order: i + 1 })),
+      compleet.map((s, i) => {
+        const vlag = vlagWijzigingen.find((v) => v.id === s.id);
+        return { ...s, sort_order: i + 1, ...(vlag ? { kolom_start: vlag.kolom_start } : {}) };
+      }),
     );
-    await persistStreetOrder(compleet);
     pushUndo({
       label: "Straatvolgorde",
       undo: async () => {
-        await persistStreetOrder(vorige);
+        await Promise.all([
+          persistStreetOrder(vorige),
+          persistKolomStart(
+            vlagWijzigingen.map((v) => ({
+              id: v.id,
+              kolom_start: vorige.find((s) => s.id === v.id)?.kolom_start ?? false,
+            })),
+          ),
+        ]);
         qc.invalidateQueries({ queryKey: ["streets"] });
       },
     });
-    qc.invalidateQueries({ queryKey: ["streets"] });
+    void Promise.all([
+      volgordeGelijk ? Promise.resolve() : persistStreetOrder(compleet),
+      persistKolomStart(vlagWijzigingen),
+    ])
+      .catch(() => toast.error("Volgorde opslaan mislukt."))
+      .finally(() => qc.invalidateQueries({ queryKey: ["streets"] }));
   }
 
-  /**
-   * Normale weergave: straat verplaatst naar een vrije rastercel (kolom/rij),
-   * los van de andere straten. Bij de eerste keer slepen wordt de huidige
-   * (automatische) indeling van de hele wijk "bevroren" naar vaste posities.
-   */
-  async function onDragEndVrij(e: DragEndEvent) {
-    const activeId = String(e.active.id);
-    const kolomBreedte = breedtePx / KOLOMMEN;
-    const deltaCol = Math.round(e.delta.x / kolomBreedte);
-    const deltaRow = Math.round(e.delta.y / RIJ_EENHEID);
-    if (deltaCol === 0 && deltaRow === 0) return;
-
-    const vorige = alleStreets.map((s) => ({ ...s }));
-    const updates = groepen.map((g) => {
-      const pos = effectievePositie(g.street);
-      if (g.street.id === activeId) {
-        return {
-          id: g.street.id,
-          print_col: Math.min(KOLOMMEN - 1, Math.max(0, pos.col + deltaCol)),
-          print_row: Math.max(0, pos.row + deltaRow),
-        };
-      }
-      return { id: g.street.id, print_col: pos.col, print_row: pos.row };
-    });
-
-    qc.setQueryData<Street[]>(
-      ["streets"],
-      alleStreets.map((s) => {
-        const u = updates.find((u) => u.id === s.id);
-        return u ? { ...s, print_col: u.print_col, print_row: u.print_row } : s;
-      }),
-    );
-    await persistPrintPosities(updates);
-    pushUndo({
-      label: "Straat verplaatst",
-      undo: async () => {
-        await persistPrintPosities(
-          updates.map((u) => {
-            const orig = vorige.find((s) => s.id === u.id)!;
-            return { id: u.id, print_col: orig.print_col, print_row: orig.print_row };
-          }),
-        );
-        qc.invalidateQueries({ queryKey: ["streets"] });
-      },
-    });
-    qc.invalidateQueries({ queryKey: ["streets"] });
-  }
-
-  async function onDragEnd(e: DragEndEvent) {
+  function onDragEnd(_e: DragEndEvent) {
+    const volgorde = sleepVolgorde;
+    const vlaggen = sleepVlaggen;
     setSleepId(null);
+    // `e.over` is bij het loslaten meestal de gesleepte straat zelf — die
+    // ligt immers al op zijn nieuwe plek. Wat tijdens het slepen ontstond is
+    // dus de bedoelde uitkomst.
+    if (volgorde) bewaarVolgorde(volgorde, vlaggen);
     setSleepVolgorde(null);
-    if (vouwen) await onDragEndVouwen(e);
-    else await onDragEndVrij(e);
+    setSleepVlaggen(null);
   }
 
-  async function indelingResetten() {
-    const ids = groepen.map((g) => g.street.id);
-    const vorige = alleStreets.map((s) => ({ ...s }));
+  /** Laat een straat de kolomkop weer los. */
+  function kolomStartUit(id: string) {
+    const straat = alleStreets.find((s) => s.id === id);
+    if (!straat?.kolom_start) return;
     qc.setQueryData<Street[]>(
       ["streets"],
-      alleStreets.map((s) => (ids.includes(s.id) ? { ...s, print_col: null, print_row: null } : s)),
+      alleStreets.map((s) => (s.id === id ? { ...s, kolom_start: false } : s)),
     );
-    await persistPrintPosities(ids.map((id) => ({ id, print_col: null, print_row: null })));
     pushUndo({
-      label: "Indeling teruggezet",
+      label: "Kolomstart",
       undo: async () => {
-        await persistPrintPosities(
-          vorige
-            .filter((s) => ids.includes(s.id))
-            .map((s) => ({ id: s.id, print_col: s.print_col, print_row: s.print_row })),
-        );
+        await persistKolomStart([{ id, kolom_start: true }]);
         qc.invalidateQueries({ queryKey: ["streets"] });
       },
     });
-    qc.invalidateQueries({ queryKey: ["streets"] });
+    void persistKolomStart([{ id, kolom_start: false }])
+      .catch(() => toast.error("Opslaan mislukt."))
+      .finally(() => qc.invalidateQueries({ queryKey: ["streets"] }));
   }
 
   const zoek = { wijk, maand, prijzen, liggend, vouwen };
@@ -656,11 +761,6 @@ function PrintPagina() {
               </Label>
             </div>
 
-            {vrijeIndeling && (
-              <Button size="sm" variant="outline" onClick={() => void indelingResetten()}>
-                <LayoutGrid className="size-4" /> Automatisch indelen
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -671,14 +771,15 @@ function PrintPagina() {
         )}
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
           onDragStart={onDragStart}
-          onDragEnd={(e) => void onDragEnd(e)}
+          onDragEnd={onDragEnd}
           onDragCancel={() => {
             setSleepId(null);
             setSleepVolgorde(null);
+            setSleepVlaggen(null);
           }}
         >
+          <SortableContext items={groepen.map((g) => g.street.id)}>
           <div
             ref={inhoudRef}
             className="origin-top-left overflow-hidden print:overflow-visible"
@@ -713,7 +814,14 @@ function PrintPagina() {
                       >
                         {kwart.map((g) =>
                           indelingKlaar ? (
-                            <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                            <SleepbaarBlok
+                              key={g.street.id}
+                              g={g}
+                              prijzen={prijzen}
+                              maand={maand}
+                              kolomKop={kolomStart(g.street)}
+                              onKolomKopUit={() => kolomStartUit(g.street.id)}
+                            />
                           ) : (
                             <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
                           ),
@@ -723,26 +831,6 @@ function PrintPagina() {
                     </div>
                   ))}
                 </div>
-              ) : vrijeIndeling ? (
-                <div
-                  className="grid gap-[1mm]"
-                  style={{
-                    gridTemplateColumns: `repeat(${KOLOMMEN}, minmax(0, 1fr))`,
-                    gridAutoRows: `${RIJ_EENHEID}px`,
-                  }}
-                >
-                  {groepen.map((g) => {
-                    const pos = effectievePositie(g.street);
-                    return (
-                      <div
-                        key={g.street.id}
-                        style={{ gridColumn: pos.col + 1, gridRow: `${pos.row + 1} / span ${rijSpan(g)}` }}
-                      >
-                        <SleepbaarBlok g={g} prijzen={prijzen} maand={maand} />
-                      </div>
-                    );
-                  })}
-                </div>
               ) : (
                 printPaginas.map((paginaKolommen, i) => (
                   <div
@@ -751,15 +839,22 @@ function PrintPagina() {
                     style={{ gridTemplateColumns: `repeat(${KOLOMMEN}, minmax(0, 1fr))` }}
                   >
                     {paginaKolommen.map((kolom, k) => (
-                      <div key={k}>
+                      <KolomVak key={k} slot={i * KOLOMMEN + k}>
                         {kolom.map((g) =>
                           indelingKlaar ? (
-                            <SleepbaarBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                            <SleepbaarBlok
+                              key={g.street.id}
+                              g={g}
+                              prijzen={prijzen}
+                              maand={maand}
+                              kolomKop={kolomStart(g.street)}
+                              onKolomKopUit={() => kolomStartUit(g.street.id)}
+                            />
                           ) : (
                             <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
                           ),
                         )}
-                      </div>
+                      </KolomVak>
                     ))}
                   </div>
                 ))
@@ -771,7 +866,7 @@ function PrintPagina() {
                 className="pointer-events-none invisible absolute -left-[9999px] top-0 print:hidden"
                 style={{ width: meetBreedte }}
               >
-                {groepen.map((g) => (
+                {zichtbaar.map((g) => (
                   <div
                     key={g.street.id}
                     ref={(el) => {
@@ -783,6 +878,7 @@ function PrintPagina() {
                 ))}
               </div>
           </div>
+          </SortableContext>
           <DragOverlay>
             {sleepGroep ? (
               <div className="w-[200px] rounded bg-card px-2 py-1 text-xs font-semibold shadow-lg">

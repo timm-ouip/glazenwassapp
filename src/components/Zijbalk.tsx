@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Droplets,
   LogOut,
+  Map,
   PanelLeftClose,
   PanelLeftOpen,
   Printer,
@@ -26,7 +27,8 @@ type Pagina = {
 };
 
 const WERK: Pagina[] = [
-  { label: "Klanten", to: "/", icon: Users },
+  { label: "Wijken", to: "/", icon: Map },
+  { label: "Klanten", to: "/klanten", icon: Users },
   { label: "Printen", to: "/printen", icon: Printer },
   { label: "Importeren", to: "/importeren", icon: Upload },
 ];

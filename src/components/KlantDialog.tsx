@@ -10,7 +10,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   frequencyLabels,
@@ -22,6 +28,7 @@ import {
   type Street,
 } from "@/lib/klanten";
 import { Plus } from "lucide-react";
+import { opslaanBijEnter } from "@/lib/dialoog";
 
 interface Props {
   open: boolean;
@@ -93,7 +100,10 @@ export function KlantDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-md"
+        onKeyDown={opslaanBijEnter(save)}
+      >
         <DialogHeader>
           <DialogTitle>{customer ? "Klant bewerken" : "Klant toevoegen"}</DialogTitle>
         </DialogHeader>
@@ -116,11 +126,21 @@ export function KlantDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="nr">Huisnummer</Label>
-              <Input id="nr" inputMode="numeric" value={number} onChange={(e) => setNumber(e.target.value)} />
+              <Input
+                id="nr"
+                inputMode="numeric"
+                value={number}
+                onChange={(e) => setNumber(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="toev">Toevoeging</Label>
-              <Input id="toev" placeholder="a, bis…" value={addition} onChange={(e) => setAddition(e.target.value)} />
+              <Input
+                id="toev"
+                placeholder="a, bis…"
+                value={addition}
+                onChange={(e) => setAddition(e.target.value)}
+              />
             </div>
           </div>
           <div className="space-y-2">
@@ -177,7 +197,12 @@ export function KlantDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="prijs">Prijs (€)</Label>
-              <Input id="prijs" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
+              <Input
+                id="prijs"
+                inputMode="decimal"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>Frequentie</Label>

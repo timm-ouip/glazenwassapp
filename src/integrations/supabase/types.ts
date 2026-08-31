@@ -41,7 +41,9 @@ export type Database = {
           frequency: string
           house_number: number
           id: string
+          klant_id: string | null
           note: string
+          postcode: string
           price: number
           sort_order: number
           street_id: string
@@ -54,7 +56,9 @@ export type Database = {
           frequency?: string
           house_number: number
           id?: string
+          klant_id?: string | null
           note?: string
+          postcode?: string
           price?: number
           sort_order?: number
           street_id: string
@@ -67,7 +71,9 @@ export type Database = {
           frequency?: string
           house_number?: number
           id?: string
+          klant_id?: string | null
           note?: string
+          postcode?: string
           price?: number
           sort_order?: number
           street_id?: string
@@ -78,6 +84,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_klant_id_fkey"
+            columns: ["klant_id"]
+            isOneToOne: false
+            referencedRelation: "klanten"
             referencedColumns: ["id"]
           },
           {
@@ -96,6 +109,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           name: string
+          plaats: string
           sort_order: number
           updated_at: string
         }
@@ -105,6 +119,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name: string
+          plaats?: string
           sort_order?: number
           updated_at?: string
         }
@@ -114,6 +129,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name?: string
+          plaats?: string
           sort_order?: number
           updated_at?: string
         }
@@ -155,6 +171,62 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "employees_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      klanten: {
+        Row: {
+          company_id: string
+          created_at: string
+          deleted_at: string | null
+          email: string
+          huisnummer: string
+          id: string
+          naam: string
+          notitie: string
+          plaats: string
+          postcode: string
+          straat: string
+          telefoon: string
+          updated_at: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          email?: string
+          huisnummer?: string
+          id?: string
+          naam: string
+          notitie?: string
+          plaats?: string
+          postcode?: string
+          straat?: string
+          telefoon?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          email?: string
+          huisnummer?: string
+          id?: string
+          naam?: string
+          notitie?: string
+          plaats?: string
+          postcode?: string
+          straat?: string
+          telefoon?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "klanten_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
@@ -205,7 +277,9 @@ export type Database = {
           print_col: number | null
           print_row: number | null
           sort_desc: boolean
+          kolom_start: boolean
           sort_order: number
+          volledige_naam: string
         }
         Insert: {
           company_id?: string
@@ -217,7 +291,9 @@ export type Database = {
           print_col?: number | null
           print_row?: number | null
           sort_desc?: boolean
+          kolom_start?: boolean
           sort_order?: number
+          volledige_naam?: string
         }
         Update: {
           company_id?: string
@@ -229,7 +305,9 @@ export type Database = {
           print_col?: number | null
           print_row?: number | null
           sort_desc?: boolean
+          kolom_start?: boolean
           sort_order?: number
+          volledige_naam?: string
         }
         Relationships: [
           {

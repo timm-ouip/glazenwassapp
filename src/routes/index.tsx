@@ -35,6 +35,7 @@ import {
   Undo2,
   Droplets,
   Users,
+  User,
   Euro,
   Milestone as Route2,
 } from "lucide-react";
@@ -42,6 +43,7 @@ import {
 import { AppLayout } from "@/components/AppLayout";
 import { KlantDialog } from "@/components/KlantDialog";
 import { StraatDialog } from "@/components/StraatDialog";
+import { StratenAanvullen } from "@/components/StratenAanvullen";
 import { DubbeleStraten } from "@/components/DubbeleStraten";
 
 import { WijkKiezer } from "@/components/WijkKiezer";
@@ -49,12 +51,14 @@ import { useBevestig } from "@/components/Bevestig";
 import { InlineCel } from "@/components/InlineCel";
 import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { NotitieCel } from "@/components/NotitieCel";
+import { useActieveWijk } from "@/lib/wijkgeheugen";
 import {
   addQuickNote,
   haalTerug,
   legWeg,
   fetchCustomers,
   fetchDistricts,
+  fetchKlanten,
   fetchQuickNotes,
   fetchStreets,
   formatNumber,
@@ -92,7 +96,8 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "Klantenlijst glazenwasser" },
       {
         property: "og:description",
-        content: "Klanten per straat, prijzen, notities en printlijsten voor even of oneven maanden.",
+        content:
+          "Klanten per straat, prijzen, notities en printlijsten voor even of oneven maanden.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -112,10 +117,13 @@ function Index() {
   const [filter, setFilter] = useState<MaandFilter>("alles");
   const [zoek, setZoek] = useState("");
   const [prijzenTonen, setPrijzenTonen] = useState(true);
-  const [compact, setCompact] = useState(true);
   const [selectie, setSelectie] = useState<string[]>([]);
   const [sleep, setSleep] = useState<string | null>(null);
-  const [klantDialog, setKlantDialog] = useState<{ open: boolean; customer: Customer | null; streetId?: string }>({
+  const [klantDialog, setKlantDialog] = useState<{
+    open: boolean;
+    customer: Customer | null;
+    streetId?: string;
+  }>({
     open: false,
     customer: null,
   });
@@ -128,15 +136,24 @@ function Index() {
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
   const quickNotesQuery = useQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes });
+  const klantenQuery = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten });
+
+  // Alleen om de naam bij een gekoppelde regel te kunnen tonen; de
+  // contactgegevens zelf horen op /klanten.
+  const klantNamen = useMemo(
+    () => new Map((klantenQuery.data ?? []).map((k) => [k.id, k.naam])),
+    [klantenQuery.data],
+  );
 
   const districts: District[] = districtsQuery.data ?? [];
-  const actieveWijk = districts.find((d) => d.id === wijk)?.id ?? districts[0]?.id ?? null;
-
-  useEffect(() => {
-    if (actieveWijk && wijk !== actieveWijk) {
-      void navigate({ to: "/", search: { wijk: actieveWijk }, replace: true });
-    }
-  }, [actieveWijk, wijk, navigate]);
+  // De wijk waar je mee bezig bent blijft staan bij een paginawissel én bij
+  // een volgende inlog — zie useActieveWijk.
+  const actieveWijk = useActieveWijk(
+    districts,
+    wijk,
+    (id) => void navigate({ to: "/", search: { wijk: id }, replace: true }),
+  );
+  const wijkPlaats = districts.find((d) => d.id === actieveWijk)?.plaats ?? "";
 
   const alleStraten = streetsQuery.data ?? [];
   const streets = alleStraten.filter((s) => s.district_id === actieveWijk);
@@ -168,7 +185,8 @@ function Index() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const doel = e.target as HTMLElement | null;
-      const tikt = doel && (doel.tagName === "INPUT" || doel.tagName === "TEXTAREA" || doel.isContentEditable);
+      const tikt =
+        doel && (doel.tagName === "INPUT" || doel.tagName === "TEXTAREA" || doel.isContentEditable);
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !tikt) {
         e.preventDefault();
         void doeUndo();
@@ -184,7 +202,9 @@ function Index() {
       .filter((s) => !term || s.name.toLowerCase().includes(term))
       .map((s) => {
         const order: "asc" | "desc" = s.sort_desc ? "desc" : "asc";
-        const klanten = customers.filter((c) => c.street_id === s.id && matchesMaand(c.frequency, filter));
+        const klanten = customers.filter(
+          (c) => c.street_id === s.id && matchesMaand(c.frequency, filter),
+        );
         return {
           street: s,
           ...splitEvenOdd(klanten, order),
@@ -281,7 +301,10 @@ function Index() {
   async function nieuweRegel(streetId: string, nummer: string) {
     const huisnummer = parseInt(nummer, 10);
     if (Number.isNaN(huisnummer)) return;
-    const max = Math.max(0, ...customers.filter((c) => c.street_id === streetId).map((c) => c.sort_order));
+    const max = Math.max(
+      0,
+      ...customers.filter((c) => c.street_id === streetId).map((c) => c.sort_order),
+    );
     const { data, error } = await supabase
       .from("customers")
       .insert({ street_id: streetId, house_number: huisnummer, sort_order: max + 1 })
@@ -353,7 +376,9 @@ function Index() {
   }
 
   function klikSelectie(c: Customer, shift: boolean) {
-    const lijst = sortCustomers(customers.filter((x) => x.street_id === c.street_id)).map((x) => x.id);
+    const lijst = sortCustomers(customers.filter((x) => x.street_id === c.street_id)).map(
+      (x) => x.id,
+    );
     setSelectie((huidig) => {
       if (!shift) return huidig.includes(c.id) && huidig.length === 1 ? [] : [c.id];
       const anker = huidig.find((id) => lijst.includes(id));
@@ -388,8 +413,11 @@ function Index() {
       const next = [...streets];
       const [moved] = next.splice(from, 1);
       next.splice(to, 0, moved!);
-        const vorigeVolgorde = streets.map((s) => ({ ...s }));
-      qc.setQueryData<Street[]>(["streets"], next.map((s, i) => ({ ...s, sort_order: i + 1 })));
+      const vorigeVolgorde = streets.map((s) => ({ ...s }));
+      qc.setQueryData<Street[]>(
+        ["streets"],
+        next.map((s, i) => ({ ...s, sort_order: i + 1 })),
+      );
       await persistStreetOrder(next);
       pushUndo({
         label: "Straatvolgorde",
@@ -451,13 +479,26 @@ function Index() {
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
 
-  const rowText = compact ? "text-[12px]" : "text-[13px]";
-  const rowPad = compact ? "py-[2px]" : "py-1";
+  // De lijst staat altijd in de compacte weergave: zo passen er meer regels
+  // op het scherm, en dat is waar je op de ronde naar kijkt.
+  const rowText = "text-[12px]";
+  const rowPad = "py-[2px]";
 
   return (
     <AppLayout
-      titel={districts.find((d) => d.id === actieveWijk)?.name ?? "Klanten"}
-      kruimel="Overzicht / Klanten"
+      // De titel ís de wijkkiezer: je wisselt van wijk door op de naam te
+      // klikken. Dat scheelt een keuzevak in de knoppenbalk eronder.
+      titel={
+        <WijkKiezer
+          variant="titel"
+          districts={districts}
+          activeId={actieveWijk}
+          onSelect={(id) => void navigate({ to: "/", search: { wijk: id } })}
+          onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
+        />
+      }
+      actiePositie="onder"
+      kruimel="Overzicht / Wijken"
       acties={
         <>
           <div className="relative w-full sm:w-56">
@@ -469,11 +510,10 @@ function Index() {
               onChange={(e) => setZoek(e.target.value)}
             />
           </div>
-          <WijkKiezer
-            districts={districts}
-            activeId={actieveWijk}
-            onSelect={(id) => void navigate({ to: "/", search: { wijk: id } })}
-            onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
+          <StratenAanvullen
+            streets={streets.filter((s) => s.district_id === actieveWijk)}
+            plaats={wijkPlaats}
+            onSaved={() => qc.invalidateQueries({ queryKey: ["streets"] })}
           />
           <Button
             size="sm"
@@ -509,49 +549,51 @@ function Index() {
       }
       kop={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {[
-              {
-                label: "Klanten in beeld",
-                waarde: String(totaal),
-                icon: Users,
-                tegel: "bg-accent text-accent-foreground",
-              },
-              {
-                label: "Straten",
-                waarde: String(groepen.length),
-                icon: Route2,
-                tegel: "bg-tint-amber text-tint-amber-ink",
-              },
-              {
-                label: "Omzet per ronde",
-                waarde: formatPrice(omzet),
-                icon: Euro,
-                tegel: "bg-tint-groen text-tint-groen-ink",
-                verberg: !prijzenTonen,
-              },
-            ]
-              .filter((s) => !s.verberg)
-              .map((s) => (
+          {[
+            {
+              label: "Adressen in beeld",
+              waarde: String(totaal),
+              icon: Users,
+              tegel: "bg-accent text-accent-foreground",
+            },
+            {
+              label: "Straten",
+              waarde: String(groepen.length),
+              icon: Route2,
+              tegel: "bg-tint-amber text-tint-amber-ink",
+            },
+            {
+              label: "Omzet per ronde",
+              waarde: formatPrice(omzet),
+              icon: Euro,
+              tegel: "bg-tint-groen text-tint-groen-ink",
+              verberg: !prijzenTonen,
+            },
+          ]
+            .filter((s) => !s.verberg)
+            .map((s) => (
+              <div
+                key={s.label}
+                className="flex items-center gap-3 rounded-[14px] border border-border bg-card px-4 py-3.5"
+              >
                 <div
-                  key={s.label}
-                  className="flex items-center gap-3 rounded-[14px] border border-border bg-card px-4 py-3.5"
+                  className={`flex size-9 shrink-0 items-center justify-center rounded-[11px] ${s.tegel}`}
                 >
-                  <div className={`flex size-9 shrink-0 items-center justify-center rounded-[11px] ${s.tegel}`}>
-                    <s.icon className="size-[17px]" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground">{s.label}</p>
-                    <p className="font-display text-[22px] font-semibold leading-tight tracking-[-0.02em] tabular-nums">
-                      {s.waarde}
-                    </p>
-                  </div>
+                  <s.icon className="size-[17px]" />
                 </div>
-              ))}
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">{s.label}</p>
+                  <p className="font-display text-[22px] font-semibold leading-tight tracking-[-0.02em] tabular-nums">
+                    {s.waarde}
+                  </p>
+                </div>
+              </div>
+            ))}
         </div>
       }
     >
       <div className="space-y-3">
-        <div className="sticky top-[61px] z-10 -mx-6 flex flex-wrap items-center gap-3 border-b border-border/70 bg-background/85 px-6 py-2.5 backdrop-blur">
+        <div className="sticky top-[var(--plakrand)] z-[9] -mx-6 flex flex-wrap items-center gap-3 border-b border-border/70 bg-background/85 px-6 py-2 backdrop-blur">
           <div className="inline-flex gap-0.5 rounded-full border border-border bg-card p-[3px]">
             {(["alles", "even", "oneven"] as MaandFilter[]).map((f) => (
               <button
@@ -573,17 +615,10 @@ function Index() {
               Prijzen
             </Label>
           </div>
-          <div className="flex items-center gap-2">
-            <Switch id="compact" checked={compact} onCheckedChange={setCompact} />
-            <Label htmlFor="compact" className="text-sm text-muted-foreground">
-              Extra compact
-            </Label>
-          </div>
           <span className="ml-auto text-[12.5px] text-muted-foreground">
             {groepen.length} straten · {totaal} klanten
           </span>
         </div>
-
 
         {selectie.length > 1 && (
           <p className="text-xs text-muted-foreground">
@@ -600,7 +635,6 @@ function Index() {
           <p className="text-sm text-muted-foreground">Laden…</p>
         )}
 
-
         {!streetsQuery.isLoading && districts.length === 0 && (
           <div className="rounded-lg border border-dashed border-border p-8 text-center">
             <p className="text-sm text-muted-foreground">
@@ -612,7 +646,8 @@ function Index() {
         {!streetsQuery.isLoading && districts.length > 0 && streets.length === 0 && (
           <div className="rounded-lg border border-dashed border-border p-8 text-center">
             <p className="text-sm text-muted-foreground">
-              Nog geen straten in deze wijk. Typ hieronder een straatnaam of importeer je Excel-bestand.
+              Nog geen straten in deze wijk. Typ hieronder een straatnaam of importeer je
+              Excel-bestand.
             </p>
             <div className="mt-4 flex justify-center">
               <Button size="sm" variant="outline" asChild>
@@ -628,7 +663,10 @@ function Index() {
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
         >
-          <SortableContext items={groepen.map((g) => `s:${g.street.id}`)} strategy={verticalListSortingStrategy}>
+          <SortableContext
+            items={groepen.map((g) => `s:${g.street.id}`)}
+            strategy={verticalListSortingStrategy}
+          >
             <div className="gap-3.5 md:columns-1 xl:columns-2">
               {groepen.map((g) => (
                 <StraatBlok
@@ -641,6 +679,7 @@ function Index() {
                   sort={g.street.sort_desc ? "desc" : "asc"}
                   prijzenTonen={prijzenTonen}
                   quickNotes={quickNotes}
+                  klantNamen={klantNamen}
                   rowText={rowText}
                   rowPad={rowPad}
                   selectie={selectie}
@@ -651,19 +690,21 @@ function Index() {
                   onNieuweRegel={nieuweRegel}
                   onEditStreet={() => setStraatDialog({ open: true, street: g.street })}
                   onDeleteStreet={() => verwijderStraat(g.street)}
-                  onAddKlant={() => setKlantDialog({ open: true, customer: null, streetId: g.street.id })}
+                  onAddKlant={() =>
+                    setKlantDialog({ open: true, customer: null, streetId: g.street.id })
+                  }
                   onToggleSort={() => void wisselSort(g.street)}
                 />
               ))}
-              {districts.length > 0 && (
-                <NieuweStraat onSubmit={nieuweStraat} />
-              )}
+              {districts.length > 0 && <NieuweStraat onSubmit={nieuweStraat} />}
             </div>
           </SortableContext>
           <DragOverlay>
             {sleep ? (
               <div className="rounded border border-primary bg-card px-2 py-1 text-xs shadow-lg">
-                {sleep.startsWith("s:") ? "Straat verplaatsen" : `${selectie.length > 1 ? selectie.length : 1} regel(s)`}
+                {sleep.startsWith("s:")
+                  ? "Straat verplaatsen"
+                  : `${selectie.length > 1 ? selectie.length : 1} regel(s)`}
               </div>
             ) : null}
           </DragOverlay>
@@ -682,6 +723,7 @@ function Index() {
       />
       <StraatDialog
         districtId={actieveWijk ?? undefined}
+        plaats={wijkPlaats}
         open={straatDialog.open}
         onOpenChange={(open) => setStraatDialog((s) => ({ ...s, open }))}
         street={straatDialog.street}
@@ -700,6 +742,8 @@ interface BlokProps {
   sort: "asc" | "desc";
   prijzenTonen: boolean;
   quickNotes: QuickNote[];
+  /** Naam per klant-id, voor het personen-icoontje op een gekoppelde regel. */
+  klantNamen: Map<string, string>;
   rowText: string;
   rowPad: string;
   selectie: string[];
@@ -738,9 +782,13 @@ function StraatBlok(p: BlokProps) {
         <h2 className="flex-1 truncate font-display text-[14.5px] font-semibold uppercase tracking-[0.01em] text-foreground">
           {p.street.name}
         </h2>
-        <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">{p.aantal}</span>
+        <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">
+          {p.aantal}
+        </span>
         {p.prijzenTonen && (
-          <span className="text-[11px] font-medium tabular-nums text-brand-ink">{formatPrice(p.totaal)}</span>
+          <span className="text-[11px] font-medium tabular-nums text-brand-ink">
+            {formatPrice(p.totaal)}
+          </span>
         )}
 
         <button
@@ -749,15 +797,31 @@ function StraatBlok(p: BlokProps) {
           aria-label={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
           title={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
         >
-          {p.sort === "asc" ? <ArrowUpNarrowWide className="size-3.5" /> : <ArrowDownNarrowWide className="size-3.5" />}
+          {p.sort === "asc" ? (
+            <ArrowUpNarrowWide className="size-3.5" />
+          ) : (
+            <ArrowDownNarrowWide className="size-3.5" />
+          )}
         </button>
-        <button className="rounded p-1 text-muted-foreground hover:bg-accent" onClick={p.onAddKlant} aria-label="Klant toevoegen">
+        <button
+          className="rounded p-1 text-muted-foreground hover:bg-accent"
+          onClick={p.onAddKlant}
+          aria-label="Klant toevoegen"
+        >
           <Plus className="size-3.5" />
         </button>
-        <button className="rounded p-1 text-muted-foreground hover:bg-accent" onClick={p.onEditStreet} aria-label="Straat bewerken">
+        <button
+          className="rounded p-1 text-muted-foreground hover:bg-accent"
+          onClick={p.onEditStreet}
+          aria-label="Straat bewerken"
+        >
           <Pencil className="size-3.5" />
         </button>
-        <button className="rounded p-1 text-muted-foreground hover:bg-accent" onClick={p.onDeleteStreet} aria-label="Straat verwijderen">
+        <button
+          className="rounded p-1 text-muted-foreground hover:bg-accent"
+          onClick={p.onDeleteStreet}
+          aria-label="Straat verwijderen"
+        >
           <Trash2 className="size-3.5" />
         </button>
       </div>
@@ -783,6 +847,7 @@ function StraatBlok(p: BlokProps) {
                   customer={c}
                   prijzenTonen={p.prijzenTonen}
                   quickNotes={p.quickNotes}
+                  klantNaam={c.klant_id ? p.klantNamen.get(c.klant_id) : undefined}
                   rowText={p.rowText}
                   rowPad={p.rowPad}
                   geselecteerd={p.selectie.includes(c.id)}
@@ -794,7 +859,10 @@ function StraatBlok(p: BlokProps) {
               ))}
             </SortableContext>
             {kant === "even" && (
-              <NieuweRegel onSubmit={(nr) => p.onNieuweRegel(p.street.id, nr)} rowText={p.rowText} />
+              <NieuweRegel
+                onSubmit={(nr) => p.onNieuweRegel(p.street.id, nr)}
+                rowText={p.rowText}
+              />
             )}
           </div>
         ))}
@@ -807,6 +875,7 @@ interface RijProps {
   customer: Customer;
   prijzenTonen: boolean;
   quickNotes: QuickNote[];
+  klantNaam?: string | undefined;
   rowText: string;
   rowPad: string;
   geselecteerd: boolean;
@@ -827,6 +896,7 @@ function KlantRij({
   customer: c,
   prijzenTonen,
   quickNotes,
+  klantNaam,
   rowText,
   rowPad,
   geselecteerd,
@@ -835,7 +905,9 @@ function KlantRij({
   onAddQuickNote,
   onDelete,
 }: RijProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `c:${c.id}` });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `c:${c.id}`,
+  });
 
   return (
     <div
@@ -881,7 +953,9 @@ function KlantRij({
             align="right"
             inputMode="decimal"
             placeholder={formatPrice(0)}
-            onCommit={(v) => onPatch(c, { price: Number(v.replace(",", ".").replace(/[^\d.]/g, "")) || 0 })}
+            onCommit={(v) =>
+              onPatch(c, { price: Number(v.replace(",", ".").replace(/[^\d.]/g, "")) || 0 })
+            }
           />
         </div>
       )}
@@ -895,6 +969,21 @@ function KlantRij({
         <option value="even">Even</option>
         <option value="oneven">Oneven</option>
       </select>
+      {/* Vaste breedte, ook zonder klant: anders krimpt de notitiekolom van
+          precies die ene rij en lopen de kolommen uit de pas. */}
+      <span className="w-3 shrink-0">
+        {klantNaam && (
+          <Link
+            to="/klanten"
+            search={{ klant: c.klant_id ?? "" }}
+            title={klantNaam}
+            aria-label={`Klantgegevens van ${klantNaam}`}
+            className="text-muted-foreground/70 hover:text-foreground"
+          >
+            <User className="size-3" />
+          </Link>
+        )}
+      </span>
       <button
         className="shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:!text-destructive"
         onClick={() => onDelete(c)}

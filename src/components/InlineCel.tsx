@@ -10,7 +10,14 @@ interface Props {
 }
 
 /** Cel die je aanklikt en direct typt, zoals in Excel. */
-export function InlineCel({ value, onCommit, align = "left", placeholder, inputMode = "text", className }: Props) {
+export function InlineCel({
+  value,
+  onCommit,
+  align = "left",
+  placeholder,
+  inputMode = "text",
+  className,
+}: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const ref = useRef<HTMLInputElement>(null);
@@ -48,6 +55,10 @@ export function InlineCel({ value, onCommit, align = "left", placeholder, inputM
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
+          // Focus loslaten, anders zet de knop zichzelf via onFocus meteen
+          // weer in bewerkmodus: je lijkt klaar maar staat nog te typen, en
+          // een Escape gooit dan weg wat je net bevestigde.
+          e.currentTarget.blur();
           setEditing(false);
           if (draft !== value) onCommit(draft);
         } else if (e.key === "Escape") {

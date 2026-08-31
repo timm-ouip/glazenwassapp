@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
 import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
-import { formatNumber, gooiEchtWeg, haalTerug, type Customer } from "@/lib/klanten";
+import { formatNumber, gooiEchtWeg, haalTerug, klantAdres, type Customer } from "@/lib/klanten";
 
 export const Route = createFileRoute("/prullenbak")({
   beforeLoad: async () => {
@@ -18,7 +18,7 @@ export const Route = createFileRoute("/prullenbak")({
   component: Prullenbak,
 });
 
-type Soort = "districts" | "streets" | "customers";
+type Soort = "districts" | "streets" | "customers" | "klanten";
 
 type Weggelegd = {
   soort: Soort;
@@ -29,15 +29,19 @@ type Weggelegd = {
 };
 
 async function haalPrullenbak(): Promise<Weggelegd[]> {
-  const [wijken, straten, klanten] = await Promise.all([
+  const [wijken, straten, adressen, personen] = await Promise.all([
     supabase.from("districts").select("id,name,deleted_at").not("deleted_at", "is", null),
     supabase.from("streets").select("id,name,deleted_at").not("deleted_at", "is", null),
     supabase
       .from("customers")
       .select("id,house_number,addition,street_id,deleted_at")
       .not("deleted_at", "is", null),
+    supabase
+      .from("klanten")
+      .select("id,naam,straat,huisnummer,postcode,plaats,deleted_at")
+      .not("deleted_at", "is", null),
   ]);
-  for (const r of [wijken, straten, klanten]) if (r.error) throw r.error;
+  for (const r of [wijken, straten, adressen, personen]) if (r.error) throw r.error;
 
   // Straatnamen erbij zoeken zodat een weggelegde klant niet als kaal
   // huisnummer in de lijst staat. Ook weggelegde straten tellen mee, want
@@ -60,12 +64,21 @@ async function haalPrullenbak(): Promise<Weggelegd[]> {
       extra: "Straat — klanten komen mee terug",
       deleted_at: s.deleted_at as string,
     })),
-    ...(klanten.data ?? []).map((c) => ({
+    ...(adressen.data ?? []).map((c) => ({
       soort: "customers" as const,
       id: c.id,
       omschrijving: formatNumber(c as unknown as Customer),
       extra: straatNaam.get(c.street_id) ?? "Onbekende straat",
       deleted_at: c.deleted_at as string,
+    })),
+    // De persoon achter een adres staat in een eigen tabel; zonder deze
+    // regels beloofde de verwijderknop een prullenbak waar hij niet in kwam.
+    ...(personen.data ?? []).map((k) => ({
+      soort: "klanten" as const,
+      id: k.id,
+      omschrijving: k.naam?.trim() || "Klant zonder naam",
+      extra: klantAdres(k) || "Geen adres",
+      deleted_at: k.deleted_at as string,
     })),
   ];
 
@@ -75,7 +88,8 @@ async function haalPrullenbak(): Promise<Weggelegd[]> {
 const SOORT_LABEL: Record<Soort, string> = {
   districts: "Wijk",
   streets: "Straat",
-  customers: "Klant",
+  customers: "Adres",
+  klanten: "Klantgegevens",
 };
 
 function datum(iso: string) {
@@ -100,6 +114,7 @@ function Prullenbak() {
     qc.invalidateQueries({ queryKey: ["districts"] });
     qc.invalidateQueries({ queryKey: ["streets"] });
     qc.invalidateQueries({ queryKey: ["customers"] });
+    qc.invalidateQueries({ queryKey: ["klanten"] });
   }
 
   async function terug(r: Weggelegd) {
@@ -116,8 +131,8 @@ function Prullenbak() {
     const ja = await bevestig({
       titel: `${r.omschrijving} definitief verwijderen?`,
       tekst:
-        r.soort === "customers"
-          ? "Deze klant is hierna echt weg en niet meer terug te halen."
+        r.soort === "customers" || r.soort === "klanten"
+          ? "Dit is hierna echt weg en niet meer terug te halen."
           : "Alles wat hieronder valt gaat mee en is hierna echt weg. Dit kan niet ongedaan gemaakt worden.",
       bevestigLabel: "Definitief verwijderen",
       gevaarlijk: true,
@@ -136,7 +151,7 @@ function Prullenbak() {
     <AppLayout
       titel="Prullenbak"
       kruimel="Overzicht / Prullenbak"
-      onderschrift="Verwijderde wijken, straten en klanten staan hier tot je ze definitief weggooit"
+      onderschrift="Verwijderde wijken, straten, adressen en klantgegevens staan hier tot je ze definitief weggooit"
     >
       {vraag.isLoading ? (
         <p className="text-sm text-muted-foreground">Laden…</p>
@@ -149,8 +164,10 @@ function Prullenbak() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-[14px] border border-border bg-card">
-          <div className="flex items-center gap-3 border-b border-border bg-card-header px-4 py-2.5 text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
-            <span className="w-16 shrink-0">SOORT</span>
+          {/* Op een smal scherm staan de gegevens onder elkaar in plaats van
+              in kolommen; dan zijn kopjes overbodig. */}
+          <div className="hidden items-center gap-3 border-b border-border bg-card-header px-4 py-2.5 text-[10px] font-semibold tracking-[0.06em] text-muted-foreground sm:flex">
+            <span className="w-28 shrink-0">SOORT</span>
             <span className="min-w-0 flex-1">WAT</span>
             <span className="hidden w-44 shrink-0 lg:block">VERWIJDERD OP</span>
             <span className="w-[150px] shrink-0" />
@@ -158,9 +175,9 @@ function Prullenbak() {
           {rijen.map((r) => (
             <div
               key={`${r.soort}:${r.id}`}
-              className="flex items-center gap-3 border-b border-border/60 px-4 py-2.5 text-sm last:border-b-0"
+              className="flex flex-col gap-1.5 border-b border-border/60 px-4 py-3 text-sm last:border-b-0 sm:flex-row sm:items-center sm:gap-3 sm:py-2.5"
             >
-              <span className="w-16 shrink-0 text-xs text-muted-foreground">
+              <span className="shrink-0 truncate text-xs text-muted-foreground sm:w-28">
                 {SOORT_LABEL[r.soort]}
               </span>
               <span className="flex min-w-0 flex-1 flex-col">
@@ -173,7 +190,7 @@ function Prullenbak() {
               <span className="hidden w-44 shrink-0 text-xs text-muted-foreground lg:block">
                 {datum(r.deleted_at)}
               </span>
-              <span className="flex w-[150px] shrink-0 justify-end gap-2">
+              <span className="flex shrink-0 gap-2 sm:w-[150px] sm:justify-end">
                 <Button
                   size="sm"
                   variant="outline"
