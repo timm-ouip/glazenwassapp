@@ -413,9 +413,12 @@ function Index() {
   // Eén streek: het eerste vakje bepaalt of je aan- of uitzet, alles wat je
   // daarna aanraakt volgt diezelfde kant op. Zou elk vakje omschakelen, dan
   // zou je bij het terugslepen je eigen werk weer uitvinken.
+  type Punt = { x: number; y: number };
   type Verf = {
     aan: boolean;
     laatste: string | null;
+    /** Waar de vorige stap eindigde, om de lijn ertussen af te lopen. */
+    vorig: Punt | null;
     toegevoegd: DagRegel[];
     weggehaald: DagRegel[];
   };
@@ -461,16 +464,41 @@ function Index() {
    * doorsleept naar een volgende straat.
    */
   function startVerf(aan: boolean, x: number, y: number) {
-    verf.current = { aan, laatste: null, toegevoegd: [], weggehaald: [] };
+    verf.current = { aan, laatste: null, vorig: { x, y }, toegevoegd: [], weggehaald: [] };
     negeerKlik.current = false;
     setVerfBezig(true);
     verfOpPunt(x, y);
+  }
+
+  /**
+   * Loopt de lijn af tussen de vorige en de nieuwe muispositie. Beweeg je
+   * snel, dan liggen de meetpunten tientallen pixels uit elkaar en springt de
+   * muis zo over hele straten heen; dan zou je ze overslaan.
+   */
+  function verfOpLijn(naar: Punt) {
+    const v = verf.current;
+    if (!v) return;
+    const van = v.vorig ?? naar;
+    v.vorig = naar;
+    const dx = naar.x - van.x;
+    const dy = naar.y - van.y;
+    // Om de ~8 px kijken: dat is fijner dan de kleinste straatkop hoog is.
+    const stappen = Math.min(80, Math.max(1, Math.ceil(Math.hypot(dx, dy) / 8)));
+    for (let i = 1; i <= stappen; i++) {
+      verfOpPunt(van.x + (dx * i) / stappen, van.y + (dy * i) / stappen);
+    }
   }
 
   function rondVerfAf() {
     const v = verf.current;
     verf.current = null;
     setVerfBezig(false);
+    // Eindigt een streek buiten een straatkop, dan volgt er geen klik meer en
+    // zou de vlag blijven staan — en de eerstvolgende gewone klik opslokken.
+    // De klik van déze streek komt nog vóór deze timeout.
+    setTimeout(() => {
+      negeerKlik.current = false;
+    }, 0);
     if (!v) return;
     const raakte = new Set([
       ...v.toegevoegd.map((r) => r.customer_id),
@@ -486,18 +514,18 @@ function Index() {
   // De streek loopt door buiten het vakje waar hij begon, dus hangen deze
   // luisteraars aan het venster. `elementFromPoint` in plaats van
   // pointerenter: bij aanraken vangt het startvakje alle verdere events.
-  const verfRef = useRef<(x: number, y: number) => void>(() => {});
-  verfRef.current = verfOpPunt;
+  const verfRef = useRef<(naar: Punt) => void>(() => {});
+  verfRef.current = verfOpLijn;
   useEffect(() => {
     if (!verfBezig) return;
     let frame = 0;
-    let punt: { x: number; y: number } | null = null;
+    let punt: Punt | null = null;
     const beweeg = (e: PointerEvent) => {
       punt = { x: e.clientX, y: e.clientY };
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        if (punt) verfRef.current(punt.x, punt.y);
+        if (punt) verfRef.current(punt);
       });
     };
     const stop = () => rondVerfAf();
@@ -1176,6 +1204,12 @@ function StraatBlok(p: BlokProps) {
   // je ingeklapt meteen in welke straat je iets hebt overgeslagen.
   const straatVink: boolean | "indeterminate" =
     erop === 0 ? false : erop === zichtbaar.length ? true : "indeterminate";
+  // Hoeveel van de straat op de dag staat, als groene vulling in de kop.
+  // Minstens 10%, anders is één adres van de zestig niet te zien.
+  const gevuld =
+    erop === 0 || zichtbaar.length === 0
+      ? 0
+      : Math.max(10, Math.round((erop / zichtbaar.length) * 100));
 
   return (
     <section
@@ -1206,6 +1240,13 @@ function StraatBlok(p: BlokProps) {
               },
             }
           : {})}
+        style={
+          gevuld > 0
+            ? {
+                backgroundImage: `linear-gradient(to right, var(--tint-groen) ${gevuld}%, transparent ${gevuld}%)`,
+              }
+            : undefined
+        }
         className={`flex items-center gap-1 border-b border-border bg-card-header px-2.5 py-2 ${
           p.planmodus && zichtbaar.length > 0 && p.dagKlaar ? "cursor-pointer select-none" : ""
         }`}
