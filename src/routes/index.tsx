@@ -264,6 +264,7 @@ function Index() {
   // Het bedrag van de hele dag, dus ook straten uit andere wijken: het gaat
   // om wat de dag opbrengt, niet om deze ene wijk.
   const dagBedrag = dagRegels.reduce((sum, r) => sum + Number(r.prijs), 0);
+  const dagKlaar = planDatum === null || wasdagQuery.isSuccess;
 
   function planmodus(aan: boolean) {
     setPlanDatum(aan ? vandaag() : null);
@@ -325,14 +326,25 @@ function Index() {
     });
   }
 
+  type DagWijziging = { toegevoegd: DagRegel[]; weggehaald: DagRegel[] };
+  type DagRegel = { customer_id: string; prijs: number };
+
   /**
    * Zet adressen op de dag of haalt ze eraf, met één optimistische stap en
    * daarna de opslag. `label` is leeg voor losse regels: die zet je met
    * hetzelfde vinkje net zo snel terug, en ze zouden de ongedaan-knop
-   * verstoppen voor de grotere ingrepen.
+   * verstoppen voor de grotere ingrepen. Tijdens het slepen blijft het label
+   * ook leeg; dan maakt `rondVerfAf` er aan het eind één stap van.
+   *
+   * Geeft terug wat er werkelijk veranderd is, zodat de aanroeper dat kan
+   * verzamelen.
    */
-  function pasDagAan(erbij: Customer[], eraf: string[], label?: string) {
-    if (!planDatum) return;
+  function pasDagAan(erbij: Customer[], eraf: string[], label?: string): DagWijziging {
+    const niets: DagWijziging = { toegevoegd: [], weggehaald: [] };
+    // Nog niet opgehaald? Dan weten we niet wat er al op de dag staat, en zou
+    // de optimistische schrijfactie hieronder het antwoord dat onderweg is
+    // overschrijven. De vinkjes staan in dat venster ook uit.
+    if (!planDatum || !wasdagQuery.isSuccess) return niets;
     const datum = planDatum;
     const bestaand = qc.getQueryData<WasdagRegel[]>(["wasdag", datum]) ?? [];
     const alOpDeDag = new Set(bestaand.map((r) => r.customer_id));
@@ -341,40 +353,54 @@ function Index() {
       .map((c) => ({ customer_id: c.id, prijs: c.price }));
     // Alleen wat er echt af gaat, met de prijs zoals die op de dag stond —
     // die kan afwijken van de huidige prijs van het adres.
-    const weghalen = bestaand.filter((r) => r.customer_id && eraf.includes(r.customer_id));
-    if (toevoegen.length === 0 && weghalen.length === 0) return;
+    const weghalen = bestaand
+      .filter((r) => r.customer_id && eraf.includes(r.customer_id))
+      .map((r) => ({ customer_id: r.customer_id!, prijs: Number(r.prijs) }));
+    if (toevoegen.length === 0 && weghalen.length === 0) return niets;
 
-    const wegIds = new Set(weghalen.map((r) => r.customer_id));
-    qc.setQueryData<WasdagRegel[]>(
-      ["wasdag", datum],
-      [...bestaand.filter((r) => !wegIds.has(r.customer_id)), ...toevoegen],
-    );
+    const wegIds = new Set<string | null>(weghalen.map((r) => r.customer_id));
+    const nieuweIds = new Set(toevoegen.map((r) => r.customer_id));
+    // Bijwerken vanaf wat er op dát moment staat, niet vanaf de momentopname
+    // hierboven: tijdens een sleepstreek volgen de stappen elkaar sneller op
+    // dan react-query kan bijhouden.
+    qc.setQueryData<WasdagRegel[]>(["wasdag", datum], (oud) => [
+      ...(oud ?? bestaand).filter(
+        (r) => !wegIds.has(r.customer_id) && !nieuweIds.has(r.customer_id ?? ""),
+      ),
+      ...toevoegen,
+    ]);
 
-    if (label) {
-      pushUndo({
-        label,
-        undo: async () => {
-          await Promise.all([
-            haalUitWasdag(datum, toevoegen.map((r) => r.customer_id)),
-            voegToeAanWasdag(
-              datum,
-              weghalen.map((r) => ({ customer_id: r.customer_id!, prijs: Number(r.prijs) })),
-            ),
-          ]);
-          qc.invalidateQueries({ queryKey: ["wasdag", datum] });
-        },
-      });
-    }
+    if (label) draaiTerug(label, { toegevoegd: toevoegen, weggehaald: weghalen });
 
     void Promise.all([
       voegToeAanWasdag(datum, toevoegen),
-      haalUitWasdag(datum, weghalen.map((r) => r.customer_id!)),
+      haalUitWasdag(datum, weghalen.map((r) => r.customer_id)),
     ])
       .catch(() => toast.error("Dagplanning opslaan mislukt."))
       .finally(() => {
         qc.invalidateQueries({ queryKey: ["wasdag", datum] });
         qc.invalidateQueries({ queryKey: ["wasdagen"] });
       });
+
+    return { toegevoegd: toevoegen, weggehaald: weghalen };
+  }
+
+  /** Zet één ongedaan-stap klaar voor een wijziging aan de dag. */
+  function draaiTerug(label: string, w: DagWijziging) {
+    if (!planDatum) return;
+    const datum = planDatum;
+    if (w.toegevoegd.length === 0 && w.weggehaald.length === 0) return;
+    pushUndo({
+      label,
+      undo: async () => {
+        await Promise.all([
+          haalUitWasdag(datum, w.toegevoegd.map((r) => r.customer_id)),
+          voegToeAanWasdag(datum, w.weggehaald),
+        ]);
+        qc.invalidateQueries({ queryKey: ["wasdag", datum] });
+        qc.invalidateQueries({ queryKey: ["wasdagen"] });
+      },
+    });
   }
 
   function zetStraatOpDag(g: (typeof groepen)[number], aan: boolean) {
@@ -382,6 +408,110 @@ function Index() {
     if (aan) pasDagAan(zichtbaar, [], `${g.street.name} op de dag`);
     else pasDagAan([], zichtbaar.map((c) => c.id), `${g.street.name} van de dag af`);
   }
+
+  // --- Slepen om te selecteren -------------------------------------------
+  // Eén streek: het eerste vakje bepaalt of je aan- of uitzet, alles wat je
+  // daarna aanraakt volgt diezelfde kant op. Zou elk vakje omschakelen, dan
+  // zou je bij het terugslepen je eigen werk weer uitvinken.
+  type Verf = {
+    aan: boolean;
+    laatste: string | null;
+    toegevoegd: DagRegel[];
+    weggehaald: DagRegel[];
+  };
+  const verf = useRef<Verf | null>(null);
+  const [verfBezig, setVerfBezig] = useState(false);
+  /** Een streek eindigt met een klik; die mag niet nóg eens omschakelen. */
+  const negeerKlik = useRef(false);
+
+  function tekenBij(w: DagWijziging) {
+    const v = verf.current;
+    if (!v) return;
+    v.toegevoegd.push(...w.toegevoegd);
+    v.weggehaald.push(...w.weggehaald);
+  }
+
+  /** Past de streek toe op wat er onder de muis of vinger ligt. */
+  function verfOpPunt(x: number, y: number) {
+    const v = verf.current;
+    if (!v) return;
+    const el = document.elementFromPoint(x, y);
+    const straatEl = el?.closest<HTMLElement>("[data-verf-straat]");
+    const klantEl = el?.closest<HTMLElement>("[data-verf-klant]");
+    const id = straatEl?.dataset["verfStraat"] ?? klantEl?.dataset["verfKlant"];
+    if (!id || id === v.laatste) return;
+    v.laatste = id;
+    negeerKlik.current = true;
+
+    if (straatEl) {
+      const g = groepen.find((x) => x.street.id === id);
+      if (!g) return;
+      const zichtbaar = [...g.even, ...g.oneven];
+      tekenBij(v.aan ? pasDagAan(zichtbaar, []) : pasDagAan([], zichtbaar.map((c) => c.id)));
+      return;
+    }
+    const c = customers.find((x) => x.id === id);
+    if (!c) return;
+    tekenBij(v.aan ? pasDagAan([c], []) : pasDagAan([], [c.id]));
+  }
+
+  /**
+   * Begint een streek en past hem meteen toe op het vakje waar je indrukt.
+   * Anders zou het beginpunt overgeslagen worden als je in één beweging
+   * doorsleept naar een volgende straat.
+   */
+  function startVerf(aan: boolean, x: number, y: number) {
+    verf.current = { aan, laatste: null, toegevoegd: [], weggehaald: [] };
+    negeerKlik.current = false;
+    setVerfBezig(true);
+    verfOpPunt(x, y);
+  }
+
+  function rondVerfAf() {
+    const v = verf.current;
+    verf.current = null;
+    setVerfBezig(false);
+    if (!v) return;
+    const raakte = new Set([
+      ...v.toegevoegd.map((r) => r.customer_id),
+      ...v.weggehaald.map((r) => r.customer_id),
+    ]).size;
+    if (raakte === 0) return;
+    draaiTerug(`${raakte} ${raakte === 1 ? "adres" : "adressen"} ${v.aan ? "op de dag" : "van de dag af"}`, {
+      toegevoegd: v.toegevoegd,
+      weggehaald: v.weggehaald,
+    });
+  }
+
+  // De streek loopt door buiten het vakje waar hij begon, dus hangen deze
+  // luisteraars aan het venster. `elementFromPoint` in plaats van
+  // pointerenter: bij aanraken vangt het startvakje alle verdere events.
+  const verfRef = useRef<(x: number, y: number) => void>(() => {});
+  verfRef.current = verfOpPunt;
+  useEffect(() => {
+    if (!verfBezig) return;
+    let frame = 0;
+    let punt: { x: number; y: number } | null = null;
+    const beweeg = (e: PointerEvent) => {
+      punt = { x: e.clientX, y: e.clientY };
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (punt) verfRef.current(punt.x, punt.y);
+      });
+    };
+    const stop = () => rondVerfAf();
+    window.addEventListener("pointermove", beweeg);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    return () => {
+      window.removeEventListener("pointermove", beweeg);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      if (frame) cancelAnimationFrame(frame);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verfBezig]);
 
   function maakDagLeeg() {
     if (!planDatum) return;
@@ -913,7 +1043,13 @@ function Index() {
             items={groepen.map((g) => `s:${g.street.id}`)}
             strategy={verticalListSortingStrategy}
           >
-            <div className="gap-3.5 md:columns-1 xl:columns-2">
+            <div
+              className={`gap-3.5 md:columns-1 xl:columns-2 ${
+                // Tijdens een streek niets selecteren: anders sleep je een
+                // blauwe tekstselectie over de halve wijk.
+                verfBezig ? "select-none" : ""
+              }`}
+            >
               {groepen.map((g) => (
                 <StraatBlok
                   key={g.street.id}
@@ -943,9 +1079,14 @@ function Index() {
                   ingeklapt={ingeklapt.has(g.street.id)}
                   onKlap={() => klapStraat(g.street.id)}
                   planmodus={planDatum !== null}
+                  dagKlaar={dagKlaar}
                   opDeDag={opDeDag}
                   onStraatOpDag={(aan) => zetStraatOpDag(g, aan)}
-                  onKlantOpDag={(c, aan) => pasDagAan(aan ? [c] : [], aan ? [] : [c.id])}
+                  onKlantOpDag={(c, aan) => {
+                    pasDagAan(aan ? [c] : [], aan ? [] : [c.id]);
+                  }}
+                  onVerfStart={startVerf}
+                  negeerKlik={negeerKlik}
                 />
               ))}
               {districts.length > 0 && <NieuweStraat onSubmit={nieuweStraat} />}
@@ -1012,9 +1153,15 @@ interface BlokProps {
   onKlap: () => void;
   /** In planmodus tel je adressen voor een dag; bewerken doe je dan niet. */
   planmodus: boolean;
+  /** Vals zolang de dag nog opgehaald wordt: dan weten we van niets. */
+  dagKlaar: boolean;
   opDeDag: Set<string>;
   onStraatOpDag: (aan: boolean) => void;
   onKlantOpDag: (c: Customer, aan: boolean) => void;
+  /** Begint een sleepselectie; `aan` is de kant die de hele streek opgaat. */
+  onVerfStart: (aan: boolean, x: number, y: number) => void;
+  /** Staat op waar als de streek al iets deed — dan telt de klik erna niet. */
+  negeerKlik: { current: boolean };
 }
 
 function StraatBlok(p: BlokProps) {
@@ -1036,13 +1183,50 @@ function StraatBlok(p: BlokProps) {
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={`mb-3 break-inside-avoid-column overflow-hidden rounded-[14px] border border-border bg-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
     >
-      <div className="flex items-center gap-1 border-b border-border bg-card-header px-2.5 py-2">
+      <div
+        {...(p.planmodus
+          ? {
+              "data-verf-straat": p.street.id,
+              // De hele kop is de knop; alleen het pijltje klapt in of uit.
+              onClick: () => {
+                // Met de muis heeft het indrukken het al gedaan; dit is het
+                // pad voor aanraken en toetsenbord.
+                if (p.negeerKlik.current) {
+                  p.negeerKlik.current = false;
+                  return;
+                }
+                if (zichtbaar.length > 0 && p.dagKlaar) p.onStraatOpDag(straatVink !== true);
+              },
+              onPointerDown: (e: React.PointerEvent) => {
+                // Bij aanraken niet: dan is een veeg over de kop bedoeld om te
+                // scrollen. Op de telefoon begin je een streek op het vinkje.
+                if (e.pointerType !== "touch" && zichtbaar.length > 0 && p.dagKlaar) {
+                  p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
+                }
+              },
+            }
+          : {})}
+        className={`flex items-center gap-1 border-b border-border bg-card-header px-2.5 py-2 ${
+          p.planmodus && zichtbaar.length > 0 && p.dagKlaar ? "cursor-pointer select-none" : ""
+        }`}
+      >
         {p.planmodus ? (
           <Checkbox
-            className="mr-1"
+            className="mr-1 touch-none"
             checked={straatVink}
-            disabled={zichtbaar.length === 0}
-            onCheckedChange={(v) => p.onStraatOpDag(v !== true ? false : true)}
+            disabled={zichtbaar.length === 0 || !p.dagKlaar}
+            onCheckedChange={(v) => {
+              if (p.negeerKlik.current) {
+                p.negeerKlik.current = false;
+                return;
+              }
+              p.onStraatOpDag(v === true);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
+            }}
             aria-label={`Hele ${p.street.name} op de dag`}
           />
         ) : (
@@ -1057,7 +1241,11 @@ function StraatBlok(p: BlokProps) {
         )}
         <button
           className="rounded p-0.5 text-muted-foreground hover:bg-accent"
-          onClick={p.onKlap}
+          onClick={(e) => {
+            e.stopPropagation();
+            p.onKlap();
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
           aria-label={p.ingeklapt ? "Straat uitklappen" : "Straat inklappen"}
           aria-expanded={!p.ingeklapt}
         >
@@ -1148,7 +1336,10 @@ function StraatBlok(p: BlokProps) {
                   geselecteerd={p.selectie.includes(c.id)}
                   planmodus={p.planmodus}
                   opDeDag={p.opDeDag.has(c.id)}
+                  dagKlaar={p.dagKlaar}
                   onOpDag={(aan) => p.onKlantOpDag(c, aan)}
+                  onVerfStart={p.onVerfStart}
+                  negeerKlik={p.negeerKlik}
                   onSelect={p.onSelect}
                   onPatch={p.onPatch}
                   onAddQuickNote={p.onAddQuickNote}
@@ -1179,7 +1370,10 @@ interface RijProps {
   geselecteerd: boolean;
   planmodus: boolean;
   opDeDag: boolean;
+  dagKlaar: boolean;
   onOpDag: (aan: boolean) => void;
+  onVerfStart: (aan: boolean, x: number, y: number) => void;
+  negeerKlik: { current: boolean };
   onSelect: (c: Customer, shift: boolean) => void;
   onPatch: (c: Customer, patch: Partial<Customer>) => void;
   onAddQuickNote: (label: string) => void;
@@ -1203,7 +1397,10 @@ function KlantRij({
   geselecteerd,
   planmodus,
   opDeDag,
+  dagKlaar,
   onOpDag,
+  onVerfStart,
+  negeerKlik,
   onSelect,
   onPatch,
   onAddQuickNote,
@@ -1220,12 +1417,21 @@ function KlantRij({
       className={`group flex items-center gap-0.5 border-b border-border/60 px-0.5 ${rowPad} ${rowText} ${
         isDragging ? "opacity-40" : ""
       } ${geselecteerd ? "bg-accent" : ""} ${planmodus && opDeDag ? "bg-tint-groen" : ""}`}
+      {...(planmodus ? { "data-verf-klant": c.id } : {})}
     >
       {planmodus ? (
         <Checkbox
-          className="size-3.5 shrink-0"
+          className="size-3.5 shrink-0 touch-none"
           checked={opDeDag}
-          onCheckedChange={(v) => onOpDag(v === true)}
+          disabled={!dagKlaar}
+          onCheckedChange={(v) => {
+            if (negeerKlik.current) {
+              negeerKlik.current = false;
+              return;
+            }
+            onOpDag(v === true);
+          }}
+          onPointerDown={(e) => onVerfStart(!opDeDag, e.clientX, e.clientY)}
           aria-label={`${formatNumber(c)} op de dag`}
         />
       ) : (
