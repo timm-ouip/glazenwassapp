@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
+import { KlantMenu } from "@/components/KlantMenu";
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { WijkKiezer } from "@/components/WijkKiezer";
 import { PostcodesOphalen } from "@/components/PostcodesOphalen";
@@ -33,6 +34,7 @@ import {
   koppelKlant,
   legWeg,
   haalTerug,
+  patchCustomer,
   persistPostcodes,
   sortCustomers,
   updateKlant,
@@ -288,15 +290,26 @@ function Klanten() {
    * uit de wijklijst én uit de klantenlijst, met de klantgegevens erbij. De
    * naam is bijzaak — het adres is waar de ronde om draait.
    *
-   * Wegleggen is omkeerbaar: alles staat daarna in de prullenbak, en de
+   * Wegleggen is omkeerbaar: alles staat daarna in de geschiedenis, en de
    * melding heeft een ongedaan-knop.
    */
+  /** Kleur, overslaan en startmaand van een adres — uit het menu op de regel. */
+  async function patchAdres(c: Customer, patch: Partial<Customer>) {
+    try {
+      await patchCustomer(c.id, patch);
+    } catch (err) {
+      toast.error("Opslaan mislukt: " + (err instanceof Error ? err.message : String(err)));
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["customers"] });
+  }
+
   async function verwijderRegel(customer: Customer | null, klant: Klant | null, adres: string) {
     const ja = await bevestig({
       titel: `${adres} verwijderen?`,
       tekst: customer
-        ? "Het adres verdwijnt uit de wijklijst en uit de klantenlijst, met de klantgegevens erbij. Alles gaat naar de prullenbak; je kunt het daar terughalen."
-        : "De klantgegevens gaan naar de prullenbak; je kunt ze daar terughalen.",
+        ? "Het adres verdwijnt uit de wijklijst en uit de klantenlijst, met de klantgegevens erbij. Alles gaat naar de geschiedenis; je kunt het daar terughalen."
+        : "De klantgegevens gaan naar de geschiedenis; je kunt ze daar terughalen.",
       gevaarlijk: true,
     });
     if (!ja) return;
@@ -495,62 +508,65 @@ function Klanten() {
               </thead>
               <tbody>
                 {zichtbaar.map((r) => (
-                  <tr
+                  <KlantMenu
                     key={r.id}
-                    className="group border-b border-border/60 last:border-b-0 hover:bg-accent/30"
+                    customer={r.customer}
+                    onPatch={(patch) => void patchAdres(r.customer, patch)}
                   >
-                    {/* Het dossier openen staat vooraan, vóór het adres: dat is
-                        de knop waarvoor je hier komt, dus die hoort niet weg te
-                        vallen tot je er met de muis overheen gaat. */}
-                    <td className="px-2 py-1">
-                      <button
-                        className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                        aria-label={`Dossier van ${r.klant?.naam || adresTekst(r)}`}
-                        title="Dossier openen"
-                        onClick={() =>
-                          setDossier({ open: true, klant: r.klant, customer: r.customer })
-                        }
-                      >
-                        <User className="size-4" />
-                      </button>
-                    </td>
-                    <td className="whitespace-nowrap px-2 py-1 font-medium">{adresTekst(r)}</td>
-                    {KOLOMMEN.map((k) => (
-                      <td key={k.veld} className="px-2 py-1">
+                    <tr className="group border-b border-border/60 last:border-b-0 hover:bg-accent/30">
+                      {/* Het dossier openen staat vooraan, vóór het adres: dat is
+                          de knop waarvoor je hier komt, dus die hoort niet weg te
+                          vallen tot je er met de muis overheen gaat. */}
+                      <td className="px-2 py-1">
+                        <button
+                          className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          aria-label={`Dossier van ${r.klant?.naam || adresTekst(r)}`}
+                          title="Dossier openen"
+                          onClick={() =>
+                            setDossier({ open: true, klant: r.klant, customer: r.customer })
+                          }
+                        >
+                          <User className="size-4" />
+                        </button>
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-1 font-medium">{adresTekst(r)}</td>
+                      {KOLOMMEN.map((k) => (
+                        <td key={k.veld} className="px-2 py-1">
+                          <InlineCel
+                            value={r.klant?.[k.veld] ?? ""}
+                            placeholder="—"
+                            onCommit={(v) => void zetVeld(r, k.veld, v)}
+                          />
+                        </td>
+                      ))}
+                      <td className="px-2 py-1">
                         <InlineCel
-                          value={r.klant?.[k.veld] ?? ""}
+                          value={r.customer.postcode}
                           placeholder="—"
-                          onCommit={(v) => void zetVeld(r, k.veld, v)}
+                          onCommit={(v) => void zetPostcode(r.customer, v)}
                         />
                       </td>
-                    ))}
-                    <td className="px-2 py-1">
-                      <InlineCel
-                        value={r.customer.postcode}
-                        placeholder="—"
-                        onCommit={(v) => void zetPostcode(r.customer, v)}
-                      />
-                    </td>
-                    <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">
-                      {wijkVanNu?.plaats || "—"}
-                    </td>
-                    <td
-                      className="whitespace-nowrap px-2 py-1 text-right tabular-nums text-muted-foreground"
-                      title={frequencyLabels[r.customer.frequency]}
-                    >
-                      {r.customer.price ? formatPrice(r.customer.price) : "—"}
-                    </td>
-                    <td className="px-2 py-1">
-                      <button
-                        className="flex size-7 items-center justify-center rounded-full text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:bg-destructive/10 hover:!text-destructive"
-                        aria-label={`${adresTekst(r)} verwijderen`}
-                        title="Adres verwijderen"
-                        onClick={() => void verwijderRegel(r.customer, r.klant, adresTekst(r))}
+                      <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">
+                        {wijkVanNu?.plaats || "—"}
+                      </td>
+                      <td
+                        className="whitespace-nowrap px-2 py-1 text-right tabular-nums text-muted-foreground"
+                        title={frequencyLabels[r.customer.frequency]}
                       >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </td>
-                  </tr>
+                        {r.customer.price ? formatPrice(r.customer.price) : "—"}
+                      </td>
+                      <td className="px-2 py-1">
+                        <button
+                          className="flex size-7 items-center justify-center rounded-full text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:bg-destructive/10 hover:!text-destructive"
+                          aria-label={`${adresTekst(r)} verwijderen`}
+                          title="Adres verwijderen"
+                          onClick={() => void verwijderRegel(r.customer, r.klant, adresTekst(r))}
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  </KlantMenu>
                 ))}
               </tbody>
             </table>

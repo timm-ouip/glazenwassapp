@@ -5,10 +5,10 @@ import {
   LogOut,
   CalendarDays,
   Map,
+  History,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
-  Trash2,
   Upload,
   Users,
   type LucideIcon,
@@ -38,7 +38,7 @@ const WERK: Pagina[] = [
 const BEHEER: Pagina[] = [
   // Zonder `eigenaar`: ook een medewerker moet bij zijn eigen account kunnen.
   { label: "Instellingen", to: "/instellingen", icon: Settings },
-  { label: "Prullenbak", to: "/prullenbak", icon: Trash2 },
+  { label: "Geschiedenis", to: "/prullenbak", icon: History },
 ];
 
 export function Zijbalk() {

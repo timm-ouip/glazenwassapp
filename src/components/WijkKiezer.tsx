@@ -115,7 +115,7 @@ export function WijkKiezer({ districts, activeId, onSelect, onChanged, variant =
     const ja = await bevestig({
       titel: `Wijk "${actief.name}" verwijderen?`,
       tekst:
-        "Alle straten en klanten in deze wijk gaan mee naar de prullenbak. Je kunt ze daar terughalen.",
+        "Alle straten en klanten in deze wijk gaan mee naar de geschiedenis. Je kunt ze daar terughalen.",
       gevaarlijk: true,
     });
     if (!ja) return;

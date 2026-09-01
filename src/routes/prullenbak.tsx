@@ -14,7 +14,7 @@ export const Route = createFileRoute("/prullenbak")({
   beforeLoad: async () => {
     await requireSession();
   },
-  head: () => ({ meta: [{ title: "Prullenbak — Klantenlijst glazenwasser" }] }),
+  head: () => ({ meta: [{ title: "Geschiedenis — Klantenlijst glazenwasser" }] }),
   component: Prullenbak,
 });
 
@@ -149,15 +149,15 @@ function Prullenbak() {
 
   return (
     <AppLayout
-      titel="Prullenbak"
-      kruimel="Overzicht / Prullenbak"
+      titel="Geschiedenis"
+      kruimel="Overzicht / Geschiedenis"
       onderschrift="Verwijderde wijken, straten, adressen en klantgegevens staan hier tot je ze definitief weggooit"
     >
       {vraag.isLoading ? (
         <p className="text-sm text-muted-foreground">Laden…</p>
       ) : rijen.length === 0 ? (
         <div className="rounded-[14px] border border-border bg-card px-6 py-12 text-center">
-          <p className="font-display text-lg font-semibold">De prullenbak is leeg</p>
+          <p className="font-display text-lg font-semibold">Nog niets weggelegd</p>
           <p className="mt-1 text-sm text-muted-foreground">
             Wat je verwijdert komt hier terecht, zodat je het kunt terughalen.
           </p>

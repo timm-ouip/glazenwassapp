@@ -26,8 +26,13 @@ import {
   fetchStreets,
   formatNumber,
   formatPrice,
+  doetMee,
+  isNieuw,
+  maandSleutel,
   matchesMaand,
   noteVoorMaand,
+  regelKleur,
+  toonMaand,
   persistKolomStart,
   persistStreetOrder,
   splitEvenOdd,
@@ -78,11 +83,14 @@ const StraatBlok = memo(function StraatBlok({
   g,
   prijzen,
   maand,
+  ronde,
   sleepHandle,
 }: {
   g: Groep;
   prijzen: boolean;
   maand: "even" | "oneven" | "alles";
+  /** De kalendermaand die je nu loopt, als "jjjj-mm". */
+  ronde: string;
   sleepHandle?: ReactNode;
 }) {
   return (
@@ -101,26 +109,37 @@ const StraatBlok = memo(function StraatBlok({
             className={`w-full table-fixed border-collapse ${i < arr.length - 1 ? "border-r border-foreground/40" : ""}`}
           >
             <tbody>
-              {g[kant].map((c) => (
-                <tr key={c.id} className="border-b border-foreground/20 align-top last:border-0">
-                  <td className="w-6 px-[2px] text-[9px] font-semibold leading-[1.1] tabular-nums">
-                    {formatNumber(c)}
-                  </td>
-                  <td className="px-[2px] text-[9px] leading-[1.1] break-words hyphens-auto">
-                    {noteVoorMaand(c, maand)}
-                  </td>
-                  {maand === "alles" && (
-                    <td className="w-8 px-[2px] text-[9px] leading-[1.1]">{c.frequency}</td>
-                  )}
-                  {prijzen && (
-                    <td
-                      className={`w-10 px-[2px] text-right text-[9px] leading-[1.1] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}
-                    >
-                      {formatPrice(c.price)}
+              {g[kant].map((c) => {
+                const kleur = regelKleur(c, ronde);
+                return (
+                  <tr
+                    key={c.id}
+                    className={`border-b border-foreground/20 align-top last:border-0 ${
+                      kleur === "geel" ? "bg-tint-amber" : kleur === "groen" ? "bg-tint-groen" : ""
+                    }`}
+                  >
+                    <td className="w-6 px-[2px] text-[9px] font-semibold leading-[1.1] tabular-nums">
+                      {formatNumber(c)}
                     </td>
-                  )}
-                </tr>
-              ))}
+                    <td className="px-[2px] text-[9px] leading-[1.1] break-words hyphens-auto">
+                      {isNieuw(c, ronde) && (
+                        <span className="font-bold uppercase">nieuw in {toonMaand(ronde)} </span>
+                      )}
+                      {noteVoorMaand(c, maand)}
+                    </td>
+                    {maand === "alles" && (
+                      <td className="w-8 px-[2px] text-[9px] leading-[1.1]">{c.frequency}</td>
+                    )}
+                    {prijzen && (
+                      <td
+                        className={`w-10 px-[2px] text-right text-[9px] leading-[1.1] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}
+                      >
+                        {formatPrice(c.price)}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         ))}
@@ -134,12 +153,14 @@ function SleepbaarBlok({
   g,
   prijzen,
   maand,
+  ronde,
   kolomKop,
   onKolomKopUit,
 }: {
   g: Groep;
   prijzen: boolean;
   maand: "even" | "oneven" | "alles";
+  ronde: string;
   kolomKop?: boolean;
   onKolomKopUit?: () => void;
 }) {
@@ -162,6 +183,7 @@ function SleepbaarBlok({
         g={g}
         prijzen={prijzen}
         maand={maand}
+        ronde={ronde}
         sleepHandle={
           <>
           {kolomKop && (
@@ -264,6 +286,10 @@ const KOLOMMEN = 6;
 function PrintPagina() {
   useRequireAuth();
   const { wijk, maand, prijzen, liggend, vouwen: vouwenRaw } = Route.useSearch();
+  // De ronde die je nu gaat lopen. Overslaan en "nieuw in mei" hangen aan een
+  // echte kalendermaand, terwijl even/oneven alleen zegt welke helft van de
+  // klanten meegaat.
+  const ronde = maandSleutel(new Date());
   const navigate = Route.useNavigate();
   const qc = useQueryClient();
   const vouwen = vouwenRaw === true;
@@ -294,6 +320,9 @@ function PrintPagina() {
     const perStraat = new Map<string, Customer[]>();
     for (const c of customers) {
       if (!matchesMaand(c.frequency, maand)) continue;
+      // Nog niet begonnen, of deze maand overgeslagen: dan hoort hij niet
+      // op de lijst die je meeneemt.
+      if (!doetMee(c, ronde)) continue;
       const rij = perStraat.get(c.street_id);
       if (rij) rij.push(c);
       else perStraat.set(c.street_id, [c]);
@@ -304,7 +333,7 @@ function PrintPagina() {
         return { street: s, ...splitEvenOdd(klanten, s.sort_desc ? "desc" : "asc"), aantal: klanten.length };
       })
       .filter((g) => g.aantal > 0);
-  }, [streets, customers, maand]);
+  }, [streets, customers, maand, ronde]);
 
   const groepen: Groep[] = useMemo(() => {
     if (!sleepVolgorde) return zichtbaar;
@@ -822,11 +851,12 @@ function PrintPagina() {
                               g={g}
                               prijzen={prijzen}
                               maand={maand}
+                              ronde={ronde}
                               kolomKop={kolomStart(g.street)}
                               onKolomKopUit={() => kolomStartUit(g.street.id)}
                             />
                           ) : (
-                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} ronde={ronde} />
                           ),
                         )}
                       </div>
@@ -850,11 +880,12 @@ function PrintPagina() {
                               g={g}
                               prijzen={prijzen}
                               maand={maand}
+                              ronde={ronde}
                               kolomKop={kolomStart(g.street)}
                               onKolomKopUit={() => kolomStartUit(g.street.id)}
                             />
                           ) : (
-                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} />
+                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} ronde={ronde} />
                           ),
                         )}
                       </KolomVak>
@@ -876,7 +907,7 @@ function PrintPagina() {
                       meetRefs.current[g.street.id] = el;
                     }}
                   >
-                    <StraatBlok g={g} prijzen={prijzen} maand={maand} />
+                    <StraatBlok g={g} prijzen={prijzen} maand={maand} ronde={ronde} />
                   </div>
                 ))}
               </div>

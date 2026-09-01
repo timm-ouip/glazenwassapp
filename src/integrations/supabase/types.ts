@@ -66,6 +66,9 @@ export type Database = {
           house_number: number
           id: string
           klant_id: string | null
+          markering: string
+          overslaan: string[]
+          start_maand: string
           note: string
           note_even: string
           note_oneven: string
@@ -83,6 +86,9 @@ export type Database = {
           house_number: number
           id?: string
           klant_id?: string | null
+          markering?: string
+          overslaan?: string[]
+          start_maand?: string
           note?: string
           note_even?: string
           note_oneven?: string
@@ -100,6 +106,9 @@ export type Database = {
           house_number?: number
           id?: string
           klant_id?: string | null
+          markering?: string
+          overslaan?: string[]
+          start_maand?: string
           note?: string
           note_even?: string
           note_oneven?: string

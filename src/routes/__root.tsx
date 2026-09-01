@@ -107,7 +107,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    // Het themascript hieronder zet .dark op dit element vóór React
+    // hydrateert. Dat is precies de bedoeling, maar React ziet het als een
+    // verschil met wat de server stuurde en klaagt erover.
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Vóór de stylesheet aan bod komt: anders flitst het lichte thema
             even op bij elke paginalading. */}

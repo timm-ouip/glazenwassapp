@@ -57,6 +57,7 @@ import { useBevestig } from "@/components/Bevestig";
 import { InlineCel } from "@/components/InlineCel";
 import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { NotitieCel } from "@/components/NotitieCel";
+import { KlantMenu } from "@/components/KlantMenu";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
 import {
   fetchWasdag,
@@ -80,6 +81,8 @@ import {
   fetchStreets,
   formatNumber,
   formatPrice,
+  maandSleutel,
+  regelKleur,
   matchesMaand,
   persistCustomerOrder,
   persistStreetOrder,
@@ -1549,24 +1552,32 @@ function KlantRij({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `c:${c.id}`,
   });
+  const dezeMaand = maandSleutel(new Date());
 
-  return (
+  // In planmodus vertelt de kleur waar je die dag staat; daarbuiten waar je
+  // op moet letten. Twee kleursystemen tegelijk zou niet te lezen zijn.
+  const kleur = regelKleur(c, dezeMaand);
+  const achtergrond = planmodus
+    ? opDeDag
+      ? "bg-tint-amber"
+      : eerderGewassen
+        ? "bg-tint-groen"
+        : elderGepland
+          ? "bg-tint-paars"
+          : ""
+    : kleur === "geel"
+      ? "bg-tint-amber"
+      : kleur === "groen"
+        ? "bg-tint-groen"
+        : "";
+
+  const rij = (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={`group flex items-center gap-0.5 border-b border-border/60 px-0.5 ${rowPad} ${rowText} ${
         isDragging ? "opacity-40" : ""
-      } ${geselecteerd ? "bg-accent" : ""} ${
-        !planmodus
-          ? ""
-          : opDeDag
-            ? "bg-tint-amber"
-            : eerderGewassen
-              ? "bg-tint-groen"
-              : elderGepland
-                ? "bg-tint-paars"
-                : ""
-      }`}
+      } ${geselecteerd ? "bg-accent" : ""} ${achtergrond}`}
       {...(planmodus ? { "data-verf-klant": c.id } : {})}
     >
       {planmodus ? (
@@ -1672,6 +1683,14 @@ function KlantRij({
         <Trash2 className="size-3" />
       </button>
     </div>
+  );
+
+  // De rechtermuisknop hangt om de hele regel: kleur, overslaan en het
+  // dossier zitten daarin, want in de regel zelf is er geen plek voor.
+  return (
+    <KlantMenu customer={c} onPatch={(patch) => onPatch(c, patch)}>
+      {rij}
+    </KlantMenu>
   );
 }
 

@@ -2,6 +2,14 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type Frequency = "elke" | "even" | "oneven";
 
+/** Leeg is het gewone geval; geel is opletten, groen is een nieuwe klant. */
+export type Markering = "" | "geel" | "groen";
+
+export const markeringLabels: Record<Exclude<Markering, "">, string> = {
+  geel: "Extra opletten",
+  groen: "Nieuwe klant",
+};
+
 export interface District {
   id: string;
   name: string;
@@ -43,6 +51,15 @@ export interface Customer {
   /** Hoort bij het pand, niet bij de bewoner — en staat er dus ook als we
    *  nog niet weten wie er woont. */
   postcode: string;
+  /** Waar je op moet letten: "geel" is opletten, "groen" is nieuw, leeg is
+   *  het gewone geval. Kleurt de regel in de app én op de printlijst. */
+  markering: Markering;
+  /** Maanden ("jjjj-mm") waarin dit adres niet meegaat. */
+  overslaan: string[];
+  /** Pas wassen vanaf deze maand ("jjjj-mm"); leeg is meteen. */
+  start_maand: string;
+  /** Wanneer het adres is aangemaakt — waar "nieuw in mei" op steunt. */
+  created_at: string;
 }
 
 /**
@@ -200,8 +217,10 @@ export async function fetchStreets(): Promise<Street[]> {
 export async function fetchCustomers(): Promise<Customer[]> {
   const { data, error } = await supabase
     .from("customers")
+    // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
+    // met een samengestelde string lukt dat niet meer.
     .select(
-      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,sort_order,klant_id,postcode",
+      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at",
     )
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
@@ -213,6 +232,9 @@ export async function fetchCustomers(): Promise<Customer[]> {
     postcode: c.postcode ?? "",
     note_even: c.note_even ?? "",
     note_oneven: c.note_oneven ?? "",
+    markering: (c.markering ?? "") as Markering,
+    overslaan: c.overslaan ?? [],
+    start_maand: c.start_maand ?? "",
   })) as Customer[];
 }
 
@@ -355,6 +377,12 @@ export async function persistPostcodes(adressen: { id: string; postcode: string 
   );
 }
 
+/** Losse velden van één adres bijwerken — kleur, overslaan, startmaand. */
+export async function patchCustomer(id: string, patch: Partial<Customer>) {
+  const { error } = await supabase.from("customers").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
 /** Slaat de officiële straatnamen op voor een groep straten tegelijk. */
 export async function persistVolledigeNamen(namen: { id: string; volledige_naam: string }[]) {
   await Promise.all(
@@ -478,6 +506,51 @@ export function toggleNoteToken(note: string, token: string): string {
   if (i >= 0) tokens.splice(i, 1);
   else tokens.push(token);
   return tokens.join(", ");
+}
+
+/** Een maand als "jjjj-mm" — waarop overslaan en startmaand vergelijken. */
+export function maandSleutel(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function toonMaand(sleutel: string): string {
+  const [jaar, maand] = sleutel.split("-").map(Number);
+  if (!jaar || !maand) return sleutel;
+  return new Date(jaar, maand - 1, 1).toLocaleDateString("nl-NL", { month: "long" });
+}
+
+/** De maand waarin dit adres voor het eerst aan de beurt is. */
+export function eersteMaand(c: Pick<Customer, "start_maand" | "created_at">): string {
+  return c.start_maand || maandSleutel(new Date(c.created_at));
+}
+
+/**
+ * Hoort dit adres in deze ronde op de lijst? Nee als hij nog niet begonnen
+ * is, en nee als je die maand hebt overgeslagen.
+ */
+export function doetMee(
+  c: Pick<Customer, "start_maand" | "created_at" | "overslaan">,
+  maand: string,
+): boolean {
+  if (c.overslaan.includes(maand)) return false;
+  return maand >= eersteMaand(c);
+}
+
+/** Nieuw deze ronde: de eerste maand dat hij meegaat. */
+export function isNieuw(c: Pick<Customer, "start_maand" | "created_at">, maand: string): boolean {
+  return maand === eersteMaand(c);
+}
+
+/**
+ * De kleur van een regel: expliciet gezet, of groen omdat hij deze maand
+ * nieuw is. Leeg betekent geen kleur.
+ */
+export function regelKleur(
+  c: Pick<Customer, "markering" | "start_maand" | "created_at">,
+  maand: string,
+): Markering {
+  if (c.markering) return c.markering;
+  return isNieuw(c, maand) ? "groen" : "";
 }
 
 export function matchesMaand(freq: Frequency, filter: "alles" | "even" | "oneven") {
