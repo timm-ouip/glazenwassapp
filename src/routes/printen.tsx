@@ -80,8 +80,7 @@ export const Route = createFileRoute("/printen")({
     // Standaard de maand die je nu loopt: dat is de lijst die je meeneemt.
     maand:
       typeof search["maand"] === "string" &&
-      (isKalendermaand(search["maand"]) ||
-        ["even", "oneven", "alles"].includes(search["maand"]))
+      (isKalendermaand(search["maand"]) || ["even", "oneven", "alles"].includes(search["maand"]))
         ? search["maand"]
         : maandSleutel(new Date()),
     prijzen: search["prijzen"] === true || search["prijzen"] === "true",
@@ -94,10 +93,14 @@ export const Route = createFileRoute("/printen")({
       { title: "Printlijst maken — klantenlijst glazenwasser" },
       {
         name: "description",
-        content: "Maak een compacte A4-printlijst (staand of liggend) met de klanten van de even of oneven maand.",
+        content:
+          "Maak een compacte A4-printlijst (staand of liggend) met de klanten van de even of oneven maand.",
       },
       { property: "og:title", content: "Printlijst glazenwasser" },
-      { property: "og:description", content: "Compacte A4-lijst per straat voor even of oneven maanden." },
+      {
+        property: "og:description",
+        content: "Compacte A4-lijst per straat voor even of oneven maanden.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -127,11 +130,14 @@ const StraatBlok = memo(function StraatBlok({
         <span className="truncate">{g.street.name}</span>
         <span className="flex shrink-0 items-center">{sleepHandle}</span>
       </h2>
-      <div className={`grid ${g.even.length > 0 && g.oneven.length > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
-        {([
-          g.even.length > 0 ? "even" : null,
-          g.oneven.length > 0 ? "oneven" : null,
-        ].filter(Boolean) as ("even" | "oneven")[]).map((kant, i, arr) => (
+      <div
+        className={`grid ${g.even.length > 0 && g.oneven.length > 0 ? "grid-cols-2" : "grid-cols-1"}`}
+      >
+        {(
+          [g.even.length > 0 ? "even" : null, g.oneven.length > 0 ? "oneven" : null].filter(
+            Boolean,
+          ) as ("even" | "oneven")[]
+        ).map((kant, i, arr) => (
           <table
             key={kant}
             className={`w-full table-fixed border-collapse ${i < arr.length - 1 ? "border-r border-foreground/40" : ""}`}
@@ -214,26 +220,26 @@ function SleepbaarBlok({
         ronde={ronde}
         sleepHandle={
           <>
-          {kolomKop && (
+            {kolomKop && (
+              <button
+                type="button"
+                onClick={onKolomKopUit}
+                title="Begint bovenaan een kolom — klik om los te laten"
+                aria-label={`${g.street.name} begint bovenaan een kolom`}
+                className="shrink-0 rounded p-0.5 text-brand-ink hover:bg-background print:hidden"
+              >
+                <ArrowUpToLine className="size-3" />
+              </button>
+            )}
             <button
               type="button"
-              onClick={onKolomKopUit}
-              title="Begint bovenaan een kolom — klik om los te laten"
-              aria-label={`${g.street.name} begint bovenaan een kolom`}
-              className="shrink-0 rounded p-0.5 text-brand-ink hover:bg-background print:hidden"
+              {...attributes}
+              {...listeners}
+              aria-label={`Sleep ${g.street.name}`}
+              className="shrink-0 cursor-grab rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground active:cursor-grabbing print:hidden"
             >
-              <ArrowUpToLine className="size-3" />
+              <GripVertical className="size-3" />
             </button>
-          )}
-          <button
-            type="button"
-            {...attributes}
-            {...listeners}
-            aria-label={`Sleep ${g.street.name}`}
-            className="shrink-0 cursor-grab rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground active:cursor-grabbing print:hidden"
-          >
-            <GripVertical className="size-3" />
-          </button>
           </>
         }
       />
@@ -307,7 +313,6 @@ function verdeelVullend(
   return blokken;
 }
 
-
 const MAX_SCHAAL = 1.6;
 const MIN_SCHAAL = 0.25;
 const KOLOMMEN = 6;
@@ -363,7 +368,11 @@ function PrintPagina() {
     return streets
       .map((s) => {
         const klanten = perStraat.get(s.id) ?? [];
-        return { street: s, ...splitEvenOdd(klanten, s.sort_desc ? "desc" : "asc"), aantal: klanten.length };
+        return {
+          street: s,
+          ...splitEvenOdd(klanten, s.sort_desc ? "desc" : "asc"),
+          aantal: klanten.length,
+        };
       })
       .filter((g) => g.aantal > 0);
   }, [streets, customers, maand, ronde]);
@@ -434,8 +443,6 @@ function PrintPagina() {
     return () => cancelAnimationFrame(id);
   }, [meetSleutel, schaal, vouwen, breedtePx]);
 
-
-
   const kwartKolommen = Math.max(1, Math.round(KOLOMMEN / 2));
   const schatting = (g: Groep) => 14 + 11 * Math.max(g.even.length, g.oneven.length);
   const blokHoogte = (g: Groep) => hoogtes[g.street.id] ?? schatting(g);
@@ -450,9 +457,7 @@ function PrintPagina() {
   const kolomCap = Math.max(20, kwartHoogte - 4);
   const totaalKolommen = 4 * kwartKolommen;
   // Vul elke kolom tot aan de vouwlijn; overloop schuift door naar rechts.
-  const kolomBlokken = vouwen
-    ? verdeelVullend(groepen, meetBlok, kolomCap, totaalKolommen)
-    : [];
+  const kolomBlokken = vouwen ? verdeelVullend(groepen, meetBlok, kolomCap, totaalKolommen) : [];
   const kwarten = vouwen
     ? Array.from({ length: 4 }, (_, i) =>
         kolomBlokken.slice(i * kwartKolommen, (i + 1) * kwartKolommen).flat(),
@@ -673,8 +678,7 @@ function PrintPagina() {
         const straat = alleStreets.find((s) => s.id === v.id);
         return !!straat && straat.kolom_start !== v.kolom_start;
       });
-    const volgordeGelijk =
-      zichtbaar.map((g) => g.street.id).join(",") === nieuweVolgorde.join(",");
+    const volgordeGelijk = zichtbaar.map((g) => g.street.id).join(",") === nieuweVolgorde.join(",");
     if (volgordeGelijk && vlagWijzigingen.length === 0) return;
 
     const vorige = alleStreets.map((s) => ({ ...s }));
@@ -764,12 +768,18 @@ function PrintPagina() {
               </Link>
             </Button>
             <div className="mr-auto min-w-0">
-              <h1 className="truncate text-lg font-semibold leading-tight text-foreground">Printlijst</h1>
+              <h1 className="truncate text-lg font-semibold leading-tight text-foreground">
+                Printlijst
+              </h1>
               <p className="text-xs text-muted-foreground">
                 {actieveWijk ? actieveWijk.name : "Alle wijken"} · {groepen.length} straten
               </p>
             </div>
-            <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90" onClick={() => window.print()}>
+            <Button
+              size="sm"
+              className="bg-brand text-brand-foreground hover:bg-brand/90"
+              onClick={() => window.print()}
+            >
               <Printer className="size-4" /> Afdrukken
             </Button>
             <span className="print:hidden">
@@ -801,10 +811,14 @@ function PrintPagina() {
                     <Fragment key={m}>
                       {i > 0 && m.endsWith("-01") && <DropdownMenuSeparator />}
                       <DropdownMenuItem
-                        onSelect={() => void navigate({ to: "/printen", search: { ...zoek, maand: m } })}
+                        onSelect={() =>
+                          void navigate({ to: "/printen", search: { ...zoek, maand: m } })
+                        }
                       >
                         <span className="capitalize">{toonMaand(m)}</span>
-                        <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {m.slice(0, 4)}
+                        </span>
                       </DropdownMenuItem>
                     </Fragment>
                   ))}
@@ -830,7 +844,9 @@ function PrintPagina() {
               <Switch
                 id="liggend"
                 checked={liggend}
-                onCheckedChange={(v) => void navigate({ to: "/printen", search: { ...zoek, liggend: v } })}
+                onCheckedChange={(v) =>
+                  void navigate({ to: "/printen", search: { ...zoek, liggend: v } })
+                }
               />
               <Label htmlFor="liggend" className="text-sm text-muted-foreground">
                 Liggend
@@ -840,7 +856,9 @@ function PrintPagina() {
               <Switch
                 id="prijzen"
                 checked={prijzen}
-                onCheckedChange={(v) => void navigate({ to: "/printen", search: { ...zoek, prijzen: v } })}
+                onCheckedChange={(v) =>
+                  void navigate({ to: "/printen", search: { ...zoek, prijzen: v } })
+                }
               />
               <Label htmlFor="prijzen" className="text-sm text-muted-foreground">
                 Prijzen
@@ -850,20 +868,23 @@ function PrintPagina() {
               <Switch
                 id="vouwen"
                 checked={vouwen}
-                onCheckedChange={(v) => void navigate({ to: "/printen", search: { ...zoek, vouwen: v } })}
+                onCheckedChange={(v) =>
+                  void navigate({ to: "/printen", search: { ...zoek, vouwen: v } })
+                }
               />
               <Label htmlFor="vouwen" className="text-sm text-muted-foreground">
                 Vouwen in 4
               </Label>
             </div>
-
           </div>
         </div>
       </div>
 
       <main className="mx-auto w-fit px-4 py-5 print:p-0">
         {groepen.length === 0 && (
-          <p className="text-sm text-muted-foreground print:hidden">Geen klanten voor deze maand.</p>
+          <p className="text-sm text-muted-foreground print:hidden">
+            Geen klanten voor deze maand.
+          </p>
         )}
         <DndContext
           sensors={sensors}
@@ -876,11 +897,11 @@ function PrintPagina() {
           }}
         >
           <SortableContext items={groepen.map((g) => g.street.id)}>
-          <div
-            ref={inhoudRef}
-            className="origin-top-left overflow-hidden print:overflow-visible"
-            style={{ zoom: schaal, width: Math.round(breedtePx / schaal) }}
-          >
+            <div
+              ref={inhoudRef}
+              className="origin-top-left overflow-hidden print:overflow-visible"
+              style={{ zoom: schaal, width: Math.round(breedtePx / schaal) }}
+            >
               <div
                 ref={kopRef}
                 className="mb-1 flex items-baseline justify-between border-b-2 border-foreground pb-[1px]"
@@ -894,7 +915,9 @@ function PrintPagina() {
                       : `${maand} maand`}
                 </h1>
 
-                {prijzen && <span className="text-[11px] tabular-nums">Totaal {formatPrice(totaal)}</span>}
+                {prijzen && (
+                  <span className="text-[11px] tabular-nums">Totaal {formatPrice(totaal)}</span>
+                )}
               </div>
 
               {vouwen ? (
@@ -924,11 +947,16 @@ function PrintPagina() {
                               onKolomKopUit={() => kolomStartUit(g.street.id)}
                             />
                           ) : (
-                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} ronde={ronde} />
+                            <StraatBlok
+                              key={g.street.id}
+                              g={g}
+                              prijzen={prijzen}
+                              maand={maand}
+                              ronde={ronde}
+                            />
                           ),
                         )}
                       </div>
-
                     </div>
                   ))}
                 </div>
@@ -953,7 +981,13 @@ function PrintPagina() {
                               onKolomKopUit={() => kolomStartUit(g.street.id)}
                             />
                           ) : (
-                            <StraatBlok key={g.street.id} g={g} prijzen={prijzen} maand={maand} ronde={ronde} />
+                            <StraatBlok
+                              key={g.street.id}
+                              g={g}
+                              prijzen={prijzen}
+                              maand={maand}
+                              ronde={ronde}
+                            />
                           ),
                         )}
                       </KolomVak>
@@ -979,7 +1013,7 @@ function PrintPagina() {
                   </div>
                 ))}
               </div>
-          </div>
+            </div>
           </SortableContext>
           <DragOverlay>
             {sleepGroep ? (

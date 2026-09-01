@@ -112,9 +112,7 @@ export function KlantMenu({ customer: c, onPatch: ruwePatch, children }: Props) 
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => wisselMaand(komende)}>
           <CalendarOff className="size-4" />
-          {c.overslaan.includes(komende)
-            ? `${toonMaand(komende)} toch doen`
-            : "Overslaan"}
+          {c.overslaan.includes(komende) ? `${toonMaand(komende)} toch doen` : "Overslaan"}
         </ContextMenuItem>
 
         <ContextMenuSub>

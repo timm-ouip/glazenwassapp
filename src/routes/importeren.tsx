@@ -6,15 +6,28 @@ import { requireSession, useRequireAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowLeft, Check, Eye, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 import { AppLayout } from "@/components/AppLayout";
 import { InlineCel } from "@/components/InlineCel";
 import { NotitieCel } from "@/components/NotitieCel";
+import type { Json } from "@/integrations/supabase/types";
 import {
   addDistrict,
   addQuickNote,
@@ -22,7 +35,9 @@ import {
   fetchDistricts,
   fetchQuickNotes,
   fetchStreets,
-  frequencyLabels,
+  BASISRITMES,
+  maandwerkVanEvenOneven,
+  ritmeVelden,
   formatPrice,
   noteTokens,
   straatSleutel,
@@ -41,7 +56,6 @@ import {
 } from "@/lib/aanvullen";
 import { zoekWoonplaatsen } from "@/lib/postcode";
 
-
 export const Route = createFileRoute("/importeren")({
   beforeLoad: async () => {
     await requireSession();
@@ -51,10 +65,14 @@ export const Route = createFileRoute("/importeren")({
       { title: "Excel importeren — klantenlijst glazenwasser" },
       {
         name: "description",
-        content: "Zet je bestaande Excel-lijst met straten, huisnummers, notities en prijzen om in de app.",
+        content:
+          "Zet je bestaande Excel-lijst met straten, huisnummers, notities en prijzen om in de app.",
       },
       { property: "og:title", content: "Excel importeren" },
-      { property: "og:description", content: "Straten, huisnummers, notities en prijzen uit Excel inlezen." },
+      {
+        property: "og:description",
+        content: "Straten, huisnummers, notities en prijzen uit Excel inlezen.",
+      },
     ],
   }),
   component: ImportPagina,
@@ -70,8 +88,9 @@ interface RijPreview {
   bron?: { tabblad: string; rij: number; kolom: number };
 }
 
-
-function parseNummer(value: unknown): { nummer: number; toevoeging: string; markering: string } | null {
+function parseNummer(
+  value: unknown,
+): { nummer: number; toevoeging: string; markering: string } | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return { nummer: Math.trunc(value), toevoeging: "", markering: "" };
   }
@@ -89,7 +108,6 @@ function parseNummer(value: unknown): { nummer: number; toevoeging: string; mark
   return null;
 }
 
-
 function raadFrequentie(tabblad: string): Frequency {
   const naam = tabblad.toLowerCase();
   if (naam.includes("oneven")) return "oneven";
@@ -99,7 +117,8 @@ function raadFrequentie(tabblad: string): Frequency {
 
 /** Grijs = straatkop. Roze/blauw/geel e.d. worden genegeerd. */
 function isGrijs(cell: XLSX.CellObject | undefined): boolean {
-  const style = (cell as { s?: { patternType?: string; fgColor?: { rgb?: string } } } | undefined)?.s;
+  const style = (cell as { s?: { patternType?: string; fgColor?: { rgb?: string } } } | undefined)
+    ?.s;
   if (!style || !style.patternType || style.patternType === "none") return false;
   const rgb = style.fgColor?.rgb;
   if (!rgb) return false;
@@ -172,15 +191,15 @@ function leesTabblad(
   const ref = sheet["!ref"];
   if (!ref) return { rijen: [], bronnen: {}, grid: leeg };
   const range = XLSX.utils.decode_range(ref);
-  const cel = (r: number, c: number) => sheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
+  const cel = (r: number, c: number) =>
+    sheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
 
   // Volledige weergave van het tabblad (om later te kunnen "bekijken in origineel")
   const kolInfo = (sheet["!cols"] ?? []) as { wch?: number; width?: number }[];
   const grid: SheetGrid = {
     cellen: [],
-    breedtes: Array.from(
-      { length: range.e.c + 1 },
-      (_, c) => Math.round((kolInfo[c]?.wch ?? kolInfo[c]?.width ?? 9) * 7.5),
+    breedtes: Array.from({ length: range.e.c + 1 }, (_, c) =>
+      Math.round((kolInfo[c]?.wch ?? kolInfo[c]?.width ?? 9) * 7.5),
     ),
   };
   for (let r = 0; r <= range.e.r; r++) {
@@ -201,7 +220,6 @@ function leesTabblad(
     grid.cellen.push(rij);
   }
 
-
   // Kolommen waar een grijze straatkop in staat
   const kopKolommen = new Set<number>();
   for (let c = range.s.c; c <= range.e.c; c++) {
@@ -214,10 +232,7 @@ function leesTabblad(
     }
   }
   // Terugval: geen kleuren gevonden → eerste kolom met tekst + nummers
-  const kolommen =
-    kopKolommen.size > 0
-      ? [...kopKolommen].sort((a, b) => a - b)
-      : [range.s.c];
+  const kolommen = kopKolommen.size > 0 ? [...kopKolommen].sort((a, b) => a - b) : [range.s.c];
 
   const rijen: RijPreview[] = [];
   const bronnen: Record<string, Bron> = {};
@@ -247,9 +262,7 @@ function leesTabblad(
         const grijsBekend = kopKolommen.size > 0;
         // Straatkop: als het bestand grijze koppen heeft, telt alleen grijs.
         // Anders vallen we terug op "er beginnen hieronder huisnummers".
-        const isKop = grijsBekend
-          ? isGrijs(cell)
-          : volgt >= 1 || !laatste;
+        const isKop = grijsBekend ? isGrijs(cell) : volgt >= 1 || !laatste;
 
         if (isKop) {
           straat = String(waarde).trim();
@@ -277,7 +290,9 @@ function leesTabblad(
             : nummer.markering
           : basisNotitie,
         prijs:
-          typeof prijsCel === "number" ? prijsCel : Number(String(prijsCel ?? "").replace(",", ".")) || 0,
+          typeof prijsCel === "number"
+            ? prijsCel
+            : Number(String(prijsCel ?? "").replace(",", ".")) || 0,
         bron: { tabblad: sheetName, rij: r, kolom: c },
       };
 
@@ -286,11 +301,8 @@ function leesTabblad(
     }
   }
 
-
   return { rijen, bronnen, grid };
 }
-
-
 
 interface ImportRij {
   id: string;
@@ -452,7 +464,9 @@ function ImportPagina() {
         setWijkId((huidig) => huidig || "__geen__");
       })
       .catch(() => toast.error("Wijken laden mislukt"));
-    fetchQuickNotes().then(setQuickNotes).catch(() => undefined);
+    fetchQuickNotes()
+      .then(setQuickNotes)
+      .catch(() => undefined);
   }, []);
 
   const tabbladen = useMemo(() => [...new Set(rijen.map((r) => r.tabblad))], [rijen]);
@@ -461,7 +475,6 @@ function ImportPagina() {
     () => verdachteStraten(lijst, quickNotes).filter((v) => !goedgekeurd.has(v.straat)),
     [lijst, quickNotes, goedgekeurd],
   );
-
 
   /**
    * Adressen uit meer dan één tabblad mét een notitie: die tekst komt uit
@@ -573,13 +586,11 @@ function ImportPagina() {
       setGoedgekeurd(new Set());
       setRijen(gevonden);
       if (gevonden.length === 0) toast.error("Geen klanten herkend in dit bestand.");
-
     } catch (e) {
       toast.error("Bestand kon niet gelezen worden.");
       console.error(e);
     }
   }
-
 
   /**
    * Zoekt na het importeren meteen de officiële straatnamen en de postcodes
@@ -751,10 +762,11 @@ function ImportPagina() {
         house_number: r.huisnummer,
         addition: r.toevoeging,
         note: r.notitie,
-        note_even: r.notitieEven,
-        note_oneven: r.notitieOneven,
         price: r.prijs,
-        frequency: r.frequency,
+        // Het tabblad zegt of een notitie in de even of de oneven helft van
+        // het jaar meegaat; dat is precies wat maandwerk beschrijft.
+        maandwerk: maandwerkVanEvenOneven(r.notitieEven, r.notitieOneven) as unknown as Json,
+        ...ritmeVelden(r.frequency),
       }));
       const { error } = await supabase.from("customers").insert(payload);
       if (error) throw error;
@@ -772,7 +784,6 @@ function ImportPagina() {
       setBezig(false);
     }
   }
-
 
   return (
     <AppLayout titel="Importeren" onderschrift="Klanten uit een Excel-bestand inlezen">
@@ -860,14 +871,12 @@ function ImportPagina() {
             }}
           />
           <p className="text-xs text-muted-foreground">
-            Straatnamen herkent hij aan de grijze vakjes; andere kleuren (zoals roze) worden genegeerd.
-            Onder een straatnaam staan de huisnummers, met daarnaast de notitie en de prijs. Meerdere
-            tabellen naast elkaar op één tabblad worden allemaal ingelezen. Staat een adres in beide
-            tabbladen, dan wordt het automatisch "elke maand".
+            Straatnamen herkent hij aan de grijze vakjes; andere kleuren (zoals roze) worden
+            genegeerd. Onder een straatnaam staan de huisnummers, met daarnaast de notitie en de
+            prijs. Meerdere tabellen naast elkaar op één tabblad worden allemaal ingelezen. Staat
+            een adres in beide tabbladen, dan wordt het automatisch "elke maand".
           </p>
-
         </div>
-
 
         {lijst.length > 0 && (
           <div className="space-y-4">
@@ -875,7 +884,8 @@ function ImportPagina() {
               <p className="text-sm">
                 <span className="font-medium">{bestandsnaam}</span> — {lijst.length} klanten in{" "}
                 {straten.length} {straten.length === 1 ? "straat" : "straten"}
-                {skipTabbladen.size > 0 && `, ${skipTabbladen.size} tabblad${skipTabbladen.size === 1 ? "" : "en"} overgeslagen`}
+                {skipTabbladen.size > 0 &&
+                  `, ${skipTabbladen.size} tabblad${skipTabbladen.size === 1 ? "" : "en"} overgeslagen`}
                 {rijen.length !== lijst.length && skipTabbladen.size === 0
                   ? ` (${rijen.length - lijst.length} regels samengevoegd of verwijderd)`
                   : ""}
@@ -887,7 +897,9 @@ function ImportPagina() {
                   const skipped = skipTabbladen.has(t);
                   return (
                     <div key={t} className="flex items-center gap-3">
-                      <span className={`w-40 truncate text-sm ${skipped ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                      <span
+                        className={`w-40 truncate text-sm ${skipped ? "text-muted-foreground line-through" : "text-foreground"}`}
+                      >
                         {t}
                       </span>
                       <Select
@@ -901,9 +913,9 @@ function ImportPagina() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {(Object.keys(frequencyLabels) as Frequency[]).map((f) => (
-                            <SelectItem key={f} value={f}>
-                              {frequencyLabels[f]}
+                          {BASISRITMES.map((b) => (
+                            <SelectItem key={b.waarde} value={b.waarde}>
+                              {b.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -938,7 +950,10 @@ function ImportPagina() {
                   Dit lijkt geen straatnaam — klopt dit?
                 </div>
                 {verdacht.map((v) => (
-                  <div key={v.straat} className="space-y-2 rounded-md border border-amber-400/40 p-3">
+                  <div
+                    key={v.straat}
+                    className="space-y-2 rounded-md border border-amber-400/40 p-3"
+                  >
                     <p className="text-sm">
                       <span className="font-semibold">“{v.straat}”</span>{" "}
                       <span className="opacity-80">({v.redenen.join(", ")})</span>
@@ -948,7 +963,9 @@ function ImportPagina() {
                         className="h-8 max-w-56 bg-background text-foreground"
                         placeholder="Juiste straatnaam"
                         value={hernoemen[v.straat] ?? ""}
-                        onChange={(e) => setHernoemen((h) => ({ ...h, [v.straat]: e.target.value }))}
+                        onChange={(e) =>
+                          setHernoemen((h) => ({ ...h, [v.straat]: e.target.value }))
+                        }
                         onKeyDown={(e) => {
                           if (e.key === "Enter") hernoemStraat(v.straat, hernoemen[v.straat] ?? "");
                         }}
@@ -982,14 +999,19 @@ function ImportPagina() {
                         <Check className="size-4" /> Klopt wel
                       </Button>
                       {bronnen[v.straat] && (
-                        <Button size="sm" variant="outline" onClick={() => setBekijk({ label: v.straat, bronnen: [bronnen[v.straat]!] })}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setBekijk({ label: v.straat, bronnen: [bronnen[v.straat]!] })
+                          }
+                        >
                           <Eye className="size-4" /> Bekijken in bestand
                         </Button>
                       )}
                       <Button size="sm" variant="ghost" onClick={() => verwijderStraat(v.straat)}>
                         <Trash2 className="size-4" /> {v.aantal} regels weggooien
                       </Button>
-
                     </div>
                   </div>
                 ))}
@@ -1022,7 +1044,10 @@ function ImportPagina() {
                   {lijst.map((r) => (
                     <tr key={r.id}>
                       <td className="px-2 py-1">
-                        <InlineCel value={r.straat} onCommit={(v) => wijzig(r.id, { straat: v.trim() })} />
+                        <InlineCel
+                          value={r.straat}
+                          onCommit={(v) => wijzig(r.id, { straat: v.trim() })}
+                        />
                       </td>
                       <td className="px-2 py-1">
                         <InlineCel
@@ -1034,7 +1059,10 @@ function ImportPagina() {
                               toast.error("Ongeldig huisnummer");
                               return;
                             }
-                            wijzig(r.id, { huisnummer: parseInt(m[1]!, 10), toevoeging: m[2] ?? "" });
+                            wijzig(r.id, {
+                              huisnummer: parseInt(m[1]!, 10),
+                              toevoeging: m[2] ?? "",
+                            });
                           }}
                         />
                       </td>
@@ -1071,9 +1099,9 @@ function ImportPagina() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {(Object.keys(frequencyLabels) as Frequency[]).map((f) => (
-                              <SelectItem key={f} value={f}>
-                                {frequencyLabels[f]}
+                            {BASISRITMES.map((b) => (
+                              <SelectItem key={b.waarde} value={b.waarde}>
+                                {b.label}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1086,7 +1114,9 @@ function ImportPagina() {
                           value={formatPrice(r.prijs)}
                           placeholder={formatPrice(0)}
                           onCommit={(v) =>
-                            wijzig(r.id, { prijs: Number(v.replace(",", ".").replace(/[^\d.]/g, "")) || 0 })
+                            wijzig(r.id, {
+                              prijs: Number(v.replace(",", ".").replace(/[^\d.]/g, "")) || 0,
+                            })
                           }
                         />
                       </td>
@@ -1141,7 +1171,6 @@ function ImportPagina() {
           </div>
         )}
 
-
         <BronVenster
           straat={bekijk?.label ?? null}
           bronnen={bekijk?.bronnen ?? []}
@@ -1149,7 +1178,6 @@ function ImportPagina() {
           bestandsnaam={bestandsnaam}
           onClose={() => setBekijk(null)}
         />
-
       </div>
     </AppLayout>
   );
@@ -1217,7 +1245,9 @@ function BronRaster({ bron, grid }: { bron: Bron; grid: SheetGrid }) {
                           color: cel?.kleur ?? "#000000",
                           fontWeight: cel?.vet ? 700 : 400,
                           textAlign: cel?.rechts ? "right" : "left",
-                          ...(isDoel ? { outline: "3px solid #f59e0b", outlineOffset: "-3px" } : {}),
+                          ...(isDoel
+                            ? { outline: "3px solid #f59e0b", outlineOffset: "-3px" }
+                            : {}),
                         }}
                       >
                         {cel?.t ?? ""}
@@ -1268,7 +1298,11 @@ function BronVenster({
 
         {bruikbaar.length > 1 && (
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant={naast ? "default" : "outline"} onClick={() => setNaast(true)}>
+            <Button
+              size="sm"
+              variant={naast ? "default" : "outline"}
+              onClick={() => setNaast(true)}
+            >
               Naast elkaar
             </Button>
             {bruikbaar.map((b, i) => (
@@ -1288,14 +1322,16 @@ function BronVenster({
         )}
 
         <div className="flex gap-3 overflow-x-auto">
-          {(bruikbaar.length > 1 && naast ? bruikbaar : bruikbaar.slice(index, index + 1)).map((b) => (
-            <BronRaster key={b.tabblad} bron={b} grid={grids[b.tabblad]!} />
-          ))}
+          {(bruikbaar.length > 1 && naast ? bruikbaar : bruikbaar.slice(index, index + 1)).map(
+            (b) => (
+              <BronRaster key={b.tabblad} bron={b} grid={grids[b.tabblad]!} />
+            ),
+          )}
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Zo staat het in je Excel-bestand, met de originele kleuren. Het oranje omlijnde vakje is wat
-          de app heeft ingelezen.
+          Zo staat het in je Excel-bestand, met de originele kleuren. Het oranje omlijnde vakje is
+          wat de app heeft ingelezen.
         </p>
       </DialogContent>
     </Dialog>

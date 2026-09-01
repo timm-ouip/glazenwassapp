@@ -19,11 +19,13 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  frequencyLabels,
+  BASISRITMES,
+  basisRitmeVan,
+  ritmeLabel,
+  type BasisRitme,
   noteTokens,
   toggleNoteToken,
   type Customer,
-  type Frequency,
   type QuickNote,
   type Street,
 } from "@/lib/klanten";
@@ -57,7 +59,7 @@ export function KlantDialog({
   const [addition, setAddition] = useState("");
   const [note, setNote] = useState("");
   const [price, setPrice] = useState("");
-  const [frequency, setFrequency] = useState<Frequency>("elke");
+  const [ritme, setRitme] = useState<BasisRitme | "anders">("elke");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -67,7 +69,7 @@ export function KlantDialog({
     setAddition(customer?.addition ?? "");
     setNote(customer?.note ?? "");
     setPrice(customer ? String(customer.price) : "");
-    setFrequency(customer?.frequency ?? "elke");
+    setRitme(customer ? basisRitmeVan(customer) : "elke");
   }, [open, customer, defaultStreetId, streets]);
 
   async function save() {
@@ -77,13 +79,16 @@ export function KlantDialog({
       return;
     }
     setSaving(true);
+    const basis = BASISRITMES.find((b) => b.waarde === ritme);
     const payload = {
       street_id: streetId,
       house_number: huisnummer,
       addition: addition.trim(),
       note: note.trim(),
       price: price.trim() === "" ? 0 : Number(price.replace(",", ".")),
-      frequency,
+      // Bij "anders" laten we het ritme staan: dat stel je in de wijklijst in,
+      // waar de maanden erbij staan.
+      ...(basis ? { interval_maanden: basis.interval_maanden, ritme: basis.ritme } : {}),
     };
     const { error } = customer
       ? await supabase.from("customers").update(payload).eq("id", customer.id)
@@ -205,17 +210,22 @@ export function KlantDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>Frequentie</Label>
-              <Select value={frequency} onValueChange={(v) => setFrequency(v as Frequency)}>
+              <Label>Hoe vaak</Label>
+              <Select value={ritme} onValueChange={(v) => setRitme(v as BasisRitme)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(Object.keys(frequencyLabels) as Frequency[]).map((f) => (
-                    <SelectItem key={f} value={f}>
-                      {frequencyLabels[f]}
+                  {BASISRITMES.map((b) => (
+                    <SelectItem key={b.waarde} value={b.waarde}>
+                      {b.label}
                     </SelectItem>
                   ))}
+                  {ritme === "anders" && customer && (
+                    <SelectItem value="anders" disabled>
+                      {ritmeLabel(customer)} (stel je in de lijst in)
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>

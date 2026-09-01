@@ -30,17 +30,19 @@ function naarRegels(werk: Maandwerk[] | undefined): Regel[] {
 }
 
 function naarMaandwerk(regels: Regel[]): Maandwerk[] {
-  return regels
-    // Zonder maanden slaat een uitzondering nergens op; die valt vanzelf weg.
-    .filter((r) => r.maanden.length > 0)
-    .map((r) => {
-      const getal = Number(r.prijs.replace(",", ".").replace(/[^\d.]/g, ""));
-      return {
-        maanden: r.maanden,
-        notitie: r.notitie.trim(),
-        prijs: r.prijs.trim() === "" || Number.isNaN(getal) ? null : getal,
-      };
-    });
+  return (
+    regels
+      // Zonder maanden slaat een uitzondering nergens op; die valt vanzelf weg.
+      .filter((r) => r.maanden.length > 0)
+      .map((r) => {
+        const getal = Number(r.prijs.replace(",", ".").replace(/[^\d.]/g, ""));
+        return {
+          maanden: r.maanden,
+          notitie: r.notitie.trim(),
+          prijs: r.prijs.trim() === "" || Number.isNaN(getal) ? null : getal,
+        };
+      })
+  );
 }
 
 /** Voor de tooltip: "serre in mrt/sep". */
@@ -107,9 +109,7 @@ export function NotitieCel({
     const regel = werk[i]!;
     const aan = regel.maanden.includes(maand);
     pasAan(i, {
-      maanden: aan
-        ? regel.maanden.filter((m) => m !== maand)
-        : [...regel.maanden, maand].sort(),
+      maanden: aan ? regel.maanden.filter((m) => m !== maand) : [...regel.maanden, maand].sort(),
     });
   }
 
@@ -213,9 +213,7 @@ export function NotitieCel({
           // Alleen wat er die maand bij hoort komt op de printlijst. Boven
           // staat wat er élke keer geldt.
           <div className="space-y-2 border-t border-border pt-3">
-            <p className="text-[11px] text-muted-foreground">
-              Alleen in bepaalde maanden
-            </p>
+            <p className="text-[11px] text-muted-foreground">Alleen in bepaalde maanden</p>
             {werk.map((regel, i) => (
               <div key={i} className="space-y-1.5 rounded-md border border-border p-2">
                 <div className="grid grid-cols-6 gap-1">

@@ -430,7 +430,10 @@ function Index() {
 
     void Promise.all([
       voegToeAanWasdag(datum, toevoegen),
-      haalUitWasdag(datum, weghalen.map((r) => r.customer_id)),
+      haalUitWasdag(
+        datum,
+        weghalen.map((r) => r.customer_id),
+      ),
     ])
       .catch(() => toast.error("Dagplanning opslaan mislukt."))
       .finally(() => {
@@ -450,7 +453,10 @@ function Index() {
       label,
       undo: async () => {
         await Promise.all([
-          haalUitWasdag(datum, w.toegevoegd.map((r) => r.customer_id)),
+          haalUitWasdag(
+            datum,
+            w.toegevoegd.map((r) => r.customer_id),
+          ),
           voegToeAanWasdag(datum, w.weggehaald),
         ]);
         qc.invalidateQueries({ queryKey: ["wasdag", datum] });
@@ -462,7 +468,12 @@ function Index() {
   function zetStraatOpDag(g: (typeof groepen)[number], aan: boolean) {
     const zichtbaar = [...g.even, ...g.oneven];
     if (aan) pasDagAan(zichtbaar, [], `${g.street.name} op de dag`);
-    else pasDagAan([], zichtbaar.map((c) => c.id), `${g.street.name} van de dag af`);
+    else
+      pasDagAan(
+        [],
+        zichtbaar.map((c) => c.id),
+        `${g.street.name} van de dag af`,
+      );
   }
 
   // --- Slepen om te selecteren -------------------------------------------
@@ -506,7 +517,14 @@ function Index() {
       const g = groepen.find((x) => x.street.id === id);
       if (!g) return;
       const zichtbaar = [...g.even, ...g.oneven];
-      tekenBij(v.aan ? pasDagAan(zichtbaar, []) : pasDagAan([], zichtbaar.map((c) => c.id)));
+      tekenBij(
+        v.aan
+          ? pasDagAan(zichtbaar, [])
+          : pasDagAan(
+              [],
+              zichtbaar.map((c) => c.id),
+            ),
+      );
       return;
     }
     const c = customers.find((x) => x.id === id);
@@ -561,10 +579,13 @@ function Index() {
       ...v.weggehaald.map((r) => r.customer_id),
     ]).size;
     if (raakte === 0) return;
-    draaiTerug(`${raakte} ${raakte === 1 ? "adres" : "adressen"} ${v.aan ? "op de dag" : "van de dag af"}`, {
-      toegevoegd: v.toegevoegd,
-      weggehaald: v.weggehaald,
-    });
+    draaiTerug(
+      `${raakte} ${raakte === 1 ? "adres" : "adressen"} ${v.aan ? "op de dag" : "van de dag af"}`,
+      {
+        toegevoegd: v.toegevoegd,
+        weggehaald: v.weggehaald,
+      },
+    );
   }
 
   // De streek loopt door buiten het vakje waar hij begon, dus hangen deze
@@ -1456,39 +1477,39 @@ function StraatBlok(p: BlokProps) {
 
         {!p.planmodus && (
           <>
-        <button
-          className="rounded p-1 text-muted-foreground hover:bg-accent"
-          onClick={p.onToggleSort}
-          aria-label={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
-          title={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
-        >
-          {p.sort === "asc" ? (
-            <ArrowUpNarrowWide className="size-3.5" />
-          ) : (
-            <ArrowDownNarrowWide className="size-3.5" />
-          )}
-        </button>
-        <button
-          className="rounded p-1 text-muted-foreground hover:bg-accent"
-          onClick={p.onAddKlant}
-          aria-label="Klant toevoegen"
-        >
-          <Plus className="size-3.5" />
-        </button>
-        <button
-          className="rounded p-1 text-muted-foreground hover:bg-accent"
-          onClick={p.onEditStreet}
-          aria-label="Straat bewerken"
-        >
-          <Pencil className="size-3.5" />
-        </button>
-        <button
-          className="rounded p-1 text-muted-foreground hover:bg-accent"
-          onClick={p.onDeleteStreet}
-          aria-label="Straat verwijderen"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
+            <button
+              className="rounded p-1 text-muted-foreground hover:bg-accent"
+              onClick={p.onToggleSort}
+              aria-label={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
+              title={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
+            >
+              {p.sort === "asc" ? (
+                <ArrowUpNarrowWide className="size-3.5" />
+              ) : (
+                <ArrowDownNarrowWide className="size-3.5" />
+              )}
+            </button>
+            <button
+              className="rounded p-1 text-muted-foreground hover:bg-accent"
+              onClick={p.onAddKlant}
+              aria-label="Klant toevoegen"
+            >
+              <Plus className="size-3.5" />
+            </button>
+            <button
+              className="rounded p-1 text-muted-foreground hover:bg-accent"
+              onClick={p.onEditStreet}
+              aria-label="Straat bewerken"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+            <button
+              className="rounded p-1 text-muted-foreground hover:bg-accent"
+              onClick={p.onDeleteStreet}
+              aria-label="Straat verwijderen"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
           </>
         )}
       </div>

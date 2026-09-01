@@ -135,6 +135,53 @@ export function leesMaandwerk(waarde: unknown): Maandwerk[] {
   });
 }
 
+/**
+ * De drie ritmes waar je bijna altijd op uitkomt. In de formulieren waar je
+ * een adres aanmaakt of inleest is dit genoeg; het fijnere werk — om de drie
+ * maanden en welke drie — doe je in de wijklijst, waar je de maanden erbij
+ * ziet staan.
+ */
+export const BASISRITMES = [
+  { waarde: "elke", label: "Elke maand", interval_maanden: 1, ritme: 1 },
+  { waarde: "even", label: "Even maanden", interval_maanden: 2, ritme: 2 },
+  { waarde: "oneven", label: "Oneven maanden", interval_maanden: 2, ritme: 1 },
+] as const;
+
+export type BasisRitme = (typeof BASISRITMES)[number]["waarde"];
+
+/** De twee ritmevelden die bij een basiskeuze horen, klaar om op te slaan. */
+export function ritmeVelden(waarde: string): { interval_maanden: number; ritme: number } {
+  const basis = BASISRITMES.find((b) => b.waarde === waarde) ?? BASISRITMES[0];
+  return { interval_maanden: basis.interval_maanden, ritme: basis.ritme };
+}
+
+/** Welk van de drie is dit — of "anders", bij een ritme uit de wijklijst. */
+export function basisRitmeVan(
+  c: Pick<Customer, "interval_maanden" | "ritme">,
+): BasisRitme | "anders" {
+  const match = BASISRITMES.find(
+    (b) =>
+      b.interval_maanden === c.interval_maanden &&
+      zelfdeRitme(c.ritme, b.ritme, b.interval_maanden),
+  );
+  return match?.waarde ?? "anders";
+}
+
+export const EVEN_MAANDEN = ["02", "04", "06", "08", "10", "12"];
+export const ONEVEN_MAANDEN = ["01", "03", "05", "07", "09", "11"];
+
+/**
+ * De oude even/oneven-notities als maandwerk. Het importscherm leest per
+ * tabblad, en een tabblad gaat over de even of de oneven helft van het jaar.
+ */
+export function maandwerkVanEvenOneven(even: string, oneven: string): Maandwerk[] {
+  const uit: Maandwerk[] = [];
+  if (even.trim()) uit.push({ maanden: [...EVEN_MAANDEN], notitie: even.trim(), prijs: null });
+  if (oneven.trim())
+    uit.push({ maanden: [...ONEVEN_MAANDEN], notitie: oneven.trim(), prijs: null });
+  return uit;
+}
+
 /** Om de hoeveel maanden een adres gewassen kan worden. */
 export const INTERVALLEN = [1, 2, 3, 6, 12] as const;
 
@@ -265,7 +312,9 @@ export async function deleteDistrict(id: string) {
 export async function fetchStreets(): Promise<Street[]> {
   const { data, error } = await supabase
     .from("streets")
-    .select("id,name,volledige_naam,sort_order,district_id,sort_desc,kolom_start,print_col,print_row")
+    .select(
+      "id,name,volledige_naam,sort_order,district_id,sort_desc,kolom_start,print_col,print_row",
+    )
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
@@ -538,9 +587,7 @@ export function noteVoorMaand(c: Pick<Customer, "note" | "maandwerk">, maand: st
       // Print je alle klanten tegelijk, dan is er geen maand om op te kiezen
       // en moet erbij staan wanneer dit werk meegaat.
       if (maand !== "alles") return tekst;
-      const maanden = w.maanden
-        .map((m) => toonMaandKort(`2000-${m}`))
-        .join("/");
+      const maanden = w.maanden.map((m) => toonMaandKort(`2000-${m}`)).join("/");
       return `${tekst} (${maanden})`;
     })
     .filter(Boolean);

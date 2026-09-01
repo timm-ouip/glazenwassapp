@@ -31,14 +31,16 @@ import { NotitieCel } from "@/components/NotitieCel";
 import {
   adresVanRegel,
   bewaarKlant,
-  frequencyLabels,
+  BASISRITMES,
+  basisRitmeVan,
+  ritmeLabel,
+  type BasisRitme,
   formatNumber,
   koppelKlant,
   updateCustomer,
   zorgVoorAdresRegel,
   type Customer,
   type District,
-  type Frequency,
   type Klant,
   type QuickNote,
   type Street,
@@ -64,19 +66,21 @@ interface Props {
   onSaved: () => void;
 }
 
-/** Prijs, frequentie en notitie van het adres zelf. */
+/** Prijs, ritme en notitie van het adres zelf. */
 interface Pand {
   price: string;
-  frequency: Frequency;
+  /** Een van de drie basisritmes, of "anders" als het adres in de wijklijst
+   *  een fijner ritme heeft gekregen — dat laten we dan met rust. */
+  ritme: BasisRitme | "anders";
   note: string;
 }
 
-const LEEG_PAND: Pand = { price: "", frequency: "elke", note: "" };
+const LEEG_PAND: Pand = { price: "", ritme: "elke", note: "" };
 
 function pandVan(c: Customer): Pand {
   return {
     price: c.price ? String(c.price) : "",
-    frequency: c.frequency,
+    ritme: basisRitmeVan(c),
     note: c.note ?? "",
   };
 }
@@ -277,13 +281,16 @@ export function KlantgegevensDialog({
         null,
       );
 
-      // Prijs, frequentie en notitie horen bij dít adres. De bijgekoppelde
+      // Prijs, ritme en notitie horen bij dít adres. De bijgekoppelde
       // adressen houden de hunne; die bewerk je in hun eigen dossier.
       if (adresId) {
+        const basis = BASISRITMES.find((b) => b.waarde === pand.ritme);
         await updateCustomer(adresId, {
           price: prijsGetal(pand.price),
-          frequency: pand.frequency,
           note: pand.note.trim(),
+          // Bij "anders" niets aanraken: dat ritme is hier niet te kiezen en
+          // hoort niet stilletjes teruggezet te worden naar elke maand.
+          ...(basis ? { interval_maanden: basis.interval_maanden, ritme: basis.ritme } : {}),
         });
       }
 
@@ -474,20 +481,27 @@ export function KlantgegevensDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>Frequentie</Label>
+              <Label>Hoe vaak</Label>
               <Select
-                value={pand.frequency}
-                onValueChange={(v) => setPand((p) => ({ ...p, frequency: v as Frequency }))}
+                value={pand.ritme}
+                onValueChange={(v) => setPand((p) => ({ ...p, ritme: v as BasisRitme }))}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(Object.keys(frequencyLabels) as Frequency[]).map((f) => (
-                    <SelectItem key={f} value={f}>
-                      {frequencyLabels[f]}
+                  {BASISRITMES.map((b) => (
+                    <SelectItem key={b.waarde} value={b.waarde}>
+                      {b.label}
                     </SelectItem>
                   ))}
+                  {/* Een ritme uit de wijklijst kun je hier zien maar niet
+                      maken; daar horen de maanden bij die je hier niet ziet. */}
+                  {pand.ritme === "anders" && voorstelCustomer && (
+                    <SelectItem value="anders" disabled>
+                      {ritmeLabel(voorstelCustomer)} (stel je in de lijst in)
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>

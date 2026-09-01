@@ -31,7 +31,8 @@ import {
   fetchStreets,
   formatNumber,
   formatPrice,
-  frequencyLabels,
+  intervalLabels,
+  ritmeLabel,
   klantAdres,
   koppelKlant,
   legWeg,
@@ -562,7 +563,7 @@ function Klanten() {
                       </td>
                       <td
                         className="whitespace-nowrap px-2 py-1 text-right tabular-nums text-muted-foreground"
-                        title={frequencyLabels[r.customer.frequency]}
+                        title={`${intervalLabels[r.customer.interval_maanden] ?? ""} — ${ritmeLabel(r.customer)}`}
                       >
                         {r.customer.price ? formatPrice(r.customer.price) : "—"}
                       </td>
