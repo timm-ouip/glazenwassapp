@@ -2,8 +2,52 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
-import { noteTokens, toggleNoteToken, type Frequency, type QuickNote } from "@/lib/klanten";
+import { Plus, Trash2 } from "lucide-react";
+import {
+  formatPrice,
+  noteTokens,
+  toggleNoteToken,
+  toonMaandKort,
+  type Maandwerk,
+  type QuickNote,
+} from "@/lib/klanten";
+
+const MAANDEN = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
+
+/** Terwijl je typt is een prijs gewoon tekst: "18," moet ook even mogen. */
+interface Regel {
+  maanden: string[];
+  notitie: string;
+  prijs: string;
+}
+
+function naarRegels(werk: Maandwerk[] | undefined): Regel[] {
+  return (werk ?? []).map((w) => ({
+    maanden: w.maanden,
+    notitie: w.notitie,
+    prijs: w.prijs === null ? "" : String(w.prijs).replace(".", ","),
+  }));
+}
+
+function naarMaandwerk(regels: Regel[]): Maandwerk[] {
+  return regels
+    // Zonder maanden slaat een uitzondering nergens op; die valt vanzelf weg.
+    .filter((r) => r.maanden.length > 0)
+    .map((r) => {
+      const getal = Number(r.prijs.replace(",", ".").replace(/[^\d.]/g, ""));
+      return {
+        maanden: r.maanden,
+        notitie: r.notitie.trim(),
+        prijs: r.prijs.trim() === "" || Number.isNaN(getal) ? null : getal,
+      };
+    });
+}
+
+/** Voor de tooltip: "serre in mrt/sep". */
+function omschrijf(w: Maandwerk): string {
+  const maanden = w.maanden.map((m) => toonMaandKort(`2000-${m}`)).join("/");
+  return `${w.notitie.trim() || "andere prijs"} in ${maanden}`;
+}
 
 interface Props {
   value: string;
@@ -11,16 +55,14 @@ interface Props {
   onChange: (value: string) => void;
   onAddQuickNote: (label: string) => void;
   className?: string;
-  /** Werk dat er alleen in even maanden bij komt. Laat weg waar maandnotities
-   *  niet spelen, zoals in het importscherm. */
-  even?: string | undefined;
-  oneven?: string | undefined;
-  onChangeEven?: ((value: string) => void) | undefined;
-  onChangeOneven?: ((value: string) => void) | undefined;
-  /** Maandnotities hebben alleen zin bij "elke maand": wordt een adres toch
-   *  al maar één van de twee maanden gewassen, dan is de gewone notitie
-   *  genoeg. */
-  frequency?: Frequency | undefined;
+  /** Werk dat er alleen in bepaalde maanden bij komt. Laat weg waar dat niet
+   *  speelt, zoals in het importscherm. */
+  maandwerk?: Maandwerk[] | undefined;
+  onChangeMaandwerk?: ((werk: Maandwerk[]) => void) | undefined;
+  /** De vaste prijs van dit adres — staat als grijze voorbeeldwaarde in het
+   *  prijsvakje, zodat duidelijk is dat je daar de hele prijs voor die ronde
+   *  zet en niet de meerkosten. */
+  prijs?: number | undefined;
 }
 
 /** Notitieveld met meervoudige snelkeuzes en de mogelijkheid nieuwe toe te voegen. */
@@ -30,29 +72,20 @@ export function NotitieCel({
   onChange,
   onAddQuickNote,
   className,
-  even,
-  oneven,
-  onChangeEven,
-  onChangeOneven,
-  frequency,
+  maandwerk,
+  onChangeMaandwerk,
+  prijs,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [tekst, setTekst] = useState(value);
-  const [tekstEven, setTekstEven] = useState(even ?? "");
-  const [tekstOneven, setTekstOneven] = useState(oneven ?? "");
+  const [werk, setWerk] = useState<Regel[]>(() => naarRegels(maandwerk));
   const [nieuw, setNieuw] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Alleen bij "elke maand" — behalve als er al iets ingevuld staat, want
-  // dan moet je er nog wel bij kunnen om het weg te halen.
-  const alIngevuld = Boolean(even?.trim() || oneven?.trim());
-  const maandVelden =
-    Boolean(onChangeEven && onChangeOneven) &&
-    (frequency === undefined || frequency === "elke" || alIngevuld);
+  const maandVelden = Boolean(onChangeMaandwerk);
 
   useEffect(() => setTekst(value), [value]);
-  useEffect(() => setTekstEven(even ?? ""), [even]);
-  useEffect(() => setTekstOneven(oneven ?? ""), [oneven]);
+  useEffect(() => setWerk(naarRegels(maandwerk)), [maandwerk]);
 
   const actief = noteTokens(tekst).map((t) => t.toLowerCase());
 
@@ -66,6 +99,20 @@ export function NotitieCel({
     onChange(next);
   }
 
+  function pasAan(i: number, patch: Partial<Regel>) {
+    setWerk(werk.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  }
+
+  function wisselMaand(i: number, maand: string) {
+    const regel = werk[i]!;
+    const aan = regel.maanden.includes(maand);
+    pasAan(i, {
+      maanden: aan
+        ? regel.maanden.filter((m) => m !== maand)
+        : [...regel.maanden, maand].sort(),
+    });
+  }
+
   return (
     <Popover
       open={open}
@@ -73,8 +120,11 @@ export function NotitieCel({
         setOpen(o);
         if (o) return;
         if (tekst !== value) onChange(tekst);
-        if (onChangeEven && tekstEven !== (even ?? "")) onChangeEven(tekstEven);
-        if (onChangeOneven && tekstOneven !== (oneven ?? "")) onChangeOneven(tekstOneven);
+        if (!onChangeMaandwerk) return;
+        const volgende = naarMaandwerk(werk);
+        if (JSON.stringify(volgende) !== JSON.stringify(maandwerk ?? [])) {
+          onChangeMaandwerk(volgende);
+        }
       }}
     >
       <PopoverTrigger asChild>
@@ -86,18 +136,12 @@ export function NotitieCel({
           }
         >
           {value || <span className="text-muted-foreground/50">—</span>}
-          {/* Kleine stip als er nog werk in één van beide maanden bij hoort;
-              anders zie je dat pas als je het veld opent. */}
-          {even?.trim() && (
+          {/* Kleine stip als er in bepaalde maanden werk bij hoort; anders zie
+              je dat pas als je het veld opent. */}
+          {(maandwerk ?? []).length > 0 && (
             <span
               className="ml-1 inline-block size-2 rounded-full bg-tint-amber align-middle ring-1 ring-inset ring-tint-amber-ink/30"
-              title={`Even maanden ook: ${even.trim()}`}
-            />
-          )}
-          {oneven?.trim() && (
-            <span
-              className="ml-1 inline-block size-2 rounded-full bg-muted align-middle ring-1 ring-inset ring-muted-foreground/40"
-              title={`Oneven maanden ook: ${oneven.trim()}`}
+              title={(maandwerk ?? []).map(omschrijf).join("; ")}
             />
           )}
         </button>
@@ -170,34 +214,67 @@ export function NotitieCel({
           // staat wat er élke keer geldt.
           <div className="space-y-2 border-t border-border pt-3">
             <p className="text-[11px] text-muted-foreground">
-              {frequency === "elke" || frequency === undefined
-                ? "Alleen in bepaalde maanden"
-                : "Alleen in bepaalde maanden — doet niets zolang dit adres niet elke maand gewassen wordt"}
+              Alleen in bepaalde maanden
             </p>
-            <div className="flex items-center gap-2">
-              <span className="w-14 shrink-0 rounded-full bg-tint-amber px-2 py-0.5 text-center text-[10px] font-semibold text-tint-amber-ink">
-                even
-              </span>
-              <Input
-                value={tekstEven}
-                placeholder="bijv. serre"
-                className="h-8 text-xs"
-                onChange={(e) => setTekstEven(e.target.value)}
-                onKeyDown={sluitBijEnter}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-14 shrink-0 rounded-full bg-muted px-2 py-0.5 text-center text-[10px] font-semibold text-muted-foreground">
-                oneven
-              </span>
-              <Input
-                value={tekstOneven}
-                placeholder="bijv. dakraam"
-                className="h-8 text-xs"
-                onChange={(e) => setTekstOneven(e.target.value)}
-                onKeyDown={sluitBijEnter}
-              />
-            </div>
+            {werk.map((regel, i) => (
+              <div key={i} className="space-y-1.5 rounded-md border border-border p-2">
+                <div className="grid grid-cols-6 gap-1">
+                  {MAANDEN.map((m) => {
+                    const aan = regel.maanden.includes(m);
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => wisselMaand(i, m)}
+                        className={`rounded border px-1 py-0.5 text-[10px] font-medium capitalize transition-colors ${
+                          aan
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-secondary text-secondary-foreground hover:bg-accent"
+                        }`}
+                      >
+                        {toonMaandKort(`2000-${m}`)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-1.5">
+                  <Input
+                    value={regel.notitie}
+                    placeholder="bijv. serre"
+                    className="h-8 text-xs"
+                    onChange={(e) => pasAan(i, { notitie: e.target.value })}
+                    onKeyDown={sluitBijEnter}
+                  />
+                  {/* De vaste prijs staat er grijs in: dit is de hele prijs
+                      voor die ronde, niet wat er bij komt. */}
+                  <Input
+                    value={regel.prijs}
+                    placeholder={prijs === undefined ? "prijs" : formatPrice(prijs)}
+                    inputMode="decimal"
+                    className="h-8 w-20 shrink-0 text-xs"
+                    onChange={(e) => pasAan(i, { prijs: e.target.value })}
+                    onKeyDown={sluitBijEnter}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2 text-muted-foreground hover:text-destructive"
+                    aria-label="Deze maanden weghalen"
+                    onClick={() => setWerk(werk.filter((_, j) => j !== i))}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 w-full text-xs"
+              onClick={() => setWerk([...werk, { maanden: [], notitie: "", prijs: "" }])}
+            >
+              <Plus className="size-3.5" /> Maanden toevoegen
+            </Button>
           </div>
         )}
       </PopoverContent>

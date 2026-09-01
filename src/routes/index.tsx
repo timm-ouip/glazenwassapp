@@ -1504,7 +1504,7 @@ function StraatBlok(p: BlokProps) {
               <span className="w-9">NR</span>
               <span className="min-w-0 flex-1 truncate">NOTITIE</span>
               {p.prijzenTonen && <span className="w-12 text-right">PRIJS</span>}
-              <span className="min-w-[3.25rem] max-w-[5.5rem] text-center">HOE VAAK</span>
+              <span className="min-w-[3.25rem] max-w-[5.5rem] pl-1 text-center">RITME</span>
               <span className="w-4" />
             </div>
             <SortableContext
@@ -1678,11 +1678,9 @@ function KlantRij({
       <div className="min-w-0 flex-1">
         <NotitieCel
           value={c.note}
-          even={c.note_even}
-          oneven={c.note_oneven}
-          onChangeEven={(v) => onPatch(c, { note_even: v })}
-          onChangeOneven={(v) => onPatch(c, { note_oneven: v })}
-          frequency={c.frequency}
+          maandwerk={c.maandwerk}
+          onChangeMaandwerk={(werk) => onPatch(c, { maandwerk: werk })}
+          prijs={c.price}
           quickNotes={quickNotes}
           onChange={(v) => onPatch(c, { note: v })}
           onAddQuickNote={onAddQuickNote}

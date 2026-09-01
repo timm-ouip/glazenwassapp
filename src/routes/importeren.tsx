@@ -1052,13 +1052,11 @@ function ImportPagina() {
                             : undefined
                         }
                       >
+                        {/* Bij het inlezen typ je gewoon de notitie; werk dat
+                            maar in bepaalde maanden meegaat zet je daarna in
+                            de wijklijst, waar je de maanden erbij ziet. */}
                         <NotitieCel
                           value={r.notitie}
-                          even={r.notitieEven}
-                          oneven={r.notitieOneven}
-                          onChangeEven={(v) => wijzig(r.id, { notitieEven: v })}
-                          onChangeOneven={(v) => wijzig(r.id, { notitieOneven: v })}
-                          frequency={r.frequency}
                           quickNotes={quickNotes}
                           onChange={(v) => wijzig(r.id, { notitie: v })}
                           onAddQuickNote={(l) => void nieuweSnelkeuze(l)}
