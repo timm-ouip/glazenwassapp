@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -44,6 +44,13 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppLayout } from "@/components/AppLayout";
@@ -59,6 +66,7 @@ import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { NotitieCel } from "@/components/NotitieCel";
 import { KlantMenu } from "@/components/KlantMenu";
 import { Overgeslagen } from "@/components/Overgeslagen";
+import { RitmeKiezer } from "@/components/RitmeKiezer";
 import { WassenVanaf } from "@/components/WassenVanaf";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
 import {
@@ -73,6 +81,7 @@ import {
   type WasdagRegel,
 } from "@/lib/wasdag";
 import {
+  aanDeBeurt,
   addQuickNote,
   alsRij,
   haalTerug,
@@ -84,7 +93,11 @@ import {
   fetchStreets,
   formatNumber,
   formatPrice,
+  isKalendermaand,
+  komendeMaanden,
   maandSleutel,
+  prijsVoorMaand,
+  toonMaand,
   regelKleur,
   matchesMaand,
   persistCustomerOrder,
@@ -135,7 +148,9 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type MaandFilter = "alles" | "even" | "oneven";
+/** De ronde die je bekijkt: een echte maand ("2026-09"), of een van de oude
+ *  keuzes "alles" / "even" / "oneven". */
+type MaandFilter = string;
 
 /** Sta je midden in een dag te plannen, dan hoort een herlaadslag — of een
  *  telefoon die de pagina weggooit — je niet uit die modus te gooien. De
@@ -148,7 +163,9 @@ function Index() {
   const bevestig = useBevestig();
   const navigate = useNavigate();
   const { wijk, dag } = Route.useSearch();
-  const [filter, setFilter] = useState<MaandFilter>("alles");
+  // Standaard de maand die je nu loopt, net als op de printlijst.
+  const [filter, setFilter] = useState<MaandFilter>(() => maandSleutel(new Date()));
+  const ronde = isKalendermaand(filter) ? filter : maandSleutel(new Date());
   const [zoek, setZoek] = useState("");
   const [prijzenTonen, setPrijzenTonen] = useState(true);
   const [selectie, setSelectie] = useState<string[]>([]);
@@ -242,13 +259,17 @@ function Index() {
       .map((s) => {
         const order: "asc" | "desc" = s.sort_desc ? "desc" : "asc";
         const klanten = customers.filter(
-          (c) => c.street_id === s.id && matchesMaand(c, filter),
+          (c) =>
+            c.street_id === s.id &&
+            (isKalendermaand(filter)
+              ? aanDeBeurt(c, filter)
+              : matchesMaand(c, filter as "alles" | "even" | "oneven")),
         );
         return {
           street: s,
           ...splitEvenOdd(klanten, order),
           aantal: klanten.length,
-          totaal: klanten.reduce((sum, c) => sum + c.price, 0),
+          totaal: klanten.reduce((sum, c) => sum + prijsVoorMaand(c, filter), 0),
         };
       });
   }, [streets, customers, filter, zoek]);
@@ -385,7 +406,7 @@ function Index() {
     const alOpDeDag = new Set(bestaand.map((r) => r.customer_id));
     const toevoegen = erbij
       .filter((c) => !alOpDeDag.has(c.id))
-      .map((c) => ({ customer_id: c.id, prijs: c.price }));
+      .map((c) => ({ customer_id: c.id, prijs: prijsVoorMaand(c, ronde) }));
     // Alleen wat er echt af gaat, met de prijs zoals die op de dag stond —
     // die kan afwijken van de huidige prijs van het adres.
     const weghalen = bestaand
@@ -1004,6 +1025,33 @@ function Index() {
       <div className="space-y-3">
         <div className="sticky top-[var(--plakrand)] z-[9] -mx-6 flex flex-wrap items-center gap-3 border-b border-border/70 bg-background/85 px-6 py-2 backdrop-blur">
           <div className="inline-flex gap-0.5 rounded-full border border-border bg-card p-[3px]">
+            {/* Dezelfde keuze als op de printlijst: wat je hier ziet is wat je
+                straks meeneemt. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[13px] capitalize transition-colors ${
+                    isKalendermaand(filter)
+                      ? "bg-brand font-semibold text-brand-foreground"
+                      : "text-foreground/80 hover:text-foreground"
+                  }`}
+                >
+                  {isKalendermaand(filter) ? toonMaand(filter) : "Maand"}
+                  <ChevronDown className="size-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="max-h-72 w-48 overflow-y-auto">
+                {komendeMaanden().map((m, i) => (
+                  <Fragment key={m}>
+                    {i > 0 && m.endsWith("-01") && <DropdownMenuSeparator />}
+                    <DropdownMenuItem onSelect={() => setFilter(m)}>
+                      <span className="capitalize">{toonMaand(m)}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
+                    </DropdownMenuItem>
+                  </Fragment>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             {(["alles", "even", "oneven"] as MaandFilter[]).map((f) => (
               <button
                 key={f}
@@ -1138,6 +1186,7 @@ function Index() {
                 <StraatBlok
                   key={g.street.id}
                   street={g.street}
+                  ronde={ronde}
                   even={g.even}
                   oneven={g.oneven}
                   aantal={g.aantal}
@@ -1223,6 +1272,8 @@ interface BlokProps {
   quickNotes: QuickNote[];
   /** Naam per klant-id, voor het personen-icoontje op een gekoppelde regel. */
   klantNamen: Map<string, string>;
+  /** De maand die je bekijkt; kleurt de regels. */
+  ronde: string;
   rowText: string;
   rowPad: string;
   selectie: string[];
@@ -1453,7 +1504,7 @@ function StraatBlok(p: BlokProps) {
               <span className="w-9">NR</span>
               <span className="min-w-0 flex-1 truncate">NOTITIE</span>
               {p.prijzenTonen && <span className="w-12 text-right">PRIJS</span>}
-              <span className="min-w-[3.25rem] max-w-[4rem] text-center">FREQ</span>
+              <span className="min-w-[3.25rem] max-w-[5.5rem] text-center">HOE VAAK</span>
               <span className="w-4" />
             </div>
             <SortableContext
@@ -1470,6 +1521,7 @@ function StraatBlok(p: BlokProps) {
                   rowText={p.rowText}
                   rowPad={p.rowPad}
                   geselecteerd={p.selectie.includes(c.id)}
+                  ronde={p.ronde}
                   planmodus={p.planmodus}
                   opDeDag={p.opDeDag.has(c.id)}
                   eerderGewassen={p.eerderGewassen.has(c.id)}
@@ -1506,6 +1558,8 @@ interface RijProps {
   rowText: string;
   rowPad: string;
   geselecteerd: boolean;
+  /** De maand die je bekijkt: die bepaalt de kleur van de regel. */
+  ronde: string;
   planmodus: boolean;
   opDeDag: boolean;
   /** Deze maand al op een andere dag gewassen. */
@@ -1525,12 +1579,6 @@ interface RijProps {
 /** Kleur per frequentie: blauw is het accent, amber de even maanden, grijs de oneven.
  *  Het amber badge krijgt een randje: een aangevinkte rij is zelf ook amber,
  *  en zonder rand valt het badge daar helemaal in weg. */
-const FREQ_KLEUR: Record<Customer["frequency"], string> = {
-  elke: "bg-accent text-accent-foreground",
-  even: "bg-tint-amber text-tint-amber-ink ring-1 ring-inset ring-tint-amber-ink/25",
-  oneven: "bg-muted text-muted-foreground",
-};
-
 function KlantRij({
   customer: c,
   prijzenTonen,
@@ -1539,6 +1587,7 @@ function KlantRij({
   rowText,
   rowPad,
   geselecteerd,
+  ronde: dezeMaand,
   planmodus,
   opDeDag,
   eerderGewassen,
@@ -1555,7 +1604,6 @@ function KlantRij({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `c:${c.id}`,
   });
-  const dezeMaand = maandSleutel(new Date());
 
   // In planmodus vertelt de kleur waar je die dag staat; daarbuiten waar je
   // op moet letten. Twee kleursystemen tegelijk zou niet te lezen zijn.
@@ -1659,16 +1707,7 @@ function KlantRij({
           />
         </div>
       )}
-      <select
-        value={c.frequency}
-        onChange={(e) => onPatch(c, { frequency: e.target.value as Customer["frequency"] })}
-        className={`min-w-[3.25rem] max-w-[4rem] shrink-0 cursor-pointer appearance-none rounded-full py-[2px] text-center text-[10px] font-semibold focus:outline-none focus:ring-2 focus:ring-ring ${FREQ_KLEUR[c.frequency]}`}
-        aria-label="Frequentie"
-      >
-        <option value="elke">Elke</option>
-        <option value="even">Even</option>
-        <option value="oneven">Oneven</option>
-      </select>
+      <RitmeKiezer customer={c} onPatch={(patch) => onPatch(c, patch)} />
       {/* Vaste breedte, ook zonder klant: anders krimpt de notitiekolom van
           precies die ene rij en lopen de kolommen uit de pas. */}
       <span className="w-3 shrink-0">

@@ -714,6 +714,23 @@ export function ritmeLabel(c: Pick<Customer, "interval_maanden" | "ritme">): str
   return maanden.join("·");
 }
 
+/**
+ * De ankermaanden die bij een interval horen: om de 3 zijn dat er drie
+ * (1·4·7·10, 2·5·8·11, 3·6·9·12), om de 12 twaalf. Waar je uit kiest als je
+ * zegt in welke maanden een adres valt.
+ */
+export function ritmeVarianten(interval: number): number[] {
+  const stap = interval || 1;
+  return Array.from({ length: stap }, (_, i) => i + 1);
+}
+
+/** Komen deze twee ankers op dezelfde maanden uit? Ritme 9 en ritme 3 doen
+ *  dat bij om de 3, want ze schelen precies een hele cyclus. */
+export function zelfdeRitme(a: number, b: number, interval: number): boolean {
+  const stap = interval || 1;
+  return (((a - b) % stap) + stap) % stap === 0;
+}
+
 /** Is dit een echte maand ("2026-09") of een van de keuzes even/oneven/alles? */
 export function isKalendermaand(maand: string): boolean {
   return /^\d{4}-\d{2}$/.test(maand);
