@@ -45,10 +45,11 @@ function naarMaandwerk(regels: Regel[]): Maandwerk[] {
   );
 }
 
-/** Voor de tooltip: "serre in mrt/sep". */
+/** Voor de tooltip: "serre in mrt/sep — € 45". */
 function omschrijf(w: Maandwerk): string {
   const maanden = w.maanden.map((m) => toonMaandKort(`2000-${m}`)).join("/");
-  return `${w.notitie.trim() || "andere prijs"} in ${maanden}`;
+  const wat = `${w.notitie.trim() || "andere prijs"} in ${maanden}`;
+  return w.prijs === null ? wat : `${wat} — ${formatPrice(w.prijs)}`;
 }
 
 interface Props {
