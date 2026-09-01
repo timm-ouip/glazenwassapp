@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
 import { KlantMenu } from "@/components/KlantMenu";
+import { WassenVanaf } from "@/components/WassenVanaf";
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { WijkKiezer } from "@/components/WijkKiezer";
 import { PostcodesOphalen } from "@/components/PostcodesOphalen";
@@ -529,7 +530,15 @@ function Klanten() {
                           <User className="size-4" />
                         </button>
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1 font-medium">{adresTekst(r)}</td>
+                      <td className="whitespace-nowrap px-2 py-1 font-medium">
+                        <span className="flex items-center gap-1.5">
+                          {adresTekst(r)}
+                          <WassenVanaf
+                            customer={r.customer}
+                            onPatch={(patch) => void patchAdres(r.customer, patch)}
+                          />
+                        </span>
+                      </td>
                       {KOLOMMEN.map((k) => (
                         <td key={k.veld} className="px-2 py-1">
                           <InlineCel

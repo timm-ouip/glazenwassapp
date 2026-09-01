@@ -74,7 +74,7 @@ export function KlantMenu({ customer: c, onPatch, children }: Props) {
         <ContextMenuItem
           onSelect={() => void navigate({ to: "/klanten", search: { klant: c.klant_id ?? "" } })}
         >
-          <FileText className="size-4" /> Hele dossier
+          <FileText className="size-4" /> Dossier
         </ContextMenuItem>
 
         <ContextMenuSeparator />
@@ -104,12 +104,12 @@ export function KlantMenu({ customer: c, onPatch, children }: Props) {
           <CalendarOff className="size-4" />
           {c.overslaan.includes(komende)
             ? `${toonMaand(komende)} toch doen`
-            : "Overslaan komende ronde"}
+            : "Overslaan"}
         </ContextMenuItem>
 
         <ContextMenuSub>
           <ContextMenuSubTrigger>
-            <CalendarOff className="size-4" /> Losse maanden overslaan
+            <CalendarOff className="size-4" /> Overslaan in…
           </ContextMenuSubTrigger>
           <ContextMenuSubContent className="max-h-72 overflow-y-auto">
             {maanden.map((m) => (
