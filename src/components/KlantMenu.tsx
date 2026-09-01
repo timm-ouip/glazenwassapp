@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/context-menu";
 import {
   eersteMaand,
+  komendeMaanden,
   maandSleutel,
   markeringLabels,
   toonMaand,
@@ -27,14 +28,6 @@ interface Props {
   customer: Customer;
   onPatch: (patch: Partial<Customer>) => void;
   children: ReactNode;
-}
-
-/** De twaalf maanden vanaf nu, waaruit je er een kunt overslaan. */
-function komendeMaanden(aantal = 12): string[] {
-  const nu = new Date();
-  return Array.from({ length: aantal }, (_, i) =>
-    maandSleutel(new Date(nu.getFullYear(), nu.getMonth() + i, 1)),
-  );
 }
 
 const KLEUR_STIP: Record<Exclude<Markering, "">, string> = {
@@ -55,6 +48,7 @@ export function KlantMenu({ customer: c, onPatch, children }: Props) {
   const maanden = komendeMaanden();
   const komende = maanden[0]!;
   const start = eersteMaand(c);
+  const nieuwDezeMaand = start === maandSleutel(new Date());
 
   function zetKleur(kleur: Markering) {
     onPatch({ markering: c.markering === kleur ? "" : kleur });
@@ -92,10 +86,17 @@ export function KlantMenu({ customer: c, onPatch, children }: Props) {
             {c.markering === kleur && <Check className="ml-auto size-4" />}
           </ContextMenuItem>
         ))}
-        {c.markering && (
+        {c.markering ? (
           <ContextMenuItem onSelect={() => onPatch({ markering: "" })}>
             <CircleSlash className="size-4" /> Kleur weghalen
           </ContextMenuItem>
+        ) : (
+          nieuwDezeMaand && (
+            // Anders zoek je je scheel naar de kleur die je nooit gezet hebt.
+            <ContextMenuLabel className="font-normal text-muted-foreground">
+              Al groen: nieuw vanaf {toonMaand(start)}
+            </ContextMenuLabel>
+          )
         )}
 
         <ContextMenuSeparator />

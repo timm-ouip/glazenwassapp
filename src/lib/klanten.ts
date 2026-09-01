@@ -519,6 +519,21 @@ export function toonMaand(sleutel: string): string {
   return new Date(jaar, maand - 1, 1).toLocaleDateString("nl-NL", { month: "long" });
 }
 
+/** Korte maandnaam, voor plekken waar "september" niet past. */
+export function toonMaandKort(sleutel: string): string {
+  const [jaar, maand] = sleutel.split("-").map(Number);
+  if (!jaar || !maand) return sleutel;
+  return new Date(jaar, maand - 1, 1).toLocaleDateString("nl-NL", { month: "short" });
+}
+
+/** De twaalf maanden vanaf nu: waaruit je een startmaand of een pauze kiest. */
+export function komendeMaanden(aantal = 12): string[] {
+  const nu = new Date();
+  return Array.from({ length: aantal }, (_, i) =>
+    maandSleutel(new Date(nu.getFullYear(), nu.getMonth() + i, 1)),
+  );
+}
+
 /** De maand waarin dit adres voor het eerst aan de beurt is. */
 export function eersteMaand(c: Pick<Customer, "start_maand" | "created_at">): string {
   return c.start_maand || maandSleutel(new Date(c.created_at));

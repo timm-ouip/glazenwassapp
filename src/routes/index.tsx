@@ -79,10 +79,14 @@ import {
   fetchKlanten,
   fetchQuickNotes,
   fetchStreets,
+  eersteMaand,
   formatNumber,
   formatPrice,
+  komendeMaanden,
   maandSleutel,
   regelKleur,
+  toonMaand,
+  toonMaandKort,
   matchesMaand,
   persistCustomerOrder,
   persistStreetOrder,
@@ -1522,6 +1526,14 @@ interface RijProps {
 /** Kleur per frequentie: blauw is het accent, amber de even maanden, grijs de oneven.
  *  Het amber badge krijgt een randje: een aangevinkte rij is zelf ook amber,
  *  en zonder rand valt het badge daar helemaal in weg. */
+/** "vanaf sep", en met jaartal zodra het over de jaargrens gaat. */
+function vanafLabel(maand: string, dezeMaand: string): string {
+  const jaar = maand.slice(0, 4);
+  return jaar === dezeMaand.slice(0, 4)
+    ? `vanaf ${toonMaandKort(maand)}`
+    : `vanaf ${toonMaandKort(maand)} '${jaar.slice(2)}`;
+}
+
 const FREQ_KLEUR: Record<Customer["frequency"], string> = {
   elke: "bg-accent text-accent-foreground",
   even: "bg-tint-amber text-tint-amber-ink ring-1 ring-inset ring-tint-amber-ink/25",
@@ -1557,6 +1569,11 @@ function KlantRij({
   // In planmodus vertelt de kleur waar je die dag staat; daarbuiten waar je
   // op moet letten. Twee kleursystemen tegelijk zou niet te lezen zijn.
   const kleur = regelKleur(c, dezeMaand);
+  // Een adres dat nog moet beginnen (of deze maand nieuw is) kleurt groen.
+  // Zonder deze badge is nergens te zien waaróm, en al helemaal niet vanaf
+  // wanneer hij meedoet.
+  const start = eersteMaand(c);
+  const toonStart = !planmodus && start >= dezeMaand;
   const achtergrond = planmodus
     ? opDeDag
       ? "bg-tint-amber"
@@ -1658,6 +1675,28 @@ function KlantRij({
         <option value="even">Even</option>
         <option value="oneven">Oneven</option>
       </select>
+      {toonStart && (
+        <select
+          value={c.start_maand}
+          onChange={(e) => onPatch(c, { start_maand: e.target.value })}
+          title={`Wassen vanaf ${toonMaand(start)}`}
+          className={`max-w-[5.25rem] shrink-0 cursor-pointer appearance-none rounded-full px-1 py-[2px] text-center text-[10px] font-semibold focus:outline-none focus:ring-2 focus:ring-ring ${
+            start === dezeMaand
+              ? "bg-tint-groen text-tint-groen-ink ring-1 ring-inset ring-tint-groen-ink/25"
+              : "bg-muted text-muted-foreground"
+          }`}
+          aria-label="Wassen vanaf"
+        >
+          {/* Zonder startmaand begint hij in zijn aanmaakmaand — en dat is,
+              hier zichtbaar, altijd deze maand. */}
+          <option value="">nieuw</option>
+          {komendeMaanden().map((m) => (
+            <option key={m} value={m}>
+              {vanafLabel(m, dezeMaand)}
+            </option>
+          ))}
+        </select>
+      )}
       {/* Vaste breedte, ook zonder klant: anders krimpt de notitiekolom van
           precies die ene rij en lopen de kolommen uit de pas. */}
       <span className="w-3 shrink-0">
