@@ -54,14 +54,14 @@ export function RitmeKiezer({ customer: c, onPatch }: Props) {
           type="button"
           tabIndex={-1}
           title={ritmeOmschrijving(c)}
-          aria-label="Hoe vaak"
+          aria-label="Frequentie"
           className={`min-w-[3.25rem] max-w-[5.5rem] shrink-0 truncate rounded-full px-1.5 py-[2px] text-center text-[10px] font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${kleur(c)}`}
         >
           {ritmeLabel(c)}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-52">
-        <DropdownMenuLabel>Hoe vaak</DropdownMenuLabel>
+        <DropdownMenuLabel>Frequentie</DropdownMenuLabel>
         {INTERVALLEN.map((n) => (
           <DropdownMenuItem key={n} onSelect={() => onPatch({ interval_maanden: n })}>
             {intervalLabels[n]}

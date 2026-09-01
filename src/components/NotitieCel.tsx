@@ -4,8 +4,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
 import {
+  EVEN_MAANDEN,
   formatPrice,
   noteTokens,
+  ONEVEN_MAANDEN,
   toggleNoteToken,
   toonMaandKort,
   type Maandwerk,
@@ -104,6 +106,16 @@ export function NotitieCel({
 
   function pasAan(i: number, patch: Partial<Regel>) {
     setWerk(werk.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  }
+
+  /** Een hele helft van het jaar aan- of uitzetten. */
+  function zetHelft(i: number, maanden: string[], aan: boolean) {
+    const regel = werk[i]!;
+    pasAan(i, {
+      maanden: aan
+        ? [...new Set([...regel.maanden, ...maanden])].sort()
+        : regel.maanden.filter((m) => !maanden.includes(m)),
+    });
   }
 
   function wisselMaand(i: number, maand: string) {
@@ -217,6 +229,29 @@ export function NotitieCel({
             <p className="text-[11px] text-muted-foreground">Alleen in bepaalde maanden</p>
             {werk.map((regel, i) => (
               <div key={i} className="space-y-1.5 rounded-md border border-border p-2">
+                {/* De twee helften die je het vaakst nodig hebt, in één klik.
+                    Ze staan boven de losse maanden en zijn wat groter, want
+                    hier begin je meestal. */}
+                <div className="flex gap-1.5">
+                  {(["even", "oneven"] as const).map((helft) => {
+                    const maanden = helft === "even" ? EVEN_MAANDEN : ONEVEN_MAANDEN;
+                    const aan = maanden.every((m) => regel.maanden.includes(m));
+                    return (
+                      <button
+                        key={helft}
+                        type="button"
+                        onClick={() => zetHelft(i, maanden, !aan)}
+                        className={`flex-1 rounded-md border px-2 py-1 text-xs font-semibold transition-colors ${
+                          aan
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-secondary text-secondary-foreground hover:bg-accent"
+                        }`}
+                      >
+                        {helft === "even" ? "Even maanden" : "Oneven maanden"}
+                      </button>
+                    );
+                  })}
+                </div>
                 <div className="grid grid-cols-6 gap-1">
                   {MAANDEN.map((m) => {
                     const aan = regel.maanden.includes(m);

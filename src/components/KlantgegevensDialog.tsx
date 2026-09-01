@@ -481,7 +481,7 @@ export function KlantgegevensDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>Hoe vaak</Label>
+              <Label>Frequentie</Label>
               <Select
                 value={pand.ritme}
                 onValueChange={(v) => setPand((p) => ({ ...p, ritme: v as BasisRitme }))}

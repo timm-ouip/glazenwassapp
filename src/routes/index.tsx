@@ -1525,7 +1525,7 @@ function StraatBlok(p: BlokProps) {
               <span className="w-9">NR</span>
               <span className="min-w-0 flex-1 truncate">NOTITIE</span>
               {p.prijzenTonen && <span className="w-12 text-right">PRIJS</span>}
-              <span className="min-w-[3.25rem] max-w-[5.5rem] pl-1 text-center">RITME</span>
+              <span className="min-w-[3.25rem] max-w-[5.5rem] pl-1 text-center">FREQ</span>
               <span className="w-4" />
             </div>
             <SortableContext

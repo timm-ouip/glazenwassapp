@@ -210,7 +210,7 @@ export function KlantDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>Hoe vaak</Label>
+              <Label>Frequentie</Label>
               <Select value={ritme} onValueChange={(v) => setRitme(v as BasisRitme)}>
                 <SelectTrigger>
                   <SelectValue />
