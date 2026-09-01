@@ -1,13 +1,22 @@
-import { eersteMaand, komendeMaanden, maandSleutel, toonMaand, toonMaandKort } from "@/lib/klanten";
-import type { Customer } from "@/lib/klanten";
+import { Fragment } from "react";
+import { Check, CircleSlash } from "lucide-react";
 
-/** "vanaf sep", en met jaartal zodra het over de jaargrens gaat. */
-function vanafLabel(maand: string, dezeMaand: string): string {
-  const jaar = maand.slice(0, 4);
-  return jaar === dezeMaand.slice(0, 4)
-    ? `vanaf ${toonMaandKort(maand)}`
-    : `vanaf ${toonMaandKort(maand)} '${jaar.slice(2)}`;
-}
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  eersteMaand,
+  komendeMaanden,
+  maandSleutel,
+  toonMaand,
+  toonMaandKort,
+  vorigeMaand,
+} from "@/lib/klanten";
+import type { Customer } from "@/lib/klanten";
 
 interface Props {
   customer: Customer;
@@ -27,26 +36,52 @@ export function WassenVanaf({ customer: c, onPatch }: Props) {
   const start = eersteMaand(c);
   if (start < dezeMaand) return null;
 
+  const maanden = komendeMaanden();
+
   return (
-    <select
-      value={c.start_maand}
-      onChange={(e) => onPatch({ start_maand: e.target.value })}
-      title={`Wassen vanaf ${toonMaand(start)}`}
-      className={`max-w-[5.25rem] shrink-0 cursor-pointer appearance-none rounded-full px-1 py-[2px] text-center text-[10px] font-semibold focus:outline-none focus:ring-2 focus:ring-ring ${
-        start === dezeMaand
-          ? "bg-tint-groen text-tint-groen-ink ring-1 ring-inset ring-tint-groen-ink/25"
-          : "bg-muted text-muted-foreground"
-      }`}
-      aria-label="Wassen vanaf"
-    >
-      {/* Zonder startmaand begint hij in zijn aanmaakmaand — en dat is, waar
-          dit badge te zien is, altijd deze maand. */}
-      <option value="">nieuw</option>
-      {komendeMaanden().map((m) => (
-        <option key={m} value={m}>
-          {vanafLabel(m, dezeMaand)}
-        </option>
-      ))}
-    </select>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          tabIndex={-1}
+          title={`Wassen vanaf ${toonMaand(start)}`}
+          aria-label="Wassen vanaf"
+          className={`shrink-0 whitespace-nowrap rounded-full px-1.5 py-[2px] text-[10px] font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            start === dezeMaand
+              ? "bg-tint-groen text-tint-groen-ink ring-1 ring-inset ring-tint-groen-ink/25"
+              : "bg-muted text-muted-foreground"
+          }`}
+        >
+          {/* Zonder eigen startmaand begint hij in zijn aanmaakmaand — en dat
+              is, waar dit badge te zien is, altijd deze maand. */}
+          {c.start_maand ? `vanaf ${toonMaandKort(start)}` : "nieuw"}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-72 w-48 overflow-y-auto">
+        {maanden.map((m, i) => (
+          <Fragment key={m}>
+            {/* Streepje bij elke jaarwisseling: anders lopen december en
+                januari in elkaar over. */}
+            {i > 0 && m.endsWith("-01") && <DropdownMenuSeparator />}
+            <DropdownMenuItem onSelect={() => onPatch({ start_maand: m })}>
+              <span className="capitalize">{toonMaand(m)}</span>
+              <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
+              {c.start_maand === m && <Check className="size-4" />}
+            </DropdownMenuItem>
+          </Fragment>
+        ))}
+        <DropdownMenuSeparator />
+        {/* Een adres dat je nu invoert maar dat allang klant is: een
+            startmaand in het verleden houdt hem uit het groen. */}
+        <DropdownMenuItem onSelect={() => onPatch({ start_maand: vorigeMaand() })}>
+          <CircleSlash className="size-4" /> Niet nieuw, al langer klant
+        </DropdownMenuItem>
+        {c.start_maand && (
+          <DropdownMenuItem onSelect={() => onPatch({ start_maand: "" })}>
+            <CircleSlash className="size-4" /> Meteen (aanmaakmaand)
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

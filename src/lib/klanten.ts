@@ -526,6 +526,15 @@ export function toonMaandKort(sleutel: string): string {
   return new Date(jaar, maand - 1, 1).toLocaleDateString("nl-NL", { month: "short" });
 }
 
+/**
+ * De maand vóór deze. Als startmaand betekent hij: al langer klant, dus niet
+ * nieuw — hij doet gewoon mee en kleurt nergens groen.
+ */
+export function vorigeMaand(): string {
+  const nu = new Date();
+  return maandSleutel(new Date(nu.getFullYear(), nu.getMonth() - 1, 1));
+}
+
 /** De twaalf maanden vanaf nu: waaruit je een startmaand of een pauze kiest. */
 export function komendeMaanden(aantal = 12): string[] {
   const nu = new Date();

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
 import { KlantMenu } from "@/components/KlantMenu";
+import { Overgeslagen } from "@/components/Overgeslagen";
 import { WassenVanaf } from "@/components/WassenVanaf";
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { WijkKiezer } from "@/components/WijkKiezer";
@@ -533,6 +534,7 @@ function Klanten() {
                       <td className="whitespace-nowrap px-2 py-1 font-medium">
                         <span className="flex items-center gap-1.5">
                           {adresTekst(r)}
+                          <Overgeslagen customer={r.customer} />
                           <WassenVanaf
                             customer={r.customer}
                             onPatch={(patch) => void patchAdres(r.customer, patch)}

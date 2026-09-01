@@ -58,6 +58,7 @@ import { InlineCel } from "@/components/InlineCel";
 import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { NotitieCel } from "@/components/NotitieCel";
 import { KlantMenu } from "@/components/KlantMenu";
+import { Overgeslagen } from "@/components/Overgeslagen";
 import { WassenVanaf } from "@/components/WassenVanaf";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
 import {
@@ -1636,7 +1637,12 @@ function KlantRij({
           onAddQuickNote={onAddQuickNote}
         />
       </div>
-      {!planmodus && <WassenVanaf customer={c} onPatch={(patch) => onPatch(c, patch)} />}
+      {!planmodus && (
+        <>
+          <Overgeslagen customer={c} />
+          <WassenVanaf customer={c} onPatch={(patch) => onPatch(c, patch)} />
+        </>
+      )}
       {prijzenTonen && (
         <div className={`w-16 shrink-0 ${c.price === 0 ? "text-red-600" : ""}`}>
           <InlineCel

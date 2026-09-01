@@ -39,6 +39,8 @@
   --color-tint-groen-ink: var(--tint-groen-ink);
   --color-tint-paars: var(--tint-paars);
   --color-tint-paars-ink: var(--tint-paars-ink);
+  --color-tint-rood: var(--tint-rood);
+  --color-tint-rood-ink: var(--tint-rood-ink);
   --shadow-card: var(--shadow-card);
 
   --color-background: var(--background);
@@ -105,6 +107,9 @@
      het merk, en geen amber, want dat is al gewassen. */
   --tint-paars: oklch(0.955 0.032 305);
   --tint-paars-ink: oklch(0.48 0.125 302);
+  /* Rood: deze maand overgeslagen, dus hij staat niet op de printlijst. */
+  --tint-rood: oklch(0.955 0.032 25);
+  --tint-rood-ink: oklch(0.5 0.145 27);
   --secondary: oklch(0.955 0.002 286);
   --secondary-foreground: oklch(0.28 0.004 285.9);
   --muted: oklch(0.958 0.002 286);
@@ -159,6 +164,8 @@
   --tint-groen-ink: oklch(0.8 0.11 156);
   --tint-paars: oklch(0.3 0.045 305);
   --tint-paars-ink: oklch(0.82 0.105 302);
+  --tint-rood: oklch(0.3 0.045 25);
+  --tint-rood-ink: oklch(0.82 0.105 25);
   --brand-foreground: oklch(0.2 0.03 252);
   --secondary: oklch(0.27 0.003 286);
   --secondary-foreground: oklch(0.97 0 0);
