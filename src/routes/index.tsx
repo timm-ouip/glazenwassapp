@@ -1571,7 +1571,9 @@ function KlantRij({
       ? "bg-tint-amber"
       : kleur === "groen"
         ? "bg-tint-groen"
-        : "";
+        : kleur === "rood"
+          ? "bg-tint-rood"
+          : "";
 
   const rij = (
     <div

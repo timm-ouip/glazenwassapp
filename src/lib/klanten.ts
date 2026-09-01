@@ -5,6 +5,10 @@ export type Frequency = "elke" | "even" | "oneven";
 /** Leeg is het gewone geval; geel is opletten, groen is een nieuwe klant. */
 export type Markering = "" | "geel" | "groen";
 
+/** Wat een regel kan kleuren: de kleuren die je zelf kiest, plus rood van
+ *  een overgeslagen maand — dat laatste kies je niet, dat volgt eruit. */
+export type RegelKleur = Markering | "rood";
+
 export const markeringLabels: Record<Exclude<Markering, "">, string> = {
   geel: "Extra opletten",
   groen: "Nieuwe klant",
@@ -600,13 +604,18 @@ export function isNieuw(c: Pick<Customer, "start_maand" | "created_at">, maand: 
 }
 
 /**
- * De kleur van een regel: expliciet gezet, of groen omdat hij deze maand
- * nieuw is. Leeg betekent geen kleur.
+ * De kleur van een regel: rood als hij deze maand wordt overgeslagen,
+ * anders de kleur die je zelf gaf, anders groen omdat hij deze maand nieuw
+ * is. Leeg betekent geen kleur.
+ *
+ * Overgeslagen gaat voor: dat hij deze ronde niet meedoet is het eerste wat
+ * je wilt zien, ook als je hem een kleur had gegeven.
  */
 export function regelKleur(
-  c: Pick<Customer, "markering" | "start_maand" | "created_at">,
+  c: Pick<Customer, "markering" | "start_maand" | "created_at" | "overslaan">,
   maand: string,
-): Markering {
+): RegelKleur {
+  if (c.overslaan.includes(maand)) return "rood";
   if (c.markering) return c.markering;
   return isNieuw(c, maand) ? "groen" : "";
 }
