@@ -1,6 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   DndContext,
   DragOverlay,
@@ -16,7 +25,14 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { AccountMenu } from "@/components/AccountMenu";
-import { ArrowLeft, ArrowUpToLine, GripVertical, Printer } from "lucide-react";
+import { ArrowLeft, ArrowUpToLine, ChevronDown, GripVertical, Printer } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { pushUndo } from "@/lib/undo";
 import { requireSession, useRequireAuth } from "@/lib/auth";
@@ -26,12 +42,17 @@ import {
   fetchStreets,
   formatNumber,
   formatPrice,
+  aanDeBeurt,
   doetMee,
+  isKalendermaand,
+  komendeMaanden,
   isNieuw,
   maandSleutel,
   matchesMaand,
   noteVoorMaand,
+  prijsVoorMaand,
   regelKleur,
+  ritmeLabel,
   toonMaand,
   persistKolomStart,
   persistStreetOrder,
@@ -42,7 +63,9 @@ import {
 
 interface PrintSearch {
   wijk: string;
-  maand: "even" | "oneven" | "alles";
+  /** De ronde die je print: een echte maand ("2026-09"), of een van de oude
+   *  keuzes "even" / "oneven" / "alles". */
+  maand: string;
   prijzen: boolean;
   liggend: boolean;
   vouwen?: boolean;
@@ -54,8 +77,13 @@ export const Route = createFileRoute("/printen")({
   },
   validateSearch: (search: Record<string, unknown>): PrintSearch => ({
     wijk: typeof search["wijk"] === "string" ? search["wijk"] : "",
+    // Standaard de maand die je nu loopt: dat is de lijst die je meeneemt.
     maand:
-      search["maand"] === "oneven" ? "oneven" : search["maand"] === "alles" ? "alles" : "even",
+      typeof search["maand"] === "string" &&
+      (isKalendermaand(search["maand"]) ||
+        ["even", "oneven", "alles"].includes(search["maand"]))
+        ? search["maand"]
+        : maandSleutel(new Date()),
     prijzen: search["prijzen"] === true || search["prijzen"] === "true",
     liggend: search["liggend"] !== false && search["liggend"] !== "false",
     vouwen: search["vouwen"] === true || search["vouwen"] === "true",
@@ -88,8 +116,8 @@ const StraatBlok = memo(function StraatBlok({
 }: {
   g: Groep;
   prijzen: boolean;
-  maand: "even" | "oneven" | "alles";
-  /** De kalendermaand die je nu loopt, als "jjjj-mm". */
+  maand: string;
+  /** De kalendermaand waarvoor je print, als "jjjj-mm". */
   ronde: string;
   sleepHandle?: ReactNode;
 }) {
@@ -128,13 +156,13 @@ const StraatBlok = memo(function StraatBlok({
                       {noteVoorMaand(c, maand)}
                     </td>
                     {maand === "alles" && (
-                      <td className="w-8 px-[2px] text-[9px] leading-[1.1]">{c.frequency}</td>
+                      <td className="w-8 px-[2px] text-[9px] leading-[1.1]">{ritmeLabel(c)}</td>
                     )}
                     {prijzen && (
                       <td
-                        className={`w-10 px-[2px] text-right text-[9px] leading-[1.1] tabular-nums ${c.price === 0 ? "text-red-600" : ""}`}
+                        className={`w-10 px-[2px] text-right text-[9px] leading-[1.1] tabular-nums ${prijsVoorMaand(c, maand) === 0 ? "text-red-600" : ""}`}
                       >
-                        {formatPrice(c.price)}
+                        {formatPrice(prijsVoorMaand(c, maand))}
                       </td>
                     )}
                   </tr>
@@ -159,7 +187,7 @@ function SleepbaarBlok({
 }: {
   g: Groep;
   prijzen: boolean;
-  maand: "even" | "oneven" | "alles";
+  maand: string;
   ronde: string;
   kolomKop?: boolean;
   onKolomKopUit?: () => void;
@@ -289,7 +317,7 @@ function PrintPagina() {
   // De ronde die je nu gaat lopen. Overslaan en "nieuw in mei" hangen aan een
   // echte kalendermaand, terwijl even/oneven alleen zegt welke helft van de
   // klanten meegaat.
-  const ronde = maandSleutel(new Date());
+  const ronde = isKalendermaand(maand) ? maand : maandSleutel(new Date());
   const navigate = Route.useNavigate();
   const qc = useQueryClient();
   const vouwen = vouwenRaw === true;
@@ -319,10 +347,15 @@ function PrintPagina() {
   const zichtbaar = useMemo(() => {
     const perStraat = new Map<string, Customer[]>();
     for (const c of customers) {
-      if (!matchesMaand(c, maand)) continue;
-      // Nog niet begonnen, of deze maand overgeslagen: dan hoort hij niet
-      // op de lijst die je meeneemt.
-      if (!doetMee(c, ronde)) continue;
+      // Bij een echte maand rekent de app zelf uit wie aan de beurt is: het
+      // ritme van het adres, plus overgeslagen maanden en nog-niet-begonnen.
+      // Even/oneven blijft de oude, grovere keuze.
+      if (isKalendermaand(maand)) {
+        if (!aanDeBeurt(c, maand)) continue;
+      } else {
+        if (!matchesMaand(c, maand as "alles" | "even" | "oneven")) continue;
+        if (!doetMee(c, ronde)) continue;
+      }
       const rij = perStraat.get(c.street_id);
       if (rij) rij.push(c);
       else perStraat.set(c.street_id, [c]);
@@ -746,6 +779,37 @@ function PrintPagina() {
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <div className="inline-flex rounded-lg border border-border bg-card p-0.5 shadow-card">
+              {/* De maand die je loopt staat vooraan: dat is de lijst die je
+                  meeneemt. Even en oneven blijven eronder staan, voor wie de
+                  hele helft in één keer wil zien. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
+                      isKalendermaand(maand)
+                        ? "bg-brand text-brand-foreground shadow-card"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {isKalendermaand(maand) ? `${toonMaand(maand)} ${maand.slice(0, 4)}` : "Maand"}
+                    <ChevronDown className="size-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="max-h-72 w-48 overflow-y-auto">
+                  {komendeMaanden().map((m, i) => (
+                    <Fragment key={m}>
+                      {i > 0 && m.endsWith("-01") && <DropdownMenuSeparator />}
+                      <DropdownMenuItem
+                        onSelect={() => void navigate({ to: "/printen", search: { ...zoek, maand: m } })}
+                      >
+                        <span className="capitalize">{toonMaand(m)}</span>
+                        <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
+                      </DropdownMenuItem>
+                    </Fragment>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               {(["alles", "even", "oneven"] as const).map((f) => (
                 <Link
                   key={f}
@@ -823,7 +887,11 @@ function PrintPagina() {
               >
                 <h1 className="text-[13px] font-bold uppercase tracking-wide">
                   Waslijst {actieveWijk ? `${actieveWijk.name} ` : ""}—{" "}
-                  {maand === "alles" ? "alle klanten" : `${maand} maand`}
+                  {maand === "alles"
+                    ? "alle klanten"
+                    : isKalendermaand(maand)
+                      ? `${toonMaand(maand)} ${maand.slice(0, 4)}`
+                      : `${maand} maand`}
                 </h1>
 
                 {prijzen && <span className="text-[11px] tabular-nums">Totaal {formatPrice(totaal)}</span>}

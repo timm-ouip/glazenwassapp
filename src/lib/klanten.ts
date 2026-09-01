@@ -714,6 +714,11 @@ export function ritmeLabel(c: Pick<Customer, "interval_maanden" | "ritme">): str
   return maanden.join("·");
 }
 
+/** Is dit een echte maand ("2026-09") of een van de keuzes even/oneven/alles? */
+export function isKalendermaand(maand: string): boolean {
+  return /^\d{4}-\d{2}$/.test(maand);
+}
+
 /** Hoort dit adres op de lijst van deze kalendermaand? */
 export function aanDeBeurt(
   c: Pick<Customer, "interval_maanden" | "ritme" | "start_maand" | "created_at" | "overslaan">,
