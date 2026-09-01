@@ -19,6 +19,7 @@ import {
   komendeMaanden,
   maandSleutel,
   markeringLabels,
+  schuifStartOp,
   toonMaand,
   vorigeMaand,
   type Customer,
@@ -49,7 +50,10 @@ const KLEUR_STIP: Record<Exclude<Markering, "">, string> = {
  * wijklijst is al dicht bezet, en dit zijn dingen die je een paar keer per
  * jaar doet, niet elke ronde.
  */
-export function KlantMenu({ customer: c, onPatch, children }: Props) {
+export function KlantMenu({ customer: c, onPatch: ruwePatch, children }: Props) {
+  // Alles loopt hierlangs, zodat een startmaand die je overslaat overal
+  // opschuift en niet alleen in het menu-item dat je toevallig gebruikte.
+  const onPatch = (p: Partial<Customer>) => ruwePatch(schuifStartOp(c, p));
   const navigate = useNavigate();
   const maanden = komendeMaanden();
   const komende = maanden[0]!;

@@ -94,14 +94,16 @@ const ContextMenuCheckboxItem = React.forwardRef<
   <ContextMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      "group relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className,
     )}
     {...props}
   >
-    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+    {/* Een leeg hokje dat je ook ziet als er niets is aangevinkt: anders is
+        niet te raden dat je er meer dan één mag kiezen. */}
+    <span className="absolute left-2 flex size-4 items-center justify-center rounded-[4px] border border-muted-foreground/60 group-data-[state=checked]:border-primary group-data-[state=checked]:bg-primary group-data-[state=checked]:text-primary-foreground">
       <ContextMenuPrimitive.ItemIndicator>
-        <Check className="h-4 w-4" />
+        <Check className="size-3" strokeWidth={3} />
       </ContextMenuPrimitive.ItemIndicator>
     </span>
     {children}

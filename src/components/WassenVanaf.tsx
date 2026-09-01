@@ -12,6 +12,7 @@ import {
   eersteMaand,
   komendeMaanden,
   maandSleutel,
+  schuifStartOp,
   toonMaand,
   toonMaandKort,
   vorigeMaand,
@@ -31,7 +32,8 @@ interface Props {
  * Niets te melden zodra de startmaand achter ons ligt: dan doet hij gewoon
  * mee en zou het badge alleen ruimte kosten.
  */
-export function WassenVanaf({ customer: c, onPatch }: Props) {
+export function WassenVanaf({ customer: c, onPatch: ruwePatch }: Props) {
+  const onPatch = (p: Partial<Customer>) => ruwePatch(schuifStartOp(c, p));
   const dezeMaand = maandSleutel(new Date());
   const start = eersteMaand(c);
   if (start < dezeMaand) return null;

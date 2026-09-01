@@ -543,6 +543,40 @@ export function komendeMaanden(aantal = 12): string[] {
   );
 }
 
+/** De maand na deze sleutel. */
+export function volgendeMaand(sleutel: string): string {
+  const [jaar, maand] = sleutel.split("-").map(Number);
+  return maandSleutel(new Date(jaar!, maand!, 1));
+}
+
+/**
+ * Een adres dat nog moet beginnen en dat je zijn eigen startmaand laat
+ * overslaan, begint gewoon later. Dat is één ding om te zien — "vanaf
+ * oktober" — in plaats van twee badges die hetzelfde zeggen.
+ *
+ * Alleen voor adressen die nog niet begonnen zijn: bij een vaste klant is
+ * een maand overslaan een pauze, en die hoort niet zijn startmaand te
+ * verzetten.
+ */
+export function schuifStartOp(
+  c: Pick<Customer, "start_maand" | "created_at" | "overslaan">,
+  patch: Partial<Customer>,
+): Partial<Customer> {
+  const overslaan = patch.overslaan ?? c.overslaan;
+  const dezeMaand = maandSleutel(new Date());
+  let start = eersteMaand({ ...c, start_maand: patch.start_maand ?? c.start_maand });
+  if (start < dezeMaand) return patch;
+
+  const rest = [...overslaan];
+  let verschoven = false;
+  while (rest.includes(start)) {
+    rest.splice(rest.indexOf(start), 1);
+    start = volgendeMaand(start);
+    verschoven = true;
+  }
+  return verschoven ? { ...patch, start_maand: start, overslaan: rest } : patch;
+}
+
 /** De maand waarin dit adres voor het eerst aan de beurt is. */
 export function eersteMaand(c: Pick<Customer, "start_maand" | "created_at">): string {
   return c.start_maand || maandSleutel(new Date(c.created_at));
