@@ -64,6 +64,9 @@ export type Database = {
           deleted_at: string | null
           frequency: string
           house_number: number
+          interval_maanden: number
+          ritme: number
+          maandwerk: Json
           id: string
           klant_id: string | null
           markering: string
@@ -84,6 +87,9 @@ export type Database = {
           deleted_at?: string | null
           frequency?: string
           house_number: number
+          interval_maanden?: number
+          ritme?: number
+          maandwerk?: Json
           id?: string
           klant_id?: string | null
           markering?: string
@@ -104,6 +110,9 @@ export type Database = {
           deleted_at?: string | null
           frequency?: string
           house_number?: number
+          interval_maanden?: number
+          ritme?: number
+          maandwerk?: Json
           id?: string
           klant_id?: string | null
           markering?: string

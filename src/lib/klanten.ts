@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 
 export type Frequency = "elke" | "even" | "oneven";
 
@@ -49,6 +50,14 @@ export interface Customer {
   note_oneven: string;
   price: number;
   frequency: Frequency;
+  /** Om de hoeveel maanden dit adres gewassen wordt: 1, 2, 3, 6 of 12. */
+  interval_maanden: number;
+  /** De ankermaand binnen het jaar (1-12): in welke maanden het uitkomt.
+   *  Om de 2 met ritme 2 zijn de even maanden, met ritme 1 de oneven. */
+  ritme: number;
+  /** Werk dat er alleen in bepaalde maanden bij komt, met eventueel een
+   *  eigen prijs voor die ronde. */
+  maandwerk: Maandwerk[];
   sort_order: number;
   /** De persoon achter dit adres, als die bekend is. Zie {@link Klant}. */
   klant_id: string | null;
@@ -90,6 +99,52 @@ export interface QuickNote {
   label: string;
   sort_order: number;
 }
+
+/**
+ * Werk dat er alleen in bepaalde maanden bij komt. De maanden zijn
+ * kalendermaanden ("01"-"12"), dus het herhaalt zich elk jaar: "in maart en
+ * september komt de serre erbij, en dan is het € 25".
+ */
+export interface Maandwerk {
+  maanden: string[];
+  notitie: string;
+  /** De hele prijs voor die ronde, niet de meerkosten. Leeg (null) betekent
+   *  gewoon de vaste prijs van het adres. */
+  prijs: number | null;
+}
+
+/** Wat er uit de database komt is losse json; hier maken we er iets van
+ *  waar de rest van de app op kan rekenen. */
+export function leesMaandwerk(waarde: unknown): Maandwerk[] {
+  if (!Array.isArray(waarde)) return [];
+  return waarde.flatMap((rij) => {
+    if (!rij || typeof rij !== "object") return [];
+    const r = rij as Record<string, unknown>;
+    const maanden = Array.isArray(r["maanden"])
+      ? r["maanden"].filter((m): m is string => typeof m === "string")
+      : [];
+    // Zonder maanden slaat een uitzondering nergens op.
+    if (maanden.length === 0) return [];
+    return [
+      {
+        maanden,
+        notitie: typeof r["notitie"] === "string" ? r["notitie"] : "",
+        prijs: typeof r["prijs"] === "number" ? r["prijs"] : null,
+      },
+    ];
+  });
+}
+
+/** Om de hoeveel maanden een adres gewassen kan worden. */
+export const INTERVALLEN = [1, 2, 3, 6, 12] as const;
+
+export const intervalLabels: Record<number, string> = {
+  1: "Elke maand",
+  2: "Om de 2 maanden",
+  3: "Om de 3 maanden",
+  6: "Om de 6 maanden",
+  12: "Eén keer per jaar",
+};
 
 export const frequencyLabels: Record<Frequency, string> = {
   elke: "Elke maand",
@@ -224,7 +279,7 @@ export async function fetchCustomers(): Promise<Customer[]> {
     // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
     // met een samengestelde string lukt dat niet meer.
     .select(
-      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at",
+      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at",
     )
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
@@ -239,6 +294,9 @@ export async function fetchCustomers(): Promise<Customer[]> {
     markering: (c.markering ?? "") as Markering,
     overslaan: c.overslaan ?? [],
     start_maand: c.start_maand ?? "",
+    interval_maanden: c.interval_maanden ?? 1,
+    ritme: c.ritme ?? 1,
+    maandwerk: leesMaandwerk(c.maandwerk),
   })) as Customer[];
 }
 
@@ -381,9 +439,20 @@ export async function persistPostcodes(adressen: { id: string; postcode: string 
   );
 }
 
+/**
+ * Een patch zoals de database hem wil. `maandwerk` is bij ons een echte lijst
+ * en in de database losse json; TypeScript ziet die twee niet als hetzelfde,
+ * en die vertaling hoort op één plek te staan in plaats van bij elke update.
+ */
+export function alsRij(
+  patch: Partial<Customer>,
+): Database["public"]["Tables"]["customers"]["Update"] {
+  return patch as unknown as Database["public"]["Tables"]["customers"]["Update"];
+}
+
 /** Losse velden van één adres bijwerken — kleur, overslaan, startmaand. */
 export async function patchCustomer(id: string, patch: Partial<Customer>) {
-  const { error } = await supabase.from("customers").update(patch).eq("id", id);
+  const { error } = await supabase.from("customers").update(alsRij(patch)).eq("id", id);
   if (error) throw error;
 }
 
@@ -457,27 +526,25 @@ export async function deleteQuickNote(id: string) {
 }
 
 /**
- * De notitie zoals hij op de printlijst van één maand hoort te staan: wat er
- * altijd geldt, plus het werk dat alleen in die maand meegaat. Print je
- * "alle klanten", dan is er geen maand om op te kiezen en gaan ze er allebei
- * bij met de maand erachter.
+ * De notitie zoals hij op de printlijst van één ronde hoort te staan: wat er
+ * altijd geldt, plus het werk dat alleen in die maand meegaat. `maand` is een
+ * kalendermaand ("jjjj-mm"), of een van de oude keuzes even/oneven/alles.
  */
-export function noteVoorMaand(
-  c: Pick<Customer, "note" | "note_even" | "note_oneven">,
-  maand: "even" | "oneven" | "alles",
-): string {
-  const extra =
-    maand === "even"
-      ? c.note_even
-      : maand === "oneven"
-        ? c.note_oneven
-        : [
-            c.note_even.trim() ? `${c.note_even.trim()} (even)` : "",
-            c.note_oneven.trim() ? `${c.note_oneven.trim()} (oneven)` : "",
-          ]
-            .filter(Boolean)
-            .join(", ");
-  return [c.note, extra]
+export function noteVoorMaand(c: Pick<Customer, "note" | "maandwerk">, maand: string): string {
+  const extra = maandwerkVoor(c, maand)
+    .map((w) => {
+      const tekst = w.notitie.trim();
+      if (!tekst) return "";
+      // Print je alle klanten tegelijk, dan is er geen maand om op te kiezen
+      // en moet erbij staan wanneer dit werk meegaat.
+      if (maand !== "alles") return tekst;
+      const maanden = w.maanden
+        .map((m) => toonMaandKort(`2000-${m}`))
+        .join("/");
+      return `${tekst} (${maanden})`;
+    })
+    .filter(Boolean);
+  return [c.note, ...extra]
     .map((t) => t.trim())
     .filter(Boolean)
     .join(", ");
@@ -620,9 +687,74 @@ export function regelKleur(
   return isNieuw(c, maand) ? "groen" : "";
 }
 
-export function matchesMaand(freq: Frequency, filter: "alles" | "even" | "oneven") {
+/**
+ * De kalendermaanden (1-12) waarin dit adres aan de beurt is. Om de 2 met
+ * ritme 2 zijn de even maanden, om de 3 met ritme 3 is maart/juni/september/
+ * december. Bij elke maand doet het ritme niet mee.
+ */
+export function ritmeMaanden(c: Pick<Customer, "interval_maanden" | "ritme">): number[] {
+  const stap = c.interval_maanden || 1;
+  const alle = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  if (stap <= 1) return alle;
+  // Twee keer modulo: in JavaScript is -2 % 3 gelijk aan -2, niet aan 1.
+  return alle.filter((m) => (((m - c.ritme) % stap) + stap) % stap === 0);
+}
+
+/**
+ * Wat er in het badge van de regel komt te staan. Even en oneven blijven bij
+ * hun naam — daar kun je in één oogopslag mee zien waar een adres valt — en
+ * bij de andere ritmes zeggen de maandnummers dat.
+ */
+export function ritmeLabel(c: Pick<Customer, "interval_maanden" | "ritme">): string {
+  const stap = c.interval_maanden || 1;
+  if (stap <= 1) return "Elke";
+  if (stap === 2) return c.ritme % 2 === 0 ? "Even" : "Oneven";
+  const maanden = ritmeMaanden(c);
+  if (stap === 12) return toonMaandKort(`2000-${String(maanden[0]).padStart(2, "0")}`);
+  return maanden.join("·");
+}
+
+/** Hoort dit adres op de lijst van deze kalendermaand? */
+export function aanDeBeurt(
+  c: Pick<Customer, "interval_maanden" | "ritme" | "start_maand" | "created_at" | "overslaan">,
+  maand: string,
+): boolean {
+  if (!doetMee(c, maand)) return false;
+  return ritmeMaanden(c).includes(Number(maand.slice(5, 7)));
+}
+
+/**
+ * Het maandwerk dat in deze ronde meegaat. `maand` is een kalendermaand
+ * ("jjjj-mm"), of een van de oude keuzes even/oneven/alles — die blijven
+ * bestaan als printoptie.
+ */
+export function maandwerkVoor(c: Pick<Customer, "maandwerk">, maand: string): Maandwerk[] {
+  if (maand === "alles") return c.maandwerk;
+  if (maand === "even" || maand === "oneven") {
+    const even = maand === "even";
+    return c.maandwerk.filter((w) => w.maanden.some((m) => (Number(m) % 2 === 0) === even));
+  }
+  const nr = maand.slice(5, 7);
+  return c.maandwerk.filter((w) => w.maanden.includes(nr));
+}
+
+/** De prijs voor deze ronde: die van het maandwerk, anders de vaste prijs. */
+export function prijsVoorMaand(c: Pick<Customer, "price" | "maandwerk">, maand: string): number {
+  const metPrijs = maandwerkVoor(c, maand).find((w) => w.prijs !== null);
+  return metPrijs?.prijs ?? c.price;
+}
+
+/**
+ * Valt dit adres in de even of de oneven helft van het jaar? Alleen voor de
+ * even/oneven-printoptie; de gewone weg is `aanDeBeurt` met een echte maand.
+ */
+export function matchesMaand(
+  c: Pick<Customer, "interval_maanden" | "ritme">,
+  filter: "alles" | "even" | "oneven",
+) {
   if (filter === "alles") return true;
-  return freq === "elke" || freq === filter;
+  const even = filter === "even";
+  return ritmeMaanden(c).some((m) => (m % 2 === 0) === even);
 }
 
 export function formatNumber(c: Customer) {

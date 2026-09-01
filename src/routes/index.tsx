@@ -74,6 +74,7 @@ import {
 } from "@/lib/wasdag";
 import {
   addQuickNote,
+  alsRij,
   haalTerug,
   legWeg,
   fetchCustomers,
@@ -241,7 +242,7 @@ function Index() {
       .map((s) => {
         const order: "asc" | "desc" = s.sort_desc ? "desc" : "asc";
         const klanten = customers.filter(
-          (c) => c.street_id === s.id && matchesMaand(c.frequency, filter),
+          (c) => c.street_id === s.id && matchesMaand(c, filter),
         );
         return {
           street: s,
@@ -609,7 +610,7 @@ function Index() {
     qc.setQueryData<Customer[]>(["customers"], (old) =>
       (old ?? []).map((x) => (x.id === c.id ? { ...x, ...patch } : x)),
     );
-    const { error } = await supabase.from("customers").update(patch).eq("id", c.id);
+    const { error } = await supabase.from("customers").update(alsRij(patch)).eq("id", c.id);
     if (error) {
       toast.error("Opslaan mislukt: " + error.message);
       qc.invalidateQueries({ queryKey: ["customers"] });
@@ -618,7 +619,7 @@ function Index() {
     pushUndo({
       label: `Wijziging ${formatNumber(c)}`,
       undo: async () => {
-        await supabase.from("customers").update(vorige).eq("id", c.id);
+        await supabase.from("customers").update(alsRij(vorige)).eq("id", c.id);
         herlaad();
       },
     });

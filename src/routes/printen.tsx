@@ -319,7 +319,7 @@ function PrintPagina() {
   const zichtbaar = useMemo(() => {
     const perStraat = new Map<string, Customer[]>();
     for (const c of customers) {
-      if (!matchesMaand(c.frequency, maand)) continue;
+      if (!matchesMaand(c, maand)) continue;
       // Nog niet begonnen, of deze maand overgeslagen: dan hoort hij niet
       // op de lijst die je meeneemt.
       if (!doetMee(c, ronde)) continue;
