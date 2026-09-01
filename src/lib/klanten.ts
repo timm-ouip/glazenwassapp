@@ -783,6 +783,12 @@ export function isKalendermaand(maand: string): boolean {
   return /^\d{4}-\d{2}$/.test(maand);
 }
 
+/** Voor tooltips: "Om de 3 maanden — 3·6·9·12", of gewoon "Elke maand". */
+export function ritmeOmschrijving(c: Pick<Customer, "interval_maanden" | "ritme">): string {
+  const hoeVaak = intervalLabels[c.interval_maanden] ?? "";
+  return c.interval_maanden <= 1 ? hoeVaak : `${hoeVaak} — ${ritmeLabel(c)}`;
+}
+
 /** Hoort dit adres op de lijst van deze kalendermaand? */
 export function aanDeBeurt(
   c: Pick<Customer, "interval_maanden" | "ritme" | "start_maand" | "created_at" | "overslaan">,

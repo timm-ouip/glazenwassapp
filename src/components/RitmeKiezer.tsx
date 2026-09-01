@@ -13,6 +13,7 @@ import {
   INTERVALLEN,
   intervalLabels,
   ritmeLabel,
+  ritmeOmschrijving,
   ritmeVarianten,
   zelfdeRitme,
   type Customer,
@@ -52,7 +53,7 @@ export function RitmeKiezer({ customer: c, onPatch }: Props) {
         <button
           type="button"
           tabIndex={-1}
-          title={`${intervalLabels[c.interval_maanden] ?? ""} — ${ritmeLabel(c)}`}
+          title={ritmeOmschrijving(c)}
           aria-label="Hoe vaak"
           className={`min-w-[3.25rem] max-w-[5.5rem] shrink-0 truncate rounded-full px-1.5 py-[2px] text-center text-[10px] font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${kleur(c)}`}
         >
