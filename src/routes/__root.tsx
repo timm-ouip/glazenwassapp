@@ -109,7 +109,8 @@ function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
-        {/* Vóór alles: anders flitst het lichte thema even op. */}
+        {/* Vóór de stylesheet aan bod komt: anders flitst het lichte thema
+            even op bij elke paginalading. */}
         <script dangerouslySetInnerHTML={{ __html: THEMA_SCRIPT }} />
         <HeadContent />
       </head>
