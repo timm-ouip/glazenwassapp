@@ -42,6 +42,7 @@ import {
   type Customer,
   type District,
 } from "@/lib/klanten";
+import { meetTempo, stelVoor, werkPerWijk, type Voorstel } from "@/lib/wijkritme";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -175,6 +176,54 @@ function Planning() {
     () => Math.max(1, ...[...perDag.values()].map((v) => v.bedrag)),
     [perDag],
   );
+
+  // --- Suggestie: welke wijk is wanneer aan de beurt? ---------------------
+  // Een half jaar terugkijken om een tempo af te leiden: genoeg om iets te
+  // zeggen, kort genoeg dat een oude werkwijze het niet blijft vertekenen.
+  const halfJaar = useMemo(() => {
+    const n = new Date();
+    return { vanaf: sleutel(new Date(n.getFullYear(), n.getMonth() - 6, 1)), tot: sleutel(n) };
+  }, []);
+  const historieQuery = useQuery({
+    queryKey: ["wasdagen", halfJaar.vanaf, halfJaar.tot],
+    queryFn: () => fetchWasdagen(halfJaar.vanaf, halfJaar.tot),
+  });
+
+  const voorstel = useMemo(() => {
+    const districts = districtsQuery.data ?? [];
+    const streets = streetsQuery.data ?? [];
+    const customers = customersQuery.data ?? [];
+    if (districts.length === 0 || customers.length === 0) return new Map<string, Voorstel>();
+
+    // Alleen vooruitkijken: een voorstel voor een maand die geweest is zegt
+    // niets, en over een dag die al voorbij is heb je niets meer te beslissen.
+    const nuDatum = vandaag();
+    const eersteVanMaand = sleutel(startOfMonth(maand));
+    const beginDag = eersteVanMaand > nuDatum ? eersteVanMaand : nuDatum;
+    if (sleutel(endOfMonth(maand)) < nuDatum) return new Map<string, Voorstel>();
+
+    const maandSleutelVanBlad = format(maand, "yyyy-MM");
+    const regelsDezeMaand = regels.filter((r) => r.datum.startsWith(maandSleutelVanBlad));
+    const gemeten = meetTempo(historieQuery.data ?? [], customers, streets);
+    const werk = werkPerWijk(
+      maandSleutelVanBlad,
+      districts,
+      streets,
+      customers,
+      regelsDezeMaand,
+      gemeten,
+    );
+    // Dagen waar al iets op staat laten we met rust: die heb je zelf ingedeeld.
+    const bezet = new Set(regelsDezeMaand.map((r) => r.datum));
+    return new Map(stelVoor(beginDag, werk, bezet).map((v) => [v.datum, v]));
+  }, [
+    districtsQuery.data,
+    streetsQuery.data,
+    customersQuery.data,
+    regels,
+    historieQuery.data,
+    maand,
+  ]);
 
   const nu = vandaag();
   // Wat er gedaan is telt t/m vandaag; wat daarna staat is nog een plan. Dat
@@ -560,6 +609,23 @@ function Planning() {
                           </span>
                         </>
                       )}
+
+                      {/* Staat er nog niets op deze dag, dan zegt de app welke
+                          wijk er volgens de ronde aan de beurt is. Zacht en
+                          cursief, want het is een voorstel en geen planning. */}
+                      {!info && !buitenMaand && voorstel.get(k) && (
+                        <span className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] italic text-muted-foreground/70">
+                          <span
+                            className="size-1.5 shrink-0 rounded-full opacity-60"
+                            style={{ background: wijkInfo.get(voorstel.get(k)!.wijkId)?.kleur }}
+                          />
+                          <span className="truncate">
+                            {voorstel.get(k)!.naam}
+                            {voorstel.get(k)!.van > 1 &&
+                              ` ${voorstel.get(k)!.deel}/${voorstel.get(k)!.van}`}
+                          </span>
+                        </span>
+                      )}
                     </button>
                   </ContextMenuTrigger>
                   {/* Rechtermuisknop op een dag: een hele wijk erop zetten
@@ -579,6 +645,14 @@ function Planning() {
                               style={{ background: wijkInfo.get(w.id)?.kleur }}
                             />
                             <span className="truncate">{w.name}</span>
+                            {/* De wijk die volgens de ronde aan de beurt is
+                                staat gewoon op zijn plek in de lijst, met een
+                                merkje — verspringen zou je laten misklikken. */}
+                            {voorstel.get(k)?.wijkId === w.id && (
+                              <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                aan de beurt
+                              </span>
+                            )}
                           </ContextMenuItem>
                         ))}
                         {(districtsQuery.data ?? []).length === 0 && (

@@ -902,6 +902,22 @@ export async function persistStreetOrder(streets: Street[]) {
   );
 }
 
+/**
+ * De volgorde van de wijken. Die volgorde is de ronde die je rijdt: hij
+ * bepaalt de kleuren op de kalender, de sortering in de lijsten, en welke
+ * wijk de app voorstelt als eerstvolgende.
+ */
+export async function persistDistrictOrder(districts: District[]) {
+  await Promise.all(
+    districts.map((d, i) =>
+      supabase
+        .from("districts")
+        .update({ sort_order: i + 1 })
+        .eq("id", d.id),
+    ),
+  );
+}
+
 /** Legt vast welke straten bovenaan een printkolom beginnen. */
 export async function persistKolomStart(vlaggen: { id: string; kolom_start: boolean }[]) {
   await Promise.all(

@@ -1,7 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
+  ChevronDown,
+  ChevronUp,
   KeyRound,
   Mail,
   Monitor,
@@ -16,7 +19,20 @@ import { toast } from "sonner";
 
 import { requireSession, useAuth, useRequireAuth, type Rol } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
-import { addQuickNote, deleteQuickNote, fetchQuickNotes, type QuickNote } from "@/lib/klanten";
+import {
+  addQuickNote,
+  deleteQuickNote,
+  fetchCustomers,
+  fetchDistricts,
+  fetchQuickNotes,
+  fetchStreets,
+  persistDistrictOrder,
+  wijkKleur,
+  type District,
+  type QuickNote,
+} from "@/lib/klanten";
+import { fetchWasdagen } from "@/lib/wasdag";
+import { AANNAME_PER_DAG, meetTempo, MINIMUM_DAGEN, tempoVan } from "@/lib/wijkritme";
 import { bewaarThema, leesThema, themaLabels, type Thema } from "@/lib/thema";
 import {
   fetchTeam,
@@ -32,7 +48,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const TABBLADEN = ["bedrijf", "account", "team", "notities"] as const;
+const TABBLADEN = ["bedrijf", "account", "team", "wijken", "notities"] as const;
 type Tab = (typeof TABBLADEN)[number];
 
 interface InstellingenSearch {
@@ -74,6 +90,7 @@ function Instellingen() {
           <TabsTrigger value="bedrijf">Bedrijf</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="wijken">Wijken</TabsTrigger>
           <TabsTrigger value="notities">Notities</TabsTrigger>
         </TabsList>
 
@@ -85,6 +102,9 @@ function Instellingen() {
         </TabsContent>
         <TabsContent value="team" className="mt-4">
           <TeamTab />
+        </TabsContent>
+        <TabsContent value="wijken" className="mt-4">
+          <WijkenTab />
         </TabsContent>
         <TabsContent value="notities" className="mt-4">
           <NotitiesTab />
@@ -647,6 +667,187 @@ function TeamTab() {
  * bewust alleen hier, want in dat popovertje klik je er zo eentje weg terwijl
  * je een klant zit te bewerken.
  */
+/**
+ * De volgorde van de wijken: de ronde die je rijdt. Die volgorde bepaalt de
+ * kleuren op de kalender, de sortering in de lijsten, en welke wijk de app
+ * voorstelt als eerstvolgende.
+ *
+ * Erbij staat wat de app van je dagen geleerd heeft: hoeveel adressen je
+ * gemiddeld op een dag doet, en hoeveel dagen dat gemiddelde telt. Zolang dat
+ * er weinig zijn is het een aanname, en dat hoort er gewoon te staan.
+ */
+function WijkenTab() {
+  const qc = useQueryClient();
+  const [volgorde, setVolgorde] = useState<District[] | null>(null);
+  const [bezig, setBezig] = useState(false);
+
+  const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
+  const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
+  const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
+
+  // Een half jaar terugkijken is genoeg om een tempo uit af te leiden, en kort
+  // genoeg dat een oude werkwijze het gemiddelde niet blijft vertekenen.
+  const halfJaar = useMemo(() => {
+    const nu = new Date();
+    const van = new Date(nu.getFullYear(), nu.getMonth() - 6, 1);
+    const dag = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return { vanaf: dag(van), tot: dag(nu) };
+  }, []);
+  const wasdagenQuery = useQuery({
+    queryKey: ["wasdagen", halfJaar.vanaf, halfJaar.tot],
+    queryFn: () => fetchWasdagen(halfJaar.vanaf, halfJaar.tot),
+  });
+
+  const districts = volgorde ?? districtsQuery.data ?? [];
+  const gemeten = useMemo(
+    () => meetTempo(wasdagenQuery.data ?? [], customersQuery.data ?? [], streetsQuery.data ?? []),
+    [wasdagenQuery.data, customersQuery.data, streetsQuery.data],
+  );
+
+  /** Hoeveel adressen hangen er aan deze wijk? Zegt of een wijk groot of
+   *  klein is, los van wie er deze maand aan de beurt is. */
+  const adressenPerWijk = useMemo(() => {
+    const wijkVanStraat = new Map((streetsQuery.data ?? []).map((s) => [s.id, s.district_id]));
+    const telling = new Map<string, number>();
+    for (const c of customersQuery.data ?? []) {
+      const w = wijkVanStraat.get(c.street_id);
+      if (w) telling.set(w, (telling.get(w) ?? 0) + 1);
+    }
+    return telling;
+  }, [streetsQuery.data, customersQuery.data]);
+
+  function verplaats(index: number, kant: -1 | 1) {
+    const doel = index + kant;
+    if (doel < 0 || doel >= districts.length) return;
+    const nieuw = [...districts];
+    const [eruit] = nieuw.splice(index, 1);
+    nieuw.splice(doel, 0, eruit!);
+    setVolgorde(nieuw);
+  }
+
+  async function bewaar() {
+    if (!volgorde) return;
+    setBezig(true);
+    try {
+      await persistDistrictOrder(volgorde);
+      await qc.invalidateQueries({ queryKey: ["districts"] });
+      setVolgorde(null);
+      toast.success("Volgorde opgeslagen");
+    } catch (e) {
+      toast.error("Opslaan mislukt: " + (e as Error).message);
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Kaart
+        titel="Volgorde van de wijken"
+        uitleg="De ronde die je rijdt. Deze volgorde bepaalt de kleuren op de kalender en welke wijk de app voorstelt als eerstvolgende."
+      >
+        {districts.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nog geen wijken. Die maak je aan op de wijkenpagina.
+          </p>
+        ) : (
+          <ol className="divide-y divide-border rounded-lg border border-border">
+            {districts.map((d, i) => {
+              const tempo = tempoVan(d.id, gemeten);
+              return (
+                <li key={d.id} className="flex items-center gap-3 px-3 py-2">
+                  <span className="w-5 text-center text-[12px] tabular-nums text-muted-foreground">
+                    {i + 1}
+                  </span>
+                  <span
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={{ background: wijkKleur(i) }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{d.name}</span>
+                    <span className="block truncate text-[12px] text-muted-foreground">
+                      {adressenPerWijk.get(d.id) ?? 0} adressen ·{" "}
+                      {tempo.bron === "aanname"
+                        ? `aanname: ${tempo.perDag} per dag`
+                        : `${tempo.perDag} per dag, gemeten over ${tempo.dagen} ${
+                            tempo.dagen === 1 ? "dag" : "dagen"
+                          }${tempo.bron === "alles" ? " (alle wijken)" : ""}`}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                      disabled={i === 0}
+                      onClick={() => verplaats(i, -1)}
+                      aria-label={`${d.name} omhoog`}
+                    >
+                      <ChevronUp className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                      disabled={i === districts.length - 1}
+                      onClick={() => verplaats(i, 1)}
+                      aria-label={`${d.name} omlaag`}
+                    >
+                      <ChevronDown className="size-4" />
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+
+        {volgorde && (
+          <div className="mt-3 flex items-center gap-2">
+            <Button size="sm" onClick={() => void bewaar()} disabled={bezig}>
+              {bezig ? "Bezig…" : "Volgorde opslaan"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setVolgorde(null)} disabled={bezig}>
+              Annuleren
+            </Button>
+          </div>
+        )}
+      </Kaart>
+
+      <Kaart
+        titel="Wat de app geleerd heeft"
+        uitleg="Het tempo hierboven komt uit de dagen die je hebt afgevinkt. Hoe meer dagen je draait, hoe scherper de suggestie op de kalender wordt."
+      >
+        <p className="text-sm text-muted-foreground">
+          {gemeten.algemeen.bron === "aanname" ? (
+            <>
+              {gemeten.algemeen.dagen === 0
+                ? "Er is nog geen enkele gewerkte dag om van te leren"
+                : `Er ${gemeten.algemeen.dagen === 1 ? "is" : "zijn"} ${gemeten.algemeen.dagen} gewerkte ${
+                    gemeten.algemeen.dagen === 1 ? "dag" : "dagen"
+                  }, en dat is te weinig om iets zinnigs uit af te leiden`}
+              . Zolang het er minder dan {MINIMUM_DAGEN} zijn gaat de app uit van{" "}
+              <strong className="font-medium text-foreground">
+                {AANNAME_PER_DAG} adressen per dag
+              </strong>
+              . Daarna rekent ze op je eigen tempo.
+            </>
+          ) : (
+            <>
+              Gemiddeld{" "}
+              <strong className="font-medium text-foreground">
+                {gemeten.algemeen.perDag} adressen per dag
+              </strong>
+              , gemeten over {gemeten.algemeen.dagen}{" "}
+              {gemeten.algemeen.dagen === 1 ? "gewerkte dag" : "gewerkte dagen"} in het afgelopen
+              half jaar.
+            </>
+          )}
+        </p>
+      </Kaart>
+    </div>
+  );
+}
+
 function NotitiesTab() {
   const [notities, setNotities] = useState<QuickNote[]>([]);
   const [laden, setLaden] = useState(true);
