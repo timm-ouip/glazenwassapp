@@ -16,6 +16,7 @@ import {
   CalendarCheck,
   CalendarPlus,
   ChevronLeft,
+  ChevronsRight,
   ChevronRight,
   Droplets,
   Eraser,
@@ -59,9 +60,11 @@ import {
   fetchWasdagen,
   haalUitWasdag,
   maakWasdagLeeg,
+  maandGrenzen,
   toonDatum,
   vandaag,
   voegToeAanWasdag,
+  werkdagenVerder,
 } from "@/lib/wasdag";
 
 interface PlanningSearch {
@@ -88,6 +91,9 @@ export const Route = createFileRoute("/planning")({
   }),
   component: Planning,
 });
+
+/** De regels van één dag, klaar om te verplaatsen. */
+type DagRegels = { customer_id: string; prijs: number }[];
 
 /** `jjjj-mm-dd` zoals de database het bewaart, in lokale tijd. */
 function sleutel(d: Date) {
@@ -301,6 +307,99 @@ function Planning() {
       kwijt,
     };
   }, [dagRegels, customersQuery.data, streetsQuery.data, wijkInfo]);
+
+  /**
+   * Schuift alles wat er vanaf deze dag t/m het eind van de maand staat een
+   * paar werkdagen op. Voor als het regent of een klus uitloopt: dan verzet je
+   * niet één dag maar de hele rits die erachteraan komt.
+   *
+   * Werkdagen, dus vrijdag plus één is maandag. Werk dat over de maandgrens
+   * heen schuift belandt gewoon in de volgende maand; dat is waar het hoort.
+   */
+  async function schuifOp(vanaf: string, dagen: number) {
+    const eindMaand = maandGrenzen(vanaf).tot;
+    let inMaand: Awaited<ReturnType<typeof fetchWasdagen>>;
+    try {
+      inMaand = await fetchWasdagen(vanaf, eindMaand);
+    } catch {
+      toast.error("Kon de planning niet ophalen.");
+      return;
+    }
+
+    // Regels zonder adres horen bij een pand dat definitief weg is; die laten
+    // we staan, want ze zijn niet op id te verplaatsen.
+    const teVerzetten = inMaand.filter((r): r is typeof r & { customer_id: string } =>
+      Boolean(r.customer_id),
+    );
+    if (teVerzetten.length === 0) {
+      toast(`Vanaf ${toonDatum(vanaf)} staat er niets ingepland.`);
+      return;
+    }
+
+    // Per dag verzetten: eerst eraf op de oude datum, dan erop bij de nieuwe.
+    // De upsert daar vangt het geval af dat er op de doeldag al iets stond.
+    const perDagOud = new Map<string, { customer_id: string; prijs: number }[]>();
+    for (const r of teVerzetten) {
+      const rij = perDagOud.get(r.datum) ?? [];
+      rij.push({ customer_id: r.customer_id, prijs: Number(r.prijs) });
+      perDagOud.set(r.datum, rij);
+    }
+    const stappen = [...perDagOud.entries()].map(([oud, regels]) => ({
+      oud,
+      nieuw: werkdagenVerder(oud, dagen),
+      regels,
+    }));
+
+    async function verplaats(lijst: { oud: string; nieuw: string; regels: DagRegels }[]) {
+      // Van achter naar voren, anders schuift een dag op een dag die zelf nog
+      // moet vertrekken.
+      for (const stap of [...lijst].sort((a, b) => b.oud.localeCompare(a.oud))) {
+        await haalUitWasdag(
+          stap.oud,
+          stap.regels.map((r) => r.customer_id),
+        );
+        await voegToeAanWasdag(stap.nieuw, stap.regels);
+      }
+    }
+
+    try {
+      await verplaats(stappen);
+    } catch {
+      toast.error("Opschuiven mislukt.");
+      qc.invalidateQueries({ queryKey: ["wasdagen"] });
+      return;
+    }
+
+    pushUndo({
+      label: `Planning ${dagen} ${dagen === 1 ? "dag" : "dagen"} opgeschoven`,
+      undo: async () => {
+        // Terug is dezelfde beweging andersom, en dan van voren naar achteren.
+        await verplaats(
+          stappen.map((x) => ({ oud: x.nieuw, nieuw: x.oud, regels: x.regels })).reverse(),
+        );
+        qc.invalidateQueries({ queryKey: ["wasdagen"] });
+        qc.invalidateQueries({ queryKey: ["wasdag"] });
+      },
+    });
+    qc.invalidateQueries({ queryKey: ["wasdagen"] });
+    qc.invalidateQueries({ queryKey: ["wasdag"] });
+
+    const laatste = stappen.reduce((a, b) => (a.nieuw > b.nieuw ? a : b));
+    toast.success(
+      `${stappen.length} ${stappen.length === 1 ? "dag" : "dagen"} opgeschoven; de laatste staat nu op ${toonDatum(laatste.nieuw)}`,
+      {
+        duration: 12000,
+        action: {
+          label: "Ongedaan maken",
+          onClick: () => {
+            void undoLaatste().then((label) => {
+              if (label) toast.success("Teruggedraaid: " + label);
+            });
+          },
+        },
+      },
+    );
+  }
 
   function kiesDag(d: Date) {
     void navigate({ to: "/planning", search: { dag: sleutel(d) }, replace: true });
@@ -662,6 +761,23 @@ function Planning() {
                         )}
                       </ContextMenuSubContent>
                     </ContextMenuSub>
+                    <ContextMenuSub>
+                      <ContextMenuSubTrigger>
+                        <ChevronsRight className="size-4" /> Planning vanaf hier opschuiven
+                      </ContextMenuSubTrigger>
+                      <ContextMenuSubContent className="w-56">
+                        {[1, 2, 3].map((n) => (
+                          <ContextMenuItem key={n} onSelect={() => void schuifOp(k, n)}>
+                            {n} {n === 1 ? "werkdag" : "werkdagen"} later
+                          </ContextMenuItem>
+                        ))}
+                        <ContextMenuSeparator />
+                        <ContextMenuLabel className="font-normal text-muted-foreground">
+                          Alles t/m het eind van de maand schuift mee. Weekenden slaan we over.
+                        </ContextMenuLabel>
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
+
                     <ContextMenuSeparator />
                     <ContextMenuItem onSelect={() => kiesDag(d)}>
                       <CalendarCheck className="size-4" /> Deze dag bekijken

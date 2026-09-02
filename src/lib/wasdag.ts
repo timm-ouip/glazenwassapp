@@ -101,6 +101,23 @@ export async function maakWasdagLeeg(datum: string) {
 }
 
 /**
+ * `n` werkdagen verder. Zaterdag en zondag tellen niet mee, dus vrijdag plus
+ * één is maandag — schuif je een dag op omdat het regent, dan hoort dat werk
+ * niet in het weekend te belanden.
+ */
+export function werkdagenVerder(datum: string, n: number): string {
+  const d = new Date(`${datum}T12:00:00`);
+  let over = n;
+  while (over > 0) {
+    d.setDate(d.getDate() + 1);
+    const dag = d.getDay();
+    if (dag !== 0 && dag !== 6) over -= 1;
+  }
+  const maand = String(d.getMonth() + 1).padStart(2, "0");
+  return `${d.getFullYear()}-${maand}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
  * De eerste en laatste dag van de maand waarin `datum` valt. Gebruikt om te
  * zien wat er die maand al gewassen is: bij een nieuwe maand begint die
  * telling vanzelf weer op nul.
