@@ -26,13 +26,14 @@ import {
   fetchDistricts,
   fetchQuickNotes,
   fetchStreets,
+  formatPrice,
   persistDistrictOrder,
   wijkKleur,
   type District,
   type QuickNote,
 } from "@/lib/klanten";
 import { fetchWasdagen } from "@/lib/wasdag";
-import { AANNAME_PER_DAG, meetTempo, MINIMUM_DAGEN, tempoVan } from "@/lib/wijkritme";
+import { AANNAME_BEDRAG_PER_DAG, meetTempo, MINIMUM_DAGEN, tempoVan } from "@/lib/wijkritme";
 import { bewaarThema, leesThema, themaLabels, type Thema } from "@/lib/thema";
 import {
   fetchTeam,
@@ -769,8 +770,8 @@ function WijkenTab() {
                     <span className="block truncate text-[12px] text-muted-foreground">
                       {adressenPerWijk.get(d.id) ?? 0} adressen ·{" "}
                       {tempo.bron === "aanname"
-                        ? `aanname: ${tempo.perDag} per dag`
-                        : `${tempo.perDag} per dag, gemeten over ${tempo.dagen} ${
+                        ? `aanname: ${formatPrice(tempo.bedragPerDag)} per dag`
+                        : `${formatPrice(tempo.bedragPerDag)} per dag, gemeten over ${tempo.dagen} ${
                             tempo.dagen === 1 ? "dag" : "dagen"
                           }${tempo.bron === "alles" ? " (alle wijken)" : ""}`}
                     </span>
@@ -815,7 +816,7 @@ function WijkenTab() {
 
       <Kaart
         titel="Wat de app geleerd heeft"
-        uitleg="Het tempo hierboven komt uit de dagen die je hebt afgevinkt. Hoe meer dagen je draait, hoe scherper de suggestie op de kalender wordt."
+        uitleg="Hoeveel je op een dag wegwast, afgeleid uit de dagen die je hebt afgevinkt. In geld en niet in adressen: een wijk met rijtjeshuizen en een wijk met villa's leveren heel verschillende aantallen op, maar een dag blijft een dag."
       >
         <p className="text-sm text-muted-foreground">
           {gemeten.algemeen.bron === "aanname" ? (
@@ -827,15 +828,15 @@ function WijkenTab() {
                   }, en dat is te weinig om iets zinnigs uit af te leiden`}
               . Zolang het er minder dan {MINIMUM_DAGEN} zijn gaat de app uit van{" "}
               <strong className="font-medium text-foreground">
-                {AANNAME_PER_DAG} adressen per dag
+                {formatPrice(AANNAME_BEDRAG_PER_DAG)} per dag
               </strong>
               . Daarna rekent ze op je eigen tempo.
             </>
           ) : (
             <>
-              Gemiddeld{" "}
+              Een gewone werkdag is{" "}
               <strong className="font-medium text-foreground">
-                {gemeten.algemeen.perDag} adressen per dag
+                {formatPrice(gemeten.algemeen.bedragPerDag)}
               </strong>
               , gemeten over {gemeten.algemeen.dagen}{" "}
               {gemeten.algemeen.dagen === 1 ? "gewerkte dag" : "gewerkte dagen"} in het afgelopen

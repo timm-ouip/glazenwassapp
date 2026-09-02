@@ -1,18 +1,29 @@
-import { aanDeBeurt, type Customer, type District, type Street } from "@/lib/klanten";
+import {
+  aanDeBeurt,
+  prijsVoorMaand,
+  type Customer,
+  type District,
+  type Street,
+} from "@/lib/klanten";
 import type { WasdagDagRegel } from "@/lib/wasdag";
 
 /**
  * Hoe lang doe je over een wijk, en welke wijk is wanneer aan de beurt?
  *
  * De app weet dat niet van tevoren, dus ze leert het van de dagen die je hebt
- * afgevinkt: hoeveel adressen krijg je gemiddeld op één dag rond. Zolang er
- * nog weinig dagen zijn gaan we uit van een aanname, en dat zeggen we er
- * eerlijk bij — een suggestie die doet alsof ze het weet is erger dan geen
- * suggestie.
+ * afgevinkt. Ze rekent daarbij in geld en niet in adressen: een wijk met
+ * rijtjeshuizen van tien minuten en een wijk met villa's van een uur leveren
+ * heel verschillende aantallen op, maar een dag is een dag en levert ongeveer
+ * hetzelfde op. Wat je per dag wegwast is dus de maat die stand houdt tussen
+ * wijken.
+ *
+ * Zolang er nog weinig dagen zijn gaan we uit van een aanname, en dat zeggen
+ * we er eerlijk bij — een suggestie die doet alsof ze het weet is erger dan
+ * geen suggestie.
  */
 
 /** Waar we van uitgaan zolang er te weinig dagen zijn om iets te meten. */
-export const AANNAME_PER_DAG = 50;
+export const AANNAME_BEDRAG_PER_DAG = 1500;
 
 /**
  * Zoveel dagen willen we minstens gezien hebben voor we een gemiddelde
@@ -23,8 +34,8 @@ export const AANNAME_PER_DAG = 50;
 export const MINIMUM_DAGEN = 3;
 
 export interface Tempo {
-  /** Gemiddeld aantal adressen op één werkdag. */
-  perDag: number;
+  /** Wat je op een gewone werkdag wegwast, in euro's. */
+  bedragPerDag: number;
   /** Op hoeveel gemeten dagen dat gemiddelde steunt. */
   dagen: number;
   /** "wijk" is gemeten in deze wijk zelf, "alles" over alle wijken samen,
@@ -39,9 +50,9 @@ function wijkVanAdres(streets: Street[]): Map<string, string> {
 }
 
 /**
- * Hoeveel adressen per dag, per wijk, uit de dagen die je hebt gedraaid.
+ * Wat je per dag wegwast, per wijk, uit de dagen die je hebt gedraaid.
  *
- * Een dag telt alleen mee voor de wijk waar het merendeel van dat werk lag:
+ * Een dag telt alleen mee voor de wijk waar het meeste geld van die dag zat:
  * rijd je 's ochtends de laatste tien van Gouda en 's middags heel Madestein,
  * dan zegt die dag iets over Madestein en niets over Gouda.
  */
@@ -53,7 +64,8 @@ export function meetTempo(
   const straatVan = new Map(customers.map((c) => [c.id, c.street_id]));
   const wijkVanStraat = wijkVanAdres(streets);
 
-  // Per dag: hoeveel adressen per wijk.
+  // Per dag: hoeveel euro per wijk. Het bedrag komt van de wasdag-regel, dus
+  // van wat je die dag rekende — niet van de prijs die het adres nu heeft.
   const perDag = new Map<string, Map<string, number>>();
   for (const r of regels) {
     if (!r.customer_id) continue;
@@ -61,27 +73,27 @@ export function meetTempo(
     const wijk = straat ? wijkVanStraat.get(straat) : undefined;
     if (!wijk) continue;
     const dag = perDag.get(r.datum) ?? new Map<string, number>();
-    dag.set(wijk, (dag.get(wijk) ?? 0) + 1);
+    dag.set(wijk, (dag.get(wijk) ?? 0) + Number(r.prijs));
     perDag.set(r.datum, dag);
   }
 
   // Elke dag toegewezen aan zijn zwaartepunt.
   const tellingen = new Map<string, number[]>();
-  const alleAantallen: number[] = [];
+  const alleBedragen: number[] = [];
   for (const dag of perDag.values()) {
     let besteWijk = "";
-    let besteAantal = 0;
+    let besteBedrag = 0;
     let totaal = 0;
-    for (const [wijk, aantal] of dag) {
-      totaal += aantal;
-      if (aantal > besteAantal) {
-        besteAantal = aantal;
+    for (const [wijk, bedrag] of dag) {
+      totaal += bedrag;
+      if (bedrag > besteBedrag) {
+        besteBedrag = bedrag;
         besteWijk = wijk;
       }
     }
     if (!besteWijk) continue;
     tellingen.set(besteWijk, [...(tellingen.get(besteWijk) ?? []), totaal]);
-    alleAantallen.push(totaal);
+    alleBedragen.push(totaal);
   }
 
   // De middelste dag en niet het gemiddelde: één uitschieter — een ochtendje
@@ -95,16 +107,16 @@ export function meetTempo(
   };
 
   const algemeen: Tempo =
-    alleAantallen.length >= MINIMUM_DAGEN
-      ? { perDag: mediaan(alleAantallen), dagen: alleAantallen.length, bron: "alles" }
-      : { perDag: AANNAME_PER_DAG, dagen: alleAantallen.length, bron: "aanname" };
+    alleBedragen.length >= MINIMUM_DAGEN
+      ? { bedragPerDag: mediaan(alleBedragen), dagen: alleBedragen.length, bron: "alles" }
+      : { bedragPerDag: AANNAME_BEDRAG_PER_DAG, dagen: alleBedragen.length, bron: "aanname" };
 
   const perWijk = new Map<string, Tempo>();
   for (const [wijk, xs] of tellingen) {
     // Een wijk krijgt pas een eigen cijfer als er genoeg dagen van zijn;
     // daaronder valt hij terug op het algemene beeld.
     if (xs.length < MINIMUM_DAGEN) continue;
-    perWijk.set(wijk, { perDag: mediaan(xs), dagen: xs.length, bron: "wijk" });
+    perWijk.set(wijk, { bedragPerDag: mediaan(xs), dagen: xs.length, bron: "wijk" });
   }
   return { perWijk, algemeen };
 }
@@ -123,8 +135,11 @@ export interface WijkWerk {
   teDoen: number;
   /** Daarvan al op een dag gezet. */
   gepland: number;
-  /** Wat er nog over is. */
+  /** Adressen die nog nergens op staan. */
   resteert: number;
+  /** Wat die overgebleven adressen bij elkaar opleveren — dáármee rekenen we,
+   *  want een dag is een bedrag en geen aantal. */
+  resteertBedrag: number;
   tempo: Tempo;
   /** Hoeveel werkdagen daar naar verwachting nog voor nodig zijn. */
   dagenNodig: number;
@@ -150,16 +165,20 @@ export function werkPerWijk(
   return districts.map((wijk) => {
     const straten = stratenVan.get(wijk.id) ?? new Set<string>();
     const beurt = customers.filter((c) => straten.has(c.street_id) && aanDeBeurt(c, maand));
-    const gepland = beurt.filter((c) => alGepland.has(c.id)).length;
-    const resteert = beurt.length - gepland;
+    const over = beurt.filter((c) => !alGepland.has(c.id));
+    const resteertBedrag = over.reduce((som, c) => som + prijsVoorMaand(c, maand), 0);
     const tempo = tempoVan(wijk.id, gemeten);
     return {
       wijk,
       teDoen: beurt.length,
-      gepland,
-      resteert,
+      gepland: beurt.length - over.length,
+      resteert: over.length,
+      resteertBedrag,
       tempo,
-      dagenNodig: resteert === 0 ? 0 : Math.max(1, Math.ceil(resteert / Math.max(1, tempo.perDag))),
+      dagenNodig:
+        over.length === 0
+          ? 0
+          : Math.max(1, Math.ceil(resteertBedrag / Math.max(1, tempo.bedragPerDag))),
     };
   });
 }
