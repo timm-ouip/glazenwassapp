@@ -55,6 +55,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppLayout } from "@/components/AppLayout";
 import { KlantDialog } from "@/components/KlantDialog";
+import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { StraatDialog } from "@/components/StraatDialog";
 import { StratenAanvullen } from "@/components/StratenAanvullen";
 import { DubbeleStraten } from "@/components/DubbeleStraten";
@@ -187,6 +188,13 @@ function Index() {
     open: false,
     street: null,
   });
+  // Het dossier is een schermpje op déze pagina. Eerder sprong de rechter-
+  // muisknop naar /klanten met het klant-id in de url; bij een adres zonder
+  // klant was dat id leeg en gebeurde er niets.
+  const [dossier, setDossier] = useState<{ open: boolean; customer: Customer | null }>({
+    open: false,
+    customer: null,
+  });
 
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
@@ -216,6 +224,7 @@ function Index() {
   const alleStraten = streetsQuery.data ?? [];
   const streets = alleStraten.filter((s) => s.district_id === actieveWijk);
   const customers = customersQuery.data ?? [];
+  const alleKlanten = klantenQuery.data ?? [];
   const quickNotes = quickNotesQuery.data ?? [];
   const undoLabel = useLaatsteUndoLabel();
 
@@ -1225,6 +1234,7 @@ function Index() {
                   onPatch={patchKlant}
                   onAddQuickNote={nieuweSnelkeuze}
                   onDelete={verwijderKlant}
+                  onDossier={(c) => setDossier({ open: true, customer: c })}
                   onNieuweRegel={nieuweRegel}
                   onEditStreet={() => setStraatDialog({ open: true, street: g.street })}
                   onDeleteStreet={() => verwijderStraat(g.street)}
@@ -1272,6 +1282,23 @@ function Index() {
         onAddQuickNote={nieuweSnelkeuze}
         onSaved={herlaad}
       />
+      <KlantgegevensDialog
+        open={dossier.open}
+        onOpenChange={(open) => setDossier((d) => ({ ...d, open }))}
+        klant={alleKlanten.find((k) => k.id === dossier.customer?.klant_id) ?? null}
+        voorstelCustomer={dossier.customer}
+        districts={districts}
+        streets={alleStraten}
+        customers={customers}
+        klanten={alleKlanten}
+        quickNotes={quickNotes}
+        onAddQuickNote={nieuweSnelkeuze}
+        standaardWijkId={actieveWijk}
+        onSaved={() => {
+          herlaad();
+          qc.invalidateQueries({ queryKey: ["klanten"] });
+        }}
+      />
       <StraatDialog
         districtId={actieveWijk ?? undefined}
         plaats={wijkPlaats}
@@ -1304,6 +1331,8 @@ interface BlokProps {
   onPatch: (c: Customer, patch: Partial<Customer>) => void;
   onAddQuickNote: (label: string) => void;
   onDelete: (c: Customer) => void;
+  /** Opent het dossier van dit adres, hier op de pagina zelf. */
+  onDossier: (c: Customer) => void;
   onNieuweRegel: (streetId: string, nummer: string) => void;
   onEditStreet: () => void;
   onDeleteStreet: () => void;
@@ -1557,6 +1586,7 @@ function StraatBlok(p: BlokProps) {
                   onPatch={p.onPatch}
                   onAddQuickNote={p.onAddQuickNote}
                   onDelete={p.onDelete}
+                  onDossier={p.onDossier}
                 />
               ))}
             </SortableContext>
@@ -1597,6 +1627,7 @@ interface RijProps {
   onPatch: (c: Customer, patch: Partial<Customer>) => void;
   onAddQuickNote: (label: string) => void;
   onDelete: (c: Customer) => void;
+  onDossier: (c: Customer) => void;
 }
 
 /** Kleur per frequentie: blauw is het accent, amber de even maanden, grijs de oneven.
@@ -1623,6 +1654,7 @@ function KlantRij({
   onPatch,
   onAddQuickNote,
   onDelete,
+  onDossier,
 }: RijProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `c:${c.id}`,
@@ -1725,16 +1757,18 @@ function KlantRij({
           precies die ene rij en lopen de kolommen uit de pas. */}
       <span className="w-3 shrink-0">
         {klantNaam && (
-          <Link
-            to="/klanten"
+          // Hetzelfde dossier als achter de rechtermuisknop. Dit was een link
+          // naar de klantenpagina, maar dan zoek je je gegevens twee keer op.
+          <button
+            type="button"
             tabIndex={-1}
-            search={{ klant: c.klant_id ?? "" }}
+            onClick={() => onDossier(c)}
             title={klantNaam}
-            aria-label={`Klantgegevens van ${klantNaam}`}
+            aria-label={`Dossier van ${klantNaam}`}
             className="text-muted-foreground/70 hover:text-foreground"
           >
             <User className="size-3" />
-          </Link>
+          </button>
         )}
       </span>
       <button
@@ -1751,7 +1785,7 @@ function KlantRij({
   // De rechtermuisknop hangt om de hele regel: kleur, overslaan en het
   // dossier zitten daarin, want in de regel zelf is er geen plek voor.
   return (
-    <KlantMenu customer={c} onPatch={(patch) => onPatch(c, patch)}>
+    <KlantMenu customer={c} onPatch={(patch) => onPatch(c, patch)} onDossier={() => onDossier(c)}>
       {rij}
     </KlantMenu>
   );

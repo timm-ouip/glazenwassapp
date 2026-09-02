@@ -514,6 +514,9 @@ function Klanten() {
                     key={r.id}
                     customer={r.customer}
                     onPatch={(patch) => void patchAdres(r.customer, patch)}
+                    onDossier={() =>
+                      setDossier({ open: true, klant: r.klant, customer: r.customer })
+                    }
                   >
                     <tr className="group border-b border-border/60 last:border-b-0 hover:bg-accent/30">
                       {/* Het dossier openen staat vooraan, vóór het adres: dat is

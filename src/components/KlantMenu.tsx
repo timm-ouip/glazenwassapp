@@ -1,4 +1,3 @@
-import { useNavigate } from "@tanstack/react-router";
 import { CalendarOff, Check, CircleSlash, FileText, Flag } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 
@@ -29,6 +28,10 @@ import {
 interface Props {
   customer: Customer;
   onPatch: (patch: Partial<Customer>) => void;
+  /** Opent het dossier van dit adres. De pagina houdt het schermpje zelf
+   *  vast, zodat het opent waar je bent — een sprong naar de klantenpagina
+   *  raakte het dossier kwijt zodra het adres nog geen klant had. */
+  onDossier: () => void;
   children: ReactNode;
 }
 
@@ -50,11 +53,10 @@ const KLEUR_STIP: Record<Exclude<Markering, "">, string> = {
  * wijklijst is al dicht bezet, en dit zijn dingen die je een paar keer per
  * jaar doet, niet elke ronde.
  */
-export function KlantMenu({ customer: c, onPatch: ruwePatch, children }: Props) {
+export function KlantMenu({ customer: c, onPatch: ruwePatch, onDossier, children }: Props) {
   // Alles loopt hierlangs, zodat een startmaand die je overslaat overal
   // opschuift en niet alleen in het menu-item dat je toevallig gebruikte.
   const onPatch = (p: Partial<Customer>) => ruwePatch(schuifStartOp(c, p));
-  const navigate = useNavigate();
   const maanden = komendeMaanden();
   const komende = maanden[0]!;
   const start = eersteMaand(c);
@@ -81,9 +83,7 @@ export function KlantMenu({ customer: c, onPatch: ruwePatch, children }: Props) 
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="w-60">
-        <ContextMenuItem
-          onSelect={() => void navigate({ to: "/klanten", search: { klant: c.klant_id ?? "" } })}
-        >
+        <ContextMenuItem onSelect={onDossier}>
           <FileText className="size-4" /> Dossier
         </ContextMenuItem>
 

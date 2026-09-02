@@ -31,17 +31,27 @@ import { NotitieCel } from "@/components/NotitieCel";
 import {
   adresVanRegel,
   bewaarKlant,
-  BASISRITMES,
-  basisRitmeVan,
-  ritmeLabel,
-  type BasisRitme,
   formatNumber,
+  INTERVALLEN,
+  intervalLabels,
+  komendeMaanden,
   koppelKlant,
-  updateCustomer,
+  markeringLabels,
+  patchCustomer,
+  ritmeLabel,
+  ritmeMaanden,
+  ritmeVarianten,
+  schuifStartOp,
+  toonMaand,
+  toonMaandKort,
+  vorigeMaand,
+  zelfdeRitme,
   zorgVoorAdresRegel,
   type Customer,
   type District,
   type Klant,
+  type Maandwerk,
+  type Markering,
   type QuickNote,
   type Street,
 } from "@/lib/klanten";
@@ -66,24 +76,56 @@ interface Props {
   onSaved: () => void;
 }
 
-/** Prijs, ritme en notitie van het adres zelf. */
+/**
+ * Alles wat bij het adres hoort en niet bij de persoon: wat het kost, hoe
+ * vaak, wat erbij staat en in welke maanden het anders loopt.
+ *
+ * Dit stond eerder verspreid over de wijklijst — het meerwerk in het
+ * notitieveld, de kleur en de pauzes achter de rechtermuisknop. Hier staat
+ * het bij elkaar, zodat je één plek hebt om een adres na te lopen.
+ */
 interface Pand {
   price: string;
-  /** Een van de drie basisritmes, of "anders" als het adres in de wijklijst
-   *  een fijner ritme heeft gekregen — dat laten we dan met rust. */
-  ritme: BasisRitme | "anders";
+  interval_maanden: number;
+  ritme: number;
   note: string;
+  maandwerk: Maandwerk[];
+  overslaan: string[];
+  start_maand: string;
+  markering: Markering;
 }
 
-const LEEG_PAND: Pand = { price: "", ritme: "elke", note: "" };
+const LEEG_PAND: Pand = {
+  price: "",
+  interval_maanden: 1,
+  ritme: 1,
+  note: "",
+  maandwerk: [],
+  overslaan: [],
+  start_maand: "",
+  markering: "",
+};
 
 function pandVan(c: Customer): Pand {
   return {
     price: c.price ? String(c.price) : "",
-    ritme: basisRitmeVan(c),
+    interval_maanden: c.interval_maanden || 1,
+    ritme: c.ritme || 1,
     note: c.note ?? "",
+    maandwerk: c.maandwerk ?? [],
+    overslaan: c.overslaan ?? [],
+    start_maand: c.start_maand ?? "",
+    markering: c.markering ?? "",
   };
 }
+
+/** De keuze "meteen" heeft geen maand; Radix wil wel een echte waarde. */
+const METEEN = "meteen";
+
+const KLEUR_STIP: Record<Exclude<Markering, "">, string> = {
+  geel: "bg-tint-amber ring-tint-amber-ink/40",
+  groen: "bg-tint-groen ring-tint-groen-ink/40",
+};
 
 function prijsGetal(waarde: string) {
   const n = Number(waarde.replace(",", ".").trim());
@@ -251,8 +293,22 @@ export function KlantgegevensDialog({
       return;
     }
     setSaving(true);
+    const nu = new Date().toISOString();
     try {
-      const bewaard = await bewaarKlant(klant?.id ?? null, velden);
+      // Een klantrecord alleen aanmaken als er ook echt iemand achter zit.
+      // Vanaf de wijkenpagina open je dit schermpje vaak om alleen de prijs
+      // of een pauze te wijzigen; dan hoort er geen naamloze klant bij te
+      // komen die je daarna onder "Nog zonder wijk" weer moet opruimen.
+      const persoonlijk = Boolean(
+        velden.naam.trim() ||
+          velden.email.trim() ||
+          velden.telefoon.trim() ||
+          velden.notitie.trim(),
+      );
+      const klantId =
+        klant || persoonlijk || extra.length > 0
+          ? (await bewaarKlant(klant?.id ?? null, velden)).id
+          : null;
 
       // Bestaat het adres nog niet op een wijklijst, dan maken we het nu aan:
       // de klantenpagina en de wijkenlijst horen hetzelfde te laten zien.
@@ -268,30 +324,44 @@ export function KlantgegevensDialog({
 
       // Wie raakt er een adres kwijt doordat we het overnemen? Dát is het
       // samenvoegen: twee regels blijken dezelfde meneer.
-      const overgenomen = customers.filter(
-        (c) => alles.includes(c.id) && c.klant_id && c.klant_id !== klant?.id,
-      );
+      const overgenomen = klantId
+        ? customers.filter((c) => alles.includes(c.id) && c.klant_id && c.klant_id !== klantId)
+        : [];
 
-      await koppelKlant(
-        alles.filter((id) => !was.includes(id)),
-        bewaard.id,
-      );
+      if (klantId) {
+        await koppelKlant(
+          alles.filter((id) => !was.includes(id)),
+          klantId,
+        );
+      }
       await koppelKlant(
         was.filter((id) => !alles.includes(id)),
         null,
       );
 
-      // Prijs, ritme en notitie horen bij dít adres. De bijgekoppelde
-      // adressen houden de hunne; die bewerk je in hun eigen dossier.
+      // Prijs, ritme, notitie, kleur en de maanden horen bij dít adres. De
+      // bijgekoppelde adressen houden de hunne; die bewerk je in hun eigen
+      // dossier.
       if (adresId) {
-        const basis = BASISRITMES.find((b) => b.waarde === pand.ritme);
-        await updateCustomer(adresId, {
-          price: prijsGetal(pand.price),
-          note: pand.note.trim(),
-          // Bij "anders" niets aanraken: dat ritme is hier niet te kiezen en
-          // hoort niet stilletjes teruggezet te worden naar elke maand.
-          ...(basis ? { interval_maanden: basis.interval_maanden, ritme: basis.ritme } : {}),
-        });
+        // Dezelfde regel als in de wijklijst: een adres dat nog moet
+        // beginnen en dat je zijn startmaand laat overslaan, begint gewoon
+        // later — anders staan er twee badges die hetzelfde zeggen.
+        await patchCustomer(
+          adresId,
+          schuifStartOp(dossierCustomer ?? { start_maand: "", created_at: nu, overslaan: [] }, {
+            price: prijsGetal(pand.price),
+            note: pand.note.trim(),
+            // De postcode hoort bij het pand, niet bij de bewoner — en de
+            // klantenlijst leest hem daar ook vandaan.
+            postcode: velden.postcode.trim(),
+            interval_maanden: pand.interval_maanden,
+            ritme: pand.ritme,
+            maandwerk: pand.maandwerk,
+            overslaan: [...pand.overslaan].sort(),
+            start_maand: pand.start_maand,
+            markering: pand.markering,
+          }),
+        );
       }
 
       // De klant die het adres kwijtraakt laten we staan. Hij houdt misschien
@@ -319,6 +389,8 @@ export function KlantgegevensDialog({
         toast.success(`Klant opgeslagen en toegevoegd aan ${velden.straat.trim()} in de wijklijst`);
       } else if (alles.length === 0) {
         toast.success("Klant opgeslagen — nog niet aan een adres in een wijk gekoppeld");
+      } else if (!klantId) {
+        toast.success("Adres bijgewerkt");
       } else {
         toast.success(klant ? "Klant bijgewerkt" : "Klant toegevoegd");
       }
@@ -332,6 +404,14 @@ export function KlantgegevensDialog({
   }
 
   const nieuwAdres = !dossierCustomer && Boolean(velden.straat.trim() && velden.huisnummer.trim());
+
+  /** De ankermaanden waar je uit kiest bij om de 2, 3, 6 of 12 maanden. */
+  const ritmeKeuzes = ritmeVarianten(pand.interval_maanden);
+  /** De kalendermaanden waarin dit adres sowieso langskomt — het meerwerk-
+   *  rooster laat de andere maanden daardoor anders zien. */
+  const beurtMaanden = ritmeMaanden(pand).map((m) => String(m).padStart(2, "0"));
+  /** Twaalf maanden vooruit: waar je een pauze of een startmaand uit kiest. */
+  const maandenVooruit = komendeMaanden();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -469,64 +549,205 @@ export function KlantgegevensDialog({
             </p>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="prijs">Prijs (€)</Label>
-              <Input
-                id="prijs"
-                inputMode="decimal"
-                placeholder="0"
-                value={pand.price}
-                onChange={(e) => setPand((p) => ({ ...p, price: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Frequentie</Label>
-              <Select
-                value={pand.ritme}
-                onValueChange={(v) => setPand((p) => ({ ...p, ritme: v as BasisRitme }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {BASISRITMES.map((b) => (
-                    <SelectItem key={b.waarde} value={b.waarde}>
-                      {b.label}
-                    </SelectItem>
-                  ))}
-                  {/* Een ritme uit de wijklijst kun je hier zien maar niet
-                      maken; daar horen de maanden bij die je hier niet ziet. */}
-                  {pand.ritme === "anders" && voorstelCustomer && (
-                    <SelectItem value="anders" disabled>
-                      {ritmeLabel(voorstelCustomer)} (stel je in de lijst in)
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="notitie">Notitie bij de persoon</Label>
+            <Input
+              id="notitie"
+              value={velden.notitie}
+              onChange={(e) => zet({ notitie: e.target.value })}
+            />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          {/* Alles van het pand bij elkaar. Hetzelfde als in de wijklijst,
+              maar daar zit het verspreid over de regel en de rechtermuisknop;
+              hier loop je een adres in één keer na. */}
+          <div className="space-y-4 rounded-lg border border-border p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+              Het adres
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="prijs">Vaste prijs (€)</Label>
+                <Input
+                  id="prijs"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={pand.price}
+                  onChange={(e) => setPand((p) => ({ ...p, price: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Frequentie</Label>
+                <Select
+                  value={String(pand.interval_maanden)}
+                  onValueChange={(v) =>
+                    setPand((p) => ({ ...p, interval_maanden: Number(v), ritme: 1 }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INTERVALLEN.map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {intervalLabels[n]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Bij om de 2 kies je even of oneven, bij om de 3 welk van de
+                drie kwartaalritmes. Bij elke maand valt er niets te kiezen. */}
+            {ritmeKeuzes.length > 1 && (
+              <div className="space-y-2">
+                <Label>In welke maanden</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {ritmeKeuzes.map((r) => {
+                    const aan = zelfdeRitme(pand.ritme, r, pand.interval_maanden);
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setPand((p) => ({ ...p, ritme: r }))}
+                        className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                          aan
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-secondary text-secondary-foreground hover:bg-accent"
+                        }`}
+                      >
+                        {ritmeLabel({ interval_maanden: pand.interval_maanden, ritme: r })}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Label>Notitie bij dit adres</Label>
-              {/* Hetzelfde veld met snelkeuzes als op de wijkenpagina; dit is
-                  de notitie die op de printlijst terechtkomt. */}
+              <Label>Notitie en meerwerk</Label>
+              {/* Hetzelfde veld met snelkeuzes als op de wijkenpagina, nu
+                  inclusief het werk dat er in bepaalde maanden bij komt en
+                  wat dat extra kost. */}
               <NotitieCel
                 value={pand.note}
+                maandwerk={pand.maandwerk}
+                onChangeMaandwerk={(werk) => setPand((p) => ({ ...p, maandwerk: werk }))}
+                beurtMaanden={beurtMaanden}
                 quickNotes={quickNotes}
                 onChange={(v) => setPand((p) => ({ ...p, note: v }))}
                 onAddQuickNote={onAddQuickNote}
                 className="flex h-9 w-full items-center truncate rounded-md border border-input bg-transparent px-3 py-1 text-left text-sm shadow-sm hover:bg-accent/40 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Kleur op de printlijst</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {(Object.keys(markeringLabels) as Exclude<Markering, "">[]).map((kleur) => (
+                    <button
+                      key={kleur}
+                      type="button"
+                      onClick={() =>
+                        setPand((p) => ({ ...p, markering: p.markering === kleur ? "" : kleur }))
+                      }
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                        pand.markering === kleur
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-secondary text-secondary-foreground hover:bg-accent"
+                      }`}
+                    >
+                      <span
+                        className={`size-2.5 rounded-full ring-1 ring-inset ${KLEUR_STIP[kleur]}`}
+                      />
+                      {markeringLabels[kleur]}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setPand((p) => ({ ...p, markering: "" }))}
+                    className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                      pand.markering === ""
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-secondary text-secondary-foreground hover:bg-accent"
+                    }`}
+                  >
+                    Geen
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Wassen vanaf</Label>
+                <Select
+                  value={pand.start_maand || METEEN}
+                  onValueChange={(v) =>
+                    setPand((p) => ({ ...p, start_maand: v === METEEN ? "" : v }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    <SelectItem value={METEEN}>Meteen (aanmaakmaand)</SelectItem>
+                    <SelectItem value={vorigeMaand()}>Niet nieuw, al langer klant</SelectItem>
+                    {maandenVooruit.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        <span className="capitalize">{toonMaand(m)}</span>{" "}
+                        <span className="text-muted-foreground">{m.slice(0, 4)}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Losse maanden waarin dit adres niet meegaat: een vakantie, een
+                steiger voor de gevel. Dit is iets anders dan het ritme —
+                daarom staan ze los, met de eerste maand vooraan. */}
             <div className="space-y-2">
-              <Label htmlFor="notitie">Notitie bij de persoon</Label>
-              <Input
-                id="notitie"
-                value={velden.notitie}
-                onChange={(e) => zet({ notitie: e.target.value })}
-              />
+              <Label>Maanden overslaan</Label>
+              <div className="grid grid-cols-6 gap-1">
+                {maandenVooruit.map((m) => {
+                  const aan = pand.overslaan.includes(m);
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      title={`${toonMaand(m)} ${m.slice(0, 4)}`}
+                      onClick={() =>
+                        setPand((p) => ({
+                          ...p,
+                          overslaan: aan
+                            ? p.overslaan.filter((x) => x !== m)
+                            : [...p.overslaan, m].sort(),
+                        }))
+                      }
+                      className={`rounded border px-1 py-0.5 text-[10px] font-medium capitalize transition-colors ${
+                        aan
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-secondary text-secondary-foreground hover:bg-accent"
+                      }`}
+                    >
+                      {toonMaandKort(m)}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Maanden die al voorbij zijn staan niet in het rijtje hierboven,
+                  maar tellen wel mee — dus zeg hoeveel het er in totaal zijn. */}
+              {pand.overslaan.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPand((p) => ({ ...p, overslaan: [] }))}
+                  className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  Niets meer overslaan ({pand.overslaan.length})
+                </button>
+              )}
             </div>
           </div>
 
