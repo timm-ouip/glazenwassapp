@@ -100,6 +100,7 @@ import {
   prijsVoorMaand,
   toonMaand,
   regelKleur,
+  ritmeMaanden,
   matchesMaand,
   persistCustomerOrder,
   persistStreetOrder,
@@ -1702,7 +1703,7 @@ function KlantRij({
           value={c.note}
           maandwerk={c.maandwerk}
           onChangeMaandwerk={(werk) => onPatch(c, { maandwerk: werk })}
-          prijs={c.price}
+          beurtMaanden={ritmeMaanden(c).map((m) => String(m).padStart(2, "0"))}
           quickNotes={quickNotes}
           onChange={(v) => onPatch(c, { note: v })}
           onAddQuickNote={onAddQuickNote}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { InlineCel } from "@/components/InlineCel";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import {
@@ -73,6 +74,21 @@ export function PrijsCel({ customer: c, ronde, onPatch }: Props) {
     if (Object.keys(patch).length > 0) onPatch(patch);
   }
 
+  // Is er niets bijzonders aan de hand, dan hoort hier geen schermpje: dan is
+  // er één prijs en typ je die gewoon in de regel.
+  if (c.maandwerk.length === 0) {
+    return (
+      <InlineCel
+        value={formatPrice(c.price)}
+        align="right"
+        inputMode="decimal"
+        placeholder={formatPrice(0)}
+        className={c.price === 0 ? "text-red-600" : ""}
+        onCommit={(v) => onPatch({ price: bedragVan(v) })}
+      />
+    );
+  }
+
   return (
     <Popover
       open={open}
@@ -100,14 +116,17 @@ export function PrijsCel({ customer: c, ronde, onPatch }: Props) {
       <PopoverContent className="w-60 space-y-3 p-3" align="end">
         <div className="space-y-1.5">
           <p className="text-[11px] font-medium text-muted-foreground">Prijs van het adres</p>
-          <Input
-            value={vast}
-            inputMode="decimal"
-            placeholder="0"
-            className="h-8 text-sm"
-            onChange={(e) => setVast(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sluit()}
-          />
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm text-muted-foreground">€</span>
+            <Input
+              value={vast}
+              inputMode="decimal"
+              placeholder="0"
+              className="h-8 text-sm"
+              onChange={(e) => setVast(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sluit()}
+            />
+          </div>
         </div>
 
         {c.maandwerk.length > 0 && (
@@ -121,11 +140,12 @@ export function PrijsCel({ customer: c, ronde, onPatch }: Props) {
                   {w.notitie || "meerwerk"}
                   <span className="ml-1 text-muted-foreground">{maandenVan(w)}</span>
                 </span>
+                <span className="text-xs text-muted-foreground">+ €</span>
                 <Input
                   value={extras[i] ?? ""}
                   inputMode="decimal"
-                  placeholder="+ €"
-                  className="h-8 w-16 shrink-0 text-xs"
+                  placeholder="0"
+                  className="h-8 w-14 shrink-0 text-xs"
                   onChange={(e) => setExtras(extras.map((x, j) => (j === i ? e.target.value : x)))}
                   onKeyDown={(e) => e.key === "Enter" && sluit()}
                 />

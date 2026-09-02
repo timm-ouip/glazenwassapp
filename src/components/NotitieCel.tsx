@@ -64,10 +64,10 @@ interface Props {
    *  speelt, zoals in het importscherm. */
   maandwerk?: Maandwerk[] | undefined;
   onChangeMaandwerk?: ((werk: Maandwerk[]) => void) | undefined;
-  /** De vaste prijs van dit adres — staat als grijze voorbeeldwaarde in het
-   *  prijsvakje, zodat duidelijk is dat je daar de hele prijs voor die ronde
-   *  zet en niet de meerkosten. */
-  prijs?: number | undefined;
+  /** De kalendermaanden ("01"-"12") waarin dit adres sowieso langskomt. De
+   *  andere maanden kun je wel aanvinken — dan komt hij een keer extra — maar
+   *  ze horen er anders uit te zien. */
+  beurtMaanden?: string[] | undefined;
 }
 
 /** Notitieveld met meervoudige snelkeuzes en de mogelijkheid nieuwe toe te voegen. */
@@ -79,7 +79,7 @@ export function NotitieCel({
   className,
   maandwerk,
   onChangeMaandwerk,
-  prijs,
+  beurtMaanden,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [tekst, setTekst] = useState(value);
@@ -118,6 +118,12 @@ export function NotitieCel({
 
   function pasAan(i: number, patch: Partial<Regel>) {
     setWerk(werk.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  }
+
+  /** Komt dit adres deze maand sowieso langs? Zonder ritme (het importscherm)
+   *  gaan we ervan uit van wel. */
+  function hoortErbij(maand: string): boolean {
+    return beurtMaanden === undefined || beurtMaanden.includes(maand);
   }
 
   /** Een hele helft van het jaar aan- of uitzetten. */
@@ -247,7 +253,12 @@ export function NotitieCel({
                     hier begin je meestal. */}
                 <div className="flex gap-1.5">
                   {(["even", "oneven"] as const).map((helft) => {
-                    const maanden = helft === "even" ? EVEN_MAANDEN : ONEVEN_MAANDEN;
+                    const alle = helft === "even" ? EVEN_MAANDEN : ONEVEN_MAANDEN;
+                    // Een adres dat alleen de oneven maanden doet, heeft niets
+                    // aan een knop "even maanden": die zou zes extra beurten
+                    // aanzetten en dat is nooit wat je bedoelt.
+                    const maanden = alle.filter((m) => hoortErbij(m));
+                    if (maanden.length === 0) return null;
                     const aan = maanden.every((m) => regel.maanden.includes(m));
                     return (
                       <button
@@ -268,15 +279,23 @@ export function NotitieCel({
                 <div className="grid grid-cols-6 gap-1">
                   {MAANDEN.map((m) => {
                     const aan = regel.maanden.includes(m);
+                    const erbij = hoortErbij(m);
                     return (
                       <button
                         key={m}
                         type="button"
                         onClick={() => wisselMaand(i, m)}
+                        title={
+                          erbij ? undefined : "Komt dan niet langs — aanvinken is een extra beurt"
+                        }
                         className={`rounded border px-1 py-0.5 text-[10px] font-medium capitalize transition-colors ${
                           aan
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-secondary text-secondary-foreground hover:bg-accent"
+                            ? erbij
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-dashed border-tint-amber-ink bg-tint-amber text-tint-amber-ink"
+                            : erbij
+                              ? "border-border bg-secondary text-secondary-foreground hover:bg-accent"
+                              : "border-dashed border-border bg-transparent text-muted-foreground/60 hover:bg-accent"
                         }`}
                       >
                         {toonMaandKort(`2000-${m}`)}

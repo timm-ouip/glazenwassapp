@@ -790,13 +790,21 @@ export function ritmeOmschrijving(c: Pick<Customer, "interval_maanden" | "ritme"
   return c.interval_maanden <= 1 ? hoeVaak : `${hoeVaak} — ${ritmeLabel(c)}`;
 }
 
-/** Hoort dit adres op de lijst van deze kalendermaand? */
+/**
+ * Hoort dit adres op de lijst van deze kalendermaand? Dat is zo als het ritme
+ * erop uitkomt, én als er maandwerk voor die maand staat: dat laatste is een
+ * extra beurt, voor de klant die er een keer tussendoor bij wil.
+ */
 export function aanDeBeurt(
-  c: Pick<Customer, "interval_maanden" | "ritme" | "start_maand" | "created_at" | "overslaan">,
+  c: Pick<
+    Customer,
+    "interval_maanden" | "ritme" | "start_maand" | "created_at" | "overslaan" | "maandwerk"
+  >,
   maand: string,
 ): boolean {
   if (!doetMee(c, maand)) return false;
-  return ritmeMaanden(c).includes(Number(maand.slice(5, 7)));
+  if (ritmeMaanden(c).includes(Number(maand.slice(5, 7)))) return true;
+  return maandwerkVoor(c, maand).length > 0;
 }
 
 /**
