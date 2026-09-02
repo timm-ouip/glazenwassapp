@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -71,6 +71,7 @@ import { PrijsCel } from "@/components/PrijsCel";
 import { RitmeKiezer } from "@/components/RitmeKiezer";
 import { WassenVanaf } from "@/components/WassenVanaf";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
+import { useStabiel } from "@/hooks/use-stabiel";
 import {
   fetchWasdag,
   fetchWasdagen,
@@ -225,7 +226,9 @@ function Index() {
   const streets = alleStraten.filter((s) => s.district_id === actieveWijk);
   const customers = customersQuery.data ?? [];
   const alleKlanten = klantenQuery.data ?? [];
-  const quickNotes = quickNotesQuery.data ?? [];
+  // Vaste identiteit, ook zolang de query nog laadt: elke verse lege array
+  // zou `memo` op de regels breken.
+  const quickNotes = useMemo(() => quickNotesQuery.data ?? [], [quickNotesQuery.data]);
   const undoLabel = useLaatsteUndoLabel();
 
   function herlaad() {
@@ -827,6 +830,25 @@ function Index() {
     });
   }
 
+  // De handlers die elke regel meekrijgt, met een vaste identiteit. Zonder dit
+  // ziet `memo` op KlantRij bij elke render nieuwe functies en tekent hij de
+  // hele wijk opnieuw; zie useStabiel.
+  const opSelect = useStabiel(klikSelectie);
+  const opPatch = useStabiel(patchKlant);
+  const opDelete = useStabiel(verwijderKlant);
+  const opDossier = useStabiel((c: Customer) => setDossier({ open: true, customer: c }));
+  const opAddQuickNote = useStabiel(nieuweSnelkeuze);
+  const opVerfStart = useStabiel(startVerf);
+  const opKlantOpDag = useStabiel((c: Customer, aan: boolean) => {
+    pasDagAan(aan ? [c] : [], aan ? [] : [c.id]);
+  });
+  const opNieuweRegel = useStabiel(nieuweRegel);
+
+  // De id-lijsten voor dnd-kit. Zonder useMemo krijgt SortableContext bij elke
+  // render een verse array, verandert zijn context, en hertekent React álle
+  // regels die `useSortable` gebruiken — `memo` kan daar niets tegen doen.
+  const straatIds = useMemo(() => groepen.map((g) => `s:${g.street.id}`), [groepen]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
@@ -1203,10 +1225,7 @@ function Index() {
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
         >
-          <SortableContext
-            items={groepen.map((g) => `s:${g.street.id}`)}
-            strategy={verticalListSortingStrategy}
-          >
+          <SortableContext items={straatIds} strategy={verticalListSortingStrategy}>
             <div
               className={`gap-3.5 md:columns-1 xl:columns-2 ${
                 // Tijdens een streek niets selecteren: anders sleep je een
@@ -1230,12 +1249,12 @@ function Index() {
                   rowText={rowText}
                   rowPad={rowPad}
                   selectie={selectie}
-                  onSelect={klikSelectie}
-                  onPatch={patchKlant}
-                  onAddQuickNote={nieuweSnelkeuze}
-                  onDelete={verwijderKlant}
-                  onDossier={(c) => setDossier({ open: true, customer: c })}
-                  onNieuweRegel={nieuweRegel}
+                  onSelect={opSelect}
+                  onPatch={opPatch}
+                  onAddQuickNote={opAddQuickNote}
+                  onDelete={opDelete}
+                  onDossier={opDossier}
+                  onNieuweRegel={opNieuweRegel}
                   onEditStreet={() => setStraatDialog({ open: true, street: g.street })}
                   onDeleteStreet={() => verwijderStraat(g.street)}
                   onAddKlant={() =>
@@ -1250,10 +1269,8 @@ function Index() {
                   eerderGewassen={eerderGewassen}
                   elderGepland={elderGepland}
                   onStraatOpDag={(aan) => zetStraatOpDag(g, aan)}
-                  onKlantOpDag={(c, aan) => {
-                    pasDagAan(aan ? [c] : [], aan ? [] : [c.id]);
-                  }}
-                  onVerfStart={startVerf}
+                  onKlantOpDag={opKlantOpDag}
+                  onVerfStart={opVerfStart}
                   negeerKlik={negeerKlik}
                 />
               ))}
@@ -1559,37 +1576,7 @@ function StraatBlok(p: BlokProps) {
               <span className="min-w-[3.25rem] max-w-[5.5rem] pl-1 text-center">FREQ</span>
               <span className="w-4" />
             </div>
-            <SortableContext
-              items={p[kant].map((c) => `c:${c.id}`)}
-              strategy={verticalListSortingStrategy}
-            >
-              {p[kant].map((c) => (
-                <KlantRij
-                  key={c.id}
-                  customer={c}
-                  prijzenTonen={p.prijzenTonen}
-                  quickNotes={p.quickNotes}
-                  klantNaam={c.klant_id ? p.klantNamen.get(c.klant_id) : undefined}
-                  rowText={p.rowText}
-                  rowPad={p.rowPad}
-                  geselecteerd={p.selectie.includes(c.id)}
-                  ronde={p.ronde}
-                  planmodus={p.planmodus}
-                  opDeDag={p.opDeDag.has(c.id)}
-                  eerderGewassen={p.eerderGewassen.has(c.id)}
-                  elderGepland={p.elderGepland.has(c.id)}
-                  dagKlaar={p.dagKlaar}
-                  onOpDag={(aan) => p.onKlantOpDag(c, aan)}
-                  onVerfStart={p.onVerfStart}
-                  negeerKlik={p.negeerKlik}
-                  onSelect={p.onSelect}
-                  onPatch={p.onPatch}
-                  onAddQuickNote={p.onAddQuickNote}
-                  onDelete={p.onDelete}
-                  onDossier={p.onDossier}
-                />
-              ))}
-            </SortableContext>
+            <StraatKolom regels={p[kant]} blok={p} />
             {kant === "even" && (
               <NieuweRegel
                 onSubmit={(nr) => p.onNieuweRegel(p.street.id, nr)}
@@ -1600,6 +1587,54 @@ function StraatBlok(p: BlokProps) {
         ))}
       </div>
     </section>
+  );
+}
+
+/**
+ * Eén helft van een straat: de even of de oneven kant.
+ *
+ * Dit is een eigen component omdat de id-lijst voor dnd-kit een vaste
+ * identiteit moet houden — en een `useMemo` kan niet in de lus over de twee
+ * helften staan. Krijgt SortableContext elke render een verse array, dan
+ * wisselt zijn context en hertekent React alle regels eronder, hoeveel `memo`
+ * je er ook omheen zet.
+ */
+function StraatKolom({ regels, blok: p }: { regels: Customer[]; blok: BlokProps }) {
+  // Op de sleutel en niet op `regels`: die array is na elke wijziging nieuw,
+  // ook als er alleen een prijs in één regel veranderde. De id-lijst is dan
+  // inhoudelijk hetzelfde, en dnd-kit hoort daar niet wakker van te worden.
+  const sleutel = regels.map((c) => c.id).join(",");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ids = useMemo(() => regels.map((c) => `c:${c.id}`), [sleutel]);
+  return (
+    <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+      {regels.map((c) => (
+        <KlantRij
+          key={c.id}
+          customer={c}
+          prijzenTonen={p.prijzenTonen}
+          quickNotes={p.quickNotes}
+          klantNaam={c.klant_id ? p.klantNamen.get(c.klant_id) : undefined}
+          rowText={p.rowText}
+          rowPad={p.rowPad}
+          geselecteerd={p.selectie.includes(c.id)}
+          ronde={p.ronde}
+          planmodus={p.planmodus}
+          opDeDag={p.opDeDag.has(c.id)}
+          eerderGewassen={p.eerderGewassen.has(c.id)}
+          elderGepland={p.elderGepland.has(c.id)}
+          dagKlaar={p.dagKlaar}
+          onOpDag={p.onKlantOpDag}
+          onVerfStart={p.onVerfStart}
+          negeerKlik={p.negeerKlik}
+          onSelect={p.onSelect}
+          onPatch={p.onPatch}
+          onAddQuickNote={p.onAddQuickNote}
+          onDelete={p.onDelete}
+          onDossier={p.onDossier}
+        />
+      ))}
+    </SortableContext>
   );
 }
 
@@ -1620,7 +1655,7 @@ interface RijProps {
   /** Deze maand al op een latere dag ingepland. */
   elderGepland: boolean;
   dagKlaar: boolean;
-  onOpDag: (aan: boolean) => void;
+  onOpDag: (c: Customer, aan: boolean) => void;
   onVerfStart: (aan: boolean, x: number, y: number) => void;
   negeerKlik: { current: boolean };
   onSelect: (c: Customer, shift: boolean) => void;
@@ -1630,10 +1665,16 @@ interface RijProps {
   onDossier: (c: Customer) => void;
 }
 
-/** Kleur per frequentie: blauw is het accent, amber de even maanden, grijs de oneven.
- *  Het amber badge krijgt een randje: een aangevinkte rij is zelf ook amber,
- *  en zonder rand valt het badge daar helemaal in weg. */
-function KlantRij({
+/**
+ * Kleur per frequentie: blauw is het accent, amber de even maanden, grijs de oneven.
+ * Het amber badge krijgt een randje: een aangevinkte rij is zelf ook amber,
+ * en zonder rand valt het badge daar helemaal in weg.
+ *
+ * Gememoïseerd, want een wijk telt honderden regels en elke wijziging schrijft
+ * er maar één van om. De optimistische update in `patchKlant` laat de andere
+ * regels bij hun oude object, dus die slaan hier over.
+ */
+const KlantRij = memo(function KlantRij({
   customer: c,
   prijzenTonen,
   quickNotes,
@@ -1698,7 +1739,7 @@ function KlantRij({
               negeerKlik.current = false;
               return;
             }
-            onOpDag(v === true);
+            onOpDag(c, v === true);
           }}
           onPointerDown={(e) => onVerfStart(!opDeDag, e.clientX, e.clientY)}
           aria-label={`${formatNumber(c)} op de dag`}
@@ -1789,7 +1830,7 @@ function KlantRij({
       {rij}
     </KlantMenu>
   );
-}
+});
 
 function NieuweStraat({ onSubmit }: { onSubmit: (naam: string) => void }) {
   const [waarde, setWaarde] = useState("");
