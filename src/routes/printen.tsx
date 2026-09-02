@@ -25,7 +25,15 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { AccountMenu } from "@/components/AccountMenu";
-import { ArrowLeft, ArrowUpToLine, ChevronDown, GripVertical, Printer } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpToLine,
+  CalendarDays,
+  ChevronDown,
+  GripVertical,
+  Printer,
+  X,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,6 +68,7 @@ import {
   type Customer,
   type Street,
 } from "@/lib/klanten";
+import { fetchWasdag, toonDatum } from "@/lib/wasdag";
 
 interface PrintSearch {
   wijk: string;
@@ -69,6 +78,10 @@ interface PrintSearch {
   prijzen: boolean;
   liggend: boolean;
   vouwen?: boolean;
+  /** Print alleen wat er op deze dag ingepland staat ("jjjj-mm-dd"). Dan
+   *  vervallen de wijk- en maandkeuze: de dag zegt al wie er meegaat, en die
+   *  kan over meerdere wijken lopen. */
+  dag?: string;
 }
 
 export const Route = createFileRoute("/printen")({
@@ -86,6 +99,9 @@ export const Route = createFileRoute("/printen")({
     prijzen: search["prijzen"] === true || search["prijzen"] === "true",
     liggend: search["liggend"] !== false && search["liggend"] !== "false",
     vouwen: search["vouwen"] === true || search["vouwen"] === "true",
+    ...(typeof search["dag"] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(search["dag"])
+      ? { dag: search["dag"] }
+      : {}),
   }),
 
   head: () => ({
@@ -318,7 +334,7 @@ const MIN_SCHAAL = 0.25;
 const KOLOMMEN = 6;
 function PrintPagina() {
   useRequireAuth();
-  const { wijk, maand, prijzen, liggend, vouwen: vouwenRaw } = Route.useSearch();
+  const { wijk, maand, prijzen, liggend, vouwen: vouwenRaw, dag } = Route.useSearch();
   // De ronde die je nu gaat lopen. Overslaan en "nieuw in mei" hangen aan een
   // echte kalendermaand, terwijl even/oneven alleen zegt welke helft van de
   // klanten meegaat.
@@ -329,14 +345,30 @@ function PrintPagina() {
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
+  // Print je een dag, dan bepaalt de wasdag wie er meegaat.
+  const wasdagQuery = useQuery({
+    queryKey: ["wasdag", dag],
+    queryFn: () => fetchWasdag(dag!),
+    enabled: Boolean(dag),
+  });
+  /** De adressen van de dag; leeg als je geen dag print. */
+  const opDeDag = useMemo(
+    () =>
+      dag
+        ? new Set((wasdagQuery.data ?? []).map((r) => r.customer_id).filter(Boolean) as string[])
+        : null,
+    [dag, wasdagQuery.data],
+  );
 
   const districts = districtsQuery.data ?? [];
   const actieveWijk = districts.find((d) => d.id === wijk) ?? districts[0] ?? null;
   const alleStreets = streetsQuery.data ?? [];
   const wijkId = actieveWijk?.id ?? null;
   const streets = useMemo(
-    () => alleStreets.filter((s) => !wijkId || s.district_id === wijkId),
-    [alleStreets, wijkId],
+    // Een dag kan over meerdere wijken lopen, dus dan kijken we niet naar de
+    // wijkkeuze; welke straten meegaan volgt vanzelf uit de adressen.
+    () => (dag ? alleStreets : alleStreets.filter((s) => !wijkId || s.district_id === wijkId)),
+    [alleStreets, wijkId, dag],
   );
   const customers = customersQuery.data ?? [];
 
@@ -352,10 +384,15 @@ function PrintPagina() {
   const zichtbaar = useMemo(() => {
     const perStraat = new Map<string, Customer[]>();
     for (const c of customers) {
-      // Bij een echte maand rekent de app zelf uit wie aan de beurt is: het
-      // ritme van het adres, plus overgeslagen maanden en nog-niet-begonnen.
-      // Even/oneven blijft de oude, grovere keuze.
-      if (isKalendermaand(maand)) {
+      if (opDeDag) {
+        // Een dag print precies wat je die dag doet — het ritme is dan al
+        // verrekend bij het inplannen, en een adres dat je er handmatig bij
+        // zette hoort er ook gewoon op.
+        if (!opDeDag.has(c.id)) continue;
+      } else if (isKalendermaand(maand)) {
+        // Bij een echte maand rekent de app zelf uit wie aan de beurt is: het
+        // ritme van het adres, plus overgeslagen maanden en nog-niet-begonnen.
+        // Even/oneven blijft de oude, grovere keuze.
         if (!aanDeBeurt(c, maand)) continue;
       } else {
         if (!matchesMaand(c, maand as "alles" | "even" | "oneven")) continue;
@@ -375,7 +412,7 @@ function PrintPagina() {
         };
       })
       .filter((g) => g.aantal > 0);
-  }, [streets, customers, maand, ronde]);
+  }, [streets, customers, maand, ronde, opDeDag]);
 
   const groepen: Groep[] = useMemo(() => {
     if (!sleepVolgorde) return zichtbaar;
@@ -763,16 +800,23 @@ function PrintPagina() {
         <div className="mx-auto max-w-[1600px] px-5 py-4">
           <div className="flex flex-wrap items-center gap-3">
             <Button size="sm" variant="ghost" asChild>
-              <Link to="/" search={{ wijk }}>
-                <ArrowLeft className="size-4" /> Terug
-              </Link>
+              {dag ? (
+                <Link to="/dag" search={{ datum: dag }}>
+                  <ArrowLeft className="size-4" /> Terug
+                </Link>
+              ) : (
+                <Link to="/" search={{ wijk }}>
+                  <ArrowLeft className="size-4" /> Terug
+                </Link>
+              )}
             </Button>
             <div className="mr-auto min-w-0">
               <h1 className="truncate text-lg font-semibold leading-tight text-foreground">
                 Printlijst
               </h1>
               <p className="text-xs text-muted-foreground">
-                {actieveWijk ? actieveWijk.name : "Alle wijken"} · {groepen.length} straten
+                {dag ? `Dag ${toonDatum(dag)}` : (actieveWijk?.name ?? "Alle wijken")} ·{" "}
+                {groepen.length} straten
               </p>
             </div>
             <Button
@@ -788,57 +832,77 @@ function PrintPagina() {
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <div className="inline-flex rounded-lg border border-border bg-card p-0.5 shadow-card">
-              {/* De maand die je loopt staat vooraan: dat is de lijst die je
+            {/* Print je een dag, dan bepaalt die dag wie er meegaat en zou een
+                maandknop niets doen. In plaats daarvan één chip, met een weg
+                terug naar de gewone maandlijst. */}
+            {dag ? (
+              <span className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium shadow-card">
+                <CalendarDays className="size-4 text-muted-foreground" />
+                <span className="capitalize">{toonDatum(dag)}</span>
+                <Link
+                  to="/printen"
+                  search={{ wijk, maand, prijzen, liggend, vouwen }}
+                  title="Toch de hele maand printen"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X className="size-3.5" />
+                </Link>
+              </span>
+            ) : (
+              <div className="inline-flex rounded-lg border border-border bg-card p-0.5 shadow-card">
+                {/* De maand die je loopt staat vooraan: dat is de lijst die je
                   meeneemt. Even en oneven blijven eronder staan, voor wie de
                   hele helft in één keer wil zien. */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
-                      isKalendermaand(maand)
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
+                        isKalendermaand(maand)
+                          ? "bg-brand text-brand-foreground shadow-card"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {isKalendermaand(maand)
+                        ? `${toonMaand(maand)} ${maand.slice(0, 4)}`
+                        : "Maand"}
+                      <ChevronDown className="size-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="max-h-72 w-48 overflow-y-auto">
+                    {komendeMaanden().map((m, i) => (
+                      <Fragment key={m}>
+                        {i > 0 && m.endsWith("-01") && <DropdownMenuSeparator />}
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            void navigate({ to: "/printen", search: { ...zoek, maand: m } })
+                          }
+                        >
+                          <span className="capitalize">{toonMaand(m)}</span>
+                          <span className="ml-auto text-xs text-muted-foreground">
+                            {m.slice(0, 4)}
+                          </span>
+                        </DropdownMenuItem>
+                      </Fragment>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {(["alles", "even", "oneven"] as const).map((f) => (
+                  <Link
+                    key={f}
+                    to="/printen"
+                    search={{ ...zoek, maand: f }}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      maand === f
                         ? "bg-brand text-brand-foreground shadow-card"
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {isKalendermaand(maand) ? `${toonMaand(maand)} ${maand.slice(0, 4)}` : "Maand"}
-                    <ChevronDown className="size-3.5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="max-h-72 w-48 overflow-y-auto">
-                  {komendeMaanden().map((m, i) => (
-                    <Fragment key={m}>
-                      {i > 0 && m.endsWith("-01") && <DropdownMenuSeparator />}
-                      <DropdownMenuItem
-                        onSelect={() =>
-                          void navigate({ to: "/printen", search: { ...zoek, maand: m } })
-                        }
-                      >
-                        <span className="capitalize">{toonMaand(m)}</span>
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {m.slice(0, 4)}
-                        </span>
-                      </DropdownMenuItem>
-                    </Fragment>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              {(["alles", "even", "oneven"] as const).map((f) => (
-                <Link
-                  key={f}
-                  to="/printen"
-                  search={{ ...zoek, maand: f }}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    maand === f
-                      ? "bg-brand text-brand-foreground shadow-card"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {f === "alles" ? "Alle klanten" : f === "even" ? "Even maand" : "Oneven maand"}
-                </Link>
-              ))}
-            </div>
+                    {f === "alles" ? "Alle klanten" : f === "even" ? "Even maand" : "Oneven maand"}
+                  </Link>
+                ))}
+              </div>
+            )}
 
             <div className="flex items-center gap-2">
               <Switch
@@ -907,12 +971,20 @@ function PrintPagina() {
                 className="mb-1 flex items-baseline justify-between border-b-2 border-foreground pb-[1px]"
               >
                 <h1 className="text-[13px] font-bold uppercase tracking-wide">
-                  Waslijst {actieveWijk ? `${actieveWijk.name} ` : ""}—{" "}
-                  {maand === "alles"
-                    ? "alle klanten"
-                    : isKalendermaand(maand)
-                      ? `${toonMaand(maand)} ${maand.slice(0, 4)}`
-                      : `${maand} maand`}
+                  {/* Een daglijst noemt de dag; die kan over meerdere wijken
+                      lopen, dus de wijknaam zou dan misleiden. */}
+                  {dag ? (
+                    <>Waslijst — {toonDatum(dag)}</>
+                  ) : (
+                    <>
+                      Waslijst {actieveWijk ? `${actieveWijk.name} ` : ""}—{" "}
+                      {maand === "alles"
+                        ? "alle klanten"
+                        : isKalendermaand(maand)
+                          ? `${toonMaand(maand)} ${maand.slice(0, 4)}`
+                          : `${maand} maand`}
+                    </>
+                  )}
                 </h1>
 
                 {prijzen && (

@@ -20,6 +20,7 @@ import {
   Droplets,
   Eraser,
   Euro,
+  ListChecks,
   Milestone as Route2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -592,6 +593,11 @@ function Planning() {
                       <CalendarCheck className="size-4" /> Deze dag bekijken
                     </ContextMenuItem>
                     <ContextMenuItem
+                      onSelect={() => void navigate({ to: "/dag", search: { datum: k } })}
+                    >
+                      <ListChecks className="size-4" /> Adressen van deze dag
+                    </ContextMenuItem>
+                    <ContextMenuItem
                       onSelect={() => void navigate({ to: "/", search: { dag: k } })}
                     >
                       <Euro className="size-4" /> Aanvinken in de wijken
@@ -663,7 +669,14 @@ function Planning() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
+            {/* De dag zelf: welke huisnummers je langsgaat, en de printlijst
+                van precies dat deel van de wijk. */}
             <Button size="sm" className="rounded-full" asChild>
+              <Link to="/dag" search={{ datum: gekozenDag }}>
+                <ListChecks className="size-4" /> Naar deze dag
+              </Link>
+            </Button>
+            <Button size="sm" variant="outline" className="rounded-full" asChild>
               <Link to="/" search={{ dag: gekozenDag }}>
                 <Euro className="size-4" /> Aanvinken in de wijken
               </Link>
