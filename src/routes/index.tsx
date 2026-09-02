@@ -29,6 +29,7 @@ import {
   Pencil,
   Trash2,
   Search,
+  Square,
   GripVertical,
   ArrowUpNarrowWide,
   ArrowDownNarrowWide,
@@ -39,6 +40,9 @@ import {
   Euro,
   Milestone as Route2,
   CalendarCheck,
+  CalendarPlus,
+  Check,
+  CheckSquare,
   ChevronDown,
   ChevronRight,
   ChevronsDownUp,
@@ -48,6 +52,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -173,8 +178,16 @@ function Index() {
   const [zoek, setZoek] = useState("");
   const [prijzenTonen, setPrijzenTonen] = useState(true);
   const [selectie, setSelectie] = useState<string[]>([]);
-  /** De dag waar je nu aan plant; `null` betekent dat de planmodus uitstaat. */
-  const [planDatum, setPlanDatum] = useState<string | null>(null);
+  /** Staat de selecteermodus aan? Dan vink je adressen aan zonder dat er al
+   *  iets vastligt; met "Inplannen voor" zet je ze in één keer op een dag. */
+  const [selecteren, setSelecteren] = useState(false);
+  /** Wat je nu aangevinkt hebt. Los van `selectie`, dat over het slepen en
+   *  herschikken van regels gaat. */
+  const [keuze, setKeuze] = useState<Set<string>>(new Set());
+  /** Kom je van de kalender, dan bewerk je een bestaande dag: dan hoort
+   *  uitvinken dat adres er ook echt af te halen. Anders is dit leeg en voeg
+   *  je alleen maar toe. */
+  const [bewerktDag, setBewerktDag] = useState<string | null>(null);
   const [ingeklapt, setIngeklapt] = useState<Set<string>>(new Set());
   const [sleep, setSleep] = useState<string | null>(null);
   const [klantDialog, setKlantDialog] = useState<{
@@ -291,33 +304,54 @@ function Index() {
   const totaal = groepen.reduce((sum, g) => sum + g.aantal, 0);
   const omzet = groepen.reduce((sum, g) => sum + g.totaal, 0);
 
-  // --- Dagplanning -------------------------------------------------------
-  // Wat er 's ochtends aanstaat is de planning, wat er 's avonds aanstaat is
-  // wat er gedaan is. Zie src/lib/wasdag.ts.
+  // --- Selecteren en inplannen -------------------------------------------
+  // Je vinkt eerst aan wát je gaat doen, en zegt daarna pas wannéér. Wat er
+  // op een dag staat is de planning; is die dag geweest, dan is het wat er
+  // gedaan is. Zie src/lib/wasdag.ts.
   const wasdagQuery = useQuery({
-    queryKey: ["wasdag", planDatum],
-    queryFn: () => fetchWasdag(planDatum!),
-    enabled: planDatum !== null,
+    queryKey: ["wasdag", bewerktDag],
+    queryFn: () => fetchWasdag(bewerktDag!),
+    enabled: bewerktDag !== null,
   });
   const dagRegels = useMemo(() => wasdagQuery.data ?? [], [wasdagQuery.data]);
-  const opDeDag = useMemo(
-    () => new Set(dagRegels.map((r) => r.customer_id).filter(Boolean) as string[]),
-    [dagRegels],
-  );
-  // Het bedrag van de hele dag, dus ook straten uit andere wijken: het gaat
-  // om wat de dag opbrengt, niet om deze ene wijk.
-  const dagBedrag = dagRegels.reduce((sum, r) => sum + Number(r.prijs), 0);
-  const dagKlaar = planDatum === null || wasdagQuery.isSuccess;
+
+  // Bewerk je een bestaande dag, dan staat die eerst aangevinkt. Eén keer,
+  // bij het binnenkomen: daarna is de selectie van jou.
+  const gevuldVoor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!bewerktDag || !wasdagQuery.isSuccess) return;
+    if (gevuldVoor.current === bewerktDag) return;
+    gevuldVoor.current = bewerktDag;
+    setKeuze(new Set(dagRegels.map((r) => r.customer_id).filter(Boolean) as string[]));
+  }, [bewerktDag, wasdagQuery.isSuccess, dagRegels]);
+
+  /** Wat je aangevinkt hebt kost bij elkaar dit; daar stuur je op als je een
+   *  dag samenstelt. Over alle wijken heen, want je kunt van wijk wisselen. */
+  const keuzeBedrag = useMemo(() => {
+    const perId = new Map(customers.map((c) => [c.id, c]));
+    let som = 0;
+    for (const id of keuze) {
+      const c = perId.get(id);
+      if (c) som += prijsVoorMaand(c, ronde);
+    }
+    return som;
+  }, [keuze, customers, ronde]);
+
+  // Zolang een bestaande dag nog binnenkomt weten we niet wat er al op staat;
+  // de vinkjes staan dan uit, anders vink je tegen een leeg antwoord aan.
+  const dagKlaar = bewerktDag === null || wasdagQuery.isSuccess;
 
   // Wat er deze maand al op een ándere dag staat. Plan je morgen, dan zie je
   // zo welke adressen vandaag al gedaan zijn — je wil ze niet twee keer in
   // dezelfde maand. Verder dan de maand van de dag die je plant kijken we
   // nooit, dus op de eerste van de maand staat de teller vanzelf weer op nul.
-  const maand = planDatum ? maandGrenzen(planDatum) : null;
+  // Zonder gekozen dag kijken we naar de maand die je bekijkt; bewerk je een
+  // bestaande dag, dan naar die van die dag.
+  const maand = maandGrenzen(bewerktDag ?? `${ronde}-01`);
   const maandQuery = useQuery({
-    queryKey: ["wasdagen", maand?.vanaf, maand?.tot],
-    queryFn: () => fetchWasdagen(maand!.vanaf, maand!.tot),
-    enabled: maand !== null,
+    queryKey: ["wasdagen", maand.vanaf, maand.tot],
+    queryFn: () => fetchWasdagen(maand.vanaf, maand.tot),
+    enabled: selecteren,
   });
   const nu = vandaag();
   // Twee losse verzamelingen, want ze betekenen iets anders: wat achter je
@@ -326,7 +360,7 @@ function Index() {
     const gewassen = new Set<string>();
     const gepland = new Set<string>();
     for (const r of maandQuery.data ?? []) {
-      if (r.datum === planDatum || !r.customer_id) continue;
+      if (r.datum === bewerktDag || !r.customer_id) continue;
       if (r.datum <= nu) gewassen.add(r.customer_id);
       else gepland.add(r.customer_id);
     }
@@ -334,12 +368,18 @@ function Index() {
     // verderop nog een dag voor openstaat.
     for (const id of gewassen) gepland.delete(id);
     return { eerderGewassen: gewassen, elderGepland: gepland };
-  }, [maandQuery.data, planDatum, nu]);
+  }, [maandQuery.data, bewerktDag, nu]);
 
-  function planmodus(aan: boolean) {
-    setPlanDatum(aan ? vandaag() : null);
-    // Bij het verlaten alles weer open: dan ga je weer regels bijwerken.
-    if (!aan) setIngeklapt(new Set());
+  function selecteermodus(aan: boolean) {
+    setSelecteren(aan);
+    if (!aan) {
+      // Bij het verlaten alles weer open en de selectie leeg: dan ga je weer
+      // regels bijwerken in plaats van een dag samenstellen.
+      setIngeklapt(new Set());
+      setKeuze(new Set());
+      setBewerktDag(null);
+      gevuldVoor.current = null;
+    }
     try {
       if (aan) localStorage.setItem(PLANMODUS_OPSLAG, "ja");
       else localStorage.removeItem(PLANMODUS_OPSLAG);
@@ -349,21 +389,22 @@ function Index() {
   }
 
   useEffect(() => {
-    // Kom je van de kalender, dan bepaalt de URL de dag. Anders val je terug
-    // op de onthouden modus, en die begint altijd bij vandaag.
+    // Kom je van de kalender, dan bewerk je die dag en staat wat erop staat
+    // alvast aangevinkt. Anders val je terug op de onthouden modus.
     if (dag) {
-      setPlanDatum(dag);
+      setSelecteren(true);
+      setBewerktDag(dag);
       try {
         localStorage.setItem(PLANMODUS_OPSLAG, "ja");
       } catch {
-        /* zie planmodus() */
+        /* zie selecteermodus() */
       }
       return;
     }
     try {
-      if (localStorage.getItem(PLANMODUS_OPSLAG) === "ja") setPlanDatum(vandaag());
+      if (localStorage.getItem(PLANMODUS_OPSLAG) === "ja") setSelecteren(true);
     } catch {
-      /* zie planmodus() */
+      /* zie selecteermodus() */
     }
   }, [dag]);
 
@@ -373,14 +414,14 @@ function Index() {
   // dan zou het openklappen dat je zelf deed telkens ongedaan gemaakt worden.
   const geklaptVoor = useRef<string | null>(null);
   useEffect(() => {
-    if (planDatum === null) {
+    if (!selecteren) {
       geklaptVoor.current = null;
       return;
     }
     if (groepen.length === 0 || geklaptVoor.current === actieveWijk) return;
     geklaptVoor.current = actieveWijk;
     setIngeklapt(new Set(groepen.map((g) => g.street.id)));
-  }, [planDatum, actieveWijk, groepen]);
+  }, [selecteren, actieveWijk, groepen]);
 
   const allesIngeklapt = groepen.length > 0 && groepen.every((g) => ingeklapt.has(g.street.id));
 
@@ -396,98 +437,119 @@ function Index() {
     });
   }
 
-  type DagWijziging = { toegevoegd: DagRegel[]; weggehaald: DagRegel[] };
-  type DagRegel = { customer_id: string; prijs: number };
-
   /**
-   * Zet adressen op de dag of haalt ze eraf, met één optimistische stap en
-   * daarna de opslag. `label` is leeg voor losse regels: die zet je met
-   * hetzelfde vinkje net zo snel terug, en ze zouden de ongedaan-knop
-   * verstoppen voor de grotere ingrepen. Tijdens het slepen blijft het label
-   * ook leeg; dan maakt `rondVerfAf` er aan het eind één stap van.
-   *
-   * Geeft terug wat er werkelijk veranderd is, zodat de aanroeper dat kan
-   * verzamelen.
+   * Zet adressen in of uit de selectie. Puur lokaal: er gaat pas iets naar de
+   * database als je op "Inplannen voor" klikt. Dat is het hele punt van de
+   * selecteermodus — je kunt vrij aanvinken zonder dat er een dag vastligt.
    */
-  function pasDagAan(erbij: Customer[], eraf: string[], label?: string): DagWijziging {
-    const niets: DagWijziging = { toegevoegd: [], weggehaald: [] };
-    // Nog niet opgehaald? Dan weten we niet wat er al op de dag staat, en zou
-    // de optimistische schrijfactie hieronder het antwoord dat onderweg is
-    // overschrijven. De vinkjes staan in dat venster ook uit.
-    if (!planDatum || !wasdagQuery.isSuccess) return niets;
-    const datum = planDatum;
-    const bestaand = qc.getQueryData<WasdagRegel[]>(["wasdag", datum]) ?? [];
-    const alOpDeDag = new Set(bestaand.map((r) => r.customer_id));
-    const toevoegen = erbij
-      .filter((c) => !alOpDeDag.has(c.id))
-      .map((c) => ({ customer_id: c.id, prijs: prijsVoorMaand(c, ronde) }));
-    // Alleen wat er echt af gaat, met de prijs zoals die op de dag stond —
-    // die kan afwijken van de huidige prijs van het adres.
-    const weghalen = bestaand
-      .filter((r) => r.customer_id && eraf.includes(r.customer_id))
-      .map((r) => ({ customer_id: r.customer_id!, prijs: Number(r.prijs) }));
-    if (toevoegen.length === 0 && weghalen.length === 0) return niets;
-
-    const wegIds = new Set<string | null>(weghalen.map((r) => r.customer_id));
-    const nieuweIds = new Set(toevoegen.map((r) => r.customer_id));
-    // Bijwerken vanaf wat er op dát moment staat, niet vanaf de momentopname
-    // hierboven: tijdens een sleepstreek volgen de stappen elkaar sneller op
-    // dan react-query kan bijhouden.
-    qc.setQueryData<WasdagRegel[]>(["wasdag", datum], (oud) => [
-      ...(oud ?? bestaand).filter(
-        (r) => !wegIds.has(r.customer_id) && !nieuweIds.has(r.customer_id ?? ""),
-      ),
-      ...toevoegen,
-    ]);
-
-    if (label) draaiTerug(label, { toegevoegd: toevoegen, weggehaald: weghalen });
-
-    void Promise.all([
-      voegToeAanWasdag(datum, toevoegen),
-      haalUitWasdag(
-        datum,
-        weghalen.map((r) => r.customer_id),
-      ),
-    ])
-      .catch(() => toast.error("Dagplanning opslaan mislukt."))
-      .finally(() => {
-        qc.invalidateQueries({ queryKey: ["wasdag", datum] });
-        qc.invalidateQueries({ queryKey: ["wasdagen"] });
-      });
-
-    return { toegevoegd: toevoegen, weggehaald: weghalen };
+  function pasKeuzeAan(erbij: string[], eraf: string[]) {
+    if (!dagKlaar) return;
+    setKeuze((was) => {
+      const nu = new Set(was);
+      for (const id of erbij) nu.add(id);
+      for (const id of eraf) nu.delete(id);
+      return nu;
+    });
   }
 
-  /** Zet één ongedaan-stap klaar voor een wijziging aan de dag. */
-  function draaiTerug(label: string, w: DagWijziging) {
-    if (!planDatum) return;
-    const datum = planDatum;
-    if (w.toegevoegd.length === 0 && w.weggehaald.length === 0) return;
+  /**
+   * Zet de selectie op een dag. Bewerk je een bestaande dag, dan gaat wat je
+   * uitvinkte er ook echt af; kwam je hier zonder dag, dan voeg je alleen toe
+   * — anders zou inplannen op donderdag je dinsdag stilletjes leegvegen.
+   */
+  async function planIn(datum: string) {
+    const perId = new Map(customers.map((c) => [c.id, c]));
+    const bestaand = datum === bewerktDag ? dagRegels : await fetchWasdag(datum);
+    const alErop = new Set(bestaand.map((r) => r.customer_id).filter(Boolean) as string[]);
+
+    const toevoegen = [...keuze]
+      .filter((id) => !alErop.has(id))
+      .map((id) => ({ customer_id: id, prijs: prijsVoorMaand(perId.get(id)!, ronde) }))
+      .filter((r) => perId.has(r.customer_id));
+
+    // Alleen bij het bewerken van een dag: wat je uitvinkte hoort eraf.
+    const weghalen =
+      datum === bewerktDag
+        ? bestaand
+            .filter((r) => r.customer_id && !keuze.has(r.customer_id))
+            .map((r) => ({ customer_id: r.customer_id!, prijs: Number(r.prijs) }))
+        : [];
+
+    if (toevoegen.length === 0 && weghalen.length === 0) {
+      toast(`${toonDatum(datum)} stond al zo ingepland.`);
+      return;
+    }
+
+    try {
+      await Promise.all([
+        voegToeAanWasdag(datum, toevoegen),
+        haalUitWasdag(
+          datum,
+          weghalen.map((r) => r.customer_id),
+        ),
+      ]);
+    } catch {
+      toast.error("Inplannen mislukt.");
+      return;
+    }
+
     pushUndo({
-      label,
+      label: `Inplannen ${toonDatum(datum)}`,
       undo: async () => {
         await Promise.all([
           haalUitWasdag(
             datum,
-            w.toegevoegd.map((r) => r.customer_id),
+            toevoegen.map((r) => r.customer_id),
           ),
-          voegToeAanWasdag(datum, w.weggehaald),
+          voegToeAanWasdag(datum, weghalen),
         ]);
-        qc.invalidateQueries({ queryKey: ["wasdag", datum] });
+        qc.invalidateQueries({ queryKey: ["wasdag"] });
         qc.invalidateQueries({ queryKey: ["wasdagen"] });
       },
     });
+
+    qc.invalidateQueries({ queryKey: ["wasdag"] });
+    qc.invalidateQueries({ queryKey: ["wasdagen"] });
+    // Je bewerkt vanaf nu díe dag: vink je daarna nog iets uit, dan gaat het
+    // er ook af in plaats van dat er niets gebeurt.
+    setBewerktDag(datum);
+    gevuldVoor.current = datum;
+
+    const erbij = toevoegen.length;
+    const eraf = weghalen.length;
+    toast.success(
+      eraf === 0
+        ? `${erbij} ${erbij === 1 ? "adres" : "adressen"} ingepland op ${toonDatum(datum)}`
+        : `${toonDatum(datum)} bijgewerkt: ${erbij} erbij, ${eraf} eraf`,
+      {
+        duration: 10000,
+        action: {
+          label: "Ongedaan maken",
+          onClick: () => {
+            void undoLaatste().then((label) => {
+              if (label) toast.success("Teruggedraaid: " + label);
+            });
+          },
+        },
+      },
+    );
   }
 
   function zetStraatOpDag(g: (typeof groepen)[number], aan: boolean) {
-    const zichtbaar = [...g.even, ...g.oneven];
-    if (aan) pasDagAan(zichtbaar, [], `${g.street.name} op de dag`);
-    else
-      pasDagAan(
-        [],
-        zichtbaar.map((c) => c.id),
-        `${g.street.name} van de dag af`,
-      );
+    const ids = [...g.even, ...g.oneven].map((c) => c.id);
+    pasKeuzeAan(aan ? ids : [], aan ? [] : ids);
+  }
+
+  /** Alles in beeld aan- of uitvinken. Kijkt naar de wijk die je bekijkt en
+   *  naar je zoekfilter: wat je niet ziet, vink je ook niet aan. */
+  const alleZichtbare = useMemo(
+    () => groepen.flatMap((g) => [...g.even, ...g.oneven].map((c) => c.id)),
+    [groepen],
+  );
+  const allesGekozen = alleZichtbare.length > 0 && alleZichtbare.every((id) => keuze.has(id));
+
+  function wisselAlles() {
+    pasKeuzeAan(allesGekozen ? [] : alleZichtbare, allesGekozen ? alleZichtbare : []);
   }
 
   // --- Slepen om te selecteren -------------------------------------------
@@ -500,20 +562,11 @@ function Index() {
     laatste: string | null;
     /** Waar de vorige stap eindigde, om de lijn ertussen af te lopen. */
     vorig: Punt | null;
-    toegevoegd: DagRegel[];
-    weggehaald: DagRegel[];
   };
   const verf = useRef<Verf | null>(null);
   const [verfBezig, setVerfBezig] = useState(false);
   /** Een streek eindigt met een klik; die mag niet nóg eens omschakelen. */
   const negeerKlik = useRef(false);
-
-  function tekenBij(w: DagWijziging) {
-    const v = verf.current;
-    if (!v) return;
-    v.toegevoegd.push(...w.toegevoegd);
-    v.weggehaald.push(...w.weggehaald);
-  }
 
   /** Past de streek toe op wat er onder de muis of vinger ligt. */
   function verfOpPunt(x: number, y: number) {
@@ -527,23 +580,12 @@ function Index() {
     v.laatste = id;
     negeerKlik.current = true;
 
-    if (straatEl) {
-      const g = groepen.find((x) => x.street.id === id);
-      if (!g) return;
-      const zichtbaar = [...g.even, ...g.oneven];
-      tekenBij(
-        v.aan
-          ? pasDagAan(zichtbaar, [])
-          : pasDagAan(
-              [],
-              zichtbaar.map((c) => c.id),
-            ),
-      );
-      return;
-    }
-    const c = customers.find((x) => x.id === id);
-    if (!c) return;
-    tekenBij(v.aan ? pasDagAan([c], []) : pasDagAan([], [c.id]));
+    const ids = straatEl
+      ? (groepen.find((x) => x.street.id === id)?.even ?? [])
+          .concat(groepen.find((x) => x.street.id === id)?.oneven ?? [])
+          .map((c) => c.id)
+      : [id];
+    pasKeuzeAan(v.aan ? ids : [], v.aan ? [] : ids);
   }
 
   /**
@@ -552,7 +594,7 @@ function Index() {
    * doorsleept naar een volgende straat.
    */
   function startVerf(aan: boolean, x: number, y: number) {
-    verf.current = { aan, laatste: null, vorig: { x, y }, toegevoegd: [], weggehaald: [] };
+    verf.current = { aan, laatste: null, vorig: { x, y } };
     negeerKlik.current = false;
     setVerfBezig(true);
     verfOpPunt(x, y);
@@ -587,19 +629,6 @@ function Index() {
     setTimeout(() => {
       negeerKlik.current = false;
     }, 0);
-    if (!v) return;
-    const raakte = new Set([
-      ...v.toegevoegd.map((r) => r.customer_id),
-      ...v.weggehaald.map((r) => r.customer_id),
-    ]).size;
-    if (raakte === 0) return;
-    draaiTerug(
-      `${raakte} ${raakte === 1 ? "adres" : "adressen"} ${v.aan ? "op de dag" : "van de dag af"}`,
-      {
-        toegevoegd: v.toegevoegd,
-        weggehaald: v.weggehaald,
-      },
-    );
   }
 
   // De streek loopt door buiten het vakje waar hij begon, dus hangen deze
@@ -629,33 +658,12 @@ function Index() {
       window.removeEventListener("pointercancel", stop);
       if (frame) cancelAnimationFrame(frame);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verfBezig]);
 
-  function maakDagLeeg() {
-    if (!planDatum) return;
-    const datum = planDatum;
-    const terug = (qc.getQueryData<WasdagRegel[]>(["wasdag", datum]) ?? [])
-      .filter((r) => r.customer_id)
-      .map((r) => ({ customer_id: r.customer_id!, prijs: Number(r.prijs) }));
-    if (terug.length === 0) return;
-    qc.setQueryData<WasdagRegel[]>(["wasdag", datum], []);
-    pushUndo({
-      label: "Dag leeggemaakt",
-      undo: async () => {
-        await voegToeAanWasdag(datum, terug);
-        qc.invalidateQueries({ queryKey: ["wasdag", datum] });
-        qc.invalidateQueries({ queryKey: ["wasdagen"] });
-      },
-    });
-    // Op datum, niet op een lijst met id's: dat blijft ook bij een hele wijk
-    // één kort verzoek.
-    void maakWasdagLeeg(datum)
-      .catch(() => toast.error("Leegmaken mislukt."))
-      .finally(() => {
-        qc.invalidateQueries({ queryKey: ["wasdag", datum] });
-        qc.invalidateQueries({ queryKey: ["wasdagen"] });
-      });
+  /** De selectie leegvegen. Raakt de database niet: wat er al ingepland
+   *  staat blijft staan, dat maak je leeg op de planningpagina. */
+  function wisKeuze() {
+    setKeuze(new Set());
   }
 
   async function patchKlant(c: Customer, patch: Partial<Customer>) {
@@ -840,7 +848,7 @@ function Index() {
   const opAddQuickNote = useStabiel(nieuweSnelkeuze);
   const opVerfStart = useStabiel(startVerf);
   const opKlantOpDag = useStabiel((c: Customer, aan: boolean) => {
-    pasDagAan(aan ? [c] : [], aan ? [] : [c.id]);
+    pasKeuzeAan(aan ? [c.id] : [], aan ? [] : [c.id]);
   });
   const opNieuweRegel = useStabiel(nieuweRegel);
 
@@ -977,13 +985,37 @@ function Index() {
           />
           <Button
             size="sm"
-            variant={planDatum ? "default" : "outline"}
+            variant={selecteren ? "default" : "outline"}
             className="rounded-full"
-            onClick={() => planmodus(!planDatum)}
-            title="Aanvinken wat er op een dag gewassen wordt"
+            onClick={() => selecteermodus(!selecteren)}
+            title="Adressen aanvinken om daarna in te plannen"
           >
-            <CalendarCheck className="size-4" /> Dagplanning
+            <CheckSquare className="size-4" /> Selecteren
           </Button>
+          {selecteren && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                onClick={wisselAlles}
+                disabled={alleZichtbare.length === 0}
+                title={
+                  allesGekozen
+                    ? "Alles in beeld uitvinken"
+                    : `Alle ${alleZichtbare.length} adressen in beeld aanvinken`
+                }
+              >
+                {allesGekozen ? <Square className="size-4" /> : <CheckSquare className="size-4" />}
+                {allesGekozen ? "Niets" : "Alles"}
+              </Button>
+              <InplannenKnop
+                aantal={keuze.size}
+                bewerktDag={bewerktDag}
+                onKies={(d) => void planIn(d)}
+              />
+            </>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -1130,31 +1162,35 @@ function Index() {
             {groepen.length} straten · {totaal} klanten
           </span>
 
-          {planDatum && (
+          {selecteren && (
             // Blijft in beeld terwijl je naar beneden vinkt: het bedrag is
             // waar je op stuurt bij het samenstellen van een dag.
             <div className="flex w-full flex-wrap items-center gap-2 border-t border-border/70 pt-2">
               <CalendarCheck className="size-4 text-brand-ink" />
-              <Link
-                to="/planning"
-                search={{ dag: planDatum }}
-                className="text-[13px] font-medium underline-offset-2 hover:underline"
-                title="Andere dag kiezen op de kalender"
-              >
-                Dagplanning {toonDatum(planDatum)}
-              </Link>
+              {bewerktDag ? (
+                <Link
+                  to="/planning"
+                  search={{ dag: bewerktDag }}
+                  className="text-[13px] font-medium underline-offset-2 hover:underline"
+                  title="Deze dag op de kalender bekijken"
+                >
+                  Je bewerkt {toonDatum(bewerktDag)}
+                </Link>
+              ) : (
+                <span className="text-[13px] font-medium">Geselecteerd</span>
+              )}
               <span className="font-display text-[19px] font-semibold tabular-nums tracking-[-0.02em]">
-                {formatPrice(dagBedrag)}
+                {formatPrice(keuzeBedrag)}
               </span>
               <span className="text-[12.5px] text-muted-foreground">
-                {opDeDag.size} {opDeDag.size === 1 ? "adres" : "adressen"}
+                {keuze.size} {keuze.size === 1 ? "adres" : "adressen"}
               </span>
-              {opDeDag.size > 0 && (
+              {keuze.size > 0 && (
                 <button
                   className="text-[12.5px] text-muted-foreground underline"
-                  onClick={maakDagLeeg}
+                  onClick={wisKeuze}
                 >
-                  leegmaken
+                  selectie wissen
                 </button>
               )}
 
@@ -1263,9 +1299,9 @@ function Index() {
                   onToggleSort={() => void wisselSort(g.street)}
                   ingeklapt={ingeklapt.has(g.street.id)}
                   onKlap={() => klapStraat(g.street.id)}
-                  planmodus={planDatum !== null}
+                  planmodus={selecteren}
                   dagKlaar={dagKlaar}
-                  opDeDag={opDeDag}
+                  opDeDag={keuze}
                   eerderGewassen={eerderGewassen}
                   elderGepland={elderGepland}
                   onStraatOpDag={(aan) => zetStraatOpDag(g, aan)}
@@ -1831,6 +1867,78 @@ const KlantRij = memo(function KlantRij({
     </KlantMenu>
   );
 });
+
+/** De eerstvolgende dagen om uit te kiezen, met de weekdag erbij. Zondagen
+ *  laten we staan — die werk je zelden, maar het is niet aan ons om dat te
+ *  verbieden. */
+function komendeDagen(aantal = 14): string[] {
+  const uit: string[] = [];
+  const nu = new Date();
+  for (let i = 0; i < aantal; i++) {
+    const d = new Date(nu.getFullYear(), nu.getMonth(), nu.getDate() + i);
+    uit.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+    );
+  }
+  return uit;
+}
+
+/** "ma 8 sep" — kort genoeg voor een menuregel, met de weekdag voorop omdat
+ *  je daarop plant. */
+function toonKorteDag(datum: string): string {
+  const d = new Date(`${datum}T12:00:00`);
+  return d.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" });
+}
+
+/**
+ * "Inplannen voor…" — zet wat je aangevinkt hebt op een dag. Staat alleen in
+ * de selecteermodus, want zonder selectie valt er niets in te plannen.
+ */
+function InplannenKnop({
+  aantal,
+  bewerktDag,
+  onKies,
+}: {
+  aantal: number;
+  bewerktDag: string | null;
+  onKies: (datum: string) => void;
+}) {
+  const dagen = komendeDagen();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="sm"
+          className="rounded-full"
+          disabled={aantal === 0}
+          title={aantal === 0 ? "Vink eerst adressen aan" : `${aantal} adressen inplannen`}
+        >
+          <CalendarPlus className="size-4" /> Inplannen voor
+          {aantal > 0 && <span className="tabular-nums opacity-80">({aantal})</span>}
+          <ChevronDown className="size-3.5 opacity-70" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-80 w-52 overflow-y-auto">
+        <DropdownMenuLabel>
+          {aantal} {aantal === 1 ? "adres" : "adressen"} inplannen op
+        </DropdownMenuLabel>
+        {dagen.map((d, i) => (
+          <DropdownMenuItem key={d} onSelect={() => onKies(d)}>
+            {/* Vandaag en morgen bij hun naam, met de datum erachter; verder
+                is de datum zelf het duidelijkst. */}
+            <span className="capitalize">
+              {i < 2 ? (i === 0 ? "vandaag" : "morgen") : toonKorteDag(d)}
+            </span>
+            {i < 2 && (
+              <span className="ml-auto text-xs text-muted-foreground">{toonKorteDag(d)}</span>
+            )}
+            {d === bewerktDag && <Check className={`size-4 ${i < 2 ? "ml-1" : "ml-auto"}`} />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 function NieuweStraat({ onSubmit }: { onSubmit: (naam: string) => void }) {
   const [waarde, setWaarde] = useState("");
