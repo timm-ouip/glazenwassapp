@@ -14,6 +14,7 @@ import {
 import { nl } from "date-fns/locale";
 import {
   CalendarCheck,
+  CalendarPlus,
   ChevronLeft,
   ChevronRight,
   Droplets,
@@ -29,16 +30,32 @@ import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { pushUndo, undoLaatste } from "@/lib/undo";
 import {
+  aanDeBeurt,
   fetchCustomers,
   fetchDistricts,
   fetchStreets,
   formatPrice,
+  prijsVoorMaand,
   wijkKleur,
   wijkVlak,
   type Customer,
+  type District,
 } from "@/lib/klanten";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  fetchWasdag,
   fetchWasdagen,
+  haalUitWasdag,
   maakWasdagLeeg,
   toonDatum,
   vandaag,
@@ -239,6 +256,76 @@ function Planning() {
     void navigate({ to: "/planning", search: { dag: sleutel(d) }, replace: true });
   }
 
+  /**
+   * Zet een hele wijk op een dag: alle adressen die die maand aan de beurt
+   * zijn en er nog niet op staan. Niet de hele wijk klakkeloos — een adres
+   * dat om de drie maanden gaat hoort er in de tussenmaanden niet bij.
+   */
+  async function planWijk(datum: string, wijk: District) {
+    const straten = new Set(
+      (streetsQuery.data ?? []).filter((s) => s.district_id === wijk.id).map((s) => s.id),
+    );
+    const maandVanDag = datum.slice(0, 7);
+    const kandidaten = (customersQuery.data ?? []).filter(
+      (c) => straten.has(c.street_id) && aanDeBeurt(c, maandVanDag),
+    );
+
+    let alErop: Set<string>;
+    try {
+      const bestaand = await fetchWasdag(datum);
+      alErop = new Set(bestaand.map((r) => r.customer_id).filter(Boolean) as string[]);
+    } catch {
+      toast.error("Kon niet ophalen wat er al op die dag staat.");
+      return;
+    }
+
+    const erbij = kandidaten
+      .filter((c) => !alErop.has(c.id))
+      .map((c) => ({ customer_id: c.id, prijs: prijsVoorMaand(c, maandVanDag) }));
+
+    if (erbij.length === 0) {
+      toast(
+        kandidaten.length === 0
+          ? `${wijk.name} is deze maand niet aan de beurt.`
+          : `${wijk.name} staat al helemaal op ${toonDatum(datum)}.`,
+      );
+      return;
+    }
+
+    try {
+      await voegToeAanWasdag(datum, erbij);
+    } catch {
+      toast.error("Inplannen mislukt.");
+      return;
+    }
+
+    pushUndo({
+      label: `${wijk.name} op ${toonDatum(datum)}`,
+      undo: async () => {
+        await haalUitWasdag(
+          datum,
+          erbij.map((r) => r.customer_id),
+        );
+        qc.invalidateQueries({ queryKey: ["wasdagen"] });
+        qc.invalidateQueries({ queryKey: ["wasdag"] });
+      },
+    });
+    qc.invalidateQueries({ queryKey: ["wasdagen"] });
+    qc.invalidateQueries({ queryKey: ["wasdag"] });
+
+    toast.success(`${wijk.name}: ${erbij.length} adressen op ${toonDatum(datum)}`, {
+      duration: 10000,
+      action: {
+        label: "Ongedaan maken",
+        onClick: () => {
+          void undoLaatste().then((label) => {
+            if (label) toast.success("Teruggedraaid: " + label);
+          });
+        },
+      },
+    });
+  }
+
   async function maakDagLeeg() {
     const ja = await bevestig({
       titel: `${toonDatum(gekozenDag)} leegmaken?`,
@@ -401,77 +488,116 @@ function Planning() {
                         .filter((i): i is number => i !== undefined),
                     );
               return (
-                <button
-                  key={k}
-                  onClick={() => kiesDag(d)}
-                  // Dubbelklikken slaat de tussenstap over en zet je meteen
-                  // in de wijken met die dag aan het aanvinken.
-                  onDoubleClick={() => void navigate({ to: "/", search: { dag: k } })}
-                  title="Klik om te bekijken, dubbelklik om aan te vinken in de wijken"
-                  aria-current={isVandaag ? "date" : undefined}
-                  aria-pressed={isGekozen}
-                  // Het hele vakje krijgt de pastelkleur van de wijk die er
-                  // die dag aan de beurt is; zo zie je een maand aan de
-                  // kleuren, zonder namen te lezen.
-                  style={vlak ? { background: vlak } : undefined}
-                  className={`relative flex min-h-[4.5rem] flex-col border-b border-r border-border p-1.5 text-left transition-colors [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0 sm:min-h-[6.25rem] ${
-                    buitenMaand ? "bg-card-header" : vlak ? "" : "hover:bg-muted/50"
-                  } ${isGekozen ? "outline outline-2 -outline-offset-2 outline-brand" : ""} ${
-                    isGekozen && !vlak ? "bg-brand/10" : ""
-                  }`}
-                >
-                  <span
-                    className={`self-start rounded-md px-1 text-[12px] font-semibold leading-5 tabular-nums ${
-                      isVandaag
-                        ? "bg-brand text-brand-foreground"
-                        : buitenMaand
-                          ? "text-muted-foreground/70"
-                          : "text-foreground"
-                    }`}
-                  >
-                    {format(d, "d")}
-                  </span>
-
-                  {info && (
-                    <>
-                      {/* De wijk staat boven het bedrag: dat is waar je heen
-                          rijdt. Elke wijk heeft zijn eigen kleur, zodat je
-                          een maand in één oogopslag ziet. */}
-                      {info.wijken.length > 0 && (
-                        <span className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] font-medium">
-                          <span
-                            className="size-1.5 shrink-0 rounded-full"
-                            style={{ background: wijkInfo.get(info.wijken[0]!)?.kleur }}
-                          />
-                          <span className="truncate">
-                            {wijkInfo.get(info.wijken[0]!)?.naam ?? "Onbekende wijk"}
-                            {info.wijken.length > 1 && ` +${info.wijken.length - 1}`}
-                          </span>
-                        </span>
-                      )}
+                <ContextMenu key={k}>
+                  <ContextMenuTrigger asChild>
+                    <button
+                      onClick={() => kiesDag(d)}
+                      // Dubbelklikken slaat de tussenstap over en zet je meteen
+                      // in de wijken met die dag aan het aanvinken.
+                      onDoubleClick={() => void navigate({ to: "/", search: { dag: k } })}
+                      title="Klik om te bekijken, dubbelklik om aan te vinken in de wijken"
+                      aria-current={isVandaag ? "date" : undefined}
+                      aria-pressed={isGekozen}
+                      // Het hele vakje krijgt de pastelkleur van de wijk die er
+                      // die dag aan de beurt is; zo zie je een maand aan de
+                      // kleuren, zonder namen te lezen.
+                      style={vlak ? { background: vlak } : undefined}
+                      className={`relative flex min-h-[4.5rem] flex-col border-b border-r border-border p-1.5 text-left transition-colors [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0 sm:min-h-[6.25rem] ${
+                        buitenMaand ? "bg-card-header" : vlak ? "" : "hover:bg-muted/50"
+                      } ${isGekozen ? "outline outline-2 -outline-offset-2 outline-brand" : ""} ${
+                        isGekozen && !vlak ? "bg-brand/10" : ""
+                      }`}
+                    >
                       <span
-                        className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.02em] tabular-nums sm:text-[16px] ${
-                          info.wijken.length > 0 ? "mt-0.5" : "mt-auto"
+                        className={`self-start rounded-md px-1 text-[12px] font-semibold leading-5 tabular-nums ${
+                          isVandaag
+                            ? "bg-brand text-brand-foreground"
+                            : buitenMaand
+                              ? "text-muted-foreground/70"
+                              : "text-foreground"
                         }`}
                       >
-                        {formatPrice(info.bedrag)}
+                        {format(d, "d")}
                       </span>
-                      <span className="mt-1 hidden truncate text-[10.5px] text-muted-foreground sm:block">
-                        {info.straten.size > 0
-                          ? `${info.straten.size} ${info.straten.size === 1 ? "straat" : "straten"} · ${info.aantal}×`
-                          : `${info.aantal}×`}
-                      </span>
-                      <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
-                        <span
-                          className={`block h-full rounded-full ${
-                            isGedaan ? "bg-tint-groen-ink" : "bg-brand"
-                          }`}
-                          style={{ width: `${Math.round((info.bedrag / drukste) * 100)}%` }}
-                        />
-                      </span>
-                    </>
-                  )}
-                </button>
+
+                      {info && (
+                        <>
+                          {/* De wijk staat boven het bedrag: dat is waar je heen
+                          rijdt. Elke wijk heeft zijn eigen kleur, zodat je
+                          een maand in één oogopslag ziet. */}
+                          {info.wijken.length > 0 && (
+                            <span className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] font-medium">
+                              <span
+                                className="size-1.5 shrink-0 rounded-full"
+                                style={{ background: wijkInfo.get(info.wijken[0]!)?.kleur }}
+                              />
+                              <span className="truncate">
+                                {wijkInfo.get(info.wijken[0]!)?.naam ?? "Onbekende wijk"}
+                                {info.wijken.length > 1 && ` +${info.wijken.length - 1}`}
+                              </span>
+                            </span>
+                          )}
+                          <span
+                            className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.02em] tabular-nums sm:text-[16px] ${
+                              info.wijken.length > 0 ? "mt-0.5" : "mt-auto"
+                            }`}
+                          >
+                            {formatPrice(info.bedrag)}
+                          </span>
+                          <span className="mt-1 hidden truncate text-[10.5px] text-muted-foreground sm:block">
+                            {info.straten.size > 0
+                              ? `${info.straten.size} ${info.straten.size === 1 ? "straat" : "straten"} · ${info.aantal}×`
+                              : `${info.aantal}×`}
+                          </span>
+                          <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
+                            <span
+                              className={`block h-full rounded-full ${
+                                isGedaan ? "bg-tint-groen-ink" : "bg-brand"
+                              }`}
+                              style={{ width: `${Math.round((info.bedrag / drukste) * 100)}%` }}
+                            />
+                          </span>
+                        </>
+                      )}
+                    </button>
+                  </ContextMenuTrigger>
+                  {/* Rechtermuisknop op een dag: een hele wijk erop zetten
+                      zonder eerst naar de wijklijst te gaan. De wijken staan
+                      in de volgorde die je in de instellingen hebt gezet. */}
+                  <ContextMenuContent className="w-56">
+                    <ContextMenuLabel className="capitalize">{toonDatum(k)}</ContextMenuLabel>
+                    <ContextMenuSub>
+                      <ContextMenuSubTrigger>
+                        <CalendarPlus className="size-4" /> Hele wijk inplannen
+                      </ContextMenuSubTrigger>
+                      <ContextMenuSubContent className="max-h-72 w-52 overflow-y-auto">
+                        {(districtsQuery.data ?? []).map((w) => (
+                          <ContextMenuItem key={w.id} onSelect={() => void planWijk(k, w)}>
+                            <span
+                              className="size-2 shrink-0 rounded-full"
+                              style={{ background: wijkInfo.get(w.id)?.kleur }}
+                            />
+                            <span className="truncate">{w.name}</span>
+                          </ContextMenuItem>
+                        ))}
+                        {(districtsQuery.data ?? []).length === 0 && (
+                          <ContextMenuLabel className="font-normal text-muted-foreground">
+                            Nog geen wijken
+                          </ContextMenuLabel>
+                        )}
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem onSelect={() => kiesDag(d)}>
+                      <CalendarCheck className="size-4" /> Deze dag bekijken
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onSelect={() => void navigate({ to: "/", search: { dag: k } })}
+                    >
+                      <Euro className="size-4" /> Aanvinken in de wijken
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
               );
             })}
           </div>
