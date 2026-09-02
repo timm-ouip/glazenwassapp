@@ -69,12 +69,10 @@ export async function voegToeAanWasdag(
   regels: { customer_id: string; prijs: number }[],
 ) {
   if (regels.length === 0) return;
-  const { error } = await supabase
-    .from("wasdag_regels")
-    .upsert(
-      regels.map((r) => ({ datum, customer_id: r.customer_id, prijs: r.prijs })),
-      { onConflict: "company_id,datum,customer_id" },
-    );
+  const { error } = await supabase.from("wasdag_regels").upsert(
+    regels.map((r) => ({ datum, customer_id: r.customer_id, prijs: r.prijs })),
+    { onConflict: "company_id,datum,customer_id" },
+  );
   if (error) throw error;
 }
 
