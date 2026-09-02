@@ -16,18 +16,18 @@ import {
 
 const MAANDEN = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
 
-/** Terwijl je typt is een prijs gewoon tekst: "18," moet ook even mogen. */
+/** Terwijl je typt is een bedrag gewoon tekst: "18," moet ook even mogen. */
 interface Regel {
   maanden: string[];
   notitie: string;
-  prijs: string;
+  extra: string;
 }
 
 function naarRegels(werk: Maandwerk[] | undefined): Regel[] {
   return (werk ?? []).map((w) => ({
     maanden: w.maanden,
     notitie: w.notitie,
-    prijs: w.prijs === null ? "" : String(w.prijs).replace(".", ","),
+    extra: w.extra === null ? "" : String(w.extra).replace(".", ","),
   }));
 }
 
@@ -37,21 +37,21 @@ function naarMaandwerk(regels: Regel[]): Maandwerk[] {
       // Zonder maanden slaat een uitzondering nergens op; die valt vanzelf weg.
       .filter((r) => r.maanden.length > 0)
       .map((r) => {
-        const getal = Number(r.prijs.replace(",", ".").replace(/[^\d.]/g, ""));
+        const getal = Number(r.extra.replace(",", ".").replace(/[^\d.]/g, ""));
         return {
           maanden: r.maanden,
           notitie: r.notitie.trim(),
-          prijs: r.prijs.trim() === "" || Number.isNaN(getal) ? null : getal,
+          extra: r.extra.trim() === "" || Number.isNaN(getal) ? null : getal,
         };
       })
   );
 }
 
-/** Voor de tooltip: "serre in mrt/sep — € 45". */
+/** Voor de tooltip: "serre in mrt/sep — € 15 extra". */
 function omschrijf(w: Maandwerk): string {
   const maanden = w.maanden.map((m) => toonMaandKort(`2000-${m}`)).join("/");
   const wat = `${w.notitie.trim() || "andere prijs"} in ${maanden}`;
-  return w.prijs === null ? wat : `${wat} — ${formatPrice(w.prijs)}`;
+  return w.extra === null ? wat : `${wat} — ${formatPrice(w.extra)} extra`;
 }
 
 interface Props {
@@ -90,13 +90,25 @@ export function NotitieCel({
   const maandVelden = Boolean(onChangeMaandwerk);
 
   useEffect(() => setTekst(value), [value]);
-  useEffect(() => setWerk(naarRegels(maandwerk)), [maandwerk]);
 
   const actief = noteTokens(tekst).map((t) => t.toLowerCase());
 
-  /** Enter sluit het scherm; het opslaan gebeurt in onOpenChange. */
+  /** Zelf sluiten gaat buiten Radix om, dus dan slaan we hier zelf op. */
+  function sluit() {
+    bewaarMaandwerk();
+    setOpen(false);
+  }
+
   function sluitBijEnter(e: ReactKeyboardEvent) {
-    if (e.key === "Enter") setOpen(false);
+    if (e.key === "Enter") sluit();
+  }
+
+  function bewaarMaandwerk() {
+    if (!onChangeMaandwerk) return;
+    const volgende = naarMaandwerk(werk);
+    if (JSON.stringify(volgende) !== JSON.stringify(maandwerk ?? [])) {
+      onChangeMaandwerk(volgende);
+    }
   }
 
   function bewaar(next: string) {
@@ -131,13 +143,14 @@ export function NotitieCel({
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (o) return;
-        if (tekst !== value) onChange(tekst);
-        if (!onChangeMaandwerk) return;
-        const volgende = naarMaandwerk(werk);
-        if (JSON.stringify(volgende) !== JSON.stringify(maandwerk ?? [])) {
-          onChangeMaandwerk(volgende);
+        // Bij het opengaan overnemen wat er in de database staat; deed een
+        // useEffect dat, dan wiste elke hervalidatie van de lijst je invoer.
+        if (o) {
+          setWerk(naarRegels(maandwerk));
+          return;
         }
+        if (tekst !== value) onChange(tekst);
+        bewaarMaandwerk();
       }}
     >
       <PopoverTrigger asChild>
@@ -279,14 +292,15 @@ export function NotitieCel({
                     onChange={(e) => pasAan(i, { notitie: e.target.value })}
                     onKeyDown={sluitBijEnter}
                   />
-                  {/* De vaste prijs staat er grijs in: dit is de hele prijs
-                      voor die ronde, niet wat er bij komt. */}
+                  {/* Alleen wat er bij komt: op een factuur hoort het meerwerk
+                      apart te staan van wat het pand normaal kost. */}
                   <Input
-                    value={regel.prijs}
-                    placeholder={prijs === undefined ? "prijs" : formatPrice(prijs)}
+                    value={regel.extra}
+                    placeholder="+ €"
+                    title="Wat dit werk extra kost, bovenop de vaste prijs"
                     inputMode="decimal"
-                    className="h-8 w-20 shrink-0 text-xs"
-                    onChange={(e) => pasAan(i, { prijs: e.target.value })}
+                    className="h-8 w-16 shrink-0 text-xs"
+                    onChange={(e) => pasAan(i, { extra: e.target.value })}
                     onKeyDown={sluitBijEnter}
                   />
                   <Button
@@ -305,7 +319,7 @@ export function NotitieCel({
               size="sm"
               variant="outline"
               className="h-8 w-full text-xs"
-              onClick={() => setWerk([...werk, { maanden: [], notitie: "", prijs: "" }])}
+              onClick={() => setWerk([...werk, { maanden: [], notitie: "", extra: "" }])}
             >
               <Plus className="size-3.5" /> Maanden toevoegen
             </Button>

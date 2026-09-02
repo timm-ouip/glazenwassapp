@@ -66,6 +66,7 @@ import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { NotitieCel } from "@/components/NotitieCel";
 import { KlantMenu } from "@/components/KlantMenu";
 import { Overgeslagen } from "@/components/Overgeslagen";
+import { PrijsCel } from "@/components/PrijsCel";
 import { RitmeKiezer } from "@/components/RitmeKiezer";
 import { WassenVanaf } from "@/components/WassenVanaf";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
@@ -1714,16 +1715,8 @@ function KlantRij({
         </>
       )}
       {prijzenTonen && (
-        <div className={`w-16 shrink-0 ${c.price === 0 ? "text-red-600" : ""}`}>
-          <InlineCel
-            value={formatPrice(c.price)}
-            align="right"
-            inputMode="decimal"
-            placeholder={formatPrice(0)}
-            onCommit={(v) =>
-              onPatch(c, { price: Number(v.replace(",", ".").replace(/[^\d.]/g, "")) || 0 })
-            }
-          />
+        <div className="w-16 shrink-0">
+          <PrijsCel customer={c} ronde={dezeMaand} onPatch={(patch) => onPatch(c, patch)} />
         </div>
       )}
       <RitmeKiezer customer={c} onPatch={(patch) => onPatch(c, patch)} />

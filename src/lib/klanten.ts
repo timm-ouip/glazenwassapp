@@ -108,9 +108,10 @@ export interface QuickNote {
 export interface Maandwerk {
   maanden: string[];
   notitie: string;
-  /** De hele prijs voor die ronde, niet de meerkosten. Leeg (null) betekent
-   *  gewoon de vaste prijs van het adres. */
-  prijs: number | null;
+  /** Wat dit werk kost bovenop de vaste prijs van het adres. Apart van de
+   *  vaste prijs, zodat op een factuur te zien is wat het meerwerk was en
+   *  wat het pand normaal kost. Leeg (null) is geen meerprijs. */
+  extra: number | null;
 }
 
 /** Wat er uit de database komt is losse json; hier maken we er iets van
@@ -129,7 +130,7 @@ export function leesMaandwerk(waarde: unknown): Maandwerk[] {
       {
         maanden,
         notitie: typeof r["notitie"] === "string" ? r["notitie"] : "",
-        prijs: typeof r["prijs"] === "number" ? r["prijs"] : null,
+        extra: typeof r["extra"] === "number" ? r["extra"] : null,
       },
     ];
   });
@@ -176,9 +177,9 @@ export const ONEVEN_MAANDEN = ["01", "03", "05", "07", "09", "11"];
  */
 export function maandwerkVanEvenOneven(even: string, oneven: string): Maandwerk[] {
   const uit: Maandwerk[] = [];
-  if (even.trim()) uit.push({ maanden: [...EVEN_MAANDEN], notitie: even.trim(), prijs: null });
+  if (even.trim()) uit.push({ maanden: [...EVEN_MAANDEN], notitie: even.trim(), extra: null });
   if (oneven.trim())
-    uit.push({ maanden: [...ONEVEN_MAANDEN], notitie: oneven.trim(), prijs: null });
+    uit.push({ maanden: [...ONEVEN_MAANDEN], notitie: oneven.trim(), extra: null });
   return uit;
 }
 
@@ -813,10 +814,14 @@ export function maandwerkVoor(c: Pick<Customer, "maandwerk">, maand: string): Ma
   return c.maandwerk.filter((w) => w.maanden.includes(nr));
 }
 
-/** De prijs voor deze ronde: die van het maandwerk, anders de vaste prijs. */
+/** Wat er deze ronde bij komt bovenop de vaste prijs. */
+export function extraVoorMaand(c: Pick<Customer, "maandwerk">, maand: string): number {
+  return maandwerkVoor(c, maand).reduce((som, w) => som + (w.extra ?? 0), 0);
+}
+
+/** De prijs voor deze ronde: de vaste prijs plus het meerwerk van die maand. */
 export function prijsVoorMaand(c: Pick<Customer, "price" | "maandwerk">, maand: string): number {
-  const metPrijs = maandwerkVoor(c, maand).find((w) => w.prijs !== null);
-  return metPrijs?.prijs ?? c.price;
+  return c.price + extraVoorMaand(c, maand);
 }
 
 /**
