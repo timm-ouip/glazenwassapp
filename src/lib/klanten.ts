@@ -6,6 +6,9 @@ export type Frequency = "elke" | "even" | "oneven";
 /** Leeg is het gewone geval; geel is opletten, groen is een nieuwe klant. */
 export type Markering = "" | "geel" | "groen";
 
+/** De twee kolommen van een straat: de even en de oneven huisnummers. */
+export type Kant = "even" | "oneven";
+
 /** Wat een regel kan kleuren: de kleuren die je zelf kiest, plus rood van
  *  een overgeslagen maand — dat laatste kies je niet, dat volgt eruit. */
 export type RegelKleur = Markering | "rood";
@@ -73,6 +76,13 @@ export interface Customer {
   start_maand: string;
   /** Wanneer het adres is aangemaakt — waar "nieuw in mei" op steunt. */
   created_at: string;
+  /** De straat waar dit adres echt aan ligt, als het op de hoek staat.
+   *  Werknaam zoals hij op de lijst staat; leeg is het gewone geval. */
+  hoek_straat: string;
+  /** Dezelfde straat, maar voluit — dát is het postadres van dit pand. */
+  hoek_straat_volledig: string;
+  /** In welke kolom de regel hoort; leeg = het huisnummer beslist. */
+  hoek_kant: Kant | "";
 }
 
 /**
@@ -329,7 +339,7 @@ export async function fetchCustomers(): Promise<Customer[]> {
     // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
     // met een samengestelde string lukt dat niet meer.
     .select(
-      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at",
+      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant",
     )
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
@@ -347,6 +357,9 @@ export async function fetchCustomers(): Promise<Customer[]> {
     interval_maanden: c.interval_maanden ?? 1,
     ritme: c.ritme ?? 1,
     maandwerk: leesMaandwerk(c.maandwerk),
+    hoek_straat: c.hoek_straat ?? "",
+    hoek_straat_volledig: c.hoek_straat_volledig ?? "",
+    hoek_kant: (c.hoek_kant ?? "") as Kant | "",
   })) as Customer[];
 }
 
@@ -535,7 +548,9 @@ export async function koppelKlant(customerIds: string[], klantId: string | null)
  */
 export function adresVanRegel(c: Customer, s: Street, d: District | undefined) {
   return {
-    straat: s.volledige_naam.trim() || s.name.trim(),
+    // Een hoekadres hoort aan een andere straat, en dat is het adres waar de
+    // post heen gaat. Alleen voluit: een werknaam is geen straatnaam.
+    straat: c.hoek_straat_volledig.trim() || s.volledige_naam.trim() || s.name.trim(),
     huisnummer: formatNumber(c),
     plaats: d?.plaats.trim() ?? "",
   };
@@ -868,24 +883,49 @@ export function sortCustomers(customers: Customer[]) {
   );
 }
 
+/** De kant die het huisnummer zelf aanwijst. */
+export function natuurlijkeKant(c: Pick<Customer, "house_number">): Kant {
+  return c.house_number % 2 === 0 ? "even" : "oneven";
+}
+
+/** In welke kolom een regel hoort. Normaal beslist het huisnummer; een adres
+ *  op de hoek overschrijft dat, want dat nummer komt van de andere straat. */
+export function kantVan(c: Pick<Customer, "house_number" | "hoek_kant">): Kant {
+  return c.hoek_kant || natuurlijkeKant(c);
+}
+
+/** Staat deze regel ergens anders dan zijn huisnummer zegt, of hoort hij aan
+ *  een andere straat? Dan verdient hij het hoekpijltje. */
+export function isHoekadres(
+  c: Pick<Customer, "house_number" | "hoek_kant" | "hoek_straat" | "hoek_straat_volledig">,
+) {
+  return (
+    c.hoek_straat !== "" ||
+    c.hoek_straat_volledig !== "" ||
+    (c.hoek_kant !== "" && c.hoek_kant !== natuurlijkeKant(c))
+  );
+}
+
 /** Splits klanten in even en oneven huisnummers, elk in de ingestelde volgorde. */
 export function splitEvenOdd(customers: Customer[], order: "asc" | "desc" = "asc") {
   const sorted = sortCustomers(customers);
   const lijst = order === "desc" ? [...sorted].reverse() : sorted;
   return {
-    even: lijst.filter((c) => c.house_number % 2 === 0),
-    oneven: lijst.filter((c) => c.house_number % 2 !== 0),
+    even: lijst.filter((c) => kantVan(c) === "even"),
+    oneven: lijst.filter((c) => kantVan(c) === "oneven"),
   };
 }
 
+/** De volgorde van een straat wegschrijven. `hoek_kant` gaat mee, want in
+ *  welke kolom je iets loslaat is net zo goed een plek als de volgorde. */
 export async function persistCustomerOrder(
-  items: { id: string; street_id: string; sort_order: number }[],
+  items: { id: string; street_id: string; sort_order: number; hoek_kant: Kant | "" }[],
 ) {
   await Promise.all(
     items.map((i) =>
       supabase
         .from("customers")
-        .update({ street_id: i.street_id, sort_order: i.sort_order })
+        .update({ street_id: i.street_id, sort_order: i.sort_order, hoek_kant: i.hoek_kant })
         .eq("id", i.id),
     ),
   );

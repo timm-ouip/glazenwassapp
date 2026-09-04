@@ -30,6 +30,7 @@ import {
   ArrowUpToLine,
   CalendarDays,
   ChevronDown,
+  CornerDownRight,
   GripVertical,
   Printer,
   X,
@@ -64,6 +65,7 @@ import {
   toonMaand,
   persistKolomStart,
   persistStreetOrder,
+  isHoekadres,
   splitEvenOdd,
   type Customer,
   type Street,
@@ -126,6 +128,27 @@ export const Route = createFileRoute("/printen")({
 
 type Groep = { street: Street; even: Customer[]; oneven: Customer[]; aantal: number };
 
+/** Zoveel regels moet het schelen voordat een straat met maar één kant zich
+ *  over twee kolommen verdeelt. Onder de vier regels is een blok toch al laag. */
+const MINIMALE_WINST = 3;
+
+/**
+ * De twee kolommen van een straatblok.
+ *
+ * Even links en oneven rechts, zoals je het loopt — daar valt niet aan te
+ * tornen: door elkaar husselen leest niet. Alleen een straat waarvan één kant
+ * leeg is heeft niets te husselen; die maakt anders een lange sliert naast
+ * een lege kolom, en die knippen we gewoon doormidden.
+ */
+function tweeKolommen(g: Groep): Customer[][] {
+  if (g.even.length > 0 && g.oneven.length > 0) return [g.even, g.oneven];
+
+  const enige = g.even.length > 0 ? g.even : g.oneven;
+  const helft = Math.ceil(enige.length / 2);
+  if (enige.length - helft < MINIMALE_WINST) return enige.length > 0 ? [enige] : [];
+  return [enige.slice(0, helft), enige.slice(helft)];
+}
+
 const StraatBlok = memo(function StraatBlok({
   g,
   prijzen,
@@ -140,59 +163,75 @@ const StraatBlok = memo(function StraatBlok({
   ronde: string;
   sleepHandle?: ReactNode;
 }) {
+  const kolommen = tweeKolommen(g);
   return (
     <div className="-mt-px break-inside-avoid border border-foreground/70">
       <h2 className="flex items-center justify-between gap-1 border-b border-foreground/70 bg-muted py-px pl-1 pr-px text-[9px] font-bold uppercase leading-[1.15] tracking-wide">
         <span className="truncate">{g.street.name}</span>
         <span className="flex shrink-0 items-center">{sleepHandle}</span>
       </h2>
-      <div
-        className={`grid ${g.even.length > 0 && g.oneven.length > 0 ? "grid-cols-2" : "grid-cols-1"}`}
-      >
-        {(
-          [g.even.length > 0 ? "even" : null, g.oneven.length > 0 ? "oneven" : null].filter(
-            Boolean,
-          ) as ("even" | "oneven")[]
-        ).map((kant, i, arr) => (
-          <table
-            key={kant}
-            className={`w-full table-fixed border-collapse ${i < arr.length - 1 ? "border-r border-foreground/40" : ""}`}
-          >
-            <tbody>
-              {g[kant].map((c) => {
-                const kleur = regelKleur(c, ronde);
-                return (
-                  <tr
-                    key={c.id}
-                    className={`border-b border-foreground/20 align-top last:border-0 ${
-                      kleur === "geel" ? "bg-tint-amber" : kleur === "groen" ? "bg-tint-groen" : ""
-                    }`}
-                  >
-                    <td className="w-6 px-[2px] text-[9px] font-semibold leading-[1.1] tabular-nums">
-                      {formatNumber(c)}
-                    </td>
-                    <td className="px-[2px] text-[9px] leading-[1.1] break-words hyphens-auto">
-                      {isNieuw(c, ronde) && (
-                        <span className="font-bold uppercase">nieuw in {toonMaand(ronde)} </span>
-                      )}
-                      {noteVoorMaand(c, maand)}
-                    </td>
-                    {maand === "alles" && (
-                      <td className="w-8 px-[2px] text-[9px] leading-[1.1]">{ritmeLabel(c)}</td>
-                    )}
-                    {prijzen && (
+      <div className={`grid ${kolommen.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+        {kolommen.map((kolom, i, arr) => {
+          // Bij table-fixed telt alleen de eerste rij voor de kolombreedte, dus
+          // de nummerkolom gaat per tabel breder — en alleen als er een
+          // hoekpijltje bij komt, want die paar millimeter zijn notitieruimte.
+          const hoekIn = kolom.some(isHoekadres);
+          return (
+            <table
+              key={i}
+              className={`w-full table-fixed border-collapse ${i < arr.length - 1 ? "border-r border-foreground/40" : ""}`}
+            >
+              <tbody>
+                {kolom.map((c) => {
+                  const kleur = regelKleur(c, ronde);
+                  return (
+                    <tr
+                      key={c.id}
+                      className={`border-b border-foreground/20 align-top last:border-0 ${
+                        kleur === "geel"
+                          ? "bg-tint-amber"
+                          : kleur === "groen"
+                            ? "bg-tint-groen"
+                            : ""
+                      }`}
+                    >
                       <td
-                        className={`w-10 px-[2px] text-right text-[9px] leading-[1.1] tabular-nums ${prijsVoorMaand(c, maand) === 0 ? "text-red-600" : ""}`}
+                        className={`${hoekIn ? "w-10" : "w-6"} px-[2px] text-[9px] font-semibold leading-[1.1] tabular-nums`}
                       >
-                        {formatPrice(prijsVoorMaand(c, maand))}
+                        {isHoekadres(c) && (
+                          <CornerDownRight
+                            className="mr-px inline size-[7px] align-[-1px]"
+                            strokeWidth={2.5}
+                          />
+                        )}
+                        {formatNumber(c)}
                       </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        ))}
+                      <td className="px-[2px] text-[9px] leading-[1.1] break-words hyphens-auto">
+                        {c.hoek_straat && (
+                          <span className="font-bold uppercase">{c.hoek_straat} </span>
+                        )}
+                        {isNieuw(c, ronde) && (
+                          <span className="font-bold uppercase">nieuw in {toonMaand(ronde)} </span>
+                        )}
+                        {noteVoorMaand(c, maand)}
+                      </td>
+                      {maand === "alles" && (
+                        <td className="w-8 px-[2px] text-[9px] leading-[1.1]">{ritmeLabel(c)}</td>
+                      )}
+                      {prijzen && (
+                        <td
+                          className={`w-10 px-[2px] text-right text-[9px] leading-[1.1] tabular-nums ${prijsVoorMaand(c, maand) === 0 ? "text-red-600" : ""}`}
+                        >
+                          {formatPrice(prijsVoorMaand(c, maand))}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          );
+        })}
       </div>
     </div>
   );
@@ -481,7 +520,9 @@ function PrintPagina() {
   }, [meetSleutel, schaal, vouwen, breedtePx]);
 
   const kwartKolommen = Math.max(1, Math.round(KOLOMMEN / 2));
-  const schatting = (g: Groep) => 14 + 11 * Math.max(g.even.length, g.oneven.length);
+  // Twee kolommen naast elkaar, dus ruwweg de helft van de regels hoog; het
+  // echte getal komt straks uit de meting.
+  const schatting = (g: Groep) => 14 + 11 * Math.ceil((g.even.length + g.oneven.length) / 2);
   const blokHoogte = (g: Groep) => hoogtes[g.street.id] ?? schatting(g);
   // Tijdens het slepen tellen de vlaggen zoals ze op dat moment zouden worden.
   const kolomStart = (s: Street) => sleepVlaggen?.[s.id] ?? s.kolom_start;

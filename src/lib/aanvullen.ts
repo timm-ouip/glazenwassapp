@@ -128,6 +128,9 @@ export async function haalPostcodesOp(
 
     for (const c of customers) {
       if (c.street_id !== street.id || c.postcode.trim()) continue;
+      // Een hoekadres heeft het huisnummer van een ándere straat; die postcode
+      // zoeken we hier niet op, anders krijgt hij die van de buren.
+      if (c.hoek_straat_volledig.trim()) continue;
       const gevonden = kaart.get(nummerSleutel(c.house_number, c.addition));
       if (gevonden) {
         wijzigingen.push({ id: c.id, postcode: gevonden });

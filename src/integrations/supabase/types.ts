@@ -64,6 +64,9 @@ export type Database = {
           deleted_at: string | null
           frequency: string
           house_number: number
+          hoek_straat: string
+          hoek_straat_volledig: string
+          hoek_kant: string
           interval_maanden: number
           ritme: number
           maandwerk: Json
@@ -87,6 +90,9 @@ export type Database = {
           deleted_at?: string | null
           frequency?: string
           house_number: number
+          hoek_straat?: string
+          hoek_straat_volledig?: string
+          hoek_kant?: string
           interval_maanden?: number
           ritme?: number
           maandwerk?: Json
@@ -110,6 +116,9 @@ export type Database = {
           deleted_at?: string | null
           frequency?: string
           house_number?: number
+          hoek_straat?: string
+          hoek_straat_volledig?: string
+          hoek_kant?: string
           interval_maanden?: number
           ritme?: number
           maandwerk?: Json

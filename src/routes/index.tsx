@@ -28,7 +28,6 @@ import {
   Upload,
   Pencil,
   Trash2,
-  Search,
   Square,
   GripVertical,
   ArrowUpNarrowWide,
@@ -49,6 +48,7 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   CircleSlash,
+  CornerDownRight,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -56,6 +56,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -72,6 +75,8 @@ import { useBevestig } from "@/components/Bevestig";
 import { InlineCel } from "@/components/InlineCel";
 import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { NotitieCel } from "@/components/NotitieCel";
+import { ZoekBalk } from "@/components/ZoekBalk";
+import { HoekadresDialog } from "@/components/HoekadresDialog";
 import { KlantMenu } from "@/components/KlantMenu";
 import { Overgeslagen } from "@/components/Overgeslagen";
 import { PrijsCel } from "@/components/PrijsCel";
@@ -103,7 +108,9 @@ import {
   fetchStreets,
   formatNumber,
   formatPrice,
+  isHoekadres,
   isKalendermaand,
+  kantVan,
   komendeMaanden,
   patchCustomer,
   schuifStartOp,
@@ -113,12 +120,14 @@ import {
   regelKleur,
   ritmeMaanden,
   matchesMaand,
+  natuurlijkeKant,
   persistCustomerOrder,
   persistStreetOrder,
   setStreetSortDesc,
   sortCustomers,
   splitEvenOdd,
   type Customer,
+  type Kant,
   type District,
   type QuickNote,
   type Street,
@@ -179,7 +188,7 @@ function Index() {
   // Standaard de maand die je nu loopt, net als op de printlijst.
   const [filter, setFilter] = useState<MaandFilter>(() => maandSleutel(new Date()));
   const ronde = isKalendermaand(filter) ? filter : maandSleutel(new Date());
-  const [zoek, setZoek] = useState("");
+  const [zoektermen, setZoektermen] = useState<string[]>([]);
   const [prijzenTonen, setPrijzenTonen] = useState(true);
   const [selectie, setSelectie] = useState<string[]>([]);
   /** Staat de selecteermodus aan? Dan vink je adressen aan zonder dat er al
@@ -210,6 +219,10 @@ function Index() {
   // muisknop naar /klanten met het klant-id in de url; bij een adres zonder
   // klant was dat id leeg en gebeurde er niets.
   const [dossier, setDossier] = useState<{ open: boolean; customer: Customer | null }>({
+    open: false,
+    customer: null,
+  });
+  const [hoek, setHoek] = useState<{ open: boolean; customer: Customer | null }>({
     open: false,
     customer: null,
   });
@@ -284,9 +297,11 @@ function Index() {
   }, []);
 
   const groepen = useMemo(() => {
-    const term = zoek.trim().toLowerCase();
+    // Meerdere zoektermen naast elkaar: een straat hoeft maar op één ervan te
+    // passen, anders zou een tweede straat de eerste juist wegfilteren.
+    const termen = zoektermen.map((t) => t.toLowerCase());
     return streets
-      .filter((s) => !term || s.name.toLowerCase().includes(term))
+      .filter((s) => !termen.length || termen.some((t) => s.name.toLowerCase().includes(t)))
       .map((s) => {
         const order: "asc" | "desc" = s.sort_desc ? "desc" : "asc";
         const klanten = customers.filter(
@@ -303,7 +318,7 @@ function Index() {
           totaal: klanten.reduce((sum, c) => sum + prijsVoorMaand(c, filter), 0),
         };
       });
-  }, [streets, customers, filter, zoek]);
+  }, [streets, customers, filter, zoektermen]);
 
   const totaal = groepen.reduce((sum, g) => sum + g.aantal, 0);
   const omzet = groepen.reduce((sum, g) => sum + g.totaal, 0);
@@ -377,9 +392,9 @@ function Index() {
   function selecteermodus(aan: boolean) {
     setSelecteren(aan);
     if (!aan) {
-      // Bij het verlaten alles weer open en de selectie leeg: dan ga je weer
-      // regels bijwerken in plaats van een dag samenstellen.
-      setIngeklapt(new Set());
+      // Bij het verlaten alleen de selectie leeg: dan ga je weer regels
+      // bijwerken in plaats van een dag samenstellen. Wat je zelf in- of
+      // uitgeklapt hebt blijft staan; dat is jouw keuze, niet die van de modus.
       setKeuze(new Set());
       setBewerktDag(null);
       gevuldVoor.current = null;
@@ -411,21 +426,6 @@ function Index() {
       /* zie selecteermodus() */
     }
   }, [dag]);
-
-  // Ingeklapt zie je veel straten tegelijk, en dat is precies wat je wil als je
-  // een dag samenstelt. Dit gebeurt zodra de modus aangaat én bij elke wijk die
-  // je daarna opent — maar niet opnieuw bij zoeken of een andere datum, want
-  // dan zou het openklappen dat je zelf deed telkens ongedaan gemaakt worden.
-  const geklaptVoor = useRef<string | null>(null);
-  useEffect(() => {
-    if (!selecteren) {
-      geklaptVoor.current = null;
-      return;
-    }
-    if (groepen.length === 0 || geklaptVoor.current === actieveWijk) return;
-    geklaptVoor.current = actieveWijk;
-    setIngeklapt(new Set(groepen.map((g) => g.street.id)));
-  }, [selecteren, actieveWijk, groepen]);
 
   const allesIngeklapt = groepen.length > 0 && groepen.every((g) => ingeklapt.has(g.street.id));
 
@@ -926,6 +926,7 @@ function Index() {
   const opPatch = useStabiel(patchKlant);
   const opDelete = useStabiel(verwijderKlant);
   const opDossier = useStabiel((c: Customer) => setDossier({ open: true, customer: c }));
+  const opHoekadres = useStabiel((c: Customer) => setHoek({ open: true, customer: c }));
   const opAddQuickNote = useStabiel(nieuweSnelkeuze);
   const opVerfStart = useStabiel(startVerf);
   const opKlantOpDag = useStabiel((c: Customer, aan: boolean) => {
@@ -983,13 +984,19 @@ function Index() {
     const dragged = customers.find((c) => c.id === activeId.slice(2));
     if (!dragged) return;
 
+    // Wélke kolom je loslaat telt net zo goed als waar in de rij: een nummer
+    // op de hoek hoort soms aan de andere kant van de straat.
     let doelStraat: string | null = null;
+    let doelKant: Kant | null = null;
     let overKlant: Customer | null = null;
     if (overId.startsWith("c:")) {
       overKlant = customers.find((c) => c.id === overId.slice(2)) ?? null;
       doelStraat = overKlant?.street_id ?? null;
+      doelKant = overKlant ? kantVan(overKlant) : null;
     } else if (overId.startsWith("z:")) {
-      doelStraat = overId.slice(2);
+      const [, straatId, kant] = overId.split(":");
+      doelStraat = straatId ?? null;
+      doelKant = (kant as Kant | undefined) ?? null;
     }
     if (!doelStraat) return;
 
@@ -998,6 +1005,13 @@ function Index() {
       : [dragged];
     const verplaatstIds = new Set(verplaatst.map((c) => c.id));
 
+    /** Sta je aan de kant die je huisnummer aanwijst, dan hoef je niets vast
+     *  te leggen; sta je ergens anders, dan is dat een hoekadres. */
+    function kantVoor(c: Customer): Kant | "" {
+      if (!doelKant || !verplaatstIds.has(c.id)) return c.hoek_kant;
+      return doelKant === natuurlijkeKant(c) ? "" : doelKant;
+    }
+
     const doelLijst = sortCustomers(
       customers.filter((c) => c.street_id === doelStraat && !verplaatstIds.has(c.id)),
     );
@@ -1005,17 +1019,25 @@ function Index() {
     const nieuw = [...doelLijst];
     nieuw.splice(index < 0 ? doelLijst.length : index, 0, ...verplaatst);
 
-    const updates = nieuw.map((c, i) => ({ id: c.id, street_id: doelStraat!, sort_order: i + 1 }));
+    const updates = nieuw.map((c, i) => ({
+      id: c.id,
+      street_id: doelStraat!,
+      sort_order: i + 1,
+      hoek_kant: kantVoor(c),
+    }));
     qc.setQueryData<Customer[]>(["customers"], (old) =>
       (old ?? []).map((c) => {
         const u = updates.find((x) => x.id === c.id);
-        return u ? { ...c, street_id: u.street_id, sort_order: u.sort_order } : c;
+        return u
+          ? { ...c, street_id: u.street_id, sort_order: u.sort_order, hoek_kant: u.hoek_kant }
+          : c;
       }),
     );
     const vorigePlek = [...verplaatst, ...doelLijst].map((c) => ({
       id: c.id,
       street_id: c.street_id,
       sort_order: c.sort_order,
+      hoek_kant: c.hoek_kant,
     }));
     await persistCustomerOrder(updates);
     pushUndo({
@@ -1050,15 +1072,7 @@ function Index() {
       kruimel="Overzicht / Wijken"
       acties={
         <>
-          <div className="relative w-full sm:w-56">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="h-9 rounded-full bg-card pl-9"
-              placeholder="Zoek straat"
-              value={zoek}
-              onChange={(e) => setZoek(e.target.value)}
-            />
-          </div>
+          <ZoekBalk placeholder="Zoek straat" onTermen={setZoektermen} />
           {/* Straatnamen aanvullen is werk aan de wijklijst zelf; in de
               selecteerstand ben je een dag aan het samenstellen en staat die
               knop alleen in de weg. */}
@@ -1381,6 +1395,7 @@ function Index() {
                   onAddQuickNote={opAddQuickNote}
                   onDelete={opDelete}
                   onDossier={opDossier}
+                  onHoekadres={opHoekadres}
                   onNieuweRegel={opNieuweRegel}
                   onEditStreet={() => setStraatDialog({ open: true, street: g.street })}
                   onDeleteStreet={() => verwijderStraat(g.street)}
@@ -1425,6 +1440,13 @@ function Index() {
         quickNotes={quickNotes}
         onAddQuickNote={nieuweSnelkeuze}
         onSaved={herlaad}
+      />
+      <HoekadresDialog
+        open={hoek.open}
+        onOpenChange={(open) => setHoek((h) => ({ ...h, open }))}
+        customer={hoek.customer}
+        straten={streets.filter((s) => s.district_id === actieveWijk)}
+        onOpslaan={(patch) => hoek.customer && void patchKlant(hoek.customer, patch)}
       />
       <KlantgegevensDialog
         open={dossier.open}
@@ -1477,6 +1499,7 @@ interface BlokProps {
   onDelete: (c: Customer) => void;
   /** Opent het dossier van dit adres, hier op de pagina zelf. */
   onDossier: (c: Customer) => void;
+  onHoekadres: (c: Customer) => void;
   onNieuweRegel: (streetId: string, nummer: string) => void;
   onEditStreet: () => void;
   onDeleteStreet: () => void;
@@ -1505,7 +1528,6 @@ function StraatBlok(p: BlokProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `s:${p.street.id}`,
   });
-  const { setNodeRef: setZoneRef } = useDroppable({ id: `z:${p.street.id}` });
 
   const zichtbaar = [...p.even, ...p.oneven];
   const erop = zichtbaar.filter((c) => p.opDeDag.has(c.id)).length;
@@ -1689,21 +1711,18 @@ function StraatBlok(p: BlokProps) {
         )}
       </div>
 
-      <div
-        ref={setZoneRef}
-        className={`grid grid-cols-2 gap-px bg-border ${p.ingeklapt ? "hidden" : ""}`}
-      >
+      <div className={`grid grid-cols-2 gap-px bg-border ${p.ingeklapt ? "hidden" : ""}`}>
         {(["even", "oneven"] as const).map((kant) => (
           <div key={kant} className="bg-card">
             <div className="flex items-center gap-0.5 border-b border-border/60 px-1 py-1 text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
               <span className="w-4" />
-              <span className="w-9">NR</span>
+              <span className="w-11">NR</span>
               <span className="min-w-0 flex-1 truncate">NOTITIE</span>
               {p.prijzenTonen && <span className="w-12 text-right">PRIJS</span>}
               <span className="min-w-[3.25rem] max-w-[5.5rem] pl-1 text-center">FREQ</span>
               <span className="w-4" />
             </div>
-            <StraatKolom regels={p[kant]} blok={p} />
+            <StraatKolom regels={p[kant]} blok={p} kant={kant} />
             {kant === "even" && (
               <NieuweRegel
                 onSubmit={(nr) => p.onNieuweRegel(p.street.id, nr)}
@@ -1726,7 +1745,18 @@ function StraatBlok(p: BlokProps) {
  * wisselt zijn context en hertekent React alle regels eronder, hoeveel `memo`
  * je er ook omheen zet.
  */
-function StraatKolom({ regels, blok: p }: { regels: Customer[]; blok: BlokProps }) {
+function StraatKolom({
+  regels,
+  blok: p,
+  kant,
+}: {
+  regels: Customer[];
+  blok: BlokProps;
+  kant: Kant;
+}) {
+  // Een losplek per kolom, niet één voor de hele straat: waar je loslaat
+  // bepaalt de kant, en in een lege kolom moet je ook kunnen mikken.
+  const { setNodeRef: setZoneRef } = useDroppable({ id: `z:${p.street.id}:${kant}` });
   // Op de sleutel en niet op `regels`: die array is na elke wijziging nieuw,
   // ook als er alleen een prijs in één regel veranderde. De id-lijst is dan
   // inhoudelijk hetzelfde, en dnd-kit hoort daar niet wakker van te worden.
@@ -1735,32 +1765,35 @@ function StraatKolom({ regels, blok: p }: { regels: Customer[]; blok: BlokProps 
   const ids = useMemo(() => regels.map((c) => `c:${c.id}`), [sleutel]);
   return (
     <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-      {regels.map((c) => (
-        <KlantRij
-          key={c.id}
-          customer={c}
-          prijzenTonen={p.prijzenTonen}
-          quickNotes={p.quickNotes}
-          klantNaam={c.klant_id ? p.klantNamen.get(c.klant_id) : undefined}
-          rowText={p.rowText}
-          rowPad={p.rowPad}
-          geselecteerd={p.selectie.includes(c.id)}
-          ronde={p.ronde}
-          planmodus={p.planmodus}
-          opDeDag={p.opDeDag.has(c.id)}
-          eerderGewassen={p.eerderGewassen.has(c.id)}
-          elderGepland={p.elderGepland.has(c.id)}
-          dagKlaar={p.dagKlaar}
-          onOpDag={p.onKlantOpDag}
-          onVerfStart={p.onVerfStart}
-          negeerKlik={p.negeerKlik}
-          onSelect={p.onSelect}
-          onPatch={p.onPatch}
-          onAddQuickNote={p.onAddQuickNote}
-          onDelete={p.onDelete}
-          onDossier={p.onDossier}
-        />
-      ))}
+      <div ref={setZoneRef} className="min-h-6">
+        {regels.map((c) => (
+          <KlantRij
+            key={c.id}
+            customer={c}
+            prijzenTonen={p.prijzenTonen}
+            quickNotes={p.quickNotes}
+            klantNaam={c.klant_id ? p.klantNamen.get(c.klant_id) : undefined}
+            rowText={p.rowText}
+            rowPad={p.rowPad}
+            geselecteerd={p.selectie.includes(c.id)}
+            ronde={p.ronde}
+            planmodus={p.planmodus}
+            opDeDag={p.opDeDag.has(c.id)}
+            eerderGewassen={p.eerderGewassen.has(c.id)}
+            elderGepland={p.elderGepland.has(c.id)}
+            dagKlaar={p.dagKlaar}
+            onOpDag={p.onKlantOpDag}
+            onVerfStart={p.onVerfStart}
+            negeerKlik={p.negeerKlik}
+            onSelect={p.onSelect}
+            onPatch={p.onPatch}
+            onAddQuickNote={p.onAddQuickNote}
+            onDelete={p.onDelete}
+            onDossier={p.onDossier}
+            onHoekadres={p.onHoekadres}
+          />
+        ))}
+      </div>
     </SortableContext>
   );
 }
@@ -1790,6 +1823,7 @@ interface RijProps {
   onAddQuickNote: (label: string) => void;
   onDelete: (c: Customer) => void;
   onDossier: (c: Customer) => void;
+  onHoekadres: (c: Customer) => void;
 }
 
 /**
@@ -1823,6 +1857,7 @@ const KlantRij = memo(function KlantRij({
   onAddQuickNote,
   onDelete,
   onDossier,
+  onHoekadres,
 }: RijProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `c:${c.id}`,
@@ -1851,26 +1886,40 @@ const KlantRij = memo(function KlantRij({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`group flex items-center gap-0.5 border-b border-border/60 px-0.5 ${rowPad} ${rowText} ${
+      className={`group relative flex items-center gap-0.5 border-b border-border/60 px-0.5 ${rowPad} ${rowText} ${
         isDragging ? "opacity-40" : ""
       } ${geselecteerd ? "bg-accent" : ""} ${achtergrond}`}
       {...(planmodus ? { "data-verf-klant": c.id } : {})}
     >
       {planmodus ? (
-        <Checkbox
-          className="size-3.5 shrink-0 touch-none"
-          checked={opDeDag}
-          disabled={!dagKlaar}
-          onCheckedChange={(v) => {
-            if (negeerKlik.current) {
-              negeerKlik.current = false;
-              return;
-            }
-            onOpDag(c, v === true);
-          }}
-          onPointerDown={(e) => onVerfStart(!opDeDag, e.clientX, e.clientY)}
-          aria-label={`${formatNumber(c)} op de dag`}
-        />
+        <>
+          {/* In de selecteerstand ligt de hele regel op slot: je bent een dag
+              aan het samenstellen, niet aan het bijwerken. Eén doorzichtig
+              laagje vangt alle klikken, zodat je overal op de regel kunt
+              aanvinken en nergens per ongeluk een notitie openklikt. */}
+          <div
+            className={`absolute inset-0 z-10 ${dagKlaar ? "cursor-pointer" : "cursor-not-allowed"}`}
+            aria-hidden="true"
+            onPointerDown={(e) => {
+              if (dagKlaar) onVerfStart(!opDeDag, e.clientX, e.clientY);
+            }}
+            onClick={() => {
+              // Kwam je hier via een streek, dan is het vakje al om.
+              if (negeerKlik.current) {
+                negeerKlik.current = false;
+                return;
+              }
+              if (dagKlaar) onOpDag(c, !opDeDag);
+            }}
+          />
+          <Checkbox
+            className="size-3.5 shrink-0 touch-none"
+            checked={opDeDag}
+            disabled={!dagKlaar}
+            onCheckedChange={(v) => onOpDag(c, v === true)}
+            aria-label={`${formatNumber(c)} op de dag`}
+          />
+        </>
       ) : (
         <button
           className="cursor-grab touch-none text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
@@ -1886,11 +1935,17 @@ const KlantRij = memo(function KlantRij({
           <GripVertical className="size-3" />
         </button>
       )}
-      <div className="w-9 shrink-0">
+      <div className="flex w-11 shrink-0 items-center gap-px">
+        {isHoekadres(c) && (
+          <CornerDownRight
+            className="size-2.5 shrink-0 text-muted-foreground"
+            aria-label={c.hoek_straat ? `hoek ${c.hoek_straat}` : "hoekadres"}
+          />
+        )}
         <InlineCel
           value={`${c.house_number}${c.addition ?? ""}`}
           align="left"
-          className="font-medium"
+          className="min-w-0 font-medium"
           onCommit={(v) => {
             const m = /^(\d+)\s*(.*)$/.exec(v.trim());
             if (!m) return;
@@ -1898,6 +1953,14 @@ const KlantRij = memo(function KlantRij({
           }}
         />
       </div>
+      {c.hoek_straat && (
+        <span
+          className="shrink-0 text-[10px] uppercase text-muted-foreground"
+          title={`Hoort bij ${c.hoek_straat}`}
+        >
+          {c.hoek_straat}
+        </span>
+      )}
       <div className="min-w-0 flex-1">
         <NotitieCel
           value={c.note}
@@ -1953,7 +2016,12 @@ const KlantRij = memo(function KlantRij({
   // De rechtermuisknop hangt om de hele regel: kleur, overslaan en het
   // dossier zitten daarin, want in de regel zelf is er geen plek voor.
   return (
-    <KlantMenu customer={c} onPatch={(patch) => onPatch(c, patch)} onDossier={() => onDossier(c)}>
+    <KlantMenu
+      customer={c}
+      onPatch={(patch) => onPatch(c, patch)}
+      onDossier={() => onDossier(c)}
+      onHoekadres={() => onHoekadres(c)}
+    >
       {rij}
     </KlantMenu>
   );
@@ -2049,6 +2117,9 @@ function OverslaanKnop({
   onNietsOverslaan: () => void;
 }) {
   const maanden = komendeMaanden();
+  const komende = maanden[0]!;
+  /** Streepje bij de jaarwissel, anders lopen december en januari in elkaar. */
+  const jaarwissel = (m: string, i: number) => i > 0 && m.endsWith("-01");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -2063,44 +2134,58 @@ function OverslaanKnop({
           <ChevronDown className="size-3.5 opacity-70" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
-        <DropdownMenuLabel>
-          {aantal} {aantal === 1 ? "adres" : "adressen"} overslaan in
+      <DropdownMenuContent align="start" className="w-60">
+        <DropdownMenuLabel className="font-normal text-muted-foreground">
+          {aantal} {aantal === 1 ? "adres" : "adressen"}
         </DropdownMenuLabel>
-        <DropdownMenuItem onSelect={() => onOverslaan([maanden[0]!])}>
-          <span className="capitalize">{toonMaand(maanden[0]!)}</span>
-          <span className="ml-auto text-xs text-muted-foreground">komende ronde</span>
+
+        <DropdownMenuItem onSelect={() => onOverslaan([komende])}>
+          <CalendarOff className="size-4" /> Overslaan
+          <span className="ml-auto text-xs capitalize text-muted-foreground">
+            {toonMaand(komende)}
+          </span>
         </DropdownMenuItem>
 
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="font-normal text-muted-foreground">
-          Eén maand
-        </DropdownMenuLabel>
-        {maanden.map((m, i) => (
-          <Fragment key={m}>
-            {i > 0 && m.endsWith("-01") && <DropdownMenuSeparator />}
-            <DropdownMenuItem onSelect={() => onOverslaan([m])}>
-              <span className="capitalize">{toonMaand(m)}</span>
-              <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
-            </DropdownMenuItem>
-          </Fragment>
-        ))}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <CalendarOff className="size-4" /> Overslaan in…
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="max-h-72 overflow-y-auto">
+            {maanden.map((m, i) => (
+              <Fragment key={m}>
+                {jaarwissel(m, i) && <DropdownMenuSeparator />}
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    // Openhouden: meestal kies je er meer dan één.
+                    e.preventDefault();
+                    onOverslaan([m]);
+                  }}
+                >
+                  <span className="capitalize">{toonMaand(m)}</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
+                </DropdownMenuItem>
+              </Fragment>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
 
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="font-normal text-muted-foreground">
-          Alles t/m
-        </DropdownMenuLabel>
-        {maanden.map((m, i) => (
-          <Fragment key={`tot-${m}`}>
-            {i > 0 && m.endsWith("-01") && <DropdownMenuSeparator />}
-            <DropdownMenuItem onSelect={() => onOverslaan(maanden.filter((x) => x <= m))}>
-              <span className="capitalize">t/m {toonMaand(m)}</span>
-              <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
-            </DropdownMenuItem>
-          </Fragment>
-        ))}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <CalendarOff className="size-4" /> Overslaan t/m…
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="max-h-72 overflow-y-auto">
+            {maanden.map((m, i) => (
+              <Fragment key={`tot-${m}`}>
+                {jaarwissel(m, i) && <DropdownMenuSeparator />}
+                <DropdownMenuItem onSelect={() => onOverslaan(maanden.filter((x) => x <= m))}>
+                  <span className="capitalize">{toonMaand(m)}</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
+                </DropdownMenuItem>
+              </Fragment>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
 
-        <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onNietsOverslaan}>
           <CircleSlash className="size-4" /> Niets meer overslaan
         </DropdownMenuItem>

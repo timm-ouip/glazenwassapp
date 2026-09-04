@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Plus, Search, SquarePen, Trash2, User, Users } from "lucide-react";
+import { CornerDownRight, Mail, Plus, SquarePen, Trash2, User, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { requireSession, useRequireAuth } from "@/lib/auth";
@@ -13,6 +13,8 @@ import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { WijkKiezer } from "@/components/WijkKiezer";
 import { PostcodesOphalen } from "@/components/PostcodesOphalen";
 import { InlineCel } from "@/components/InlineCel";
+import { ZoekBalk } from "@/components/ZoekBalk";
+import { HoekadresDialog } from "@/components/HoekadresDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -31,6 +33,7 @@ import {
   fetchStreets,
   formatNumber,
   formatPrice,
+  isHoekadres,
   ritmeOmschrijving,
   klantAdres,
   koppelKlant,
@@ -101,7 +104,7 @@ function Klanten() {
   const bevestig = useBevestig();
   const { wijk, klant: klantUitUrl } = Route.useSearch();
 
-  const [zoek, setZoek] = useState("");
+  const [zoektermen, setZoektermen] = useState<string[]>([]);
   const [alleenLeeg, setAlleenLeeg] = useState(false);
   const [dossier, setDossier] = useState<{
     open: boolean;
@@ -110,6 +113,10 @@ function Klanten() {
   }>({
     open: false,
     klant: null,
+    customer: null,
+  });
+  const [hoek, setHoek] = useState<{ open: boolean; customer: Customer | null }>({
+    open: false,
     customer: null,
   });
 
@@ -195,15 +202,21 @@ function Klanten() {
   }, [customers, streets, districts, klanten]);
 
   function adresTekst(r: Regel) {
-    const naam = r.street.volledige_naam.trim() || r.street.name;
+    // Een hoekadres hoort aan een andere straat; dát is het adres van deze
+    // klant, ook al staat hij op de wijklijst onder de straat die je loopt.
+    const naam =
+      r.customer.hoek_straat_volledig.trim() || r.street.volledige_naam.trim() || r.street.name;
     return `${naam} ${formatNumber(r.customer)}`;
   }
 
-  const zoekterm = zoek.trim().toLowerCase();
+  const zoektermenKlein = zoektermen.map((t) => t.toLowerCase());
 
+  // Eén treffer is genoeg: met twee straten in de balk wil je ze allebei zien,
+  // niet alleen wat op allebei past.
   function pastZoek(velden: (string | undefined)[]) {
-    if (!zoekterm) return true;
-    return velden.filter(Boolean).join(" ").toLowerCase().includes(zoekterm);
+    if (!zoektermenKlein.length) return true;
+    const tekst = velden.filter(Boolean).join(" ").toLowerCase();
+    return zoektermenKlein.some((t) => tekst.includes(t));
   }
 
   const zichtbaar = useMemo(() => {
@@ -213,7 +226,7 @@ function Klanten() {
       return pastZoek([adresTekst(r), k?.naam, k?.email, k?.telefoon, r.customer.postcode]);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regels, zoekterm, alleenLeeg]);
+  }, [regels, zoektermen, alleenLeeg]);
 
   const zichtbareLos = useMemo(() => {
     return losseKlanten.filter((k) => {
@@ -221,7 +234,7 @@ function Klanten() {
       return pastZoek([k.naam, k.email, k.telefoon, k.postcode, k.straat, k.plaats]);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [losseKlanten, zoekterm, alleenLeeg]);
+  }, [losseKlanten, zoektermen, alleenLeeg]);
 
   function herlaad() {
     qc.invalidateQueries({ queryKey: ["klanten"] });
@@ -391,15 +404,7 @@ function Klanten() {
       kruimel="Overzicht / Klanten"
       acties={
         <>
-          <div className="relative w-full sm:w-56">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="h-9 rounded-full bg-card pl-9"
-              placeholder="Zoek adres of naam"
-              value={zoek}
-              onChange={(e) => setZoek(e.target.value)}
-            />
-          </div>
+          <ZoekBalk placeholder="Zoek adres of naam" onTermen={setZoektermen} />
           <PostcodesOphalen
             streets={streets.filter((s) => s.district_id === actieveWijk)}
             customers={customers}
@@ -517,6 +522,7 @@ function Klanten() {
                     onDossier={() =>
                       setDossier({ open: true, klant: r.klant, customer: r.customer })
                     }
+                    onHoekadres={() => setHoek({ open: true, customer: r.customer })}
                   >
                     <tr className="group border-b border-border/60 last:border-b-0 hover:bg-accent/30">
                       {/* Het dossier openen staat vooraan, vóór het adres: dat is
@@ -536,7 +542,18 @@ function Klanten() {
                       </td>
                       <td className="whitespace-nowrap px-2 py-1 font-medium">
                         <span className="flex items-center gap-1.5">
+                          {isHoekadres(r.customer) && (
+                            <CornerDownRight
+                              className="size-3 shrink-0 text-muted-foreground"
+                              aria-label="hoekadres"
+                            />
+                          )}
                           {adresTekst(r)}
+                          {r.customer.hoek_straat && (
+                            <span className="text-[10px] uppercase text-muted-foreground">
+                              {r.customer.hoek_straat}
+                            </span>
+                          )}
                           <Overgeslagen customer={r.customer} />
                           <WassenVanaf
                             customer={r.customer}
@@ -654,6 +671,13 @@ function Klanten() {
         )}
       </div>
 
+      <HoekadresDialog
+        open={hoek.open}
+        onOpenChange={(open) => setHoek((h) => ({ ...h, open }))}
+        customer={hoek.customer}
+        straten={streets.filter((s) => s.district_id === actieveWijk)}
+        onOpslaan={(patch) => hoek.customer && void patchAdres(hoek.customer, patch)}
+      />
       <KlantgegevensDialog
         open={dossier.open}
         onOpenChange={(open) => setDossier((s) => ({ ...s, open }))}

@@ -1,4 +1,4 @@
-import { CalendarOff, Check, CircleSlash, FileText, Flag } from "lucide-react";
+import { CalendarOff, Check, CircleSlash, CornerDownRight, FileText, Flag } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 
 import {
@@ -32,6 +32,8 @@ interface Props {
    *  vast, zodat het opent waar je bent — een sprong naar de klantenpagina
    *  raakte het dossier kwijt zodra het adres nog geen klant had. */
   onDossier: () => void;
+  /** Opent het hoekadres-schermpje; ook dat houdt de pagina vast. */
+  onHoekadres: () => void;
   children: ReactNode;
 }
 
@@ -53,7 +55,13 @@ const KLEUR_STIP: Record<Exclude<Markering, "">, string> = {
  * wijklijst is al dicht bezet, en dit zijn dingen die je een paar keer per
  * jaar doet, niet elke ronde.
  */
-export function KlantMenu({ customer: c, onPatch: ruwePatch, onDossier, children }: Props) {
+export function KlantMenu({
+  customer: c,
+  onPatch: ruwePatch,
+  onDossier,
+  onHoekadres,
+  children,
+}: Props) {
   // Alles loopt hierlangs, zodat een startmaand die je overslaat overal
   // opschuift en niet alleen in het menu-item dat je toevallig gebruikte.
   const onPatch = (p: Partial<Customer>) => ruwePatch(schuifStartOp(c, p));
@@ -85,6 +93,12 @@ export function KlantMenu({ customer: c, onPatch: ruwePatch, onDossier, children
       <ContextMenuContent className="w-60">
         <ContextMenuItem onSelect={onDossier}>
           <FileText className="size-4" /> Dossier
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onHoekadres}>
+          <CornerDownRight className="size-4" /> Hoekadres…
+          {c.hoek_straat && (
+            <span className="ml-auto truncate text-xs text-muted-foreground">{c.hoek_straat}</span>
+          )}
         </ContextMenuItem>
 
         <ContextMenuSeparator />
