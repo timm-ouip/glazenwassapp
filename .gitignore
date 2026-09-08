@@ -41,3 +41,8 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+# Dit project bouwt met bun; bun.lock is de lockfile die telt.
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
