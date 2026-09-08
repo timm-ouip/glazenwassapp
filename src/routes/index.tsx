@@ -252,9 +252,14 @@ function Index() {
   );
   const wijkPlaats = districts.find((d) => d.id === actieveWijk)?.plaats ?? "";
 
-  const alleStraten = streetsQuery.data ?? [];
-  const streets = alleStraten.filter((s) => s.district_id === actieveWijk);
-  const customers = customersQuery.data ?? [];
+  const alleStraten = useMemo(() => streetsQuery.data ?? [], [streetsQuery.data]);
+  // Ook deze twee met een vaste identiteit: ze zijn de invoer van `groepen`,
+  // en die levert de even/oneven-lijsten waar `memo` op StraatBlok op let.
+  const streets = useMemo(
+    () => alleStraten.filter((s) => s.district_id === actieveWijk),
+    [alleStraten, actieveWijk],
+  );
+  const customers = useMemo(() => customersQuery.data ?? [], [customersQuery.data]);
   const alleKlanten = klantenQuery.data ?? [];
   // Vaste identiteit, ook zolang de query nog laadt: elke verse lege array
   // zou `memo` op de regels breken.
@@ -933,6 +938,17 @@ function Index() {
     pasKeuzeAan(aan ? [c.id] : [], aan ? [] : [c.id]);
   });
   const opNieuweRegel = useStabiel(nieuweRegel);
+  const opEditStreet = useStabiel((street: Street) => setStraatDialog({ open: true, street }));
+  const opDeleteStreet = useStabiel((street: Street) => verwijderStraat(street));
+  const opAddKlant = useStabiel((streetId: string) =>
+    setKlantDialog({ open: true, customer: null, streetId }),
+  );
+  const opToggleSort = useStabiel((street: Street) => void wisselSort(street));
+  const opKlap = useStabiel((streetId: string) => klapStraat(streetId));
+  const opStraatOpDag = useStabiel((streetId: string, aan: boolean) => {
+    const g = groepen.find((x) => x.street.id === streetId);
+    if (g) zetStraatOpDag(g, aan);
+  });
 
   // De id-lijsten voor dnd-kit. Zonder useMemo krijgt SortableContext bij elke
   // render een verse array, verandert zijn context, en hertekent React álle
@@ -1397,20 +1413,18 @@ function Index() {
                   onDossier={opDossier}
                   onHoekadres={opHoekadres}
                   onNieuweRegel={opNieuweRegel}
-                  onEditStreet={() => setStraatDialog({ open: true, street: g.street })}
-                  onDeleteStreet={() => verwijderStraat(g.street)}
-                  onAddKlant={() =>
-                    setKlantDialog({ open: true, customer: null, streetId: g.street.id })
-                  }
-                  onToggleSort={() => void wisselSort(g.street)}
+                  onEditStreet={opEditStreet}
+                  onDeleteStreet={opDeleteStreet}
+                  onAddKlant={opAddKlant}
+                  onToggleSort={opToggleSort}
                   ingeklapt={ingeklapt.has(g.street.id)}
-                  onKlap={() => klapStraat(g.street.id)}
+                  onKlap={opKlap}
                   planmodus={selecteren}
                   dagKlaar={dagKlaar}
                   opDeDag={keuze}
                   eerderGewassen={eerderGewassen}
                   elderGepland={elderGepland}
-                  onStraatOpDag={(aan) => zetStraatOpDag(g, aan)}
+                  onStraatOpDag={opStraatOpDag}
                   onKlantOpDag={opKlantOpDag}
                   onVerfStart={opVerfStart}
                   negeerKlik={negeerKlik}
@@ -1501,12 +1515,12 @@ interface BlokProps {
   onDossier: (c: Customer) => void;
   onHoekadres: (c: Customer) => void;
   onNieuweRegel: (streetId: string, nummer: string) => void;
-  onEditStreet: () => void;
-  onDeleteStreet: () => void;
-  onAddKlant: () => void;
-  onToggleSort: () => void;
+  onEditStreet: (street: Street) => void;
+  onDeleteStreet: (street: Street) => void;
+  onAddKlant: (streetId: string) => void;
+  onToggleSort: (street: Street) => void;
   ingeklapt: boolean;
-  onKlap: () => void;
+  onKlap: (streetId: string) => void;
   /** In planmodus tel je adressen voor een dag; bewerken doe je dan niet. */
   planmodus: boolean;
   /** Vals zolang de dag nog opgehaald wordt: dan weten we van niets. */
@@ -1516,7 +1530,7 @@ interface BlokProps {
   eerderGewassen: Set<string>;
   /** Adressen die deze maand al op een latere dag ingepland staan. */
   elderGepland: Set<string>;
-  onStraatOpDag: (aan: boolean) => void;
+  onStraatOpDag: (streetId: string, aan: boolean) => void;
   onKlantOpDag: (c: Customer, aan: boolean) => void;
   /** Begint een sleepselectie; `aan` is de kant die de hele streek opgaat. */
   onVerfStart: (aan: boolean, x: number, y: number) => void;
@@ -1524,7 +1538,7 @@ interface BlokProps {
   negeerKlik: { current: boolean };
 }
 
-function StraatBlok(p: BlokProps) {
+const StraatBlok = memo(function StraatBlok(p: BlokProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `s:${p.street.id}`,
   });
@@ -1577,7 +1591,8 @@ function StraatBlok(p: BlokProps) {
                   p.negeerKlik.current = false;
                   return;
                 }
-                if (zichtbaar.length > 0 && p.dagKlaar) p.onStraatOpDag(straatVink !== true);
+                if (zichtbaar.length > 0 && p.dagKlaar)
+                  p.onStraatOpDag(p.street.id, straatVink !== true);
               },
               onPointerDown: (e: React.PointerEvent) => {
                 // Bij aanraken niet: dan is een veeg over de kop bedoeld om te
@@ -1609,7 +1624,7 @@ function StraatBlok(p: BlokProps) {
                 p.negeerKlik.current = false;
                 return;
               }
-              p.onStraatOpDag(v === true);
+              p.onStraatOpDag(p.street.id, v === true);
             }}
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => {
@@ -1632,7 +1647,7 @@ function StraatBlok(p: BlokProps) {
           className="rounded p-0.5 text-muted-foreground hover:bg-accent"
           onClick={(e) => {
             e.stopPropagation();
-            p.onKlap();
+            p.onKlap(p.street.id);
           }}
           onPointerDown={(e) => e.stopPropagation()}
           aria-label={p.ingeklapt ? "Straat uitklappen" : "Straat inklappen"}
@@ -1676,7 +1691,7 @@ function StraatBlok(p: BlokProps) {
           <>
             <button
               className="rounded p-1 text-muted-foreground hover:bg-accent"
-              onClick={p.onToggleSort}
+              onClick={() => p.onToggleSort(p.street)}
               aria-label={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
               title={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
             >
@@ -1688,21 +1703,21 @@ function StraatBlok(p: BlokProps) {
             </button>
             <button
               className="rounded p-1 text-muted-foreground hover:bg-accent"
-              onClick={p.onAddKlant}
+              onClick={() => p.onAddKlant(p.street.id)}
               aria-label="Klant toevoegen"
             >
               <Plus className="size-3.5" />
             </button>
             <button
               className="rounded p-1 text-muted-foreground hover:bg-accent"
-              onClick={p.onEditStreet}
+              onClick={() => p.onEditStreet(p.street)}
               aria-label="Straat bewerken"
             >
               <Pencil className="size-3.5" />
             </button>
             <button
               className="rounded p-1 text-muted-foreground hover:bg-accent"
-              onClick={p.onDeleteStreet}
+              onClick={() => p.onDeleteStreet(p.street)}
               aria-label="Straat verwijderen"
             >
               <Trash2 className="size-3.5" />
@@ -1734,7 +1749,7 @@ function StraatBlok(p: BlokProps) {
       </div>
     </section>
   );
-}
+});
 
 /**
  * Eén helft van een straat: de even of de oneven kant.
@@ -1745,7 +1760,7 @@ function StraatBlok(p: BlokProps) {
  * wisselt zijn context en hertekent React alle regels eronder, hoeveel `memo`
  * je er ook omheen zet.
  */
-function StraatKolom({
+const StraatKolom = memo(function StraatKolom({
   regels,
   blok: p,
   kant,
@@ -1796,7 +1811,7 @@ function StraatKolom({
       </div>
     </SortableContext>
   );
-}
+});
 
 interface RijProps {
   customer: Customer;
