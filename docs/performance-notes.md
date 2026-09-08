@@ -179,6 +179,94 @@ adressen` → `1 adres` → `0 adressen`), en het contextmenu. In de
 selecteerstand staan er 341 regels met het streek-attribuut en geen enkel
 sleepgreepje, zoals het hoort.
 
+## De klantenpagina: hetzelfde patroon, andere aanleiding
+
+Gemeten op wijk Madestein, 506 regels in de lijst. De rij-grens is hier
+`KlantMenu`, want daar begint elke regel.
+
+### Hoe het was
+
+| | renders van de rij |
+|---|---|
+| de pagina openen | 2024 (vier rondes over 506 regels) |
+| één letter in de zoekbalk | 1012 (twee rondes) |
+
+Bij het typen zat de pagina 1,0 tot 3,7 seconde vast, afhankelijk van hoeveel
+er overbleef. Bij het openen 2,7 seconde. Elke toetsaanslag tekende de hele
+lijst opnieuw, ook al veranderde er aan de meeste regels niets.
+
+Let op hoe de zoekbalk werkt: hij meldt bij élke toetsaanslag, niet pas bij
+Enter. Een letter intikken is dus meteen een volledige filterronde.
+
+### Wat eraan gedaan is
+
+**De rij is een eigen component geworden**, `KlantRegel`, in `memo`. De
+handlers (`onPatch`, `onDossier`, `onHoekadres`, verwijderen, de
+`onCommit`-handlers van de cellen, `zetVeld`, `zetPostcode`) hebben een vaste
+identiteit via `useStabiel`; het binden aan een specifieke regel gebeurt
+binnen de rij, onder de memo-grens. `adresTekst` staat nu op modulehoogte,
+zodat de rij hem ook kan gebruiken.
+
+Net als op de wijkenpagina zat het venijn een laag dieper: `districts`,
+`streets`, `customers`, `klanten` en `quickNotes` waren verse arrays bij elke
+render. Daardoor herberekende `regels` zich telkens en was elk regel-object
+nieuw — en dan kan `memo` niets. Die vijf staan nu in een `useMemo`. Zonder
+die stap had de splitsing niets opgeleverd.
+
+**En de lijst toont niet meer alles tegelijk.** Er staan 25 regels, en er
+komen er 25 bij zodra een leeg regeltje onderaan in beeld komt
+(`IntersectionObserver`, 300px van tevoren). Bij een nieuw zoekresultaat, een
+andere wijk of het omzetten van "alleen nog in te vullen" begint de teller
+weer op 25. Geen virtualisatie-bibliotheek: bij deze aantallen is meer tonen
+bij scrollen genoeg, en er is minder om fout te laten gaan.
+
+Zoeken en filteren gebeurt onverkort over de hele wijk. Alleen wat er
+getekend wordt is beperkt.
+
+### Hoe het nu is
+
+| | vóór | na memo | na memo + 25 tegelijk |
+|---|---|---|---|
+| renders bij openen | 2024 | 1012 | **100** |
+| renders bij één letter | 1012 | **0** | 50 |
+| regels in de DOM | 506 | 506 | **50** |
+| pagina zat vast bij openen | 2697 ms | — | **188 ms** |
+| pagina zat vast bij één letter | 997–3746 ms | 146 ms | **266 ms** |
+
+Twee dingen vallen op in die tabel, en ze verdienen allebei een woord.
+
+De memo alleen brengt het typen op **nul** rijrenders: er verandert dan
+werkelijk niets aan de regels, alleen welke er in de lijst staan. Met de
+pagineringsstap erbij worden het er 50, omdat de teller bij een nieuw
+zoekresultaat terugvalt naar 25 en de eerste rijen opnieuw opgebouwd worden.
+Dat is de prijs van "je kijkt weer naar het begin van het resultaat", en 50
+regels tekenen kost 266 ms tegen de seconden van eerst.
+
+Bij het openen is het andersom: daar doet de paginering het werk, van 1012
+naar 100 renders en van 2,7 seconde naar 188 milliseconde. Dat is een factor
+veertien in de tijd dat de pagina niet reageert, en dat is wat je merkt als je
+de pagina opent op een wijk van vijfhonderd adressen.
+
+### Wat er getest is
+
+- Zoeken na scrollen: 276 regels getoond, dan zoeken op "aleid" → 8 van 506,
+  en na wissen weer netjes bovenaan. Het zoekt dus over de hele wijk, niet
+  over wat toevallig getoond werd.
+- Korte lijst (8 treffers) en lege lijst (0 treffers): geen regeltje onderaan,
+  dus geen scroll-gedoe bij een kort resultaat.
+- Wisselen van wijk na scrollen: van 276 regels terug naar het begin, teller
+  op "437 van 437" voor de nieuwe wijk.
+- Bewerken via de cellen: op een regel binnen de eerste 25 én op een regel die
+  pas door scrollen verscheen (regel 141 van 177). Beide slaan op en blijven
+  in beeld staan.
+- De tellers bovenaan (adressen in deze wijk, met naam, bereikbaar) en de
+  "x van y regels" rekenen nog op het volledige resultaat, niet op wat
+  getoond wordt.
+
+Twee testnamen zijn in de testdatabase blijven staan: "Testnaam A" op
+Noorderhaaks 5 en "Testnaam B" op Burgemeester van Dijkesingel 91, allebei in
+wijk Gouda.
+
 ## Plan voor de sleep-refactor (nog niet uitgevoerd)
 
 Doel: het slepen soepel maken. Wacht op akkoord.

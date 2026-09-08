@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CornerDownRight, Mail, Plus, SquarePen, Trash2, User, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { useBevestig } from "@/components/Bevestig";
 import { pushUndo, undoLaatste } from "@/lib/undo";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
+import { useStabiel } from "@/hooks/use-stabiel";
 import {
   addQuickNote,
   adresVanRegel,
@@ -90,12 +91,130 @@ export const Route = createFileRoute("/klanten")({
  */
 type Regel = { id: string; customer: Customer; street: Street; klant: Klant | null };
 
+/**
+ * Het adres zoals het op de post staat.
+ *
+ * Een hoekadres hoort aan een andere straat; dát is het adres van deze klant,
+ * ook al staat hij op de wijklijst onder de straat die je loopt.
+ */
+function adresTekst(r: Regel) {
+  const naam =
+    r.customer.hoek_straat_volledig.trim() || r.street.volledige_naam.trim() || r.street.name;
+  return `${naam} ${formatNumber(r.customer)}`;
+}
+
 /** Contactvelden van de klant, rechtstreeks in de lijst te typen. */
 const KOLOMMEN = [
   { veld: "naam", kop: "NAAM", breed: "w-44" },
   { veld: "email", kop: "E-MAIL", breed: "w-56" },
   { veld: "telefoon", kop: "TELEFOON", breed: "w-36" },
 ] as const satisfies readonly { veld: keyof KlantVelden; kop: string; breed: string }[];
+
+/**
+ * Eén regel in de klantenlijst.
+ *
+ * Apart component en gememoïseerd, want een wijk telt er honderden en bij elke
+ * toetsaanslag in de zoekbalk tekende de browser ze voorheen allemaal opnieuw.
+ * De handlers komen als vaste functies binnen (zie useStabiel); het binden aan
+ * déze regel gebeurt hier, onder de memo-grens, dus dat kost niets.
+ */
+const KlantRegel = memo(function KlantRegel({
+  regel: r,
+  plaats,
+  onPatch,
+  onDossier,
+  onHoekadres,
+  onVerwijder,
+  onVeld,
+  onPostcode,
+}: {
+  regel: Regel;
+  plaats: string;
+  onPatch: (c: Customer, patch: Partial<Customer>) => void;
+  onDossier: (r: Regel) => void;
+  onHoekadres: (c: Customer) => void;
+  onVerwijder: (r: Regel) => void;
+  onVeld: (r: Regel, veld: keyof KlantVelden, waarde: string) => void;
+  onPostcode: (c: Customer, waarde: string) => void;
+}) {
+  const adres = adresTekst(r);
+
+  return (
+    <KlantMenu
+      customer={r.customer}
+      onPatch={(patch) => onPatch(r.customer, patch)}
+      onDossier={() => onDossier(r)}
+      onHoekadres={() => onHoekadres(r.customer)}
+    >
+      <tr className="group border-b border-border/60 last:border-b-0 hover:bg-accent/30">
+        {/* Het dossier openen staat vooraan, vóór het adres: dat is
+            de knop waarvoor je hier komt, dus die hoort niet weg te
+            vallen tot je er met de muis overheen gaat. */}
+        <td className="px-2 py-1">
+          <button
+            className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label={`Dossier van ${r.klant?.naam || adres}`}
+            title="Dossier openen"
+            onClick={() => onDossier(r)}
+          >
+            <User className="size-4" />
+          </button>
+        </td>
+        <td className="whitespace-nowrap px-2 py-1 font-medium">
+          <span className="flex items-center gap-1.5">
+            {isHoekadres(r.customer) && (
+              <CornerDownRight
+                className="size-3 shrink-0 text-muted-foreground"
+                aria-label="hoekadres"
+              />
+            )}
+            {adres}
+            {r.customer.hoek_straat && (
+              <span className="text-[10px] uppercase text-muted-foreground">
+                {r.customer.hoek_straat}
+              </span>
+            )}
+            <Overgeslagen customer={r.customer} />
+            <WassenVanaf customer={r.customer} onPatch={(patch) => onPatch(r.customer, patch)} />
+          </span>
+        </td>
+        {KOLOMMEN.map((k) => (
+          <td key={k.veld} className="px-2 py-1">
+            <InlineCel
+              value={r.klant?.[k.veld] ?? ""}
+              placeholder="—"
+              onCommit={(v) => onVeld(r, k.veld, v)}
+            />
+          </td>
+        ))}
+        <td className="px-2 py-1">
+          <InlineCel
+            value={r.customer.postcode}
+            placeholder="—"
+            onCommit={(v) => onPostcode(r.customer, v)}
+          />
+        </td>
+        <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">{plaats || "—"}</td>
+        <td
+          className="whitespace-nowrap px-2 py-1 text-right tabular-nums text-muted-foreground"
+          title={ritmeOmschrijving(r.customer)}
+        >
+          {r.customer.price ? formatPrice(r.customer.price) : "—"}
+        </td>
+        <td className="px-2 py-1">
+          <button
+            className="flex size-7 items-center justify-center rounded-full text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:bg-destructive/10 hover:!text-destructive"
+            aria-label={`${adres} verwijderen`}
+            title="Adres verwijderen"
+            onClick={() => onVerwijder(r)}
+          >
+            <Trash2 className="size-4" />
+          </button>
+        </td>
+      </tr>
+    </KlantMenu>
+  );
+});
 
 function Klanten() {
   useRequireAuth();
@@ -126,11 +245,15 @@ function Klanten() {
   const klantenQuery = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten });
   const quickNotesQuery = useQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes });
 
-  const districts: District[] = districtsQuery.data ?? [];
-  const streets: Street[] = streetsQuery.data ?? [];
-  const customers: Customer[] = customersQuery.data ?? [];
-  const klanten: Klant[] = klantenQuery.data ?? [];
-  const quickNotes: QuickNote[] = quickNotesQuery.data ?? [];
+  // Alle vijf met een vaste identiteit, ook zolang een query nog laadt. Ze
+  // zijn de invoer van `regels`, en daaruit komt het regel-object dat elke
+  // KlantRegel meekrijgt. Een verse lege array hier betekent bij elke render
+  // nieuwe regels, en dan kan `memo` op de rij niets uitrichten.
+  const districts: District[] = useMemo(() => districtsQuery.data ?? [], [districtsQuery.data]);
+  const streets: Street[] = useMemo(() => streetsQuery.data ?? [], [streetsQuery.data]);
+  const customers: Customer[] = useMemo(() => customersQuery.data ?? [], [customersQuery.data]);
+  const klanten: Klant[] = useMemo(() => klantenQuery.data ?? [], [klantenQuery.data]);
+  const quickNotes: QuickNote[] = useMemo(() => quickNotesQuery.data ?? [], [quickNotesQuery.data]);
 
   // De wijk waar je mee bezig bent blijft staan, ook na een paginawissel of
   // een nieuwe inlog. Een ?klant= in de URL blijft daarbij behouden, anders
@@ -201,14 +324,6 @@ function Klanten() {
     return klanten.filter((k) => !opWijklijst.has(k.id));
   }, [customers, streets, districts, klanten]);
 
-  function adresTekst(r: Regel) {
-    // Een hoekadres hoort aan een andere straat; dát is het adres van deze
-    // klant, ook al staat hij op de wijklijst onder de straat die je loopt.
-    const naam =
-      r.customer.hoek_straat_volledig.trim() || r.street.volledige_naam.trim() || r.street.name;
-    return `${naam} ${formatNumber(r.customer)}`;
-  }
-
   const zoektermenKlein = zoektermen.map((t) => t.toLowerCase());
 
   // Eén treffer is genoeg: met twee straten in de balk wil je ze allebei zien,
@@ -235,6 +350,47 @@ function Klanten() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [losseKlanten, zoektermen, alleenLeeg]);
+
+  /**
+   * Niet de hele wijk in één keer op het scherm: dat zijn er honderden, en
+   * de browser is er seconden mee bezig terwijl je er maar een handvol van
+   * ziet. We beginnen met 25 en tonen er 25 bij zodra je onderaan komt.
+   *
+   * Dit gaat alleen over wat er getekend wordt. Zoeken en filteren gebeurt
+   * onverkort over de hele wijk, dus je vindt nog steeds een adres dat
+   * driehonderd regels verderop staat.
+   */
+  const [aantalZichtbaar, setAantalZichtbaar] = useState(25);
+  const meerRef = useRef<HTMLTableRowElement | null>(null);
+  const getoond = zichtbaar.slice(0, aantalZichtbaar);
+  const erIsMeer = aantalZichtbaar < zichtbaar.length;
+
+  // Een nieuw zoekresultaat begint weer bovenaan; blijven staan op een oud,
+  // groter aantal zou betekenen dat je honderden regels tekent van iets waar
+  // je net vanaf de eerste regel naar kijkt.
+  useEffect(() => {
+    setAantalZichtbaar(25);
+  }, [zoektermen, alleenLeeg, actieveWijk]);
+
+  // Het lege regeltje onderaan de tabel is de aanleiding: komt dat in beeld,
+  // dan komen er 25 bij. `aantalZichtbaar` staat in de lijst hieronder zodat
+  // er een nieuwe waarnemer komt na elke uitbreiding — is het regeltje dan
+  // nog steeds in beeld (een hoog scherm, een korte aanvulling), dan gaat het
+  // meteen door tot het scherm vol is.
+  useEffect(() => {
+    const el = meerRef.current;
+    if (!el) return;
+    const waarnemer = new IntersectionObserver(
+      (regels) => {
+        if (regels.some((r) => r.isIntersecting)) setAantalZichtbaar((n) => n + 25);
+      },
+      // Iets eerder dan de onderrand, zodat de volgende 25 er al staan
+      // tegen de tijd dat je ze nodig hebt.
+      { rootMargin: "300px" },
+    );
+    waarnemer.observe(el);
+    return () => waarnemer.disconnect();
+  }, [aantalZichtbaar, zichtbaar.length]);
 
   function herlaad() {
     qc.invalidateQueries({ queryKey: ["klanten"] });
@@ -385,6 +541,22 @@ function Klanten() {
     }
   }
 
+  // Vaste identiteit voor alles wat een regel meekrijgt. Zonder dit ziet
+  // `memo` op KlantRegel bij elke toetsaanslag nieuwe functies en tekent de
+  // browser de hele lijst opnieuw; zie useStabiel.
+  const opPatch = useStabiel((c: Customer, patch: Partial<Customer>) => void patchAdres(c, patch));
+  const opDossier = useStabiel((r: Regel) =>
+    setDossier({ open: true, klant: r.klant, customer: r.customer }),
+  );
+  const opHoekadres = useStabiel((c: Customer) => setHoek({ open: true, customer: c }));
+  const opVerwijder = useStabiel(
+    (r: Regel) => void verwijderRegel(r.customer, r.klant, adresTekst(r)),
+  );
+  const opVeld = useStabiel(
+    (r: Regel, veld: keyof KlantVelden, waarde: string) => void zetVeld(r, veld, waarde),
+  );
+  const opPostcode = useStabiel((c: Customer, waarde: string) => void zetPostcode(c, waarde));
+
   const metNaam = regels.filter((r) => r.klant?.naam.trim()).length;
   const bereikbaar = regels.filter((r) => r.klant?.email.trim() || r.klant?.telefoon.trim()).length;
 
@@ -514,91 +686,26 @@ function Klanten() {
                 </tr>
               </thead>
               <tbody>
-                {zichtbaar.map((r) => (
-                  <KlantMenu
+                {getoond.map((r) => (
+                  <KlantRegel
                     key={r.id}
-                    customer={r.customer}
-                    onPatch={(patch) => void patchAdres(r.customer, patch)}
-                    onDossier={() =>
-                      setDossier({ open: true, klant: r.klant, customer: r.customer })
-                    }
-                    onHoekadres={() => setHoek({ open: true, customer: r.customer })}
-                  >
-                    <tr className="group border-b border-border/60 last:border-b-0 hover:bg-accent/30">
-                      {/* Het dossier openen staat vooraan, vóór het adres: dat is
-                          de knop waarvoor je hier komt, dus die hoort niet weg te
-                          vallen tot je er met de muis overheen gaat. */}
-                      <td className="px-2 py-1">
-                        <button
-                          className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                          aria-label={`Dossier van ${r.klant?.naam || adresTekst(r)}`}
-                          title="Dossier openen"
-                          onClick={() =>
-                            setDossier({ open: true, klant: r.klant, customer: r.customer })
-                          }
-                        >
-                          <User className="size-4" />
-                        </button>
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-1 font-medium">
-                        <span className="flex items-center gap-1.5">
-                          {isHoekadres(r.customer) && (
-                            <CornerDownRight
-                              className="size-3 shrink-0 text-muted-foreground"
-                              aria-label="hoekadres"
-                            />
-                          )}
-                          {adresTekst(r)}
-                          {r.customer.hoek_straat && (
-                            <span className="text-[10px] uppercase text-muted-foreground">
-                              {r.customer.hoek_straat}
-                            </span>
-                          )}
-                          <Overgeslagen customer={r.customer} />
-                          <WassenVanaf
-                            customer={r.customer}
-                            onPatch={(patch) => void patchAdres(r.customer, patch)}
-                          />
-                        </span>
-                      </td>
-                      {KOLOMMEN.map((k) => (
-                        <td key={k.veld} className="px-2 py-1">
-                          <InlineCel
-                            value={r.klant?.[k.veld] ?? ""}
-                            placeholder="—"
-                            onCommit={(v) => void zetVeld(r, k.veld, v)}
-                          />
-                        </td>
-                      ))}
-                      <td className="px-2 py-1">
-                        <InlineCel
-                          value={r.customer.postcode}
-                          placeholder="—"
-                          onCommit={(v) => void zetPostcode(r.customer, v)}
-                        />
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">
-                        {wijkVanNu?.plaats || "—"}
-                      </td>
-                      <td
-                        className="whitespace-nowrap px-2 py-1 text-right tabular-nums text-muted-foreground"
-                        title={ritmeOmschrijving(r.customer)}
-                      >
-                        {r.customer.price ? formatPrice(r.customer.price) : "—"}
-                      </td>
-                      <td className="px-2 py-1">
-                        <button
-                          className="flex size-7 items-center justify-center rounded-full text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:bg-destructive/10 hover:!text-destructive"
-                          aria-label={`${adresTekst(r)} verwijderen`}
-                          title="Adres verwijderen"
-                          onClick={() => void verwijderRegel(r.customer, r.klant, adresTekst(r))}
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  </KlantMenu>
+                    regel={r}
+                    plaats={wijkVanNu?.plaats ?? ""}
+                    onPatch={opPatch}
+                    onDossier={opDossier}
+                    onHoekadres={opHoekadres}
+                    onVerwijder={opVerwijder}
+                    onVeld={opVeld}
+                    onPostcode={opPostcode}
+                  />
                 ))}
+                {/* Geen inhoud, alleen een plek om te zien dat je onderaan
+                    bent. Staat er niet als de lijst al helemaal getoond is. */}
+                {erIsMeer && (
+                  <tr ref={meerRef} aria-hidden="true">
+                    <td colSpan={KOLOMMEN.length + 6} className="h-8" />
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
