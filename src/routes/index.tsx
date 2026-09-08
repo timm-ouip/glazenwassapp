@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -1850,63 +1850,105 @@ interface RijProps {
  * er maar één van om. De optimistische update in `patchKlant` laat de andere
  * regels bij hun oude object, dus die slaan hier over.
  */
-const KlantRij = memo(function KlantRij({
+/**
+ * De dunne schil die aan de sleepbeweging hangt.
+ *
+ * Alles wat `useSortable` aanroept, hertekent bij élke muisbeweging tijdens
+ * een sleep: die hook volgt de DndContext, en die werkt continu bij. Dat is
+ * niet te vermijden — maar wel goedkoop te houden. Daarom staat hier niet
+ * meer dan de buitenste laag en het greepje, en komt de eigenlijke regel als
+ * `children` binnen. Die elementen maakt `KlantRij` aan, en zolang díe niet
+ * hertekent blijven het dezelfde objecten, dus laat React de hele inhoud met
+ * rust. Zie docs/performance-notes.md.
+ */
+function KlantRijSleep({
+  id,
+  className,
+  verfKlant,
+  onGreep,
+  children,
+  // Het contextmenu eromheen gebruikt `asChild` en hangt zijn eigen ref en
+  // onContextMenu aan wat het binnenkrijgt. Vroeger was dat de div hieronder
+  // en ging dat vanzelf goed; nu zit deze component ertussen, en moet alles
+  // wat hij niet zelf kent doorgegeven worden — anders doet de rechtermuis-
+  // knop op een regel niets meer.
+  ref: buitenRef,
+  ...rest
+}: {
+  id: string;
+  className: string;
+  /** In de selecteerstand hangt de streek-afhandeling aan dit attribuut. */
+  verfKlant?: string | undefined;
+  /** Null in de selecteerstand: dan is er geen greepje om aan te trekken. */
+  onGreep: ((e: React.MouseEvent) => void) | null;
+  children: ReactNode;
+  ref?: React.Ref<HTMLDivElement>;
+} & Omit<React.HTMLAttributes<HTMLDivElement>, "className" | "children">) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
+
+  return (
+    <div
+      ref={(node) => {
+        setNodeRef(node);
+        if (typeof buitenRef === "function") buitenRef(node);
+        else if (buitenRef) buitenRef.current = node;
+      }}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={`${className} ${isDragging ? "opacity-40" : ""}`}
+      {...(verfKlant ? { "data-verf-klant": verfKlant } : {})}
+      {...rest}
+    >
+      {onGreep && (
+        <button
+          className="cursor-grab touch-none text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
+          aria-label="Regel verslepen"
+          onClick={onGreep}
+          {...attributes}
+          {...listeners}
+          // Ná attributes, want dnd-kit zet er zelf tabIndex 0 op. Tab hoort
+          // van vakje naar vakje te springen, niet langs de sleepgreepjes;
+          // er is geen toetsenbordsensor, dus hier gaat niets verloren.
+          tabIndex={-1}
+        >
+          <GripVertical className="size-3" />
+        </button>
+      )}
+      {children}
+    </div>
+  );
+}
+
+/**
+ * De regel zelf: nummer, notitie, prijs, ritme en de knoppen erachter.
+ *
+ * Apart van de schil hierboven, en gememoïseerd, want dit is het dure deel.
+ * Zolang er aan dit adres niets verandert hoeft het tijdens een sleep geen
+ * enkele keer opnieuw getekend te worden.
+ */
+const KlantRijInhoud = memo(function KlantRijInhoud({
   customer: c,
   prijzenTonen,
   quickNotes,
   klantNaam,
-  rowText,
-  rowPad,
-  geselecteerd,
   ronde: dezeMaand,
   planmodus,
   opDeDag,
-  eerderGewassen,
-  elderGepland,
   dagKlaar,
   onOpDag,
   onVerfStart,
   negeerKlik,
-  onSelect,
   onPatch,
   onAddQuickNote,
   onDelete,
   onDossier,
-  onHoekadres,
 }: RijProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: `c:${c.id}`,
-  });
-
-  // In planmodus vertelt de kleur waar je die dag staat; daarbuiten waar je
-  // op moet letten. Twee kleursystemen tegelijk zou niet te lezen zijn.
-  const kleur = regelKleur(c, dezeMaand);
-  const achtergrond = planmodus
-    ? opDeDag
-      ? "bg-tint-amber"
-      : eerderGewassen
-        ? "bg-tint-groen"
-        : elderGepland
-          ? "bg-tint-paars"
-          : ""
-    : kleur === "geel"
-      ? "bg-tint-amber"
-      : kleur === "groen"
-        ? "bg-tint-groen"
-        : kleur === "rood"
-          ? "bg-tint-rood"
-          : "";
-
-  const rij = (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`group relative flex items-center gap-0.5 border-b border-border/60 px-0.5 ${rowPad} ${rowText} ${
-        isDragging ? "opacity-40" : ""
-      } ${geselecteerd ? "bg-accent" : ""} ${achtergrond}`}
-      {...(planmodus ? { "data-verf-klant": c.id } : {})}
-    >
-      {planmodus ? (
+  return (
+    <>
+      {/* Het greepje om aan te slepen staat in KlantRijSleep hierboven: dat
+          hangt aan de sleepbeweging, de rest hieronder niet. */}
+      {planmodus && (
         <>
           {/* In de selecteerstand ligt de hele regel op slot: je bent een dag
               aan het samenstellen, niet aan het bijwerken. Eén doorzichtig
@@ -1935,20 +1977,6 @@ const KlantRij = memo(function KlantRij({
             aria-label={`${formatNumber(c)} op de dag`}
           />
         </>
-      ) : (
-        <button
-          className="cursor-grab touch-none text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
-          aria-label="Regel verslepen"
-          onClick={(e) => onSelect(c, e.shiftKey)}
-          {...attributes}
-          {...listeners}
-          // Ná attributes, want dnd-kit zet er zelf tabIndex 0 op. Tab hoort
-          // van vakje naar vakje te springen, niet langs de sleepgreepjes;
-          // er is geen toetsenbordsensor, dus hier gaat niets verloren.
-          tabIndex={-1}
-        >
-          <GripVertical className="size-3" />
-        </button>
       )}
       <div className="flex w-11 shrink-0 items-center gap-px">
         {isHoekadres(c) && (
@@ -2025,19 +2053,58 @@ const KlantRij = memo(function KlantRij({
       >
         <Trash2 className="size-3" />
       </button>
-    </div>
+    </>
   );
+});
+
+/**
+ * Kleur per frequentie: blauw is het accent, amber de even maanden, grijs de oneven.
+ * Het amber badge krijgt een randje: een aangevinkte rij is zelf ook amber,
+ * en zonder rand valt het badge daar helemaal in weg.
+ *
+ * Gememoïseerd, want een wijk telt honderden regels en elke wijziging schrijft
+ * er maar één van om. De optimistische update in `patchKlant` laat de andere
+ * regels bij hun oude object, dus die slaan hier over.
+ */
+const KlantRij = memo(function KlantRij(p: RijProps) {
+  const c = p.customer;
+
+  // In planmodus vertelt de kleur waar je die dag staat; daarbuiten waar je
+  // op moet letten. Twee kleursystemen tegelijk zou niet te lezen zijn.
+  const kleur = regelKleur(c, p.ronde);
+  const achtergrond = p.planmodus
+    ? p.opDeDag
+      ? "bg-tint-amber"
+      : p.eerderGewassen
+        ? "bg-tint-groen"
+        : p.elderGepland
+          ? "bg-tint-paars"
+          : ""
+    : kleur === "geel"
+      ? "bg-tint-amber"
+      : kleur === "groen"
+        ? "bg-tint-groen"
+        : kleur === "rood"
+          ? "bg-tint-rood"
+          : "";
 
   // De rechtermuisknop hangt om de hele regel: kleur, overslaan en het
   // dossier zitten daarin, want in de regel zelf is er geen plek voor.
   return (
     <KlantMenu
       customer={c}
-      onPatch={(patch) => onPatch(c, patch)}
-      onDossier={() => onDossier(c)}
-      onHoekadres={() => onHoekadres(c)}
+      onPatch={(patch) => p.onPatch(c, patch)}
+      onDossier={() => p.onDossier(c)}
+      onHoekadres={() => p.onHoekadres(c)}
     >
-      {rij}
+      <KlantRijSleep
+        id={`c:${c.id}`}
+        className={`group relative flex items-center gap-0.5 border-b border-border/60 px-0.5 ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond}`}
+        verfKlant={p.planmodus ? c.id : undefined}
+        onGreep={p.planmodus ? null : (e) => p.onSelect(c, e.shiftKey)}
+      >
+        <KlantRijInhoud {...p} />
+      </KlantRijSleep>
     </KlantMenu>
   );
 });

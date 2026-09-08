@@ -110,6 +110,75 @@ al gedaan is. Op de gebruiker en niet op de sessie: een verversde token is
 dezelfde persoon. Bij uitloggen gaat de vlag eraf, dus in- en uitloggen
 verversen nog gewoon. Gemeten: van drie aanvragen naar één.
 
+## Uitgevoerd: stap 1, `KlantRij` gesplitst
+
+`KlantRij` is uit elkaar gehaald in twee delen:
+
+- `KlantRijSleep` — de schil. Roept `useSortable` aan en rendert niet meer dan
+  de buitenste laag en het sleepgreepje.
+- `KlantRijInhoud` — in `memo`. Nummer, notitie, prijs, ritme, de knoppen.
+
+Renders tijdens dezelfde sleep als hierboven (dezelfde regel in Markgraaf A,
+vijf plaatsen omhoog, twaalf muisbewegingen):
+
+| component | vóór | na stap 1 |
+|---|---|---|
+| `Index` | 2 | 2 |
+| `StraatBlok` | 522 | 522 |
+| `KlantRij` (schil) | 6166 | 6166 |
+| `KlantRijInhoud` | — | **0** |
+
+De schil doet exact evenveel werk als `KlantRij` eerst deed — dat is de
+bevestiging dat er niets is weggevallen. Maar het is nu een `<div>` met een
+greepje in plaats van een hele regel. De dure inhoud wordt tijdens het slepen
+geen enkele keer meer getekend.
+
+Inclusief het loslaten gaat `KlantRijInhoud` van 7530 renders naar 24. De
+overige aantallen liggen in die fase iets hoger dan in de eerste meting
+(`Index` 8 tegen 4, `StraatBlok` 754 tegen 638); dat deel van de meting is
+gevoelig voor de timing van het netwerkverkeer en de query-invalidatie na een
+sleep, en dat verschil is niet verder uitgezocht.
+
+### Wat het in tijd doet
+
+Zelfde sleep, gemeten met `PerformanceObserver` op long tasks, beide keren in
+dev-modus:
+
+| | vóór | na stap 1 |
+|---|---|---|
+| duur van de hele sleep | 9745 ms | **822 ms** |
+| tijd waarin de pagina vastzat | 11153 ms | **729 ms** |
+| traagste losse muisbeweging | 4374 ms | **319 ms** |
+
+De eerste beweging is in beide gevallen de duurste: dnd-kit meet dan alle
+posities op. Daarna zit het merendeel van de bewegingen onder de 10 ms, waar
+het eerder tientallen milliseconden per stap was bovenop een start van ruim
+vier seconden. Twee metingen na elkaar gaven 801 en 822 ms, dus het cijfer is
+stabiel.
+
+### Eén regressie onderweg, en hoe die eruitzag
+
+`KlantMenu` (de rechtermuisknop op een regel) gebruikt
+`<ContextMenuTrigger asChild>`. Radix hangt zijn eigen `onContextMenu` en een
+ref aan het element dat het binnenkrijgt. Dat was de `<div>` en ging vanzelf
+goed; met de schil ertussen kwam het bij een functiecomponent terecht, die
+allebei stilzwijgend liet vallen. Het menu deed het daardoor niet meer.
+
+`KlantRijSleep` neemt nu een `ref` aan, combineert die met de `setNodeRef` van
+dnd-kit, en geeft alle overige props door aan de div. Het kostte geen
+meetbare tijd: 822 ms met en zonder.
+
+De les voor stap 2: een component tussen `asChild` en zijn doel schuiven
+breekt stil. Er komt geen foutmelding — het werkt gewoon niet meer.
+
+### Wat er nog getest is
+
+Slepen zelf (de volgorde verandert echt), een regel selecteren via het
+greepje, de selecteerstand aan en uit, een adres aan- en uitvinken (`0
+adressen` → `1 adres` → `0 adressen`), en het contextmenu. In de
+selecteerstand staan er 341 regels met het streek-attribuut en geen enkel
+sleepgreepje, zoals het hoort.
+
 ## Plan voor de sleep-refactor (nog niet uitgevoerd)
 
 Doel: het slepen soepel maken. Wacht op akkoord.
@@ -119,7 +188,7 @@ elk component dat wil kunnen slepen moet zijn context volgen. De uitweg is
 niet om ze te voorkomen, maar om ze **goedkoop** te maken: laat het abonnement
 op de context in een dun schilletje zitten, en houd de dure inhoud daarbuiten.
 
-### Stap 1 — `KlantRij` splitsen (grootste winst, kleinste ingreep)
+### Stap 1 — `KlantRij` splitsen — GEDAAN, zie hierboven
 
 Hier zit 92% van het werk. Splits het component in tweeën:
 
