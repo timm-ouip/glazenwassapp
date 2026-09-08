@@ -80,15 +80,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     }
 
+    /** Voor wie de employees- en companies-rij al opgehaald zijn. Bij het
+     * opstarten komt hier meer dan één aanroep langs — `getSession` levert er
+     * één, en `onAuthStateChange` vuurt zijn eigen beginevents daar bovenop —
+     * en zonder dit deed elk van die aanroepen dezelfde twee queries opnieuw.
+     * Op de gebruiker en niet op de sessie: een verversde token is dezelfde
+     * persoon, en dan hoeft er niets opgehaald te worden. */
+    let geladenVoor: string | null = null;
+
     async function laadMedewerker(session: Session | null) {
       zetSessie(session);
-      if (!session) return;
-      const { data } = await supabase
+      if (!session) {
+        // Uitgelogd: de volgende die binnenkomt hoort weer opgehaald te worden.
+        geladenVoor = null;
+        return;
+      }
+      if (geladenVoor === session.user.id) return;
+      // Vóór de eerste await, anders glipt een tweede aanroep er nog langs.
+      geladenVoor = session.user.id;
+      const { data, error } = await supabase
         .from("employees")
         .select("id,company_id,naam,email,rol")
         .eq("id", session.user.id)
         .maybeSingle();
       if (!actief) return;
+      if (error) {
+        // Mislukt is niet hetzelfde als opgehaald: laat een volgende aanroep
+        // het opnieuw proberen, anders blijf je zonder bedrijf zitten.
+        if (geladenVoor === session.user.id) geladenVoor = null;
+        return;
+      }
       const employee = (data as Employee) ?? null;
       const company = await laadBedrijf(employee);
       if (!actief) return;
@@ -132,7 +153,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  return <AuthContext.Provider value={{ ...state, refreshEmployee }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ ...state, refreshEmployee }}>{children}</AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
