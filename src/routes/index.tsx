@@ -63,6 +63,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppLayout } from "@/components/AppLayout";
 import { KlantDialog } from "@/components/KlantDialog";
@@ -109,6 +117,7 @@ import {
   fetchQuickNotes,
   fetchStraatGroepen,
   fetchStreets,
+  nieuweStraatGroep,
   formatNumber,
   formatPrice,
   isHoekadres,
@@ -224,7 +233,13 @@ function Index() {
     open: false,
     street: null,
   });
-  const [groepDialog, setGroepDialog] = useState<{ open: boolean; groep: StraatGroep | null }>({
+  /** Hernoemen als er een groep in staat; is die leeg en staat er een straat
+   *  in, dan maakt het dialoogje een nieuwe groep met die straat erin. */
+  const [groepDialog, setGroepDialog] = useState<{
+    open: boolean;
+    groep: StraatGroep | null;
+    street?: Street | null;
+  }>({
     open: false,
     groep: null,
   });
@@ -922,6 +937,56 @@ function Index() {
     meldUndo(`Straat "${s.name}" verwijderd`);
   }
 
+  /** Een straat in een groep zetten of eruit halen, vanaf de rechtermuisknop
+   *  op de straatkop. */
+  async function zetStraatInGroep(street: Street, groepId: string | null) {
+    const vorige = street.groep_id;
+    if (vorige === groepId) return;
+    qc.setQueryData<Street[]>(["streets"], (oud) =>
+      (oud ?? []).map((s) => (s.id === street.id ? { ...s, groep_id: groepId } : s)),
+    );
+    try {
+      await zetStratenInGroep([street.id], groepId);
+    } catch (e) {
+      toast.error("Verplaatsen mislukt: " + (e as Error).message);
+      qc.invalidateQueries({ queryKey: ["streets"] });
+      return;
+    }
+    const naar = subgroepen.find((g) => g.id === groepId)?.naam;
+    pushUndo({
+      label: `Straat ${street.name} verplaatst`,
+      undo: async () => {
+        await zetStratenInGroep([street.id], vorige);
+        qc.invalidateQueries({ queryKey: ["streets"] });
+      },
+    });
+    toast.success(naar ? `${street.name} zit nu in ${naar}` : `${street.name} zit in geen groep`);
+  }
+
+  /** Een nieuwe groep met deze straat er meteen in. De naam vraagt het
+   *  dialoogje; het aanmaken gebeurt hier, bij het opslaan. */
+  async function maakGroepMetStraat(street: Street, naam: string) {
+    if (!actieveWijk) return;
+    try {
+      const volgende = Math.max(0, ...subgroepen.map((g) => g.sort_order)) + 1;
+      const id = await nieuweStraatGroep(actieveWijk, naam, volgende);
+      await zetStratenInGroep([street.id], id);
+      pushUndo({
+        label: `Groep ${naam}`,
+        undo: async () => {
+          await zetStratenInGroep([street.id], street.groep_id);
+          await verwijderStraatGroep(id);
+          herlaad();
+        },
+      });
+    } catch (e) {
+      toast.error("Groep maken mislukt: " + (e as Error).message);
+      return;
+    }
+    herlaad();
+    toast.success(`Groep "${naam}" gemaakt, met ${street.name} erin`);
+  }
+
   async function hernoemGroep(groep: StraatGroep, naam: string) {
     qc.setQueryData<StraatGroep[]>(["straat_groepen"], (oud) =>
       (oud ?? []).map((g) => (g.id === groep.id ? { ...g, naam } : g)),
@@ -1103,6 +1168,12 @@ function Index() {
     if (ids.length) pasKeuzeAan(aan ? ids : [], aan ? [] : ids);
   });
   const opKlapGroep = useStabiel((groepId: string) => klapStraat(groepSleutel(groepId)));
+  const opZetGroep = useStabiel(
+    (street: Street, groepId: string | null) => void zetStraatInGroep(street, groepId),
+  );
+  const opNieuweGroep = useStabiel((street: Street) =>
+    setGroepDialog({ open: true, groep: null, street }),
+  );
   const opEditGroep = useStabiel((groep: StraatGroep) => setGroepDialog({ open: true, groep }));
   const opDeleteGroep = useStabiel((groep: StraatGroep) => void verwijderGroep(groep));
 
@@ -1323,6 +1394,9 @@ function Index() {
       onToggleSort={opToggleSort}
       ingeklapt={ingeklapt.has(g.street.id)}
       onKlap={opKlap}
+      groepen={subgroepen}
+      onZetGroep={opZetGroep}
+      onNieuweGroep={opNieuweGroep}
       planmodus={selecteren}
       dagKlaar={dagKlaar}
       opDeDag={keuze}
@@ -1741,7 +1815,10 @@ function Index() {
         open={groepDialog.open}
         onOpenChange={(open) => setGroepDialog((g) => ({ ...g, open }))}
         groep={groepDialog.groep}
-        onOpslaan={(naam) => groepDialog.groep && void hernoemGroep(groepDialog.groep, naam)}
+        onOpslaan={(naam) => {
+          if (groepDialog.groep) void hernoemGroep(groepDialog.groep, naam);
+          else if (groepDialog.street) void maakGroepMetStraat(groepDialog.street, naam);
+        }}
       />
     </AppLayout>
   );
@@ -1807,7 +1884,11 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
     <section
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`mb-3 break-inside-avoid-column rounded-[16px] border border-dashed border-border bg-muted/30 p-1.5 ${
+      // [column-span:all] laat de groep over beide kolommen lopen, zodat de
+      // straten die er niet in zitten er gewoon onder verder gaan in plaats
+      // van ernaast. Binnen de groep staan de straten zelf weer in twee
+      // kolommen, net als daarbuiten.
+      className={`mb-3 break-inside-avoid-column rounded-[16px] border border-dashed border-border bg-muted/30 p-1.5 [column-span:all] ${
         isDragging ? "opacity-50" : ""
       }`}
     >
@@ -1935,7 +2016,7 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
           {p.aantal} {p.aantal === 1 ? "adres" : "adressen"} ingeklapt
         </p>
       ) : (
-        p.children
+        <div className="gap-3.5 md:columns-1 xl:columns-2">{p.children}</div>
       )}
     </section>
   );
@@ -1971,6 +2052,10 @@ interface BlokProps {
   onToggleSort: (street: Street) => void;
   ingeklapt: boolean;
   onKlap: (streetId: string) => void;
+  /** De subgroepen van deze wijk, voor het menu onder de rechtermuisknop. */
+  groepen: StraatGroep[];
+  onZetGroep: (street: Street, groepId: string | null) => void;
+  onNieuweGroep: (street: Street) => void;
   /** In planmodus tel je adressen voor een dag; bewerken doe je dan niet. */
   planmodus: boolean;
   /** Vals zolang de dag nog opgehaald wordt: dan weten we van niets. */
@@ -2029,152 +2114,189 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={`mb-3 break-inside-avoid-column overflow-hidden rounded-[14px] border border-border bg-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
     >
-      <div
-        {...(p.planmodus
-          ? {
-              "data-verf-straat": p.street.id,
-              // De hele kop is de knop; alleen het pijltje klapt in of uit.
-              onClick: () => {
-                // Met de muis heeft het indrukken het al gedaan; dit is het
-                // pad voor aanraken en toetsenbord.
-                if (p.negeerKlik.current) {
-                  p.negeerKlik.current = false;
-                  return;
+      {/* Rechtermuisknop op de straatkop: hierin zit alles wat met
+          groepen te maken heeft. Dat hoort niet in de kop zelf — die is al
+          vol, en dit doe je een paar keer per jaar. */}
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            {...(p.planmodus
+              ? {
+                  "data-verf-straat": p.street.id,
+                  // De hele kop is de knop; alleen het pijltje klapt in of uit.
+                  onClick: () => {
+                    // Met de muis heeft het indrukken het al gedaan; dit is het
+                    // pad voor aanraken en toetsenbord.
+                    if (p.negeerKlik.current) {
+                      p.negeerKlik.current = false;
+                      return;
+                    }
+                    if (zichtbaar.length > 0 && p.dagKlaar)
+                      p.onStraatOpDag(p.street.id, straatVink !== true);
+                  },
+                  onPointerDown: (e: React.PointerEvent) => {
+                    // Bij aanraken niet: dan is een veeg over de kop bedoeld om te
+                    // scrollen. Op de telefoon begin je een streek op het vinkje.
+                    if (e.pointerType !== "touch" && zichtbaar.length > 0 && p.dagKlaar) {
+                      p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
+                    }
+                  },
                 }
-                if (zichtbaar.length > 0 && p.dagKlaar)
-                  p.onStraatOpDag(p.street.id, straatVink !== true);
-              },
-              onPointerDown: (e: React.PointerEvent) => {
-                // Bij aanraken niet: dan is een veeg over de kop bedoeld om te
-                // scrollen. Op de telefoon begin je een streek op het vinkje.
-                if (e.pointerType !== "touch" && zichtbaar.length > 0 && p.dagKlaar) {
-                  p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
-                }
-              },
+              : {})}
+            style={
+              gevuld > 0
+                ? {
+                    backgroundImage: `linear-gradient(to right, var(--tint-amber) ${gevuld}%, transparent ${gevuld}%)`,
+                  }
+                : undefined
             }
-          : {})}
-        style={
-          gevuld > 0
-            ? {
-                backgroundImage: `linear-gradient(to right, var(--tint-amber) ${gevuld}%, transparent ${gevuld}%)`,
-              }
-            : undefined
-        }
-        className={`flex items-center gap-1 border-b border-border px-2.5 py-2 ${kopKleur} ${
-          p.planmodus && zichtbaar.length > 0 && p.dagKlaar ? "cursor-pointer select-none" : ""
-        }`}
-      >
-        {p.planmodus ? (
-          <Checkbox
-            className="mr-1 touch-none"
-            checked={straatVink}
-            disabled={zichtbaar.length === 0 || !p.dagKlaar}
-            onCheckedChange={(v) => {
-              if (p.negeerKlik.current) {
-                p.negeerKlik.current = false;
-                return;
-              }
-              p.onStraatOpDag(p.street.id, v === true);
-            }}
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
-            }}
-            aria-label={`Hele ${p.street.name} op de dag`}
-          />
-        ) : (
-          <button
-            className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing"
-            aria-label="Straat verslepen"
-            {...attributes}
-            {...listeners}
+            className={`flex items-center gap-1 border-b border-border px-2.5 py-2 ${kopKleur} ${
+              p.planmodus && zichtbaar.length > 0 && p.dagKlaar ? "cursor-pointer select-none" : ""
+            }`}
           >
-            <GripVertical className="size-3.5" />
-          </button>
-        )}
-        <button
-          className="rounded p-0.5 text-muted-foreground hover:bg-accent"
-          onClick={(e) => {
-            e.stopPropagation();
-            p.onKlap(p.street.id);
-          }}
-          onPointerDown={(e) => e.stopPropagation()}
-          aria-label={p.ingeklapt ? "Straat uitklappen" : "Straat inklappen"}
-          aria-expanded={!p.ingeklapt}
-        >
-          {p.ingeklapt ? (
-            <ChevronRight className="size-3.5" />
-          ) : (
-            <ChevronDown className="size-3.5" />
-          )}
-        </button>
-        <h2 className="flex-1 truncate font-display text-[14.5px] font-semibold uppercase tracking-[0.01em] text-foreground">
-          {p.street.name}
-        </h2>
-        <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">
-          {p.planmodus && erop > 0 && erop < p.aantal ? `${erop}/${p.aantal}` : p.aantal}
-        </span>
-        {p.planmodus && alGedaan > 0 && (
-          <span
-            className="rounded-full bg-tint-groen px-1.5 text-[11px] tabular-nums text-tint-groen-ink"
-            title={`${alGedaan} deze maand al gewassen`}
-          >
-            {alGedaan} gedaan
-          </span>
-        )}
-        {p.planmodus && alGepland > 0 && (
-          <span
-            className="rounded-full bg-tint-paars px-1.5 text-[11px] tabular-nums text-tint-paars-ink"
-            title={`${alGepland} staat al op een andere dag`}
-          >
-            {alGepland} gepland
-          </span>
-        )}
-        {p.prijzenTonen && (
-          <span className="text-[11px] font-medium tabular-nums text-brand-ink">
-            {formatPrice(p.totaal)}
-          </span>
-        )}
-
-        {!p.planmodus && (
-          <>
+            {p.planmodus ? (
+              <Checkbox
+                className="mr-1 touch-none"
+                checked={straatVink}
+                disabled={zichtbaar.length === 0 || !p.dagKlaar}
+                onCheckedChange={(v) => {
+                  if (p.negeerKlik.current) {
+                    p.negeerKlik.current = false;
+                    return;
+                  }
+                  p.onStraatOpDag(p.street.id, v === true);
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
+                }}
+                aria-label={`Hele ${p.street.name} op de dag`}
+              />
+            ) : (
+              <button
+                className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing"
+                aria-label="Straat verslepen"
+                {...attributes}
+                {...listeners}
+              >
+                <GripVertical className="size-3.5" />
+              </button>
+            )}
             <button
-              className="rounded p-1 text-muted-foreground hover:bg-accent"
-              onClick={() => p.onToggleSort(p.street)}
-              aria-label={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
-              title={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
+              className="rounded p-0.5 text-muted-foreground hover:bg-accent"
+              onClick={(e) => {
+                e.stopPropagation();
+                p.onKlap(p.street.id);
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label={p.ingeklapt ? "Straat uitklappen" : "Straat inklappen"}
+              aria-expanded={!p.ingeklapt}
             >
-              {p.sort === "asc" ? (
-                <ArrowUpNarrowWide className="size-3.5" />
+              {p.ingeklapt ? (
+                <ChevronRight className="size-3.5" />
               ) : (
-                <ArrowDownNarrowWide className="size-3.5" />
+                <ChevronDown className="size-3.5" />
               )}
             </button>
-            <button
-              className="rounded p-1 text-muted-foreground hover:bg-accent"
-              onClick={() => p.onAddKlant(p.street.id)}
-              aria-label="Klant toevoegen"
-            >
-              <Plus className="size-3.5" />
-            </button>
-            <button
-              className="rounded p-1 text-muted-foreground hover:bg-accent"
-              onClick={() => p.onEditStreet(p.street)}
-              aria-label="Straat bewerken"
-            >
-              <Pencil className="size-3.5" />
-            </button>
-            <button
-              className="rounded p-1 text-muted-foreground hover:bg-accent"
-              onClick={() => p.onDeleteStreet(p.street)}
-              aria-label="Straat verwijderen"
-            >
-              <Trash2 className="size-3.5" />
-            </button>
-          </>
-        )}
-      </div>
+            <h2 className="flex-1 truncate font-display text-[14.5px] font-semibold uppercase tracking-[0.01em] text-foreground">
+              {p.street.name}
+            </h2>
+            <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">
+              {p.planmodus && erop > 0 && erop < p.aantal ? `${erop}/${p.aantal}` : p.aantal}
+            </span>
+            {p.planmodus && alGedaan > 0 && (
+              <span
+                className="rounded-full bg-tint-groen px-1.5 text-[11px] tabular-nums text-tint-groen-ink"
+                title={`${alGedaan} deze maand al gewassen`}
+              >
+                {alGedaan} gedaan
+              </span>
+            )}
+            {p.planmodus && alGepland > 0 && (
+              <span
+                className="rounded-full bg-tint-paars px-1.5 text-[11px] tabular-nums text-tint-paars-ink"
+                title={`${alGepland} staat al op een andere dag`}
+              >
+                {alGepland} gepland
+              </span>
+            )}
+            {p.prijzenTonen && (
+              <span className="text-[11px] font-medium tabular-nums text-brand-ink">
+                {formatPrice(p.totaal)}
+              </span>
+            )}
+
+            {!p.planmodus && (
+              <>
+                <button
+                  className="rounded p-1 text-muted-foreground hover:bg-accent"
+                  onClick={() => p.onToggleSort(p.street)}
+                  aria-label={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
+                  title={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
+                >
+                  {p.sort === "asc" ? (
+                    <ArrowUpNarrowWide className="size-3.5" />
+                  ) : (
+                    <ArrowDownNarrowWide className="size-3.5" />
+                  )}
+                </button>
+                <button
+                  className="rounded p-1 text-muted-foreground hover:bg-accent"
+                  onClick={() => p.onAddKlant(p.street.id)}
+                  aria-label="Klant toevoegen"
+                >
+                  <Plus className="size-3.5" />
+                </button>
+                <button
+                  className="rounded p-1 text-muted-foreground hover:bg-accent"
+                  onClick={() => p.onEditStreet(p.street)}
+                  aria-label="Straat bewerken"
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+                <button
+                  className="rounded p-1 text-muted-foreground hover:bg-accent"
+                  onClick={() => p.onDeleteStreet(p.street)}
+                  aria-label="Straat verwijderen"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </>
+            )}
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-56">
+          <ContextMenuLabel>{p.street.name}</ContextMenuLabel>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => p.onNieuweGroep(p.street)}>
+            <Layers className="mr-2 size-4" /> Nieuwe groep met deze straat…
+          </ContextMenuItem>
+          {p.groepen.length > 0 && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuLabel className="text-muted-foreground">
+                Toevoegen aan groep
+              </ContextMenuLabel>
+              {p.groepen.map((groep) => (
+                <ContextMenuItem key={groep.id} onSelect={() => p.onZetGroep(p.street, groep.id)}>
+                  {p.street.groep_id === groep.id ? (
+                    <Check className="mr-2 size-4" />
+                  ) : (
+                    <span className="mr-2 size-4" />
+                  )}
+                  {groep.naam}
+                </ContextMenuItem>
+              ))}
+              {p.street.groep_id && (
+                <ContextMenuItem onSelect={() => p.onZetGroep(p.street, null)}>
+                  <CircleSlash className="mr-2 size-4" /> Uit de groep halen
+                </ContextMenuItem>
+              )}
+            </>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
 
       <div className={`grid grid-cols-2 gap-px bg-border ${p.ingeklapt ? "hidden" : ""}`}>
         {(["even", "oneven"] as const).map((kant) => (

@@ -16,14 +16,14 @@ import { opslaanBijEnter } from "@/lib/dialoog";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** De groep die hernoemd wordt; leeg betekent: er komt een nieuwe. */
   groep: StraatGroep | null;
   onOpslaan: (naam: string) => void;
 }
 
 /**
- * Alleen de naam van een subgroep veranderen. Aanmaken gebeurt in
- * StraatDialog, bij de straat die je erin zet — dat scheelt een tweede plek
- * waar je aan groepen kunt beginnen.
+ * De naam van een subgroep: hernoemen als er een groep meekomt, en anders een
+ * nieuwe maken. Wie hem opent, weet zelf wat er daarna met die naam gebeurt.
  */
 export function GroepDialog({ open, onOpenChange, groep, onOpslaan }: Props) {
   const [naam, setNaam] = useState("");
@@ -45,14 +45,11 @@ export function GroepDialog({ open, onOpenChange, groep, onOpslaan }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm" onKeyDown={opslaanBijEnter(save)}>
         <DialogHeader>
-          <DialogTitle>Groep hernoemen</DialogTitle>
+          <DialogTitle>{groep ? "Groep hernoemen" : "Nieuwe groep"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-2">
           <Label htmlFor="groepnaam">Naam</Label>
           <Input id="groepnaam" autoFocus value={naam} onChange={(e) => setNaam(e.target.value)} />
-          <p className="text-xs text-muted-foreground">
-            Waar dit stuk van de wijk voor jou naar heet: Noordkant, Achter het park.
-          </p>
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>

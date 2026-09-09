@@ -382,10 +382,35 @@ Twee dingen zijn onderweg anders uitgepakt dan hierboven staat:
   mét beide straten erin — dat is het pad waar de undo zelf moet onthouden wie
   erin zat, en dat klopt.
 
-**Niet getest:** het verslepen van een straat naar een andere groep, en het
-verslepen van groepen onderling. De code staat er (zie `onDragEnd`), maar
-slepen is met een aangestuurde browser niet betrouwbaar na te doen; dat is
-iets om zelf even te proberen.
+**Het slepen** — een straat naar een andere groep, en groepen onderling — is
+door Timmie zelf geprobeerd en werkt. Met een aangestuurde browser was het niet
+betrouwbaar na te doen, vandaar dat het hier niet in de eigen testronde staat.
 
-Er staat in de testdatabase één groep "Noordkant" in wijk Gouda, met
-Noorderhaaks en De Slufter erin.
+In de testdatabase staat één groep "Noordkant" in wijk Gouda.
+
+### Wijzigingen na de eerste versie, dezelfde dag
+
+Na het meekijken zijn er vier dingen aangepast:
+
+1. **De uitleg onder het naamveld is weg.** Een veld met "Naam" erboven in een
+   venster dat "Groep hernoemen" heet, legt zichzelf uit.
+2. **Een groep loopt over beide kolommen.** De sectie heeft
+   `[column-span:all]`, waardoor de straten die er niet in zitten er gewoon
+   ónder verdergaan in plaats van ernaast. Binnen de groep staan de straten
+   zelf weer in twee kolommen, net als daarbuiten. Dit is duidelijk beter dan
+   de variant uit hoofdstuk 6, waar de groep één kolom vulde en de rest ernaast
+   doorliep.
+3. **De rechtermuisknop op een straatkop** geeft nu "Nieuwe groep met deze
+   straat…", de bestaande groepen om hem aan toe te voegen (met een vinkje bij
+   de groep waar hij nu in zit), en "Uit de groep halen". Daarmee is de
+   keuzelijst in `StraatDialog` niet langer de enige weg naar een groep — en de
+   snelle weg loopt nu langs de straat waar je toch al met je muis bent.
+4. **`GroepDialog` maakt ook nieuwe groepen.** Komt er een groep mee, dan
+   hernoemt hij; komt er een straat mee, dan maakt hij een groep met die straat
+   erin. Het terugdraaien haalt de straat er weer uit én gooit de groep weg.
+
+Ook dit is nagelopen: een straat aan een bestaande groep toevoegen
+("Schiermonnikoog zit nu in Noordkant", de kop telt door naar 15 · € 484), een
+nieuwe groep vanaf de rechtermuisknop ("Groep 'Testgroep' gemaakt, met
+Scheygrond erin"), en het terugdraaien daarvan — waarna Scheygrond weer in
+Noordkant zat en Testgroep verdwenen was.
