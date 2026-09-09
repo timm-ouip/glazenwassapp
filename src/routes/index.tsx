@@ -39,7 +39,6 @@ import {
   Euro,
   Milestone as Route2,
   CalendarCheck,
-  CalendarOff,
   CalendarPlus,
   Check,
   CheckSquare,
@@ -57,9 +56,6 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -87,6 +83,8 @@ import { WijkKiezer } from "@/components/WijkKiezer";
 import { useBevestig } from "@/components/Bevestig";
 import { InlineCel } from "@/components/InlineCel";
 import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
+import { OverslaanKnop } from "@/components/OverslaanKnop";
+import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
 import { NotitieCel } from "@/components/NotitieCel";
 import { ZoekBalk } from "@/components/ZoekBalk";
 import { HoekadresDialog } from "@/components/HoekadresDialog";
@@ -679,75 +677,19 @@ function Index() {
    * adres dat nog moet beginnen schuift op in plaats van een pauze te krijgen.
    */
   async function slaKeuzeOver(maanden: string[]) {
-    const gekozen = customers.filter((c) => keuze.has(c.id));
-    if (gekozen.length === 0) return;
-    const vorige = gekozen.map((c) => ({ id: c.id, overslaan: c.overslaan, start: c.start_maand }));
-
-    const patches = gekozen.map((c) => ({
-      c,
-      patch: schuifStartOp(c, {
-        overslaan: [...new Set([...c.overslaan, ...maanden])].sort(),
-      }),
-    }));
-
-    qc.setQueryData<Customer[]>(["customers"], (oud) =>
-      (oud ?? []).map((x) => {
-        const p = patches.find((y) => y.c.id === x.id);
-        return p ? { ...x, ...p.patch } : x;
-      }),
+    await slaSelectieOver(
+      customers.filter((c) => keuze.has(c.id)),
+      maanden,
+      qc,
     );
-
-    try {
-      await Promise.all(patches.map(({ c, patch }) => patchCustomer(c.id, patch)));
-    } catch (e) {
-      toast.error("Overslaan mislukt: " + (e as Error).message);
-      qc.invalidateQueries({ queryKey: ["customers"] });
-      return;
-    }
-
-    pushUndo({
-      label: `Overslaan voor ${gekozen.length} adressen`,
-      undo: async () => {
-        await Promise.all(
-          vorige.map((v) => patchCustomer(v.id, { overslaan: v.overslaan, start_maand: v.start })),
-        );
-        qc.invalidateQueries({ queryKey: ["customers"] });
-      },
-    });
-
-    const wat =
-      maanden.length === 1
-        ? toonMaand(maanden[0]!)
-        : `${maanden.length} maanden t/m ${toonMaand(maanden[maanden.length - 1]!)}`;
-    toast.success(`${gekozen.length} adressen slaan ${wat} over`);
   }
 
   /** De pauzes weghalen bij alles wat aangevinkt staat. */
   async function wisOverslaanVanKeuze() {
-    const gekozen = customers.filter((c) => keuze.has(c.id) && c.overslaan.length > 0);
-    if (gekozen.length === 0) {
-      toast("Bij deze adressen staat niets overgeslagen.");
-      return;
-    }
-    const vorige = gekozen.map((c) => ({ id: c.id, overslaan: c.overslaan }));
-    qc.setQueryData<Customer[]>(["customers"], (oud) =>
-      (oud ?? []).map((x) => (keuze.has(x.id) ? { ...x, overslaan: [] } : x)),
+    await wisOverslaanVanSelectie(
+      customers.filter((c) => keuze.has(c.id)),
+      qc,
     );
-    try {
-      await Promise.all(gekozen.map((c) => patchCustomer(c.id, { overslaan: [] })));
-    } catch (e) {
-      toast.error("Mislukt: " + (e as Error).message);
-      qc.invalidateQueries({ queryKey: ["customers"] });
-      return;
-    }
-    pushUndo({
-      label: `Overslaan teruggezet voor ${gekozen.length} adressen`,
-      undo: async () => {
-        await Promise.all(vorige.map((v) => patchCustomer(v.id, { overslaan: v.overslaan })));
-        qc.invalidateQueries({ queryKey: ["customers"] });
-      },
-    });
-    toast.success(`${gekozen.length} adressen slaan niets meer over`);
   }
 
   // --- Slepen om te selecteren -------------------------------------------
@@ -2803,101 +2745,6 @@ function InplannenKnop({
             {d === bewerktDag && <Check className={`size-4 ${i < 2 ? "ml-1" : "ml-auto"}`} />}
           </DropdownMenuItem>
         ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-/**
- * Overslaan voor alles wat je aangevinkt hebt.
- *
- * Dezelfde keuzes als achter de rechtermuisknop op één regel, maar dan in één
- * klap: een straat waar de steiger staat, of een rijtje dat op vakantie is.
- * Per adres los gaan zou hier tientallen klikken kosten.
- */
-function OverslaanKnop({
-  aantal,
-  onOverslaan,
-  onNietsOverslaan,
-}: {
-  aantal: number;
-  /** `tot` is waar bij "t/m" alles ervoor ook meegaat. */
-  onOverslaan: (maanden: string[]) => void;
-  onNietsOverslaan: () => void;
-}) {
-  const maanden = komendeMaanden();
-  const komende = maanden[0]!;
-  /** Streepje bij de jaarwissel, anders lopen december en januari in elkaar. */
-  const jaarwissel = (m: string, i: number) => i > 0 && m.endsWith("-01");
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          size="sm"
-          variant="outline"
-          className="rounded-full"
-          disabled={aantal === 0}
-          title={aantal === 0 ? "Vink eerst adressen aan" : `${aantal} adressen overslaan`}
-        >
-          <CalendarOff className="size-4" /> Overslaan
-          <ChevronDown className="size-3.5 opacity-70" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-60">
-        <DropdownMenuLabel className="font-normal text-muted-foreground">
-          {aantal} {aantal === 1 ? "adres" : "adressen"}
-        </DropdownMenuLabel>
-
-        <DropdownMenuItem onSelect={() => onOverslaan([komende])}>
-          <CalendarOff className="size-4" /> Overslaan
-          <span className="ml-auto text-xs capitalize text-muted-foreground">
-            {toonMaand(komende)}
-          </span>
-        </DropdownMenuItem>
-
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <CalendarOff className="size-4" /> Overslaan in…
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="max-h-72 overflow-y-auto">
-            {maanden.map((m, i) => (
-              <Fragment key={m}>
-                {jaarwissel(m, i) && <DropdownMenuSeparator />}
-                <DropdownMenuItem
-                  onSelect={(e) => {
-                    // Openhouden: meestal kies je er meer dan één.
-                    e.preventDefault();
-                    onOverslaan([m]);
-                  }}
-                >
-                  <span className="capitalize">{toonMaand(m)}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
-                </DropdownMenuItem>
-              </Fragment>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <CalendarOff className="size-4" /> Overslaan t/m…
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="max-h-72 overflow-y-auto">
-            {maanden.map((m, i) => (
-              <Fragment key={`tot-${m}`}>
-                {jaarwissel(m, i) && <DropdownMenuSeparator />}
-                <DropdownMenuItem onSelect={() => onOverslaan(maanden.filter((x) => x <= m))}>
-                  <span className="capitalize">{toonMaand(m)}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
-                </DropdownMenuItem>
-              </Fragment>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-
-        <DropdownMenuItem onSelect={onNietsOverslaan}>
-          <CircleSlash className="size-4" /> Niets meer overslaan
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

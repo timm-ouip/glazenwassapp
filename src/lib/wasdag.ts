@@ -19,10 +19,18 @@ export interface WasdagRegel {
  * die rekent in UTC en zet een Nederlandse zomeravond na 22:00 al op morgen.
  */
 export function vandaag(): string {
-  const nu = new Date();
-  const maand = String(nu.getMonth() + 1).padStart(2, "0");
-  const dag = String(nu.getDate()).padStart(2, "0");
-  return `${nu.getFullYear()}-${maand}-${dag}`;
+  return datumSleutel(new Date());
+}
+
+/**
+ * Een `Date` als `jjjj-mm-dd` in lokale tijd. Zelfde reden als hierboven: de
+ * kalender geeft een `Date` terug op middernacht, en `toISOString()` maakt daar
+ * in de zomer de dag ervoor van.
+ */
+export function datumSleutel(d: Date): string {
+  const maand = String(d.getMonth() + 1).padStart(2, "0");
+  const dag = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${maand}-${dag}`;
 }
 
 /** Toont een datum als "31 augustus", of "vandaag" als dat vandaag is. */
