@@ -27,6 +27,18 @@ export interface District {
   plaats: string;
 }
 
+/**
+ * Een stuk van een wijk met een eigen naam: "Noordkant", "Achter het park".
+ * Bedoeld voor wijken die je niet in één keer rijdt — je klapt zo'n stuk in
+ * of uit, en zet het in één handeling op een wasdag.
+ */
+export interface StraatGroep {
+  id: string;
+  district_id: string;
+  naam: string;
+  sort_order: number;
+}
+
 export interface Street {
   id: string;
   name: string;
@@ -35,6 +47,9 @@ export interface Street {
   volledige_naam: string;
   sort_order: number;
   district_id: string;
+  /** In welke subgroep van de wijk deze straat zit; leeg = in geen enkele.
+   *  Die straten staan gewoon los onder de groepen. */
+  groep_id: string | null;
   sort_desc: boolean;
   kolom_start: boolean;
   print_col: number | null;
@@ -324,7 +339,7 @@ export async function fetchStreets(): Promise<Street[]> {
   const { data, error } = await supabase
     .from("streets")
     .select(
-      "id,name,volledige_naam,sort_order,district_id,sort_desc,kolom_start,print_col,print_row",
+      "id,name,volledige_naam,sort_order,district_id,groep_id,sort_desc,kolom_start,print_col,print_row",
     )
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
@@ -938,6 +953,86 @@ export async function persistStreetOrder(streets: Street[]) {
         .from("streets")
         .update({ sort_order: i + 1 })
         .eq("id", s.id),
+    ),
+  );
+}
+
+// --- Subgroepen van straten ---------------------------------------------
+
+export async function fetchStraatGroepen(): Promise<StraatGroep[]> {
+  const { data, error } = await supabase
+    .from("straat_groepen")
+    .select("id,district_id,naam,sort_order")
+    .order("sort_order", { ascending: true })
+    .order("naam", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as StraatGroep[];
+}
+
+/** Maakt een groep aan en geeft zijn id terug, zodat de straat die hem
+ *  aanvroeg er meteen in kan. */
+export async function nieuweStraatGroep(
+  districtId: string,
+  naam: string,
+  sortOrder: number,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("straat_groepen")
+    .insert({ district_id: districtId, naam: naam.trim(), sort_order: sortOrder })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return (data as { id: string }).id;
+}
+
+export async function hernoemStraatGroep(id: string, naam: string) {
+  const { error } = await supabase
+    .from("straat_groepen")
+    .update({ naam: naam.trim() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Weg is weg — een groep heeft geen prullenbak. Er gaat ook niets verloren:
+ * `on delete set null` laat de straten staan met een leeg `groep_id`, en ze
+ * komen los onder de groepen terug. Wie dit terugdraait moet zelf onthouden
+ * wélke straten erin zaten; zie `zetStratenInGroep`.
+ */
+export async function verwijderStraatGroep(id: string) {
+  const { error } = await supabase.from("straat_groepen").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Maakt een verwijderde groep terug met hetzelfde id, zodat de straten er
+ *  zo weer in kunnen. Alleen voor het ongedaan maken. */
+export async function herstelStraatGroep(g: StraatGroep) {
+  const { error } = await supabase.from("straat_groepen").insert({
+    id: g.id,
+    district_id: g.district_id,
+    naam: g.naam,
+    sort_order: g.sort_order,
+  });
+  if (error) throw error;
+}
+
+/** Zet straten in een groep, of (met null) er juist uit. */
+export async function zetStratenInGroep(streetIds: string[], groepId: string | null) {
+  if (streetIds.length === 0) return;
+  const { error } = await supabase
+    .from("streets")
+    .update({ groep_id: groepId })
+    .in("id", streetIds);
+  if (error) throw error;
+}
+
+export async function persistGroepOrder(groepen: StraatGroep[]) {
+  await Promise.all(
+    groepen.map((g, i) =>
+      supabase
+        .from("straat_groepen")
+        .update({ sort_order: i + 1 })
+        .eq("id", g.id),
     ),
   );
 }

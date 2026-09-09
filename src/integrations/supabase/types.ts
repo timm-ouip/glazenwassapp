@@ -323,12 +323,55 @@ export type Database = {
           },
         ]
       }
+      straat_groepen: {
+        Row: {
+          company_id: string
+          created_at: string
+          district_id: string
+          id: string
+          naam: string
+          sort_order: number
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          district_id: string
+          id?: string
+          naam: string
+          sort_order?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          district_id?: string
+          id?: string
+          naam?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "straat_groepen_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "straat_groepen_district_id_fkey"
+            columns: ["district_id"]
+            isOneToOne: false
+            referencedRelation: "districts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       streets: {
         Row: {
           company_id: string
           created_at: string
           deleted_at: string | null
           district_id: string
+          groep_id: string | null
           id: string
           name: string
           print_col: number | null
@@ -343,6 +386,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           district_id: string
+          groep_id?: string | null
           id?: string
           name: string
           print_col?: number | null
@@ -357,6 +401,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           district_id?: string
+          groep_id?: string | null
           id?: string
           name?: string
           print_col?: number | null
@@ -379,6 +424,13 @@ export type Database = {
             columns: ["district_id"]
             isOneToOne: false
             referencedRelation: "districts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "streets_groep_id_fkey"
+            columns: ["groep_id"]
+            isOneToOne: false
+            referencedRelation: "straat_groepen"
             referencedColumns: ["id"]
           },
         ]

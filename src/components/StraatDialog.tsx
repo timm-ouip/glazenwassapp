@@ -11,7 +11,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import type { Street } from "@/lib/klanten";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { nieuweStraatGroep, type StraatGroep, type Street } from "@/lib/klanten";
 import { zoekStraten } from "@/lib/postcode";
 import { opslaanBijEnter } from "@/lib/dialoog";
 
@@ -19,23 +26,45 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   street: Street | null;
+  /** De subgroepen van deze wijk, om de straat in te kunnen zetten. */
+  groepen: StraatGroep[];
   districtId?: string | undefined;
   /** Woonplaats van de wijk; nodig om straatnamen te kunnen voorstellen. */
   plaats?: string | undefined;
   onSaved: () => void;
 }
 
-export function StraatDialog({ open, onOpenChange, street, districtId, plaats, onSaved }: Props) {
+/** De waarde in de keuzelijst voor "hoort bij geen enkele groep". Een lege
+ *  string kan niet: Radix gebruikt die voor "nog niets gekozen". */
+const GEEN = "geen";
+/** En dit is de regel onderaan waarmee je er ter plekke een maakt. */
+const NIEUW = "nieuw";
+
+export function StraatDialog({
+  open,
+  onOpenChange,
+  street,
+  groepen,
+  districtId,
+  plaats,
+  onSaved,
+}: Props) {
   const [name, setName] = useState("");
   const [volledig, setVolledig] = useState("");
   const [suggesties, setSuggesties] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  /** Het id van de gekozen groep, of GEEN, of NIEUW. */
+  const [groep, setGroep] = useState<string>(GEEN);
+  /** De naam die je intikt als je NIEUW koos. */
+  const [nieuweNaam, setNieuweNaam] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setName(street?.name ?? "");
     setVolledig(street?.volledige_naam ?? "");
     setSuggesties([]);
+    setGroep(street?.groep_id ?? GEEN);
+    setNieuweNaam("");
   }, [open, street]);
 
   // Officiële straatnamen voorstellen op basis van wat er in het korte veld
@@ -60,8 +89,33 @@ export function StraatDialog({ open, onOpenChange, street, districtId, plaats, o
       toast.error("Vul een straatnaam in.");
       return;
     }
+    if (groep === NIEUW && !nieuweNaam.trim()) {
+      toast.error("Geef de nieuwe groep een naam.");
+      return;
+    }
     setSaving(true);
-    const payload = { name: name.trim(), volledige_naam: volledig.trim() };
+
+    // Koos je "Nieuwe groep…", dan bestaat die groep nog niet: eerst maken,
+    // dan de straat opslaan met het id dat daaruit komt. Lukt het maken niet,
+    // dan slaan we ook de straat niet op — anders staat hij straks in een
+    // groep die er niet is.
+    let groepId: string | null = groep === GEEN || groep === NIEUW ? null : groep;
+    if (groep === NIEUW) {
+      try {
+        const volgende = Math.max(0, ...groepen.map((g) => g.sort_order)) + 1;
+        groepId = await nieuweStraatGroep(districtId!, nieuweNaam, volgende);
+      } catch (e) {
+        setSaving(false);
+        toast.error("Groep aanmaken mislukt: " + (e as Error).message);
+        return;
+      }
+    }
+
+    const payload = {
+      name: name.trim(),
+      volledige_naam: volledig.trim(),
+      groep_id: groepId,
+    };
     const { error } = street
       ? await supabase.from("streets").update(payload).eq("id", street.id)
       : await supabase
@@ -108,6 +162,35 @@ export function StraatDialog({ open, onOpenChange, street, districtId, plaats, o
             <p className="text-xs text-muted-foreground">
               De officiële naam, waarmee postcodes opgezocht worden. Mag leeg blijven als dit geen
               echte straat is, zoals een blok of complex.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="groep">Onderdeel van</Label>
+            <Select value={groep} onValueChange={setGroep}>
+              <SelectTrigger id="groep">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={GEEN}>Geen groep</SelectItem>
+                {groepen.map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.naam}
+                  </SelectItem>
+                ))}
+                <SelectItem value={NIEUW}>Nieuwe groep…</SelectItem>
+              </SelectContent>
+            </Select>
+            {groep === NIEUW && (
+              <Input
+                autoFocus
+                placeholder="Naam van de groep, bijv. Noordkant"
+                value={nieuweNaam}
+                onChange={(e) => setNieuweNaam(e.target.value)}
+              />
+            )}
+            <p className="text-xs text-muted-foreground">
+              Een groep is een stuk van de wijk dat je in één keer kunt inklappen of inplannen.
+              Straten zonder groep staan er gewoon los onder.
             </p>
           </div>
         </div>

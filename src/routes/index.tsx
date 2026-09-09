@@ -49,6 +49,7 @@ import {
   ChevronsUpDown,
   CircleSlash,
   CornerDownRight,
+  Layers,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -67,6 +68,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { KlantDialog } from "@/components/KlantDialog";
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { StraatDialog } from "@/components/StraatDialog";
+import { GroepDialog } from "@/components/GroepDialog";
 import { StratenAanvullen } from "@/components/StratenAanvullen";
 import { DubbeleStraten } from "@/components/DubbeleStraten";
 
@@ -105,6 +107,7 @@ import {
   fetchDistricts,
   fetchKlanten,
   fetchQuickNotes,
+  fetchStraatGroepen,
   fetchStreets,
   formatNumber,
   formatPrice,
@@ -121,7 +124,10 @@ import {
   ritmeMaanden,
   matchesMaand,
   natuurlijkeKant,
+  herstelStraatGroep,
+  hernoemStraatGroep,
   persistCustomerOrder,
+  persistGroepOrder,
   persistStreetOrder,
   setStreetSortDesc,
   sortCustomers,
@@ -129,7 +135,10 @@ import {
   type Customer,
   type Kant,
   type District,
+  verwijderStraatGroep,
+  zetStratenInGroep,
   type QuickNote,
+  type StraatGroep,
   type Street,
 } from "@/lib/klanten";
 
@@ -215,6 +224,10 @@ function Index() {
     open: false,
     street: null,
   });
+  const [groepDialog, setGroepDialog] = useState<{ open: boolean; groep: StraatGroep | null }>({
+    open: false,
+    groep: null,
+  });
   // Het dossier is een schermpje op déze pagina. Eerder sprong de rechter-
   // muisknop naar /klanten met het klant-id in de url; bij een adres zonder
   // klant was dat id leeg en gebeurde er niets.
@@ -232,6 +245,7 @@ function Index() {
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
   const quickNotesQuery = useQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes });
   const klantenQuery = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten });
+  const groepenQuery = useQuery({ queryKey: ["straat_groepen"], queryFn: fetchStraatGroepen });
 
   // Alleen om de naam bij een gekoppelde regel te kunnen tonen; de
   // contactgegevens zelf horen op /klanten.
@@ -264,12 +278,19 @@ function Index() {
   // Vaste identiteit, ook zolang de query nog laadt: elke verse lege array
   // zou `memo` op de regels breken.
   const quickNotes = useMemo(() => quickNotesQuery.data ?? [], [quickNotesQuery.data]);
+  const alleGroepen = useMemo(() => groepenQuery.data ?? [], [groepenQuery.data]);
+  /** De subgroepen van de wijk die je bekijkt, op volgorde. */
+  const subgroepen = useMemo(
+    () => alleGroepen.filter((g) => g.district_id === actieveWijk),
+    [alleGroepen, actieveWijk],
+  );
   const undoLabel = useLaatsteUndoLabel();
 
   function herlaad() {
     qc.invalidateQueries({ queryKey: ["districts"] });
     qc.invalidateQueries({ queryKey: ["streets"] });
     qc.invalidateQueries({ queryKey: ["customers"] });
+    qc.invalidateQueries({ queryKey: ["straat_groepen"] });
   }
 
   async function doeUndo() {
@@ -327,6 +348,49 @@ function Index() {
 
   const totaal = groepen.reduce((sum, g) => sum + g.aantal, 0);
   const omzet = groepen.reduce((sum, g) => sum + g.totaal, 0);
+
+  /**
+   * De straatblokken verdeeld over de subgroepen van deze wijk. Straten
+   * zonder groep — en straten waarvan de groep net verwijderd is — komen in
+   * `losseBlokken` en staan straks gewoon onder de groepen.
+   *
+   * De optelling per groep (aantal adressen, bedrag, de id's van de klanten
+   * erin) gebeurt hier en niet in de kop zelf: die kop hangt aan de
+   * sleepcontext en hertekent bij elke muisbeweging, en dan zou hij ook bij
+   * elke muisbeweging opnieuw staan te rekenen.
+   */
+  const { secties, losseBlokken } = useMemo(() => {
+    const perGroep = new Map<string, typeof groepen>();
+    const los: typeof groepen = [];
+    const bestaat = new Set(subgroepen.map((g) => g.id));
+    for (const blok of groepen) {
+      const id = blok.street.groep_id;
+      if (!id || !bestaat.has(id)) {
+        los.push(blok);
+        continue;
+      }
+      const lijst = perGroep.get(id);
+      if (lijst) lijst.push(blok);
+      else perGroep.set(id, [blok]);
+    }
+    const lijsten = subgroepen.map((groep) => {
+      const blokken = perGroep.get(groep.id) ?? [];
+      return {
+        groep,
+        blokken,
+        klantIds: blokken.flatMap((b) => [...b.even, ...b.oneven].map((c) => c.id)),
+        aantal: blokken.reduce((sum, b) => sum + b.aantal, 0),
+        totaal: blokken.reduce((sum, b) => sum + b.totaal, 0),
+      };
+    });
+    return { secties: lijsten, losseBlokken: los };
+  }, [groepen, subgroepen]);
+
+  /** Zoek je, dan gaat een dichtgeklapte groep open: anders vind je iets en
+   *  zie je het niet staan. */
+  const zoekt = zoektermen.length > 0;
+  /** Groepen waar de zoekterm niets van overlaat verdwijnen helemaal. */
+  const zichtbareSecties = zoekt ? secties.filter((s) => s.blokken.length > 0) : secties;
 
   // --- Selecteren en inplannen -------------------------------------------
   // Je vinkt eerst aan wát je gaat doen, en zegt daarna pas wannéér. Wat er
@@ -432,10 +496,27 @@ function Index() {
     }
   }, [dag]);
 
-  const allesIngeklapt = groepen.length > 0 && groepen.every((g) => ingeklapt.has(g.street.id));
+  /** Het in- en uitklappen loopt voor straten en groepen door dezelfde `Set`.
+   *  Een groep staat erin als "groep:<id>", een straat gewoon als zijn eigen
+   *  id — zo hoeft er maar één ding onthouden en omgezet te worden. */
+  function groepSleutel(id: string) {
+    return `groep:${id}`;
+  }
+
+  const allesIngeklapt =
+    groepen.length > 0 &&
+    groepen.every((g) => ingeklapt.has(g.street.id)) &&
+    secties.every((s) => ingeklapt.has(groepSleutel(s.groep.id)));
 
   function klapAlles() {
-    setIngeklapt(allesIngeklapt ? new Set() : new Set(groepen.map((g) => g.street.id)));
+    setIngeklapt(
+      allesIngeklapt
+        ? new Set()
+        : new Set([
+            ...groepen.map((g) => g.street.id),
+            ...secties.map((s) => groepSleutel(s.groep.id)),
+          ]),
+    );
   }
 
   function klapStraat(id: string) {
@@ -659,18 +740,26 @@ function Index() {
     const v = verf.current;
     if (!v) return;
     const el = document.elementFromPoint(x, y);
+    const groepEl = el?.closest<HTMLElement>("[data-verf-groep]");
     const straatEl = el?.closest<HTMLElement>("[data-verf-straat]");
     const klantEl = el?.closest<HTMLElement>("[data-verf-klant]");
-    const id = straatEl?.dataset["verfStraat"] ?? klantEl?.dataset["verfKlant"];
+    const id =
+      groepEl?.dataset["verfGroep"] ??
+      straatEl?.dataset["verfStraat"] ??
+      klantEl?.dataset["verfKlant"];
     if (!id || id === v.laatste) return;
     v.laatste = id;
     negeerKlik.current = true;
 
-    const ids = straatEl
-      ? (groepen.find((x) => x.street.id === id)?.even ?? [])
-          .concat(groepen.find((x) => x.street.id === id)?.oneven ?? [])
-          .map((c) => c.id)
-      : [id];
+    // Een groepkop staat voor alles wat eronder hangt, een straatkop voor die
+    // ene straat, en anders is het het adres zelf.
+    const ids = groepEl
+      ? (secties.find((x) => x.groep.id === id)?.klantIds ?? [])
+      : straatEl
+        ? (groepen.find((x) => x.street.id === id)?.even ?? [])
+            .concat(groepen.find((x) => x.street.id === id)?.oneven ?? [])
+            .map((c) => c.id)
+        : [id];
     pasKeuzeAan(v.aan ? ids : [], v.aan ? [] : ids);
   }
 
@@ -833,6 +922,63 @@ function Index() {
     meldUndo(`Straat "${s.name}" verwijderd`);
   }
 
+  async function hernoemGroep(groep: StraatGroep, naam: string) {
+    qc.setQueryData<StraatGroep[]>(["straat_groepen"], (oud) =>
+      (oud ?? []).map((g) => (g.id === groep.id ? { ...g, naam } : g)),
+    );
+    try {
+      await hernoemStraatGroep(groep.id, naam);
+    } catch (e) {
+      toast.error("Hernoemen mislukt: " + (e as Error).message);
+      qc.invalidateQueries({ queryKey: ["straat_groepen"] });
+      return;
+    }
+    pushUndo({
+      label: `Groepnaam ${groep.naam}`,
+      undo: async () => {
+        await hernoemStraatGroep(groep.id, groep.naam);
+        qc.invalidateQueries({ queryKey: ["straat_groepen"] });
+      },
+    });
+  }
+
+  /**
+   * Een groep weghalen. Weg is weg — een groep heeft geen prullenbak, want er
+   * gaat niets verloren: de straten en al hun adressen blijven staan en komen
+   * los onder de groepen terug.
+   *
+   * Het terugdraaien moet zélf onthouden welke straten erin zaten: de
+   * database heeft hun `groep_id` op dat moment al leeggemaakt.
+   */
+  async function verwijderGroep(groep: StraatGroep) {
+    const erin = streets.filter((s) => s.groep_id === groep.id).map((s) => s.id);
+    const ja = await bevestig({
+      titel: `Groep "${groep.naam}" verwijderen?`,
+      tekst:
+        erin.length === 0
+          ? "Deze groep is leeg. Je kunt dit direct daarna nog ongedaan maken."
+          : `De ${erin.length} ${erin.length === 1 ? "straat" : "straten"} erin blijven gewoon staan, los onder de groepen. Je kunt dit direct daarna nog ongedaan maken.`,
+      gevaarlijk: true,
+    });
+    if (!ja) return;
+    try {
+      await verwijderStraatGroep(groep.id);
+    } catch (e) {
+      toast.error("Verwijderen mislukt: " + (e as Error).message);
+      return;
+    }
+    pushUndo({
+      label: `Verwijderen groep ${groep.naam}`,
+      undo: async () => {
+        await herstelStraatGroep(groep);
+        await zetStratenInGroep(erin, groep.id);
+        herlaad();
+      },
+    });
+    herlaad();
+    meldUndo(`Groep "${groep.naam}" verwijderd`);
+  }
+
   async function nieuweRegel(streetId: string, nummer: string) {
     const huisnummer = parseInt(nummer, 10);
     if (Number.isNaN(huisnummer)) return;
@@ -949,11 +1095,35 @@ function Index() {
     const g = groepen.find((x) => x.street.id === streetId);
     if (g) zetStraatOpDag(g, aan);
   });
+  /** De hele groep op de dag, in één keer. Loopt langs dezelfde `pasKeuzeAan`
+   *  als een losse straat, dus het bedrag, het ongedaan maken en het opslaan
+   *  van de dag doen vanzelf mee. */
+  const opGroepOpDag = useStabiel((groepId: string, aan: boolean) => {
+    const ids = secties.find((x) => x.groep.id === groepId)?.klantIds ?? [];
+    if (ids.length) pasKeuzeAan(aan ? ids : [], aan ? [] : ids);
+  });
+  const opKlapGroep = useStabiel((groepId: string) => klapStraat(groepSleutel(groepId)));
+  const opEditGroep = useStabiel((groep: StraatGroep) => setGroepDialog({ open: true, groep }));
+  const opDeleteGroep = useStabiel((groep: StraatGroep) => void verwijderGroep(groep));
 
   // De id-lijsten voor dnd-kit. Zonder useMemo krijgt SortableContext bij elke
   // render een verse array, verandert zijn context, en hertekent React álle
   // regels die `useSortable` gebruiken — `memo` kan daar niets tegen doen.
-  const straatIds = useMemo(() => groepen.map((g) => `s:${g.street.id}`), [groepen]);
+  // Een ingeklapte groep staat er wel in, maar zijn straten niet: die zijn
+  // niet getekend, en dan valt er ook niets aan te wijzen om iets naast te
+  // laten vallen.
+  const straatIds = useMemo(
+    () => [
+      ...zichtbareSecties.flatMap((sec) => [
+        `g:${sec.groep.id}`,
+        ...(!zoekt && ingeklapt.has(groepSleutel(sec.groep.id))
+          ? []
+          : sec.blokken.map((b) => `s:${b.street.id}`)),
+      ]),
+      ...losseBlokken.map((b) => `s:${b.street.id}`),
+    ],
+    [zichtbareSecties, losseBlokken, ingeklapt, zoekt],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -970,25 +1140,76 @@ function Index() {
     const overId = e.over ? String(e.over.id) : null;
     if (!overId || activeId === overId) return;
 
-    if (activeId.startsWith("s:")) {
-      if (!overId.startsWith("s:")) return;
-      const ids = streets.map((s) => s.id);
+    // Een groep verslepen: alleen ten opzichte van een andere groep. De
+    // straten erin verhuizen mee doordat ze aan de groep hangen.
+    if (activeId.startsWith("g:")) {
+      if (!overId.startsWith("g:")) return;
+      const ids = subgroepen.map((g) => g.id);
       const from = ids.indexOf(activeId.slice(2));
       const to = ids.indexOf(overId.slice(2));
       if (from < 0 || to < 0) return;
-      const next = [...streets];
+      const next = [...subgroepen];
       const [moved] = next.splice(from, 1);
       next.splice(to, 0, moved!);
+      const vorigeVolgorde = subgroepen.map((g) => ({ ...g }));
+      // De query bevat de groepen van álle wijken; alleen die van deze wijk
+      // krijgen een nieuw nummer.
+      const nieuweNummers = new Map(next.map((g, i) => [g.id, i + 1]));
+      qc.setQueryData<StraatGroep[]>(["straat_groepen"], (oud) =>
+        (oud ?? []).map((g) => ({ ...g, sort_order: nieuweNummers.get(g.id) ?? g.sort_order })),
+      );
+      await persistGroepOrder(next);
+      pushUndo({
+        label: "Groepvolgorde",
+        undo: async () => {
+          await persistGroepOrder(vorigeVolgorde);
+          qc.invalidateQueries({ queryKey: ["straat_groepen"] });
+        },
+      });
+      qc.invalidateQueries({ queryKey: ["straat_groepen"] });
+      return;
+    }
+
+    if (activeId.startsWith("s:")) {
+      const bron = streets.find((s) => s.id === activeId.slice(2));
+      if (!bron) return;
+
+      // Waar je loslaat bepaalt twee dingen tegelijk: de plek in de rij, én
+      // in welke groep de straat voortaan zit. Laat je hem op een straat uit
+      // een andere groep los, dan verhuist hij mee — dezelfde beweging als
+      // altijd, hij doet alleen iets meer. Op een groepkop loslaten zet hem
+      // bovenaan in die groep.
+      let overStraat: Street | null = null;
+      let doelGroep: string | null;
+      if (overId.startsWith("s:")) {
+        overStraat = streets.find((s) => s.id === overId.slice(2)) ?? null;
+        if (!overStraat) return;
+        doelGroep = overStraat.groep_id;
+      } else if (overId.startsWith("g:")) {
+        doelGroep = overId.slice(2);
+      } else return;
+
+      const zonder = streets.filter((s) => s.id !== bron.id);
+      const index = overStraat
+        ? zonder.findIndex((s) => s.id === overStraat!.id)
+        : zonder.findIndex((s) => s.groep_id === doelGroep);
+      const verhuist = (bron.groep_id ?? null) !== (doelGroep ?? null);
+      const next = [...zonder];
+      next.splice(index < 0 ? zonder.length : index, 0, { ...bron, groep_id: doelGroep });
+
       const vorigeVolgorde = streets.map((s) => ({ ...s }));
+      const vorigeGroep = bron.groep_id;
       qc.setQueryData<Street[]>(
         ["streets"],
         next.map((s, i) => ({ ...s, sort_order: i + 1 })),
       );
       await persistStreetOrder(next);
+      if (verhuist) await zetStratenInGroep([bron.id], doelGroep);
       pushUndo({
-        label: "Straatvolgorde",
+        label: verhuist ? `Straat ${bron.name} verplaatst` : "Straatvolgorde",
         undo: async () => {
           await persistStreetOrder(vorigeVolgorde);
+          if (verhuist) await zetStratenInGroep([bron.id], vorigeGroep);
           herlaad();
         },
       });
@@ -1070,6 +1291,49 @@ function Index() {
   // op het scherm, en dat is waar je op de ronde naar kijkt.
   const rowText = "text-[12px]";
   const rowPad = "py-[2px]";
+
+  /** Eén straatblok. Staat hier als functie omdat hij op twee plekken nodig
+   *  is: binnen een groep, en los eronder. */
+  const straatBlok = (g: (typeof groepen)[number]) => (
+    <StraatBlok
+      key={g.street.id}
+      street={g.street}
+      ronde={ronde}
+      even={g.even}
+      oneven={g.oneven}
+      aantal={g.aantal}
+      totaal={g.totaal}
+      sort={g.street.sort_desc ? "desc" : "asc"}
+      prijzenTonen={prijzenTonen}
+      quickNotes={quickNotes}
+      klantNamen={klantNamen}
+      rowText={rowText}
+      rowPad={rowPad}
+      selectie={selectie}
+      onSelect={opSelect}
+      onPatch={opPatch}
+      onAddQuickNote={opAddQuickNote}
+      onDelete={opDelete}
+      onDossier={opDossier}
+      onHoekadres={opHoekadres}
+      onNieuweRegel={opNieuweRegel}
+      onEditStreet={opEditStreet}
+      onDeleteStreet={opDeleteStreet}
+      onAddKlant={opAddKlant}
+      onToggleSort={opToggleSort}
+      ingeklapt={ingeklapt.has(g.street.id)}
+      onKlap={opKlap}
+      planmodus={selecteren}
+      dagKlaar={dagKlaar}
+      opDeDag={keuze}
+      eerderGewassen={eerderGewassen}
+      elderGepland={elderGepland}
+      onStraatOpDag={opStraatOpDag}
+      onKlantOpDag={opKlantOpDag}
+      onVerfStart={opVerfStart}
+      negeerKlik={negeerKlik}
+    />
+  );
 
   return (
     <AppLayout
@@ -1390,46 +1654,31 @@ function Index() {
                 verfBezig ? "select-none" : ""
               }`}
             >
-              {groepen.map((g) => (
-                <StraatBlok
-                  key={g.street.id}
-                  street={g.street}
-                  ronde={ronde}
-                  even={g.even}
-                  oneven={g.oneven}
-                  aantal={g.aantal}
-                  totaal={g.totaal}
-                  sort={g.street.sort_desc ? "desc" : "asc"}
+              {zichtbareSecties.map((sec) => (
+                <GroepSectie
+                  key={sec.groep.id}
+                  groep={sec.groep}
+                  aantal={sec.aantal}
+                  totaal={sec.totaal}
+                  klantIds={sec.klantIds}
+                  ingeklapt={!zoekt && ingeklapt.has(groepSleutel(sec.groep.id))}
                   prijzenTonen={prijzenTonen}
-                  quickNotes={quickNotes}
-                  klantNamen={klantNamen}
-                  rowText={rowText}
-                  rowPad={rowPad}
-                  selectie={selectie}
-                  onSelect={opSelect}
-                  onPatch={opPatch}
-                  onAddQuickNote={opAddQuickNote}
-                  onDelete={opDelete}
-                  onDossier={opDossier}
-                  onHoekadres={opHoekadres}
-                  onNieuweRegel={opNieuweRegel}
-                  onEditStreet={opEditStreet}
-                  onDeleteStreet={opDeleteStreet}
-                  onAddKlant={opAddKlant}
-                  onToggleSort={opToggleSort}
-                  ingeklapt={ingeklapt.has(g.street.id)}
-                  onKlap={opKlap}
                   planmodus={selecteren}
                   dagKlaar={dagKlaar}
                   opDeDag={keuze}
                   eerderGewassen={eerderGewassen}
                   elderGepland={elderGepland}
-                  onStraatOpDag={opStraatOpDag}
-                  onKlantOpDag={opKlantOpDag}
+                  onKlap={opKlapGroep}
+                  onGroepOpDag={opGroepOpDag}
+                  onEdit={opEditGroep}
+                  onDelete={opDeleteGroep}
                   onVerfStart={opVerfStart}
                   negeerKlik={negeerKlik}
-                />
+                >
+                  {sec.blokken.map((g) => straatBlok(g))}
+                </GroepSectie>
               ))}
+              {losseBlokken.map((g) => straatBlok(g))}
               {districts.length > 0 && <NieuweStraat onSubmit={nieuweStraat} />}
             </div>
           </SortableContext>
@@ -1485,11 +1734,212 @@ function Index() {
         open={straatDialog.open}
         onOpenChange={(open) => setStraatDialog((s) => ({ ...s, open }))}
         street={straatDialog.street}
+        groepen={subgroepen}
         onSaved={herlaad}
+      />
+      <GroepDialog
+        open={groepDialog.open}
+        onOpenChange={(open) => setGroepDialog((g) => ({ ...g, open }))}
+        groep={groepDialog.groep}
+        onOpslaan={(naam) => groepDialog.groep && void hernoemGroep(groepDialog.groep, naam)}
       />
     </AppLayout>
   );
 }
+
+interface SectieProps {
+  groep: StraatGroep;
+  /** De adressen die in deze groep zitten, over alle straten heen. */
+  klantIds: string[];
+  aantal: number;
+  totaal: number;
+  ingeklapt: boolean;
+  prijzenTonen: boolean;
+  planmodus: boolean;
+  dagKlaar: boolean;
+  opDeDag: Set<string>;
+  eerderGewassen: Set<string>;
+  elderGepland: Set<string>;
+  onKlap: (groepId: string) => void;
+  onGroepOpDag: (groepId: string, aan: boolean) => void;
+  onEdit: (groep: StraatGroep) => void;
+  onDelete: (groep: StraatGroep) => void;
+  onVerfStart: (aan: boolean, x: number, y: number) => void;
+  negeerKlik: React.MutableRefObject<boolean>;
+  children: ReactNode;
+}
+
+/**
+ * Een stuk van de wijk met een eigen naam. De kop werkt als de straatkop
+ * eronder — vinkje, streek, in- en uitklappen — maar dan voor alles wat
+ * eronder hangt.
+ *
+ * Ingeklapt tekent hij zijn straten niet; ze staan er dan werkelijk niet, en
+ * daarmee ook geen van hun regels. Dat is het goedkoopste dat er is: je hebt
+ * gezegd dat je deze kant van de wijk nu niet nodig hebt.
+ */
+const GroepSectie = memo(function GroepSectie(p: SectieProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `g:${p.groep.id}`,
+  });
+
+  // Precies dezelfde optelling als in de straatkop, maar dan over de hele
+  // groep. Zie StraatBlok voor waarom het zo geteld wordt.
+  const erop = p.klantIds.filter((id) => p.opDeDag.has(id)).length;
+  const alGedaan = p.klantIds.filter((id) => !p.opDeDag.has(id) && p.eerderGewassen.has(id)).length;
+  const alGepland = p.klantIds.filter((id) => !p.opDeDag.has(id) && p.elderGepland.has(id)).length;
+  const rond = p.klantIds.length > 0 && erop === 0 && alGedaan + alGepland === p.klantIds.length;
+  const kopKleur =
+    !p.planmodus || !rond
+      ? "bg-card-header"
+      : alGedaan >= alGepland
+        ? "bg-tint-groen"
+        : "bg-tint-paars";
+  const vink: boolean | "indeterminate" =
+    erop === 0 ? false : erop === p.klantIds.length ? true : "indeterminate";
+  const gevuld =
+    erop === 0 || p.klantIds.length === 0
+      ? 0
+      : Math.max(10, Math.round((erop / p.klantIds.length) * 100));
+  const bruikbaar = p.klantIds.length > 0 && p.dagKlaar;
+
+  return (
+    <section
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={`mb-3 break-inside-avoid-column rounded-[16px] border border-dashed border-border bg-muted/30 p-1.5 ${
+        isDragging ? "opacity-50" : ""
+      }`}
+    >
+      <div
+        {...(p.planmodus
+          ? {
+              "data-verf-groep": p.groep.id,
+              onClick: () => {
+                if (p.negeerKlik.current) {
+                  p.negeerKlik.current = false;
+                  return;
+                }
+                if (bruikbaar) p.onGroepOpDag(p.groep.id, vink !== true);
+              },
+              onPointerDown: (e: React.PointerEvent) => {
+                if (e.pointerType !== "touch" && bruikbaar) {
+                  p.onVerfStart(vink !== true, e.clientX, e.clientY);
+                }
+              },
+            }
+          : {})}
+        style={
+          gevuld > 0
+            ? {
+                backgroundImage: `linear-gradient(to right, var(--tint-amber) ${gevuld}%, transparent ${gevuld}%)`,
+              }
+            : undefined
+        }
+        className={`mb-1.5 flex items-center gap-1 rounded-[11px] px-2 py-1.5 ${kopKleur} ${
+          p.planmodus && bruikbaar ? "cursor-pointer select-none" : ""
+        }`}
+      >
+        {p.planmodus ? (
+          <Checkbox
+            className="mr-1 touch-none"
+            checked={vink}
+            disabled={!bruikbaar}
+            onCheckedChange={(v) => {
+              if (p.negeerKlik.current) {
+                p.negeerKlik.current = false;
+                return;
+              }
+              p.onGroepOpDag(p.groep.id, v === true);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              p.onVerfStart(vink !== true, e.clientX, e.clientY);
+            }}
+            aria-label={`Hele groep ${p.groep.naam} op de dag`}
+          />
+        ) : (
+          <button
+            className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing"
+            aria-label="Groep verslepen"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-3.5" />
+          </button>
+        )}
+        <button
+          className="rounded p-0.5 text-muted-foreground hover:bg-accent"
+          onClick={(e) => {
+            e.stopPropagation();
+            p.onKlap(p.groep.id);
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          aria-label={p.ingeklapt ? "Groep uitklappen" : "Groep inklappen"}
+          aria-expanded={!p.ingeklapt}
+        >
+          {p.ingeklapt ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
+        </button>
+        <Layers className="size-3.5 shrink-0 text-muted-foreground" />
+        <h2 className="flex-1 truncate font-display text-[13px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+          {p.groep.naam}
+        </h2>
+        <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">
+          {p.planmodus && erop > 0 && erop < p.aantal ? `${erop}/${p.aantal}` : p.aantal}
+        </span>
+        {p.planmodus && alGedaan > 0 && (
+          <span
+            className="rounded-full bg-tint-groen px-1.5 text-[11px] tabular-nums text-tint-groen-ink"
+            title={`${alGedaan} deze maand al gewassen`}
+          >
+            {alGedaan} gedaan
+          </span>
+        )}
+        {p.planmodus && alGepland > 0 && (
+          <span
+            className="rounded-full bg-tint-paars px-1.5 text-[11px] tabular-nums text-tint-paars-ink"
+            title={`${alGepland} staat al op een andere dag`}
+          >
+            {alGepland} gepland
+          </span>
+        )}
+        {p.prijzenTonen && (
+          <span className="text-[11px] font-medium tabular-nums text-brand-ink">
+            {formatPrice(p.totaal)}
+          </span>
+        )}
+        {!p.planmodus && (
+          <>
+            <button
+              className="rounded p-1 text-muted-foreground hover:bg-accent"
+              onClick={() => p.onEdit(p.groep)}
+              aria-label="Groep hernoemen"
+              title="Groep hernoemen"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+            <button
+              className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => p.onDelete(p.groep)}
+              aria-label="Groep verwijderen"
+              title="Groep verwijderen — de straten blijven staan"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </>
+        )}
+      </div>
+      {p.ingeklapt ? (
+        <p className="px-2 pb-1 text-[11px] text-muted-foreground">
+          {p.aantal} {p.aantal === 1 ? "adres" : "adressen"} ingeklapt
+        </p>
+      ) : (
+        p.children
+      )}
+    </section>
+  );
+});
 
 interface BlokProps {
   street: Street;
