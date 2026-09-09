@@ -58,8 +58,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const TABBLADEN = ["bedrijf", "account", "team", "wijken", "notities", "kleuren"] as const;
+const TABBLADEN = ["account", "team", "wijken", "voorkeuren"] as const;
 type Tab = (typeof TABBLADEN)[number];
+
+/** De tabbladen van vroeger, die nu bij een ander horen. Een opgeslagen link
+ *  of een bladwijzer komt zo nog op de goede plek uit. */
+const OUDE_TABS: Record<string, Tab> = {
+  bedrijf: "account",
+  notities: "voorkeuren",
+  kleuren: "voorkeuren",
+};
 
 interface InstellingenSearch {
   tab: Tab;
@@ -71,7 +79,8 @@ export const Route = createFileRoute("/instellingen")({
   },
   validateSearch: (search: Record<string, unknown>): InstellingenSearch => {
     const tab = String(search["tab"] ?? "");
-    return { tab: (TABBLADEN as readonly string[]).includes(tab) ? (tab as Tab) : "bedrijf" };
+    if ((TABBLADEN as readonly string[]).includes(tab)) return { tab: tab as Tab };
+    return { tab: OUDE_TABS[tab] ?? "account" };
   },
   head: () => ({ meta: [{ title: "Instellingen — Klantenlijst glazenwasser" }] }),
   component: Instellingen,
@@ -115,11 +124,11 @@ function Instellingen() {
         </TabsList>
 
         <div className="min-w-0 flex-1">
-          <TabsContent value="bedrijf">
-            <BedrijfTab isEigenaar={isEigenaar} />
-          </TabsContent>
-          <TabsContent value="account">
+          {/* Jouw account en dat van het bedrijf staan op één blad: het is
+              allebei "wie ben ik", en apart waren het twee halve pagina's. */}
+          <TabsContent value="account" className="space-y-4">
             <AccountTab />
+            <BedrijfTab isEigenaar={isEigenaar} />
           </TabsContent>
           <TabsContent value="team">
             <TeamTab />
@@ -127,10 +136,9 @@ function Instellingen() {
           <TabsContent value="wijken">
             <WijkenTab />
           </TabsContent>
-          <TabsContent value="notities">
+          {/* En hier alles wat je zelf inricht en daarna laat staan. */}
+          <TabsContent value="voorkeuren" className="space-y-4">
             <NotitiesTab />
-          </TabsContent>
-          <TabsContent value="kleuren">
             <KleurenTab />
           </TabsContent>
         </div>
