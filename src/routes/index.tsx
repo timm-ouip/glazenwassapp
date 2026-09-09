@@ -90,6 +90,7 @@ import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { NotitieCel } from "@/components/NotitieCel";
 import { ZoekBalk } from "@/components/ZoekBalk";
 import { HoekadresDialog } from "@/components/HoekadresDialog";
+import { KlusDialog } from "@/components/KlusDialog";
 import { KlantMenu } from "@/components/KlantMenu";
 import { Overgeslagen } from "@/components/Overgeslagen";
 import { PrijsCel } from "@/components/PrijsCel";
@@ -97,6 +98,7 @@ import { RitmeKiezer } from "@/components/RitmeKiezer";
 import { WassenVanaf } from "@/components/WassenVanaf";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
 import { useStabiel } from "@/hooks/use-stabiel";
+import { nieuweKlus, verwijderKlus } from "@/lib/klussen";
 import {
   fetchWasdag,
   fetchWasdagen,
@@ -257,6 +259,11 @@ function Index() {
     customer: null,
   });
   const [hoek, setHoek] = useState<{ open: boolean; customer: Customer | null }>({
+    open: false,
+    customer: null,
+  });
+  /** Extra opdracht bij een adres: werk zonder maand. */
+  const [klus, setKlus] = useState<{ open: boolean; customer: Customer | null }>({
     open: false,
     customer: null,
   });
@@ -888,6 +895,30 @@ function Index() {
     });
   }
 
+  /**
+   * Een extra opdracht bij een adres. Hij komt zonder dag binnen: waar en
+   * wanneer je hem doet beslis je op de planning, als die wijk aan de beurt
+   * is.
+   */
+  async function maakKlus(customerId: string, omschrijving: string, prijs: number) {
+    let id: string;
+    try {
+      id = await nieuweKlus(customerId, omschrijving, prijs);
+    } catch (e) {
+      toast.error("Opslaan mislukt: " + (e as Error).message);
+      return;
+    }
+    pushUndo({
+      label: `Opdracht ${omschrijving}`,
+      undo: async () => {
+        await verwijderKlus(id);
+        qc.invalidateQueries({ queryKey: ["klussen"] });
+      },
+    });
+    qc.invalidateQueries({ queryKey: ["klussen"] });
+    toast.success(`Opdracht genoteerd: ${omschrijving}`);
+  }
+
   async function nieuweSnelkeuze(label: string) {
     try {
       await addQuickNote(label);
@@ -1152,6 +1183,7 @@ function Index() {
   const opDelete = useStabiel(verwijderKlant);
   const opDossier = useStabiel((c: Customer) => setDossier({ open: true, customer: c }));
   const opHoekadres = useStabiel((c: Customer) => setHoek({ open: true, customer: c }));
+  const opKlus = useStabiel((c: Customer) => setKlus({ open: true, customer: c }));
   const opAddQuickNote = useStabiel(nieuweSnelkeuze);
   const opVerfStart = useStabiel(startVerf);
   const opKlantOpDag = useStabiel((c: Customer, aan: boolean) => {
@@ -1397,6 +1429,7 @@ function Index() {
       onDelete={opDelete}
       onDossier={opDossier}
       onHoekadres={opHoekadres}
+      onKlus={opKlus}
       onNieuweRegel={opNieuweRegel}
       onEditStreet={opEditStreet}
       onDeleteStreet={opDeleteStreet}
@@ -1788,6 +1821,15 @@ function Index() {
         onAddQuickNote={nieuweSnelkeuze}
         onSaved={herlaad}
       />
+      <KlusDialog
+        open={klus.open}
+        onOpenChange={(open) => setKlus((k) => ({ ...k, open }))}
+        customer={klus.customer}
+        klus={null}
+        onOpslaan={(customerId, omschrijving, prijs) =>
+          void maakKlus(customerId, omschrijving, prijs)
+        }
+      />
       <HoekadresDialog
         open={hoek.open}
         onOpenChange={(open) => setHoek((h) => ({ ...h, open }))}
@@ -2056,6 +2098,7 @@ interface BlokProps {
   /** Opent het dossier van dit adres, hier op de pagina zelf. */
   onDossier: (c: Customer) => void;
   onHoekadres: (c: Customer) => void;
+  onKlus: (c: Customer) => void;
   onNieuweRegel: (streetId: string, nummer: string) => void;
   onEditStreet: (street: Street) => void;
   onDeleteStreet: (street: Street) => void;
@@ -2389,6 +2432,7 @@ const StraatKolom = memo(function StraatKolom({
             onDelete={p.onDelete}
             onDossier={p.onDossier}
             onHoekadres={p.onHoekadres}
+            onKlus={p.onKlus}
           />
         ))}
       </div>
@@ -2423,6 +2467,7 @@ interface RijProps {
   onDelete: (c: Customer) => void;
   onDossier: (c: Customer) => void;
   onHoekadres: (c: Customer) => void;
+  onKlus: (c: Customer) => void;
 }
 
 /**
@@ -2676,6 +2721,7 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
       onPatch={(patch) => p.onPatch(c, patch)}
       onDossier={() => p.onDossier(c)}
       onHoekadres={() => p.onHoekadres(c)}
+      onKlus={() => p.onKlus(c)}
       markeringen={p.markeringen}
     >
       <KlantRijSleep

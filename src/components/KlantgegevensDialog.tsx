@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,12 +27,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Link2, Sparkles, X } from "lucide-react";
+import { Hammer, Link2, Sparkles, X } from "lucide-react";
 import { NotitieCel } from "@/components/NotitieCel";
 import {
   adresVanRegel,
   bewaarKlant,
   formatNumber,
+  formatPrice,
   INTERVALLEN,
   intervalLabels,
   komendeMaanden,
@@ -59,6 +60,9 @@ import {
 } from "@/lib/klanten";
 import { zoekAdres, zoekStraten } from "@/lib/postcode";
 import { opslaanBijEnter } from "@/lib/dialoog";
+import { blijvenLiggen, fetchKlussen, nieuweKlus, staatOpen } from "@/lib/klussen";
+import { toonDatum } from "@/lib/wasdag";
+import { KlusDialog } from "@/components/KlusDialog";
 
 interface Props {
   open: boolean;
@@ -158,6 +162,11 @@ export function KlantgegevensDialog({
   // wordt vanaf twee pagina's geopend, en dan is één query minder gedoe dan
   // hem overal doorgeven. React Query deelt hem met de rest.
   const markeringen = useQuery({ queryKey: ["markeringen"], queryFn: fetchMarkeringen }).data ?? [];
+  const qc = useQueryClient();
+  // Wat er nog openstaat aan extra werk voor dít adres. Openstaand werk is
+  // niet aan een maand gebonden, dus er is geen periode om op te vragen.
+  const klussen = useQuery({ queryKey: ["klussen"], queryFn: () => fetchKlussen() }).data ?? [];
+  const [klusOpen, setKlusOpen] = useState(false);
   const [velden, setVelden] = useState(LEEG);
   const [pand, setPand] = useState<Pand>(LEEG_PAND);
   /** Ids van de overige adressen van deze klant — de uitzondering. */
@@ -174,6 +183,7 @@ export function KlantgegevensDialog({
 
   /** Het adres waar dit dossier over gaat; null als het nog niet bestaat. */
   const dossierCustomer = voorstelCustomer ?? null;
+  const openKlussen = klussen.filter((k) => k.customer_id === dossierCustomer?.id && staatOpen(k));
 
   function zet(patch: Partial<typeof LEEG>) {
     setVelden((v) => ({ ...v, ...patch }));
@@ -644,6 +654,41 @@ export function KlantgegevensDialog({
               />
             </div>
 
+            {/* Werk dat niet aan een maand vastzit: de dakrand, de goot. Het
+                staat hier omdat je in het dossier kijkt of er nog iets ligt
+                voor dit adres. Indelen doe je op de planning. */}
+            {dossierCustomer && (
+              <div className="space-y-2">
+                <Label>Openstaand werk</Label>
+                {openKlussen.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground">Niets openstaand.</p>
+                ) : (
+                  <ul className="divide-y divide-border/60 rounded-lg border border-border">
+                    {openKlussen.map((k) => (
+                      <li key={k.id} className="flex items-center gap-2 px-3 py-1.5 text-[13px]">
+                        <span className="min-w-0 flex-1 truncate">{k.omschrijving}</span>
+                        {k.gepland_op && !blijvenLiggen(k) && (
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {toonDatum(k.gepland_op)}
+                          </span>
+                        )}
+                        <span className="shrink-0 tabular-nums">{formatPrice(k.prijs)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() => setKlusOpen(true)}
+                >
+                  <Hammer className="size-4" /> Opdracht erbij
+                </Button>
+              </div>
+            )}
+
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Kleur op printlijst</Label>
@@ -830,6 +875,20 @@ export function KlantgegevensDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <KlusDialog
+        open={klusOpen}
+        onOpenChange={setKlusOpen}
+        customer={dossierCustomer}
+        klus={null}
+        onOpslaan={(customerId, omschrijving, prijs) => {
+          void nieuweKlus(customerId, omschrijving, prijs)
+            .then(() => {
+              qc.invalidateQueries({ queryKey: ["klussen"] });
+              toast.success(`Opdracht genoteerd: ${omschrijving}`);
+            })
+            .catch((e: Error) => toast.error("Opslaan mislukt: " + e.message));
+        }}
+      />
     </Dialog>
   );
 }

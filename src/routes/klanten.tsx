@@ -15,12 +15,14 @@ import { PostcodesOphalen } from "@/components/PostcodesOphalen";
 import { InlineCel } from "@/components/InlineCel";
 import { ZoekBalk } from "@/components/ZoekBalk";
 import { HoekadresDialog } from "@/components/HoekadresDialog";
+import { KlusDialog } from "@/components/KlusDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useBevestig } from "@/components/Bevestig";
 import { pushUndo, undoLaatste } from "@/lib/undo";
+import { nieuweKlus, verwijderKlus } from "@/lib/klussen";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
 import { useStabiel } from "@/hooks/use-stabiel";
 import {
@@ -126,6 +128,7 @@ const KlantRegel = memo(function KlantRegel({
   onPatch,
   onDossier,
   onHoekadres,
+  onKlus,
   onVerwijder,
   onVeld,
   onPostcode,
@@ -136,6 +139,7 @@ const KlantRegel = memo(function KlantRegel({
   onPatch: (c: Customer, patch: Partial<Customer>) => void;
   onDossier: (r: Regel) => void;
   onHoekadres: (c: Customer) => void;
+  onKlus: (c: Customer) => void;
   onVerwijder: (r: Regel) => void;
   onVeld: (r: Regel, veld: keyof KlantVelden, waarde: string) => void;
   onPostcode: (c: Customer, waarde: string) => void;
@@ -149,6 +153,7 @@ const KlantRegel = memo(function KlantRegel({
       onPatch={(patch) => onPatch(r.customer, patch)}
       onDossier={() => onDossier(r)}
       onHoekadres={() => onHoekadres(r.customer)}
+      onKlus={() => onKlus(r.customer)}
       markeringen={markeringen}
     >
       <tr className="group border-b border-border/60 last:border-b-0 hover:bg-accent/30">
@@ -240,6 +245,10 @@ function Klanten() {
     customer: null,
   });
   const [hoek, setHoek] = useState<{ open: boolean; customer: Customer | null }>({
+    open: false,
+    customer: null,
+  });
+  const [klus, setKlus] = useState<{ open: boolean; customer: Customer | null }>({
     open: false,
     customer: null,
   });
@@ -557,6 +566,27 @@ function Klanten() {
     setDossier({ open: true, klant: r.klant, customer: r.customer }),
   );
   const opHoekadres = useStabiel((c: Customer) => setHoek({ open: true, customer: c }));
+  const opKlus = useStabiel((c: Customer) => setKlus({ open: true, customer: c }));
+
+  /** Zie de wijkenpagina: een opdracht komt zonder dag binnen. */
+  async function maakKlus(customerId: string, omschrijving: string, prijs: number) {
+    let id: string;
+    try {
+      id = await nieuweKlus(customerId, omschrijving, prijs);
+    } catch (e) {
+      toast.error("Opslaan mislukt: " + (e as Error).message);
+      return;
+    }
+    pushUndo({
+      label: `Opdracht ${omschrijving}`,
+      undo: async () => {
+        await verwijderKlus(id);
+        qc.invalidateQueries({ queryKey: ["klussen"] });
+      },
+    });
+    qc.invalidateQueries({ queryKey: ["klussen"] });
+    toast.success(`Opdracht genoteerd: ${omschrijving}`);
+  }
   const opVerwijder = useStabiel(
     (r: Regel) => void verwijderRegel(r.customer, r.klant, adresTekst(r)),
   );
@@ -702,6 +732,7 @@ function Klanten() {
                     onPatch={opPatch}
                     onDossier={opDossier}
                     onHoekadres={opHoekadres}
+                    onKlus={opKlus}
                     onVerwijder={opVerwijder}
                     onVeld={opVeld}
                     onPostcode={opPostcode}
@@ -787,6 +818,15 @@ function Klanten() {
         )}
       </div>
 
+      <KlusDialog
+        open={klus.open}
+        onOpenChange={(open) => setKlus((k) => ({ ...k, open }))}
+        customer={klus.customer}
+        klus={null}
+        onOpslaan={(customerId, omschrijving, prijs) =>
+          void maakKlus(customerId, omschrijving, prijs)
+        }
+      />
       <HoekadresDialog
         open={hoek.open}
         onOpenChange={(open) => setHoek((h) => ({ ...h, open }))}

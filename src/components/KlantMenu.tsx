@@ -1,4 +1,12 @@
-import { CalendarOff, Check, CircleSlash, CornerDownRight, FileText, Flag } from "lucide-react";
+import {
+  CalendarOff,
+  Check,
+  CircleSlash,
+  CornerDownRight,
+  FileText,
+  Flag,
+  Hammer,
+} from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 
 import {
@@ -35,6 +43,9 @@ interface Props {
   onDossier: () => void;
   /** Opent het hoekadres-schermpje; ook dat houdt de pagina vast. */
   onHoekadres: () => void;
+  /** Extra opdracht bij dit adres: werk zonder maand, dat meerijdt als je
+   *  toch in die wijk bent. */
+  onKlus: () => void;
   /** De kleuren die dit bedrijf zelf gemaakt heeft, uit Instellingen. */
   markeringen: MarkeringRij[];
   children: ReactNode;
@@ -58,6 +69,7 @@ export function KlantMenu({
   onPatch: ruwePatch,
   onDossier,
   onHoekadres,
+  onKlus,
   markeringen,
   children,
 }: Props) {
@@ -92,6 +104,9 @@ export function KlantMenu({
       <ContextMenuContent className="w-60">
         <ContextMenuItem onSelect={onDossier}>
           <FileText className="size-4" /> Dossier
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onKlus}>
+          <Hammer className="size-4" /> Extra opdracht…
         </ContextMenuItem>
 
         <ContextMenuSeparator />

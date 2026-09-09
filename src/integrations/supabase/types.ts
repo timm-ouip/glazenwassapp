@@ -291,6 +291,57 @@ export type Database = {
           },
         ]
       }
+      klussen: {
+        Row: {
+          company_id: string
+          created_at: string
+          customer_id: string
+          deleted_at: string | null
+          gedaan_op: string | null
+          gepland_op: string | null
+          id: string
+          omschrijving: string
+          prijs: number
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          customer_id: string
+          deleted_at?: string | null
+          gedaan_op?: string | null
+          gepland_op?: string | null
+          id?: string
+          omschrijving: string
+          prijs?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          customer_id?: string
+          deleted_at?: string | null
+          gedaan_op?: string | null
+          gepland_op?: string | null
+          id?: string
+          omschrijving?: string
+          prijs?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "klussen_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "klussen_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       markeringen: {
         Row: {
           company_id: string

@@ -1,0 +1,199 @@
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { opslaanBijEnter } from "@/lib/dialoog";
+import {
+  fetchCustomers,
+  fetchDistricts,
+  fetchStreets,
+  formatNumber,
+  type Customer,
+} from "@/lib/klanten";
+import type { Klus } from "@/lib/klussen";
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Het adres waar de opdracht bij hoort. Leeg: dan zoek je hem hier op. */
+  customer: Customer | null;
+  /** Een bestaande opdracht om te wijzigen; leeg is een nieuwe. */
+  klus: Klus | null;
+  onOpslaan: (customerId: string, omschrijving: string, prijs: number) => void;
+}
+
+/** "Kerkstraat 12 · Gouda", waar je op zoekt en wat je in de lijst ziet. */
+function adresLabel(c: Customer, straat: string, wijk: string) {
+  return `${straat} ${formatNumber(c)}${wijk ? ` · ${wijk}` : ""}`;
+}
+
+/**
+ * Een extra opdracht bij een adres: de dakrand, de goot, een serre die één
+ * keer mee moet. Omschrijving en prijs, en verder niets — geen maand, want
+ * dat is het hele punt: je doet hem als je toch in die wijk bent.
+ *
+ * Kom je hier vanaf een adres, dan ligt dat vast. Kom je van de planning, dan
+ * zoek je het adres er eerst bij.
+ */
+export function KlusDialog({ open, onOpenChange, customer, klus, onOpslaan }: Props) {
+  const [omschrijving, setOmschrijving] = useState("");
+  const [prijs, setPrijs] = useState("");
+  const [zoek, setZoek] = useState("");
+  const [gekozen, setGekozen] = useState<Customer | null>(null);
+
+  // Alleen nodig als er nog geen adres bij hoort. React Query deelt deze drie
+  // met de rest van de app, dus dit kost meestal geen extra aanvraag.
+  const zoeken = open && !customer;
+  const customersQuery = useQuery({
+    queryKey: ["customers"],
+    queryFn: fetchCustomers,
+    enabled: zoeken,
+  });
+  const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets, enabled: zoeken });
+  const districtsQuery = useQuery({
+    queryKey: ["districts"],
+    queryFn: fetchDistricts,
+    enabled: zoeken,
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    setOmschrijving(klus?.omschrijving ?? "");
+    setPrijs(klus?.prijs ? String(klus.prijs) : "");
+    setZoek("");
+    setGekozen(null);
+  }, [open, klus]);
+
+  /** De adressen om uit te kiezen, met hun straat en wijk erbij. */
+  const treffers = useMemo(() => {
+    if (!zoeken) return [];
+    const term = zoek.trim().toLowerCase();
+    if (term.length < 2) return [];
+    const straten = new Map((streetsQuery.data ?? []).map((s) => [s.id, s]));
+    const wijken = new Map((districtsQuery.data ?? []).map((d) => [d.id, d.name]));
+    const uit: { c: Customer; label: string }[] = [];
+    for (const c of customersQuery.data ?? []) {
+      const straat = straten.get(c.street_id);
+      if (!straat) continue;
+      const label = adresLabel(c, straat.name, wijken.get(straat.district_id) ?? "");
+      if (label.toLowerCase().includes(term)) uit.push({ c, label });
+      // Meer dan dit lees je toch niet; typ dan een huisnummer erbij.
+      if (uit.length >= 30) break;
+    }
+    return uit;
+  }, [zoeken, zoek, customersQuery.data, streetsQuery.data, districtsQuery.data]);
+
+  const adres = customer ?? gekozen;
+
+  function save() {
+    if (!adres) {
+      toast.error("Kies eerst een adres.");
+      return;
+    }
+    if (!omschrijving.trim()) {
+      toast.error("Vul in wat er gedaan moet worden.");
+      return;
+    }
+    const bedrag = Number(prijs.replace(",", "."));
+    if (prijs.trim() && Number.isNaN(bedrag)) {
+      toast.error("Die prijs begrijp ik niet.");
+      return;
+    }
+    onOpslaan(adres.id, omschrijving.trim(), prijs.trim() ? bedrag : 0);
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm" onKeyDown={opslaanBijEnter(save)}>
+        <DialogHeader>
+          <DialogTitle>{klus ? "Opdracht wijzigen" : "Extra opdracht"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {!customer && (
+            <div className="space-y-2">
+              <Label htmlFor="klus-adres">Adres</Label>
+              {gekozen ? (
+                <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate">
+                    {treffers.find((t) => t.c.id === gekozen.id)?.label ?? formatNumber(gekozen)}
+                  </span>
+                  <button
+                    className="text-xs text-muted-foreground underline"
+                    onClick={() => setGekozen(null)}
+                  >
+                    anders
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Input
+                    id="klus-adres"
+                    autoFocus
+                    placeholder="Zoek op straat en huisnummer"
+                    value={zoek}
+                    onChange={(e) => setZoek(e.target.value)}
+                  />
+                  {treffers.length > 0 && (
+                    <ul className="max-h-40 divide-y divide-border/60 overflow-y-auto rounded-md border border-border">
+                      {treffers.map((t) => (
+                        <li key={t.c.id}>
+                          <button
+                            className="w-full px-3 py-1.5 text-left text-sm hover:bg-accent"
+                            onClick={() => setGekozen(t.c)}
+                          >
+                            {t.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="klus-wat">Wat er gedaan moet worden</Label>
+            <Input
+              id="klus-wat"
+              autoFocus={!!customer}
+              placeholder="bijv. dakrand schoonmaken"
+              value={omschrijving}
+              onChange={(e) => setOmschrijving(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="klus-prijs">Prijs</Label>
+            <Input
+              id="klus-prijs"
+              inputMode="decimal"
+              placeholder="0,00"
+              value={prijs}
+              onChange={(e) => setPrijs(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Komt bij de omzet van de dag waarop je hem doet. Er hoort geen maand bij: hij blijft
+              openstaan tot je hem afvinkt.
+            </p>
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Annuleren
+          </Button>
+          <Button onClick={save}>Opslaan</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
