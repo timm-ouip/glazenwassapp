@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +37,8 @@ import {
   intervalLabels,
   komendeMaanden,
   koppelKlant,
-  markeringLabels,
+  fetchMarkeringen,
+  tintStip,
   patchCustomer,
   ritmeLabel,
   ritmeMaanden,
@@ -122,11 +124,6 @@ function pandVan(c: Customer): Pand {
 /** De keuze "meteen" heeft geen maand; Radix wil wel een echte waarde. */
 const METEEN = "meteen";
 
-const KLEUR_STIP: Record<Exclude<Markering, "">, string> = {
-  geel: "bg-tint-amber ring-tint-amber-ink/40",
-  groen: "bg-tint-groen ring-tint-groen-ink/40",
-};
-
 function prijsGetal(waarde: string) {
   const n = Number(waarde.replace(",", ".").trim());
   return Number.isFinite(n) ? n : 0;
@@ -157,6 +154,10 @@ export function KlantgegevensDialog({
   standaardWijkId,
   onSaved,
 }: Props) {
+  // De zelfgemaakte kleuren komen hier rechtstreeks binnen: dit schermpje
+  // wordt vanaf twee pagina's geopend, en dan is één query minder gedoe dan
+  // hem overal doorgeven. React Query deelt hem met de rest.
+  const markeringen = useQuery({ queryKey: ["markeringen"], queryFn: fetchMarkeringen }).data ?? [];
   const [velden, setVelden] = useState(LEEG);
   const [pand, setPand] = useState<Pand>(LEEG_PAND);
   /** Ids van de overige adressen van deze klant — de uitzondering. */
@@ -301,9 +302,9 @@ export function KlantgegevensDialog({
       // komen die je daarna onder "Nog zonder wijk" weer moet opruimen.
       const persoonlijk = Boolean(
         velden.naam.trim() ||
-          velden.email.trim() ||
-          velden.telefoon.trim() ||
-          velden.notitie.trim(),
+        velden.email.trim() ||
+        velden.telefoon.trim() ||
+        velden.notitie.trim(),
       );
       const klantId =
         klant || persoonlijk || extra.length > 0
@@ -645,25 +646,28 @@ export function KlantgegevensDialog({
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Kleur op de printlijst</Label>
+                <Label>Kleur op printlijst</Label>
                 <div className="flex flex-wrap gap-1.5">
-                  {(Object.keys(markeringLabels) as Exclude<Markering, "">[]).map((kleur) => (
+                  {markeringen.map((m) => (
                     <button
-                      key={kleur}
+                      key={m.id}
                       type="button"
                       onClick={() =>
-                        setPand((p) => ({ ...p, markering: p.markering === kleur ? "" : kleur }))
+                        setPand((p) => ({
+                          ...p,
+                          markering: p.markering === m.sleutel ? "" : m.sleutel,
+                        }))
                       }
                       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                        pand.markering === kleur
+                        pand.markering === m.sleutel
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border bg-secondary text-secondary-foreground hover:bg-accent"
                       }`}
                     >
                       <span
-                        className={`size-2.5 rounded-full ring-1 ring-inset ${KLEUR_STIP[kleur]}`}
+                        className={`size-2.5 rounded-full ring-1 ring-inset ${tintStip[m.tint]}`}
                       />
-                      {markeringLabels[kleur]}
+                      {m.naam}
                     </button>
                   ))}
                   <button

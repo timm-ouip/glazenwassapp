@@ -61,6 +61,9 @@ import {
   noteVoorMaand,
   prijsVoorMaand,
   regelKleur,
+  tintAchtergrond,
+  fetchMarkeringen,
+  type MarkeringRij,
   ritmeLabel,
   toonMaand,
   persistKolomStart,
@@ -154,6 +157,7 @@ const StraatBlok = memo(function StraatBlok({
   prijzen,
   maand,
   ronde,
+  markeringen,
   sleepHandle,
 }: {
   g: Groep;
@@ -161,6 +165,8 @@ const StraatBlok = memo(function StraatBlok({
   maand: string;
   /** De kalendermaand waarvoor je print, als "jjjj-mm". */
   ronde: string;
+  /** De zelfgemaakte kleuren; die bepalen welke regel gekleurd op papier komt. */
+  markeringen: MarkeringRij[];
   sleepHandle?: ReactNode;
 }) {
   const kolommen = tweeKolommen(g);
@@ -183,16 +189,14 @@ const StraatBlok = memo(function StraatBlok({
             >
               <tbody>
                 {kolom.map((c) => {
-                  const kleur = regelKleur(c, ronde);
+                  const kleur = regelKleur(c, ronde, markeringen);
                   return (
                     <tr
                       key={c.id}
+                      // Rood blijft van het scherm: op de printlijst staat een
+                      // overgeslagen adres helemaal niet.
                       className={`border-b border-foreground/20 align-top last:border-0 ${
-                        kleur === "geel"
-                          ? "bg-tint-amber"
-                          : kleur === "groen"
-                            ? "bg-tint-groen"
-                            : ""
+                        kleur && kleur !== "rood" ? tintAchtergrond[kleur] : ""
                       }`}
                     >
                       <td
@@ -243,6 +247,7 @@ function SleepbaarBlok({
   prijzen,
   maand,
   ronde,
+  markeringen,
   kolomKop,
   onKolomKopUit,
 }: {
@@ -250,6 +255,7 @@ function SleepbaarBlok({
   prijzen: boolean;
   maand: string;
   ronde: string;
+  markeringen: MarkeringRij[];
   kolomKop?: boolean;
   onKolomKopUit?: () => void;
 }) {
@@ -273,6 +279,7 @@ function SleepbaarBlok({
         prijzen={prijzen}
         maand={maand}
         ronde={ronde}
+        markeringen={markeringen}
         sleepHandle={
           <>
             {kolomKop && (
@@ -384,6 +391,7 @@ function PrintPagina() {
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
+  const markeringQuery = useQuery({ queryKey: ["markeringen"], queryFn: fetchMarkeringen });
   // Print je een dag, dan bepaalt de wasdag wie er meegaat.
   const wasdagQuery = useQuery({
     queryKey: ["wasdag", dag],
@@ -410,6 +418,7 @@ function PrintPagina() {
     [alleStreets, wijkId, dag],
   );
   const customers = customersQuery.data ?? [];
+  const markeringen = markeringQuery.data ?? [];
 
   // Live volgorde tijdens het slepen (ids van straten in deze wijk).
   const [sleepVolgorde, setSleepVolgorde] = useState<string[] | null>(null);
@@ -1056,6 +1065,7 @@ function PrintPagina() {
                               prijzen={prijzen}
                               maand={maand}
                               ronde={ronde}
+                              markeringen={markeringen}
                               kolomKop={kolomStart(g.street)}
                               onKolomKopUit={() => kolomStartUit(g.street.id)}
                             />
@@ -1066,6 +1076,7 @@ function PrintPagina() {
                               prijzen={prijzen}
                               maand={maand}
                               ronde={ronde}
+                              markeringen={markeringen}
                             />
                           ),
                         )}
@@ -1090,6 +1101,7 @@ function PrintPagina() {
                               prijzen={prijzen}
                               maand={maand}
                               ronde={ronde}
+                              markeringen={markeringen}
                               kolomKop={kolomStart(g.street)}
                               onKolomKopUit={() => kolomStartUit(g.street.id)}
                             />
@@ -1100,6 +1112,7 @@ function PrintPagina() {
                               prijzen={prijzen}
                               maand={maand}
                               ronde={ronde}
+                              markeringen={markeringen}
                             />
                           ),
                         )}
@@ -1122,7 +1135,13 @@ function PrintPagina() {
                       meetRefs.current[g.street.id] = el;
                     }}
                   >
-                    <StraatBlok g={g} prijzen={prijzen} maand={maand} ronde={ronde} />
+                    <StraatBlok
+                      g={g}
+                      prijzen={prijzen}
+                      maand={maand}
+                      ronde={ronde}
+                      markeringen={markeringen}
+                    />
                   </div>
                 ))}
               </div>

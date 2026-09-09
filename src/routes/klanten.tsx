@@ -31,6 +31,7 @@ import {
   fetchDistricts,
   fetchKlanten,
   fetchQuickNotes,
+  fetchMarkeringen,
   fetchStreets,
   formatNumber,
   formatPrice,
@@ -48,6 +49,7 @@ import {
   type District,
   type Klant,
   type KlantVelden,
+  type MarkeringRij,
   type QuickNote,
   type Street,
 } from "@/lib/klanten";
@@ -127,6 +129,7 @@ const KlantRegel = memo(function KlantRegel({
   onVerwijder,
   onVeld,
   onPostcode,
+  markeringen,
 }: {
   regel: Regel;
   plaats: string;
@@ -136,6 +139,7 @@ const KlantRegel = memo(function KlantRegel({
   onVerwijder: (r: Regel) => void;
   onVeld: (r: Regel, veld: keyof KlantVelden, waarde: string) => void;
   onPostcode: (c: Customer, waarde: string) => void;
+  markeringen: MarkeringRij[];
 }) {
   const adres = adresTekst(r);
 
@@ -145,6 +149,7 @@ const KlantRegel = memo(function KlantRegel({
       onPatch={(patch) => onPatch(r.customer, patch)}
       onDossier={() => onDossier(r)}
       onHoekadres={() => onHoekadres(r.customer)}
+      markeringen={markeringen}
     >
       <tr className="group border-b border-border/60 last:border-b-0 hover:bg-accent/30">
         {/* Het dossier openen staat vooraan, vóór het adres: dat is
@@ -244,6 +249,7 @@ function Klanten() {
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
   const klantenQuery = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten });
   const quickNotesQuery = useQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes });
+  const markeringQuery = useQuery({ queryKey: ["markeringen"], queryFn: fetchMarkeringen });
 
   // Alle vijf met een vaste identiteit, ook zolang een query nog laadt. Ze
   // zijn de invoer van `regels`, en daaruit komt het regel-object dat elke
@@ -254,6 +260,8 @@ function Klanten() {
   const customers: Customer[] = useMemo(() => customersQuery.data ?? [], [customersQuery.data]);
   const klanten: Klant[] = useMemo(() => klantenQuery.data ?? [], [klantenQuery.data]);
   const quickNotes: QuickNote[] = useMemo(() => quickNotesQuery.data ?? [], [quickNotesQuery.data]);
+  // Vaste identiteit, net als de rest: elke regel krijgt deze lijst mee.
+  const markeringen = useMemo(() => markeringQuery.data ?? [], [markeringQuery.data]);
 
   // De wijk waar je mee bezig bent blijft staan, ook na een paginawissel of
   // een nieuwe inlog. Een ?klant= in de URL blijft daarbij behouden, anders
@@ -697,6 +705,7 @@ function Klanten() {
                     onVerwijder={opVerwijder}
                     onVeld={opVeld}
                     onPostcode={opPostcode}
+                    markeringen={markeringen}
                   />
                 ))}
                 {/* Geen inhoud, alleen een plek om te zien dat je onderaan

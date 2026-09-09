@@ -24,13 +24,22 @@ import {
   deleteQuickNote,
   fetchCustomers,
   fetchDistricts,
+  fetchMarkeringen,
   fetchQuickNotes,
   fetchStreets,
+  nieuweMarkering,
+  patchMarkering,
+  tintNamen,
+  tintStip,
+  TINTEN,
+  verwijderMarkering,
   formatPrice,
   persistDistrictOrder,
   wijkKleur,
   type District,
+  type MarkeringRij,
   type QuickNote,
+  type Tint,
 } from "@/lib/klanten";
 import { fetchWasdagen } from "@/lib/wasdag";
 import { AANNAME_BEDRAG_PER_DAG, meetTempo, MINIMUM_DAGEN, tempoVan } from "@/lib/wijkritme";
@@ -49,7 +58,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const TABBLADEN = ["bedrijf", "account", "team", "wijken", "notities"] as const;
+const TABBLADEN = ["bedrijf", "account", "team", "wijken", "notities", "kleuren"] as const;
 type Tab = (typeof TABBLADEN)[number];
 
 interface InstellingenSearch {
@@ -93,6 +102,7 @@ function Instellingen() {
           <TabsTrigger value="team">Team</TabsTrigger>
           <TabsTrigger value="wijken">Wijken</TabsTrigger>
           <TabsTrigger value="notities">Notities</TabsTrigger>
+          <TabsTrigger value="kleuren">Kleuren</TabsTrigger>
         </TabsList>
 
         <TabsContent value="bedrijf" className="mt-4">
@@ -109,6 +119,9 @@ function Instellingen() {
         </TabsContent>
         <TabsContent value="notities" className="mt-4">
           <NotitiesTab />
+        </TabsContent>
+        <TabsContent value="kleuren" className="mt-4">
+          <KleurenTab />
         </TabsContent>
       </Tabs>
     </AppLayout>
@@ -845,6 +858,156 @@ function WijkenTab() {
           )}
         </p>
       </Kaart>
+    </div>
+  );
+}
+
+/**
+ * De kleuren die je op een adres kunt zetten, met je eigen tekst erbij. Wat
+ * geel betekent verschilt per bedrijf — bij de een is het "extra opletten",
+ * bij de ander "hoge ramen" — dus dat hoort niet in de code te staan.
+ *
+ * De kleur kies je uit vier. Die vier zijn uitgezocht op leesbaarheid, in het
+ * licht en in het donker en op papier; een vrij te kiezen kleur zou daar
+ * zomaar doorheen kunnen zakken. Rood ontbreekt met opzet: dat betekent al
+ * "deze maand overgeslagen".
+ */
+function KleurenTab() {
+  const qc = useQueryClient();
+  const bevestig = useBevestig();
+  const { data: markeringen = [], isLoading } = useQuery({
+    queryKey: ["markeringen"],
+    queryFn: fetchMarkeringen,
+  });
+  const [nieuweNaam, setNieuweNaam] = useState("");
+  const [nieuweTint, setNieuweTint] = useState<Tint>("amber");
+  const [bezig, setBezig] = useState(false);
+
+  function ververs() {
+    return qc.invalidateQueries({ queryKey: ["markeringen"] });
+  }
+
+  async function voegToe() {
+    const naam = nieuweNaam.trim();
+    if (!naam) return;
+    setBezig(true);
+    try {
+      await nieuweMarkering(naam, nieuweTint, markeringen.length + 1);
+      setNieuweNaam("");
+      await ververs();
+    } catch (err) {
+      toast.error("Toevoegen mislukt: " + (err instanceof Error ? err.message : String(err)));
+    }
+    setBezig(false);
+  }
+
+  async function pas(m: MarkeringRij, patch: { naam?: string; tint?: Tint }) {
+    if (patch.naam !== undefined && patch.naam.trim() === m.naam) return;
+    try {
+      await patchMarkering(m.id, patch.naam !== undefined ? { naam: patch.naam.trim() } : patch);
+      await ververs();
+    } catch (err) {
+      toast.error("Opslaan mislukt: " + (err instanceof Error ? err.message : String(err)));
+      await ververs();
+    }
+  }
+
+  async function gooiWeg(m: MarkeringRij) {
+    const ja = await bevestig({
+      titel: `Kleur "${m.naam}" weggooien?`,
+      tekst:
+        "De adressen die hem hadden blijven staan, maar kleuren niet meer. Maak je hem opnieuw, dan is dat een nieuwe kleur — de oude adressen krijgen hem niet vanzelf terug.",
+      gevaarlijk: true,
+    });
+    if (!ja) return;
+    try {
+      await verwijderMarkering(m.id);
+      await ververs();
+    } catch (err) {
+      toast.error("Weggooien mislukt: " + (err instanceof Error ? err.message : String(err)));
+    }
+  }
+
+  if (isLoading) return <p className="text-sm text-muted-foreground">Laden…</p>;
+
+  return (
+    <div className="max-w-lg">
+      <Kaart
+        titel="Kleuren op de printlijst"
+        uitleg="Wat je hier maakt staat onder de rechtermuisknop op een adres, en kleurt de regel in de lijst én op papier."
+      >
+        <div className="space-y-3">
+          {markeringen.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground">
+              Nog geen kleuren. Maak er hieronder een.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/60 rounded-lg border border-border">
+              {markeringen.map((m) => (
+                <li key={m.id} className="flex items-center gap-2 px-3 py-2">
+                  <KleurKeuze waarde={m.tint} onKies={(tint) => void pas(m, { tint })} />
+                  <Input
+                    className="h-8 flex-1"
+                    defaultValue={m.naam}
+                    aria-label={`Naam van de kleur ${m.naam}`}
+                    onBlur={(e) => void pas(m, { naam: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                  />
+                  <button
+                    className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
+                    onClick={() => void gooiWeg(m)}
+                    aria-label={`Kleur ${m.naam} weggooien`}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void voegToe();
+            }}
+          >
+            <KleurKeuze waarde={nieuweTint} onKies={setNieuweTint} />
+            <Input
+              className="h-8 flex-1"
+              placeholder="Waar deze kleur voor staat"
+              value={nieuweNaam}
+              onChange={(e) => setNieuweNaam(e.target.value)}
+            />
+            <Button type="submit" size="sm" disabled={bezig || !nieuweNaam.trim()}>
+              <Plus className="size-4" /> Toevoegen
+            </Button>
+          </form>
+        </div>
+      </Kaart>
+    </div>
+  );
+}
+
+/** De vier kleuren naast elkaar; de gekozene heeft een randje. */
+function KleurKeuze({ waarde, onKies }: { waarde: Tint; onKies: (t: Tint) => void }) {
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      {TINTEN.map((t) => (
+        <button
+          key={t}
+          type="button"
+          onClick={() => onKies(t)}
+          title={tintNamen[t]}
+          aria-label={tintNamen[t]}
+          aria-pressed={waarde === t}
+          className={`size-5 rounded-full ring-1 ring-inset ${tintStip[t]} ${
+            waarde === t ? "outline outline-2 outline-offset-1 outline-primary" : ""
+          }`}
+        />
+      ))}
     </div>
   );
 }

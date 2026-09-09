@@ -3,20 +3,60 @@ import type { Database } from "@/integrations/supabase/types";
 
 export type Frequency = "elke" | "even" | "oneven";
 
-/** Leeg is het gewone geval; geel is opletten, groen is een nieuwe klant. */
-export type Markering = "" | "geel" | "groen";
+/** De sleutel van de markering op een adres; leeg is het gewone geval. Welke
+ *  sleutels er zijn en wat ze betekenen bepaal je zelf bij Instellingen. */
+export type Markering = string;
 
 /** De twee kolommen van een straat: de even en de oneven huisnummers. */
 export type Kant = "even" | "oneven";
 
-/** Wat een regel kan kleuren: de kleuren die je zelf kiest, plus rood van
- *  een overgeslagen maand — dat laatste kies je niet, dat volgt eruit. */
-export type RegelKleur = Markering | "rood";
+/**
+ * De kleuren waar een markering uit te kiezen is. Geen vrije kleurcode: deze
+ * vier zijn uitgezocht op leesbaarheid, in het licht en in het donker, en op
+ * papier. Rood ontbreekt met opzet — dat betekent al "deze maand
+ * overgeslagen", en twee betekenissen op één kleur is er één te veel.
+ */
+export const TINTEN = ["amber", "groen", "paars", "blauw"] as const;
+export type Tint = (typeof TINTEN)[number];
 
-export const markeringLabels: Record<Exclude<Markering, "">, string> = {
-  geel: "Extra opletten",
-  groen: "Nieuwe klant",
+/** Hoe de kleuren heten tegen de gebruiker. "Amber" zegt niemand. */
+export const tintNamen: Record<Tint, string> = {
+  amber: "Geel",
+  groen: "Groen",
+  paars: "Paars",
+  blauw: "Blauw",
 };
+
+/** Wat een regel kan kleuren: een van de tinten, plus rood van een
+ *  overgeslagen maand — dat laatste kies je niet, dat volgt eruit. */
+export type RegelKleur = Tint | "rood" | "";
+
+/** De achtergrondklasse bij een kleur. Op één plek, want dit zit in de lijst,
+ *  in het dossier, in het menu en op de printlijst. */
+export const tintAchtergrond: Record<Tint | "rood", string> = {
+  amber: "bg-tint-amber",
+  groen: "bg-tint-groen",
+  paars: "bg-tint-paars",
+  blauw: "bg-tint-blauw",
+  rood: "bg-tint-rood",
+};
+
+/** Het bolletje voor in een menu: de kleur met een randje van zijn inkt. */
+export const tintStip: Record<Tint, string> = {
+  amber: "bg-tint-amber ring-tint-amber-ink/40",
+  groen: "bg-tint-groen ring-tint-groen-ink/40",
+  paars: "bg-tint-paars ring-tint-paars-ink/40",
+  blauw: "bg-tint-blauw ring-tint-blauw-ink/40",
+};
+
+/** Een kleur die je zelf gemaakt hebt, met de tekst die jij eraan gaf. */
+export interface MarkeringRij {
+  id: string;
+  sleutel: string;
+  naam: string;
+  tint: Tint;
+  sort_order: number;
+}
 
 export interface District {
   id: string;
@@ -759,9 +799,15 @@ export function isNieuw(c: Pick<Customer, "start_maand" | "created_at">, maand: 
 export function regelKleur(
   c: Pick<Customer, "markering" | "start_maand" | "created_at" | "overslaan">,
   maand: string,
+  markeringen: MarkeringRij[] = [],
 ): RegelKleur {
   if (c.overslaan.includes(maand)) return "rood";
-  if (c.markering) return c.markering;
+  // Staat er een markering op die je inmiddels weggehaald hebt, dan kleurt de
+  // regel niet meer. De waarde blijft staan: zet je de kleur terug, dan is hij
+  // er ook weer.
+  if (c.markering) return markeringen.find((m) => m.sleutel === c.markering)?.tint ?? "";
+  // Nieuw is altijd groen, los van wat je zelf gemaakt hebt: die kleur volgt
+  // uit de startmaand en is niets wat je aan of uit zet.
   return isNieuw(c, maand) ? "groen" : "";
 }
 
@@ -955,6 +1001,43 @@ export async function persistStreetOrder(streets: Street[]) {
         .eq("id", s.id),
     ),
   );
+}
+
+// --- Markeringen (kleuren op de printlijst) ------------------------------
+
+export async function fetchMarkeringen(): Promise<MarkeringRij[]> {
+  const { data, error } = await supabase
+    .from("markeringen")
+    .select("id,sleutel,naam,tint,sort_order")
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as MarkeringRij[];
+}
+
+export async function nieuweMarkering(naam: string, tint: Tint, sortOrder: number) {
+  // De sleutel is wat er op het adres komt te staan. Een eigen sleutel en niet
+  // het id van de rij, omdat 'geel' en 'groen' van vroeger dat ook zijn.
+  const sleutel = crypto.randomUUID();
+  const { error } = await supabase
+    .from("markeringen")
+    .insert({ sleutel, naam: naam.trim(), tint, sort_order: sortOrder });
+  if (error) throw error;
+  return sleutel;
+}
+
+export async function patchMarkering(id: string, patch: { naam?: string; tint?: Tint }) {
+  const { error } = await supabase.from("markeringen").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Weg is weg. De adressen die deze kleur hadden houden hun waarde maar
+ * kleuren niet meer — zie `regelKleur`. Zo is een kleur die je per ongeluk
+ * weggooit en opnieuw maakt geen ramp, zolang de sleutel dezelfde blijft.
+ */
+export async function verwijderMarkering(id: string) {
+  const { error } = await supabase.from("markeringen").delete().eq("id", id);
+  if (error) throw error;
 }
 
 // --- Subgroepen van straten ---------------------------------------------

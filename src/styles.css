@@ -41,6 +41,8 @@
   --color-tint-paars-ink: var(--tint-paars-ink);
   --color-tint-rood: var(--tint-rood);
   --color-tint-rood-ink: var(--tint-rood-ink);
+  --color-tint-blauw: var(--tint-blauw);
+  --color-tint-blauw-ink: var(--tint-blauw-ink);
   --shadow-card: var(--shadow-card);
 
   --color-background: var(--background);
@@ -110,6 +112,10 @@
   /* Rood: deze maand overgeslagen, dus hij staat niet op de printlijst. */
   --tint-rood: oklch(0.955 0.032 25);
   --tint-rood-ink: oklch(0.5 0.145 27);
+  /* Blauw: alleen om zelf een markering mee te maken. Lichter dan het merk,
+     zodat een gekleurde regel geen knop lijkt. */
+  --tint-blauw: oklch(0.952 0.032 235);
+  --tint-blauw-ink: oklch(0.47 0.115 245);
   --secondary: oklch(0.955 0.002 286);
   --secondary-foreground: oklch(0.28 0.004 285.9);
   --muted: oklch(0.958 0.002 286);
@@ -144,7 +150,6 @@
   --wijk-c: 0.032;
 }
 
-
 .dark {
   --background: oklch(0.16 0.003 286);
   --surface: oklch(0.2 0.003 286);
@@ -166,6 +171,8 @@
   --tint-paars-ink: oklch(0.82 0.105 302);
   --tint-rood: oklch(0.3 0.045 25);
   --tint-rood-ink: oklch(0.82 0.105 25);
+  --tint-blauw: oklch(0.3 0.045 235);
+  --tint-blauw-ink: oklch(0.82 0.1 240);
   --brand-foreground: oklch(0.2 0.03 252);
   --secondary: oklch(0.27 0.003 286);
   --secondary-foreground: oklch(0.97 0 0);
@@ -216,7 +223,6 @@
     letter-spacing: -0.015em;
   }
 }
-
 
 @media print {
   @page {

@@ -69,6 +69,9 @@ import {
   ContextMenuItem,
   ContextMenuLabel,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -130,6 +133,8 @@ import {
   prijsVoorMaand,
   toonMaand,
   regelKleur,
+  tintAchtergrond,
+  fetchMarkeringen,
   ritmeMaanden,
   matchesMaand,
   natuurlijkeKant,
@@ -146,6 +151,7 @@ import {
   type District,
   verwijderStraatGroep,
   zetStratenInGroep,
+  type MarkeringRij,
   type QuickNote,
   type StraatGroep,
   type Street,
@@ -261,6 +267,7 @@ function Index() {
   const quickNotesQuery = useQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes });
   const klantenQuery = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten });
   const groepenQuery = useQuery({ queryKey: ["straat_groepen"], queryFn: fetchStraatGroepen });
+  const markeringQuery = useQuery({ queryKey: ["markeringen"], queryFn: fetchMarkeringen });
 
   // Alleen om de naam bij een gekoppelde regel te kunnen tonen; de
   // contactgegevens zelf horen op /klanten.
@@ -294,6 +301,8 @@ function Index() {
   // zou `memo` op de regels breken.
   const quickNotes = useMemo(() => quickNotesQuery.data ?? [], [quickNotesQuery.data]);
   const alleGroepen = useMemo(() => groepenQuery.data ?? [], [groepenQuery.data]);
+  /** Vaste identiteit, want elke regel krijgt deze lijst mee. */
+  const markeringen = useMemo(() => markeringQuery.data ?? [], [markeringQuery.data]);
   /** De subgroepen van de wijk die je bekijkt, op volgorde. */
   const subgroepen = useMemo(
     () => alleGroepen.filter((g) => g.district_id === actieveWijk),
@@ -1377,6 +1386,7 @@ function Index() {
       sort={g.street.sort_desc ? "desc" : "asc"}
       prijzenTonen={prijzenTonen}
       quickNotes={quickNotes}
+      markeringen={markeringen}
       klantNamen={klantNamen}
       rowText={rowText}
       rowPad={rowPad}
@@ -2031,6 +2041,7 @@ interface BlokProps {
   sort: "asc" | "desc";
   prijzenTonen: boolean;
   quickNotes: QuickNote[];
+  markeringen: MarkeringRij[];
   /** Naam per klant-id, voor het personen-icoontje op een gekoppelde regel. */
   klantNamen: Map<string, string>;
   /** De maand die je bekijkt; kleurt de regels. */
@@ -2269,32 +2280,31 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
         <ContextMenuContent className="w-56">
           <ContextMenuLabel>{p.street.name}</ContextMenuLabel>
           <ContextMenuSeparator />
-          <ContextMenuItem onSelect={() => p.onNieuweGroep(p.street)}>
-            <Layers className="mr-2 size-4" /> Nieuwe groep met deze straat…
-          </ContextMenuItem>
-          {p.groepen.length > 0 && (
-            <>
-              <ContextMenuSeparator />
-              <ContextMenuLabel className="text-muted-foreground">
-                Toevoegen aan groep
-              </ContextMenuLabel>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Layers className="size-4" /> Toevoegen aan groep
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="max-h-72 w-56 overflow-y-auto">
+              <ContextMenuItem onSelect={() => p.onNieuweGroep(p.street)}>
+                <Plus className="size-4" /> Nieuwe groep…
+              </ContextMenuItem>
+              {p.groepen.length > 0 && <ContextMenuSeparator />}
               {p.groepen.map((groep) => (
                 <ContextMenuItem key={groep.id} onSelect={() => p.onZetGroep(p.street, groep.id)}>
-                  {p.street.groep_id === groep.id ? (
-                    <Check className="mr-2 size-4" />
-                  ) : (
-                    <span className="mr-2 size-4" />
-                  )}
                   {groep.naam}
+                  {p.street.groep_id === groep.id && <Check className="ml-auto size-4" />}
                 </ContextMenuItem>
               ))}
               {p.street.groep_id && (
-                <ContextMenuItem onSelect={() => p.onZetGroep(p.street, null)}>
-                  <CircleSlash className="mr-2 size-4" /> Uit de groep halen
-                </ContextMenuItem>
+                <>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onSelect={() => p.onZetGroep(p.street, null)}>
+                    <CircleSlash className="size-4" /> Uit de groep halen
+                  </ContextMenuItem>
+                </>
               )}
-            </>
-          )}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
         </ContextMenuContent>
       </ContextMenu>
 
@@ -2359,6 +2369,7 @@ const StraatKolom = memo(function StraatKolom({
             customer={c}
             prijzenTonen={p.prijzenTonen}
             quickNotes={p.quickNotes}
+            markeringen={p.markeringen}
             klantNaam={c.klant_id ? p.klantNamen.get(c.klant_id) : undefined}
             rowText={p.rowText}
             rowPad={p.rowPad}
@@ -2389,6 +2400,7 @@ interface RijProps {
   customer: Customer;
   prijzenTonen: boolean;
   quickNotes: QuickNote[];
+  markeringen: MarkeringRij[];
   klantNaam?: string | undefined;
   rowText: string;
   rowPad: string;
@@ -2643,7 +2655,7 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
 
   // In planmodus vertelt de kleur waar je die dag staat; daarbuiten waar je
   // op moet letten. Twee kleursystemen tegelijk zou niet te lezen zijn.
-  const kleur = regelKleur(c, p.ronde);
+  const kleur = regelKleur(c, p.ronde, p.markeringen);
   const achtergrond = p.planmodus
     ? p.opDeDag
       ? "bg-tint-amber"
@@ -2652,13 +2664,9 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
         : p.elderGepland
           ? "bg-tint-paars"
           : ""
-    : kleur === "geel"
-      ? "bg-tint-amber"
-      : kleur === "groen"
-        ? "bg-tint-groen"
-        : kleur === "rood"
-          ? "bg-tint-rood"
-          : "";
+    : kleur
+      ? tintAchtergrond[kleur]
+      : "";
 
   // De rechtermuisknop hangt om de hele regel: kleur, overslaan en het
   // dossier zitten daarin, want in de regel zelf is er geen plek voor.
@@ -2668,6 +2676,7 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
       onPatch={(patch) => p.onPatch(c, patch)}
       onDossier={() => p.onDossier(c)}
       onHoekadres={() => p.onHoekadres(c)}
+      markeringen={p.markeringen}
     >
       <KlantRijSleep
         id={`c:${c.id}`}

@@ -17,12 +17,13 @@ import {
   eersteMaand,
   komendeMaanden,
   maandSleutel,
-  markeringLabels,
+  tintStip,
   schuifStartOp,
   toonMaand,
   vorigeMaand,
   type Customer,
   type Markering,
+  type MarkeringRij,
 } from "@/lib/klanten";
 
 interface Props {
@@ -34,6 +35,8 @@ interface Props {
   onDossier: () => void;
   /** Opent het hoekadres-schermpje; ook dat houdt de pagina vast. */
   onHoekadres: () => void;
+  /** De kleuren die dit bedrijf zelf gemaakt heeft, uit Instellingen. */
+  markeringen: MarkeringRij[];
   children: ReactNode;
 }
 
@@ -41,11 +44,6 @@ interface Props {
 function jaarwissel(maand: string, i: number): boolean {
   return i > 0 && maand.endsWith("-01");
 }
-
-const KLEUR_STIP: Record<Exclude<Markering, "">, string> = {
-  geel: "bg-tint-amber ring-tint-amber-ink/40",
-  groen: "bg-tint-groen ring-tint-groen-ink/40",
-};
 
 /**
  * Rechtermuisknop op een adresregel: naar het dossier, een kleur meegeven
@@ -60,6 +58,7 @@ export function KlantMenu({
   onPatch: ruwePatch,
   onDossier,
   onHoekadres,
+  markeringen,
   children,
 }: Props) {
   // Alles loopt hierlangs, zodat een startmaand die je overslaat overal
@@ -94,35 +93,8 @@ export function KlantMenu({
         <ContextMenuItem onSelect={onDossier}>
           <FileText className="size-4" /> Dossier
         </ContextMenuItem>
-        <ContextMenuItem onSelect={onHoekadres}>
-          <CornerDownRight className="size-4" /> Hoekadres…
-          {c.hoek_straat && (
-            <span className="ml-auto truncate text-xs text-muted-foreground">{c.hoek_straat}</span>
-          )}
-        </ContextMenuItem>
 
         <ContextMenuSeparator />
-        <ContextMenuLabel>Kleur op de printlijst</ContextMenuLabel>
-        {(Object.keys(markeringLabels) as Exclude<Markering, "">[]).map((kleur) => (
-          <ContextMenuItem key={kleur} onSelect={() => zetKleur(kleur)}>
-            <span className={`size-3 rounded-full ring-1 ring-inset ${KLEUR_STIP[kleur]}`} />
-            {markeringLabels[kleur]}
-            {c.markering === kleur && <Check className="ml-auto size-4" />}
-          </ContextMenuItem>
-        ))}
-        {c.markering ? (
-          <ContextMenuItem onSelect={() => onPatch({ markering: "" })}>
-            <CircleSlash className="size-4" /> Kleur weghalen
-          </ContextMenuItem>
-        ) : (
-          nieuwDezeMaand && (
-            // Anders zoek je je scheel naar de kleur die je nooit gezet hebt.
-            <ContextMenuLabel className="font-normal text-muted-foreground">
-              Al groen: nieuw vanaf {toonMaand(start)}
-            </ContextMenuLabel>
-          )
-        )}
-
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => wisselMaand(komende)}>
           <CalendarOff className="size-4" />
@@ -177,6 +149,33 @@ export function KlantMenu({
         )}
 
         <ContextMenuSeparator />
+        <ContextMenuLabel>Kleur op printlijst</ContextMenuLabel>
+        {markeringen.length === 0 && (
+          <ContextMenuLabel className="font-normal text-muted-foreground">
+            Nog geen kleuren — maak ze bij Instellingen
+          </ContextMenuLabel>
+        )}
+        {markeringen.map((m) => (
+          <ContextMenuItem key={m.id} onSelect={() => zetKleur(m.sleutel)}>
+            <span className={`size-3 rounded-full ring-1 ring-inset ${tintStip[m.tint]}`} />
+            {m.naam}
+            {c.markering === m.sleutel && <Check className="ml-auto size-4" />}
+          </ContextMenuItem>
+        ))}
+        {c.markering ? (
+          <ContextMenuItem onSelect={() => onPatch({ markering: "" })}>
+            <CircleSlash className="size-4" /> Kleur weghalen
+          </ContextMenuItem>
+        ) : (
+          nieuwDezeMaand && (
+            // Anders zoek je je scheel naar de kleur die je nooit gezet hebt.
+            <ContextMenuLabel className="font-normal text-muted-foreground">
+              Al groen: nieuw vanaf {toonMaand(start)}
+            </ContextMenuLabel>
+          )
+        )}
+
+        <ContextMenuSeparator />
         <ContextMenuSub>
           <ContextMenuSubTrigger>
             <Flag className="size-4" /> Wassen vanaf {toonMaand(start)}
@@ -202,6 +201,14 @@ export function KlantMenu({
             )}
           </ContextMenuSubContent>
         </ContextMenuSub>
+
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={onHoekadres}>
+          <CornerDownRight className="size-4" /> Hoekadres…
+          {c.hoek_straat && (
+            <span className="ml-auto truncate text-xs text-muted-foreground">{c.hoek_straat}</span>
+          )}
+        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );

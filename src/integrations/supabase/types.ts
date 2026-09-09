@@ -291,6 +291,44 @@ export type Database = {
           },
         ]
       }
+      markeringen: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          naam: string
+          sleutel: string
+          sort_order: number
+          tint: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          naam: string
+          sleutel: string
+          sort_order?: number
+          tint: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          naam?: string
+          sleutel?: string
+          sort_order?: number
+          tint?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "markeringen_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quick_notes: {
         Row: {
           company_id: string
