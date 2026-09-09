@@ -206,7 +206,7 @@ function DagPagina() {
           </Button>
           <Button size="sm" variant="outline" className="rounded-full" asChild>
             <Link to="/" search={{ dag: datum }}>
-              <Euro className="size-4" /> Aanvinken in de wijken
+              <Euro className="size-4" /> Werk inplannen
             </Link>
           </Button>
           <Button size="sm" className="rounded-full" asChild disabled={regels.length === 0}>

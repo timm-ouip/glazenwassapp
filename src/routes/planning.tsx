@@ -1151,12 +1151,12 @@ function Planning() {
                           <ContextMenuItem
                             onSelect={() => void navigate({ to: "/dag", search: { datum: k } })}
                           >
-                            <ListChecks className="size-4" /> Adressen van deze dag
+                            <ListChecks className="size-4" /> Dagplanning
                           </ContextMenuItem>
                           <ContextMenuItem
                             onSelect={() => void navigate({ to: "/", search: { dag: k } })}
                           >
-                            <Euro className="size-4" /> Aanvinken in de wijken
+                            <Euro className="size-4" /> Werk inplannen
                           </ContextMenuItem>
                         </ContextMenuContent>
                       </ContextMenu>
@@ -1168,7 +1168,7 @@ function Planning() {
           </div>
 
           {/* --- extra opdrachten: werk zonder maand --- */}
-          <div className="rounded-[14px] border border-border bg-card p-3 lg:col-start-1">
+          <div className="rounded-[14px] border border-border bg-card p-3 lg:col-start-1 lg:row-start-2">
             <div className="mb-2 flex items-center gap-2">
               <Hammer className="size-4 shrink-0 text-muted-foreground" />
               <h2 className="font-display text-[15px] font-semibold tracking-[-0.01em]">
@@ -1224,8 +1224,11 @@ function Planning() {
             )}
           </div>
 
-          {/* --- de gekozen dag --- */}
-          <div className="rounded-[14px] border border-border bg-card p-4">
+          {/* --- de gekozen dag ---
+              Rechts naast de kalender en bovenaan beginnen: zonder row-start
+              schuift hij onder de strook met opdrachten door, en dan staat
+              het belangrijkste van de pagina onderin. */}
+          <div className="rounded-[14px] border border-border bg-card p-4 lg:col-start-2 lg:row-start-1">
             <p className="text-xs text-muted-foreground">
               {gekozenDag > nu ? "Gepland voor" : "Gewassen op"}
             </p>
@@ -1313,12 +1316,12 @@ function Planning() {
                 van precies dat deel van de wijk. */}
               <Button size="sm" className="rounded-full" asChild>
                 <Link to="/dag" search={{ datum: gekozenDag }}>
-                  <ListChecks className="size-4" /> Naar deze dag
+                  <ListChecks className="size-4" /> Dagplanning
                 </Link>
               </Button>
               <Button size="sm" variant="outline" className="rounded-full" asChild>
                 <Link to="/" search={{ dag: gekozenDag }}>
-                  <Euro className="size-4" /> Aanvinken in de wijken
+                  <Euro className="size-4" /> Werk inplannen
                 </Link>
               </Button>
               {dagRegels.length > 0 && (
