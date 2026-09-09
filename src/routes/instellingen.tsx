@@ -90,39 +90,50 @@ function Instellingen() {
       kruimel="Beheer / Instellingen"
       onderschrift="Je bedrijf, je eigen account en wie er met je meewerkt."
     >
+      {/* Naast elkaar in plaats van erboven: er komen tabbladen bij, en een
+          rij die doorloopt tot buiten het scherm is geen menu meer. Op een
+          smal scherm gaat de lijst weer boven de inhoud staan en loopt hij
+          horizontaal, want daar is de breedte juist het schaarse. */}
       <Tabs
+        orientation="vertical"
         value={tab}
         onValueChange={(v) =>
           void navigate({ to: "/instellingen", search: { tab: v as Tab }, replace: true })
         }
+        className="flex flex-col gap-5 sm:flex-row sm:gap-6"
       >
-        <TabsList>
-          <TabsTrigger value="bedrijf">Bedrijf</TabsTrigger>
-          <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="team">Team</TabsTrigger>
-          <TabsTrigger value="wijken">Wijken</TabsTrigger>
-          <TabsTrigger value="notities">Notities</TabsTrigger>
-          <TabsTrigger value="kleuren">Kleuren</TabsTrigger>
+        <TabsList className="h-auto w-full shrink-0 justify-start gap-0.5 overflow-x-auto bg-transparent p-0 sm:w-44 sm:flex-col sm:overflow-visible">
+          {TABBLADEN.map((t) => (
+            <TabsTrigger
+              key={t}
+              value={t}
+              className="w-full shrink-0 justify-start rounded-[10px] px-3 py-1.5 capitalize text-muted-foreground data-[state=active]:bg-accent data-[state=active]:text-foreground data-[state=active]:shadow-none sm:w-full"
+            >
+              {t}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        <TabsContent value="bedrijf" className="mt-4">
-          <BedrijfTab isEigenaar={isEigenaar} />
-        </TabsContent>
-        <TabsContent value="account" className="mt-4">
-          <AccountTab />
-        </TabsContent>
-        <TabsContent value="team" className="mt-4">
-          <TeamTab />
-        </TabsContent>
-        <TabsContent value="wijken" className="mt-4">
-          <WijkenTab />
-        </TabsContent>
-        <TabsContent value="notities" className="mt-4">
-          <NotitiesTab />
-        </TabsContent>
-        <TabsContent value="kleuren" className="mt-4">
-          <KleurenTab />
-        </TabsContent>
+        <div className="min-w-0 flex-1">
+          <TabsContent value="bedrijf">
+            <BedrijfTab isEigenaar={isEigenaar} />
+          </TabsContent>
+          <TabsContent value="account">
+            <AccountTab />
+          </TabsContent>
+          <TabsContent value="team">
+            <TeamTab />
+          </TabsContent>
+          <TabsContent value="wijken">
+            <WijkenTab />
+          </TabsContent>
+          <TabsContent value="notities">
+            <NotitiesTab />
+          </TabsContent>
+          <TabsContent value="kleuren">
+            <KleurenTab />
+          </TabsContent>
+        </div>
       </Tabs>
     </AppLayout>
   );
@@ -994,7 +1005,7 @@ function KleurenTab() {
 /** De vier kleuren naast elkaar; de gekozene heeft een randje. */
 function KleurKeuze({ waarde, onKies }: { waarde: Tint; onKies: (t: Tint) => void }) {
   return (
-    <div className="flex shrink-0 items-center gap-1">
+    <div className="flex w-[92px] shrink-0 flex-wrap items-center gap-1">
       {TINTEN.map((t) => (
         <button
           key={t}

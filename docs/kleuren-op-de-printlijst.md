@@ -10,12 +10,16 @@ rechtermuisknop op een adres.
 
 ## Drie keuzes die uitleg verdienen
 
-**De kleur kies je uit vier, niet vrij.** Amber, groen, paars en blauw. Die
-vier zijn in het ontwerp uitgezocht op leesbaarheid: ze hebben allemaal een
-lichte en een donkere variant, en ze blijven leesbaar op papier. Een vrij
-gekozen kleurcode zou in de donkere modus of op een zwart-witprint zomaar
-kunnen wegvallen, en dat merk je pas als de lijst al in de auto ligt. Blauw is
-nieuw en alleen hiervoor toegevoegd.
+**De kleur kies je uit acht, niet vrij.** Geel, oranje, roze, paars, blauw,
+turkoois, groen en limoen — op volgorde van de kleurencirkel, zodat het rijtje
+leest als een palet. Die acht zijn in het ontwerp uitgezocht op leesbaarheid:
+ze hebben allemaal een lichte en een donkere variant, en ze blijven leesbaar op
+papier. Een vrij gekozen kleurcode zou in de donkere modus of op een
+zwart-witprint zomaar kunnen wegvallen, en dat merk je pas als de lijst al in
+de auto ligt.
+
+Het begon met vier (geel, groen, paars, blauw); de andere vier kwamen er
+dezelfde dag bij omdat vier te weinig bleek om een wijk mee te ordenen.
 
 **Rood zit er niet bij.** Dat betekent al "deze maand overgeslagen", en dat is
 niets wat je zelf aanzet — het volgt uit de maanden die je overslaat. Twee

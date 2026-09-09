@@ -43,6 +43,14 @@
   --color-tint-rood-ink: var(--tint-rood-ink);
   --color-tint-blauw: var(--tint-blauw);
   --color-tint-blauw-ink: var(--tint-blauw-ink);
+  --color-tint-oranje: var(--tint-oranje);
+  --color-tint-oranje-ink: var(--tint-oranje-ink);
+  --color-tint-roze: var(--tint-roze);
+  --color-tint-roze-ink: var(--tint-roze-ink);
+  --color-tint-turkoois: var(--tint-turkoois);
+  --color-tint-turkoois-ink: var(--tint-turkoois-ink);
+  --color-tint-limoen: var(--tint-limoen);
+  --color-tint-limoen-ink: var(--tint-limoen-ink);
   --shadow-card: var(--shadow-card);
 
   --color-background: var(--background);
@@ -116,6 +124,17 @@
      zodat een gekleurde regel geen knop lijkt. */
   --tint-blauw: oklch(0.952 0.032 235);
   --tint-blauw-ink: oklch(0.47 0.115 245);
+  /* En deze vier ook: kleuren om zelf een betekenis aan te geven. De tinten
+     liggen ver genoeg uit elkaar op de kleurencirkel om ze náást elkaar in
+     één lijst nog uit elkaar te houden — dat is waar het hier om gaat. */
+  --tint-oranje: oklch(0.955 0.042 48);
+  --tint-oranje-ink: oklch(0.51 0.13 42);
+  --tint-roze: oklch(0.953 0.032 350);
+  --tint-roze-ink: oklch(0.5 0.13 352);
+  --tint-turkoois: oklch(0.95 0.038 195);
+  --tint-turkoois-ink: oklch(0.46 0.09 197);
+  --tint-limoen: oklch(0.952 0.048 128);
+  --tint-limoen-ink: oklch(0.47 0.11 130);
   --secondary: oklch(0.955 0.002 286);
   --secondary-foreground: oklch(0.28 0.004 285.9);
   --muted: oklch(0.958 0.002 286);
@@ -173,6 +192,14 @@
   --tint-rood-ink: oklch(0.82 0.105 25);
   --tint-blauw: oklch(0.3 0.045 235);
   --tint-blauw-ink: oklch(0.82 0.1 240);
+  --tint-oranje: oklch(0.3 0.045 48);
+  --tint-oranje-ink: oklch(0.82 0.105 48);
+  --tint-roze: oklch(0.3 0.045 350);
+  --tint-roze-ink: oklch(0.82 0.105 352);
+  --tint-turkoois: oklch(0.29 0.04 195);
+  --tint-turkoois-ink: oklch(0.8 0.09 197);
+  --tint-limoen: oklch(0.29 0.05 128);
+  --tint-limoen-ink: oklch(0.8 0.11 130);
   --brand-foreground: oklch(0.2 0.03 252);
   --secondary: oklch(0.27 0.003 286);
   --secondary-foreground: oklch(0.97 0 0);

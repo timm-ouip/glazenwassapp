@@ -12,19 +12,34 @@ export type Kant = "even" | "oneven";
 
 /**
  * De kleuren waar een markering uit te kiezen is. Geen vrije kleurcode: deze
- * vier zijn uitgezocht op leesbaarheid, in het licht en in het donker, en op
- * papier. Rood ontbreekt met opzet — dat betekent al "deze maand
- * overgeslagen", en twee betekenissen op één kleur is er één te veel.
+ * acht zijn uitgezocht op leesbaarheid, in het licht en in het donker, en op
+ * papier. Ze staan op volgorde van de kleurencirkel, zodat het rijtje in de
+ * instellingen leest als een palet en niet als een hoop losse kleuren. Rood
+ * ontbreekt met opzet — dat betekent al "deze maand overgeslagen", en twee
+ * betekenissen op één kleur is er één te veel.
  */
-export const TINTEN = ["amber", "groen", "paars", "blauw"] as const;
+export const TINTEN = [
+  "amber",
+  "oranje",
+  "roze",
+  "paars",
+  "blauw",
+  "turkoois",
+  "groen",
+  "limoen",
+] as const;
 export type Tint = (typeof TINTEN)[number];
 
 /** Hoe de kleuren heten tegen de gebruiker. "Amber" zegt niemand. */
 export const tintNamen: Record<Tint, string> = {
   amber: "Geel",
-  groen: "Groen",
+  oranje: "Oranje",
+  roze: "Roze",
   paars: "Paars",
   blauw: "Blauw",
+  turkoois: "Turkoois",
+  groen: "Groen",
+  limoen: "Limoen",
 };
 
 /** Wat een regel kan kleuren: een van de tinten, plus rood van een
@@ -35,18 +50,26 @@ export type RegelKleur = Tint | "rood" | "";
  *  in het dossier, in het menu en op de printlijst. */
 export const tintAchtergrond: Record<Tint | "rood", string> = {
   amber: "bg-tint-amber",
-  groen: "bg-tint-groen",
+  oranje: "bg-tint-oranje",
+  roze: "bg-tint-roze",
   paars: "bg-tint-paars",
   blauw: "bg-tint-blauw",
+  turkoois: "bg-tint-turkoois",
+  groen: "bg-tint-groen",
+  limoen: "bg-tint-limoen",
   rood: "bg-tint-rood",
 };
 
 /** Het bolletje voor in een menu: de kleur met een randje van zijn inkt. */
 export const tintStip: Record<Tint, string> = {
   amber: "bg-tint-amber ring-tint-amber-ink/40",
-  groen: "bg-tint-groen ring-tint-groen-ink/40",
+  oranje: "bg-tint-oranje ring-tint-oranje-ink/40",
+  roze: "bg-tint-roze ring-tint-roze-ink/40",
   paars: "bg-tint-paars ring-tint-paars-ink/40",
   blauw: "bg-tint-blauw ring-tint-blauw-ink/40",
+  turkoois: "bg-tint-turkoois ring-tint-turkoois-ink/40",
+  groen: "bg-tint-groen ring-tint-groen-ink/40",
+  limoen: "bg-tint-limoen ring-tint-limoen-ink/40",
 };
 
 /** Een kleur die je zelf gemaakt hebt, met de tekst die jij eraan gaf. */
