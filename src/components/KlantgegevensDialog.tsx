@@ -572,10 +572,8 @@ export function KlantgegevensDialog({
           {/* Alles van het pand bij elkaar. Hetzelfde als in de wijklijst,
               maar daar zit het verspreid over de regel en de rechtermuisknop;
               hier loop je een adres in één keer na. */}
-          <div className="space-y-4 rounded-lg border border-border p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-              Het adres
-            </p>
+          <div className="space-y-4 rounded-[14px] border border-border bg-card-header/60 p-3">
+            <p className="text-[11.5px] font-medium text-muted-foreground/80">Het adres</p>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">

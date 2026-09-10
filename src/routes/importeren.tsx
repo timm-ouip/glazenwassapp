@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Check, Eye, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Eye, Trash2, Upload } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -788,7 +788,7 @@ function ImportPagina() {
   return (
     <AppLayout titel="Importeren" onderschrift="Klanten uit een Excel-bestand inlezen">
       <div className="space-y-6">
-        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <div className="space-y-3 rounded-[18px] border border-border bg-card shadow-card p-4">
           <Label>In welke wijk komt dit bestand?</Label>
           <Select value={wijkId} onValueChange={setWijkId}>
             <SelectTrigger className="max-w-sm">
@@ -840,7 +840,7 @@ function ImportPagina() {
         </div>
 
         <div
-          className={`space-y-2 rounded-lg border-2 border-dashed p-4 transition-colors ${
+          className={`space-y-2 rounded-[18px] border-2 border-dashed p-4 transition-colors ${
             sleep ? "border-primary bg-accent/50" : "border-border bg-card"
           }`}
           onDragOver={(e) => {
@@ -861,10 +861,25 @@ function ImportPagina() {
           }}
         >
           <Label htmlFor="bestand">Kies je Excel-bestand (.xlsx) of sleep het hierheen</Label>
-          <Input
+          {/* Het kale bestandsveld van de browser ("Choose file — no file
+              chosen") valt buiten elk thema; hier is het een gewone knop, met
+              het echte veld eronder verstopt. */}
+          <div className="flex items-center gap-3">
+            <label
+              htmlFor="bestand"
+              className="flex cursor-pointer items-center gap-2 rounded-full bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground hover:opacity-90"
+            >
+              <Upload className="size-4" /> Bestand kiezen
+            </label>
+            <span className="min-w-0 truncate text-[12.5px] text-muted-foreground">
+              {bestandsnaam || "nog geen bestand gekozen"}
+            </span>
+          </div>
+          <input
             id="bestand"
             type="file"
             accept=".xlsx,.xls"
+            className="sr-only"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) void lees(file);
@@ -880,7 +895,7 @@ function ImportPagina() {
 
         {lijst.length > 0 && (
           <div className="space-y-4">
-            <div className="rounded-lg border border-border bg-card p-4">
+            <div className="rounded-[18px] border border-border bg-card shadow-card p-4">
               <p className="text-sm">
                 <span className="font-medium">{bestandsnaam}</span> — {lijst.length} klanten in{" "}
                 {straten.length} {straten.length === 1 ? "straat" : "straten"}
@@ -944,7 +959,7 @@ function ImportPagina() {
             </div>
 
             {verdacht.length > 0 && (
-              <div className="space-y-3 rounded-lg border border-amber-400/60 bg-amber-50 p-4 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+              <div className="space-y-3 rounded-[18px] bg-tint-geel p-4 text-tint-geel-ink shadow-card">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <AlertTriangle className="size-4" />
                   Dit lijkt geen straatnaam — klopt dit?
@@ -952,7 +967,7 @@ function ImportPagina() {
                 {verdacht.map((v) => (
                   <div
                     key={v.straat}
-                    className="space-y-2 rounded-md border border-amber-400/40 p-3"
+                    className="space-y-2 rounded-[14px] bg-card/70 p-3 text-card-foreground"
                   >
                     <p className="text-sm">
                       <span className="font-semibold">“{v.straat}”</span>{" "}
@@ -1020,16 +1035,16 @@ function ImportPagina() {
 
             {samengevoegd > 0 && (
               <p className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
-                <span className="size-3 shrink-0 rounded-sm bg-tint-amber ring-1 ring-inset ring-tint-amber-ink/20" />
+                <span className="size-3 shrink-0 rounded-[4px] bg-tint-amber ring-1 ring-inset ring-tint-amber-ink/20" />
                 {samengevoegd} {samengevoegd === 1 ? "adres staat" : "adressen staan"} in meer dan
                 één tabblad. Hun notities zijn samengevoegd — ook als er maar in één maand iets
                 stond. Kijk die even na.
               </p>
             )}
 
-            <div className="rounded-lg border border-border bg-card">
+            <div className="rounded-[18px] border border-border bg-card shadow-card">
               <table className="w-full table-fixed text-sm">
-                <thead className="bg-secondary text-left text-[11px] font-medium text-muted-foreground/80">
+                <thead className="bg-card-header text-left text-[11px] font-medium text-muted-foreground/80">
                   <tr>
                     <th className="w-[15%] px-3 py-2">Straat</th>
                     <th className="w-20 px-3 py-2">Nr.</th>
@@ -1107,7 +1122,9 @@ function ImportPagina() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className={`px-2 py-1 text-right ${r.prijs === 0 ? "text-red-600" : ""}`}>
+                      <td
+                        className={`px-2 py-1 text-right ${r.prijs === 0 ? "text-destructive" : ""}`}
+                      >
                         <InlineCel
                           align="right"
                           inputMode="decimal"
@@ -1205,9 +1222,9 @@ function BronRaster({ bron, grid }: { bron: Bron; grid: SheetGrid }) {
         Tabblad “{bron.tabblad}” — cel {kolomLetter(bron.kolom)}
         {bron.rij + 1}
       </p>
-      <div className="max-h-[60vh] overflow-auto rounded-md border border-border bg-white">
+      <div className="max-h-[60vh] overflow-auto rounded-[14px] border border-border bg-card">
         <table
-          className="border-collapse font-sans text-[11px] text-black"
+          className="border-collapse font-sans text-[11px] text-foreground"
           style={{ fontFamily: "Calibri, Arial, sans-serif" }}
         >
           <thead>
@@ -1346,7 +1363,7 @@ function BronVenster({
 function NaImportVerslag({ stand }: { stand: NaImport }) {
   const bezig = stand.stap !== "klaar";
   return (
-    <div className="max-w-lg space-y-2 rounded-lg border border-border bg-card p-4">
+    <div className="max-w-lg space-y-2 rounded-[18px] border border-border bg-card shadow-card p-4">
       <p className="text-sm font-medium">
         {stand.stap === "straten"
           ? `Straatnamen opzoeken — ${stand.gedaan}/${stand.totaal}`

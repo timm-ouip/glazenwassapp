@@ -71,7 +71,10 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
         street_id: c.street_id,
         sort_order: c.sort_order,
       }));
-      const max = Math.max(0, ...customers.filter((c) => c.street_id === doel.id).map((c) => c.sort_order));
+      const max = Math.max(
+        0,
+        ...customers.filter((c) => c.street_id === doel.id).map((c) => c.sort_order),
+      );
 
       for (const [i, c] of teVerplaatsen.entries()) {
         const { error } = await supabase
@@ -83,7 +86,10 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
       const { error: delError } = await supabase
         .from("streets")
         .delete()
-        .in("id", overige.map((s) => s.id));
+        .in(
+          "id",
+          overige.map((s) => s.id),
+        );
       if (delError) throw delError;
 
       pushUndo({
@@ -116,9 +122,9 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
 
   return (
     <>
-      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+      <div className="rounded-lg border border-tint-amber-ink/25 bg-tint-amber p-3">
         <div className="flex items-start gap-2">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-tint-amber-ink" />
           <div className="space-y-2 text-sm">
             <p className="font-medium">
               {groepen.length === 1
@@ -141,8 +147,9 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
           <DialogHeader>
             <DialogTitle>"{actief?.naam}" samenvoegen?</DialogTitle>
             <DialogDescription>
-              {actief?.straten.length} straten met dezelfde naam worden één straat. Alle klanten komen achter elkaar
-              te staan in de eerste straat. Dit kun je met Ongedaan maken terugdraaien.
+              {actief?.straten.length} straten met dezelfde naam worden één straat. Alle klanten
+              komen achter elkaar te staan in de eerste straat. Dit kun je met Ongedaan maken
+              terugdraaien.
             </DialogDescription>
           </DialogHeader>
 
@@ -150,9 +157,15 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
             <div className="space-y-3 text-sm">
               <ul className="space-y-1">
                 {actief.straten.map((s, i) => (
-                  <li key={s.id} className="flex justify-between rounded border border-border px-2 py-1">
+                  <li
+                    key={s.id}
+                    className="flex justify-between rounded border border-border px-2 py-1"
+                  >
                     <span>
-                      {s.name} {i === 0 && <span className="text-xs text-muted-foreground">(blijft bestaan)</span>}
+                      {s.name}{" "}
+                      {i === 0 && (
+                        <span className="text-xs text-muted-foreground">(blijft bestaan)</span>
+                      )}
                     </span>
                     <span className="text-muted-foreground">
                       {customers.filter((c) => c.street_id === s.id).length} klanten
@@ -164,12 +177,14 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
               {dubbels.length > 0 ? (
                 <div className="rounded border border-destructive/50 bg-destructive/10 p-2">
                   <p className="flex items-center gap-1.5 font-medium text-destructive">
-                    <AlertTriangle className="size-4" /> Let op: {dubbels.length} huisnummer(s) komen dubbel voor
+                    <AlertTriangle className="size-4" /> Let op: {dubbels.length} huisnummer(s)
+                    komen dubbel voor
                   </p>
                   <ul className="mt-1 space-y-0.5 text-xs">
                     {dubbels.map((lijst) => (
                       <li key={lijst[0]!.id}>
-                        <span className="font-medium">nr {formatNumber(lijst[0]!)}</span> — {lijst.length}× (
+                        <span className="font-medium">nr {formatNumber(lijst[0]!)}</span> —{" "}
+                        {lijst.length}× (
                         {lijst
                           .map((c) => `€ ${c.price}${c.note ? ` · ${c.note}` : ""}`)
                           .join(" / ")}

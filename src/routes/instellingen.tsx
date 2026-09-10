@@ -627,7 +627,7 @@ function TeamTab() {
                   <td className="px-3 py-2">
                     {isEigenaar ? (
                       <select
-                        className="rounded-md border border-border bg-card px-2 py-1 text-[13px] disabled:cursor-not-allowed disabled:text-muted-foreground"
+                        className="rounded-[10px] border border-border bg-card px-2.5 py-1 text-[13px] disabled:cursor-not-allowed disabled:text-muted-foreground"
                         value={c.rol}
                         disabled={zelf || laatsteEigenaar}
                         title={reden}
@@ -785,7 +785,7 @@ function WijkenTab() {
             Nog geen wijken. Die maak je aan op de wijkenpagina.
           </p>
         ) : (
-          <ol className="divide-y divide-border rounded-lg border border-border">
+          <ol className="divide-y divide-border overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
             {districts.map((d, i) => {
               const tempo = tempoVan(d.id, gemeten);
               return (
@@ -961,7 +961,7 @@ function KleurenTab() {
               Nog geen kleuren. Maak er hieronder een.
             </p>
           ) : (
-            <ul className="divide-y divide-border/60 rounded-lg border border-border">
+            <ul className="divide-y divide-border/60 overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
               {markeringen.map((m) => (
                 <li key={m.id} className="flex items-center gap-2 px-3 py-2">
                   <KleurKeuze waarde={m.tint} onKies={(tint) => void pas(m, { tint })} />
@@ -1097,7 +1097,7 @@ function NotitiesTab() {
               bewerkt.
             </p>
           ) : (
-            <ul className="divide-y divide-border/60 rounded-lg border border-border">
+            <ul className="divide-y divide-border/60 overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
               {notities.map((q) => (
                 <li key={q.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                   <span className="flex-1 truncate">{q.label}</span>
@@ -1189,7 +1189,7 @@ function WeergaveKaart() {
               aria-pressed={aan}
               className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[13px] transition-colors ${
                 aan
-                  ? "border-brand bg-brand text-brand-foreground font-medium"
+                  ? "border-primary bg-primary font-medium text-primary-foreground"
                   : "border-border bg-card text-foreground hover:bg-accent"
               }`}
             >

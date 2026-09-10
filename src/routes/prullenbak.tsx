@@ -166,10 +166,10 @@ function Prullenbak() {
         <div className="overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
           {/* Op een smal scherm staan de gegevens onder elkaar in plaats van
               in kolommen; dan zijn kopjes overbodig. */}
-          <div className="hidden items-center gap-3 border-b border-border bg-card-header px-4 py-2.5 text-[10px] font-semibold tracking-[0.06em] text-muted-foreground sm:flex">
-            <span className="w-28 shrink-0">SOORT</span>
-            <span className="min-w-0 flex-1">WAT</span>
-            <span className="hidden w-44 shrink-0 lg:block">VERWIJDERD OP</span>
+          <div className="hidden items-center gap-3 border-b border-border bg-card-header px-4 py-2.5 text-[11px] font-medium text-muted-foreground/80 sm:flex">
+            <span className="w-28 shrink-0">soort</span>
+            <span className="min-w-0 flex-1">wat</span>
+            <span className="hidden w-44 shrink-0 lg:block">verwijderd op</span>
             <span className="w-[150px] shrink-0" />
           </div>
           {rijen.map((r) => (

@@ -83,7 +83,7 @@ export function PrijsCel({ customer: c, ronde, onPatch }: Props) {
         align="right"
         inputMode="decimal"
         placeholder={formatPrice(0)}
-        className={c.price === 0 ? "text-red-600" : ""}
+        className={c.price === 0 ? "text-destructive" : ""}
         onCommit={(v) => onPatch({ price: bedragVan(v) })}
       />
     );
@@ -107,7 +107,7 @@ export function PrijsCel({ customer: c, ronde, onPatch }: Props) {
               : "Prijs van dit adres"
           }
           className={`w-full truncate px-1 py-0.5 text-right tabular-nums hover:bg-accent/60 focus:bg-accent focus:outline-none ${
-            totaal === 0 ? "text-red-600" : extra > 0 ? "text-tint-amber-ink" : ""
+            totaal === 0 ? "text-destructive" : extra > 0 ? "text-tint-amber-ink" : ""
           }`}
         >
           {formatPrice(totaal)}

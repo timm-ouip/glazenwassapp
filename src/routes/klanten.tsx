@@ -704,9 +704,9 @@ function Klanten() {
                       {k.kop}
                     </th>
                   ))}
-                  <th className="w-24 px-2 py-2.5">POSTCODE</th>
-                  <th className="w-28 px-2 py-2.5">PLAATS</th>
-                  <th className="w-24 px-2 py-2.5">PRIJS</th>
+                  <th className="w-24 px-2 py-2.5">postcode</th>
+                  <th className="w-28 px-2 py-2.5">plaats</th>
+                  <th className="w-24 px-2 py-2.5">prijs</th>
                   <th className="w-9 px-2 py-2.5" />
                 </tr>
               </thead>
