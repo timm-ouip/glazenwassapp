@@ -44,10 +44,14 @@ function SignupPagina() {
     // signUp logt de gebruiker meteen in (sessie is meteen actief) zodat de
     // server-functie hieronder — die de sessie nodig heeft — meteen werkt.
     try {
-      await createCompanyAndOwner({ data: { companyName: bedrijfsnaam.trim(), naam: naam.trim() } });
+      await createCompanyAndOwner({
+        data: { companyName: bedrijfsnaam.trim(), naam: naam.trim() },
+      });
     } catch (err) {
       setBezig(false);
-      toast.error("Bedrijf aanmaken mislukt: " + (err instanceof Error ? err.message : String(err)));
+      toast.error(
+        "Bedrijf aanmaken mislukt: " + (err instanceof Error ? err.message : String(err)),
+      );
       return;
     }
 
@@ -77,7 +81,11 @@ function SignupPagina() {
           >
             <div className="space-y-2">
               <Label htmlFor="bedrijfsnaam">Bedrijfsnaam</Label>
-              <Input id="bedrijfsnaam" value={bedrijfsnaam} onChange={(e) => setBedrijfsnaam(e.target.value)} />
+              <Input
+                id="bedrijfsnaam"
+                value={bedrijfsnaam}
+                onChange={(e) => setBedrijfsnaam(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="naam">Jouw naam</Label>

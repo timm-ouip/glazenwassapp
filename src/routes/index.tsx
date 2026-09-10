@@ -72,6 +72,7 @@ import {
 } from "@/components/ui/context-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppLayout } from "@/components/AppLayout";
+import { Cijferkaarten } from "@/components/Cijferkaarten";
 import { KlantDialog } from "@/components/KlantDialog";
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { StraatDialog } from "@/components/StraatDialog";
@@ -1508,53 +1509,32 @@ function Index() {
         </>
       }
       kop={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {[
+        <Cijferkaarten
+          cijfers={[
             {
               label: "Adressen in beeld",
               waarde: String(totaal),
               onder: `van ${customers.length} in de kaartenbak`,
               icon: Users,
-              kaart: "bg-accent text-accent-foreground",
-              chip: "bg-accent-foreground/15",
+              kleur: "blauw",
             },
             {
               label: "Straten",
               waarde: String(groepen.length),
               onder: `${secties.length} in een groep`,
               icon: Route2,
-              kaart: "bg-tint-amber text-tint-amber-ink",
-              chip: "bg-tint-amber-ink/15",
+              kleur: "amber",
             },
             {
               label: "Omzet per ronde",
               waarde: formatPrice(omzet),
               onder: isKalendermaand(filter) ? toonMaand(filter) : "alle maanden",
               icon: Euro,
-              kaart: "bg-tint-groen text-tint-groen-ink",
-              chip: "bg-tint-groen-ink/15",
+              kleur: "groen",
               verberg: !prijzenTonen,
             },
-          ]
-            .filter((s) => !s.verberg)
-            // Elke kaart één kleurfamilie: het vlak is de lichte tint, het
-            // icoonvakje een stap dieper, de tekst de donkere kant ervan.
-            // Zwart op pastel zou de kaart in tweeën trekken.
-            .map((s) => (
-              <div key={s.label} className={`rounded-[18px] px-4 py-3.5 ${s.kaart}`}>
-                <div
-                  className={`mb-2.5 flex size-8 items-center justify-center rounded-[10px] ${s.chip}`}
-                >
-                  <s.icon className="size-[16px]" />
-                </div>
-                <p className="text-[12.5px] opacity-80">{s.label}</p>
-                <p className="font-display text-[24px] font-semibold leading-tight tracking-[-0.02em] tabular-nums">
-                  {s.waarde}
-                </p>
-                <p className="mt-0.5 truncate text-[11px] opacity-70">{s.onder}</p>
-              </div>
-            ))}
-        </div>
+          ]}
+        />
       }
     >
       <div className="space-y-3">

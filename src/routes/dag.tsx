@@ -16,6 +16,7 @@ import { toast } from "sonner";
 
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
+import { Cijferkaarten } from "@/components/Cijferkaarten";
 import { Button } from "@/components/ui/button";
 import { VerplaatsNaarKnop } from "@/components/VerplaatsNaarKnop";
 import { OverslaanKnop } from "@/components/OverslaanKnop";
@@ -751,51 +752,37 @@ function DagPagina() {
         </>
       }
       kop={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {[
+        <Cijferkaarten
+          cijfers={[
             {
               label: "Adressen",
               waarde: String(regels.length),
+              onder: `${perWijk.wijken.length} ${perWijk.wijken.length === 1 ? "wijk" : "wijken"}`,
               icon: Users,
-              tegel: "bg-accent text-accent-foreground",
+              kleur: "blauw",
             },
             {
               label: "Straten",
               waarde: String(straten),
+              onder: klussen.length > 0 ? `${klussen.length} extra opdracht` : "geen extra werk",
               icon: MapPin,
-              tegel: "bg-tint-amber text-tint-amber-ink",
+              kleur: "amber",
             },
             {
               label: "Opbrengst",
               waarde: formatPrice(bedrag),
+              onder: toonDatum(datum),
               icon: Euro,
-              tegel: "bg-tint-groen text-tint-groen-ink",
+              kleur: "groen",
             },
-          ].map((t) => (
-            <div
-              key={t.label}
-              className="flex items-center gap-3 rounded-[14px] border border-border bg-card p-3"
-            >
-              <span className={`flex size-9 items-center justify-center rounded-full ${t.tegel}`}>
-                <t.icon className="size-4" />
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-[12.5px] text-muted-foreground">
-                  {t.label}
-                </span>
-                <span className="block font-display text-[22px] font-semibold leading-tight tracking-[-0.02em] tabular-nums">
-                  {t.waarde}
-                </span>
-              </span>
-            </div>
-          ))}
-        </div>
+          ]}
+        />
       }
     >
       {wasdagQuery.isLoading ? (
         <p className="text-[13px] text-muted-foreground">Laden…</p>
       ) : regels.length === 0 && klussen.length === 0 ? (
-        <div className="rounded-[14px] border border-dashed border-border bg-card/50 p-8 text-center">
+        <div className="rounded-[18px] border border-dashed border-border bg-card/50 p-8 text-center">
           <p className="font-display text-[17px] font-semibold">Nog niets op deze dag</p>
           <p className="mt-1 text-[13px] text-muted-foreground">
             Vink in de wijken aan wat je gaat doen, of zet er met de rechtermuisknop op de kalender
@@ -812,7 +799,7 @@ function DagPagina() {
             return (
               <section
                 key={w.id}
-                className="mb-3.5 break-inside-avoid-column overflow-hidden rounded-[14px] border border-border bg-card"
+                className="mb-3.5 break-inside-avoid-column overflow-hidden rounded-[18px] border border-border bg-card shadow-card"
               >
                 <div
                   {...wijkRest}
@@ -890,7 +877,7 @@ function DagPagina() {
               er toch bent. Afvinken doe je hier: gebeurt dat niet, dan is hij
               morgen weer van deze dag af en wacht hij op de planning. */}
           {klussen.length > 0 && (
-            <section className="mb-3.5 break-inside-avoid-column overflow-hidden rounded-[14px] border border-border bg-card">
+            <section className="mb-3.5 break-inside-avoid-column overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
               <div className="flex items-baseline gap-2 border-b border-border bg-card-header px-3 py-2">
                 <Hammer className="size-3.5 shrink-0 translate-y-[2px] text-muted-foreground" />
                 <h2 className="min-w-0 flex-1 truncate font-display text-[14.5px] font-semibold">
@@ -1057,7 +1044,7 @@ function StraatRij({
             aria-label={`Hele straat ${straat.naam}`}
           />
         )}
-        <h3 className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+        <h3 className="min-w-0 flex-1 truncate text-[12.5px] font-semibold tracking-[-0.01em] text-foreground/70">
           {straat.naam}
         </h3>
         <span className="text-[12px] tabular-nums text-muted-foreground">

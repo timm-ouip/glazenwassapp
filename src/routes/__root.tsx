@@ -80,7 +80,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Klantenlijst glazenwasser" },
       { name: "description", content: "Klanten per straat, prijzen en printlijsten per maand." },
       { property: "og:title", content: "Klantenlijst glazenwasser" },
-      { property: "og:description", content: "Klanten per straat, prijzen en printlijsten per maand." },
+      {
+        property: "og:description",
+        content: "Klanten per straat, prijzen en printlijsten per maand.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -97,7 +100,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
-
   }),
   shellComponent: RootShell,
   component: RootComponent,

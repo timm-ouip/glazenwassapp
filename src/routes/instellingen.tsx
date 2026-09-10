@@ -158,7 +158,7 @@ function Kaart({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[14px] border border-border bg-card p-4">
+    <section className="rounded-[18px] border border-border bg-card shadow-card p-4">
       <h2 className="font-display text-[15px] font-semibold tracking-[-0.01em]">{titel}</h2>
       {uitleg && <p className="mt-0.5 text-[12.5px] text-muted-foreground">{uitleg}</p>}
       <div className="mt-3.5">{children}</div>
@@ -599,9 +599,9 @@ function TeamTab() {
 
   return (
     <div className="max-w-3xl space-y-4">
-      <div className="overflow-hidden rounded-[14px] border border-border bg-card">
+      <div className="overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
         <table className="w-full text-sm">
-          <thead className="bg-card-header text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <thead className="bg-card-header text-left text-[11px] font-medium text-muted-foreground/80">
             <tr>
               <th className="px-3 py-2 font-medium">Naam</th>
               <th className="px-3 py-2 font-medium">E-mail</th>

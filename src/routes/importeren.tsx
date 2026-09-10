@@ -1029,7 +1029,7 @@ function ImportPagina() {
 
             <div className="rounded-lg border border-border bg-card">
               <table className="w-full table-fixed text-sm">
-                <thead className="bg-secondary text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead className="bg-secondary text-left text-[11px] font-medium text-muted-foreground/80">
                   <tr>
                     <th className="w-[15%] px-3 py-2">Straat</th>
                     <th className="w-20 px-3 py-2">Nr.</th>

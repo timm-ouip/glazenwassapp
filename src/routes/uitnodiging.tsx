@@ -49,7 +49,9 @@ function UitnodigingPagina() {
       await completeInvite({ data: { naam: naam.trim() } });
     } catch (err) {
       setBezig(false);
-      toast.error("Account afronden mislukt: " + (err instanceof Error ? err.message : String(err)));
+      toast.error(
+        "Account afronden mislukt: " + (err instanceof Error ? err.message : String(err)),
+      );
       return;
     }
     await refreshEmployee();
@@ -73,7 +75,8 @@ function UitnodigingPagina() {
             <p className="text-center text-sm text-muted-foreground">Bezig met laden…</p>
           ) : !geldig ? (
             <p className="text-center text-sm text-muted-foreground">
-              Deze uitnodigingslink is ongeldig of verlopen. Vraag de eigenaar om een nieuwe uitnodiging.
+              Deze uitnodigingslink is ongeldig of verlopen. Vraag de eigenaar om een nieuwe
+              uitnodiging.
             </p>
           ) : (
             <form

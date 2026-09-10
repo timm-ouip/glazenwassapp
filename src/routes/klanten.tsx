@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
+import { Cijferkaarten } from "@/components/Cijferkaarten";
 import { KlantMenu } from "@/components/KlantMenu";
 import { Overgeslagen } from "@/components/Overgeslagen";
 import { WassenVanaf } from "@/components/WassenVanaf";
@@ -109,9 +110,9 @@ function adresTekst(r: Regel) {
 
 /** Contactvelden van de klant, rechtstreeks in de lijst te typen. */
 const KOLOMMEN = [
-  { veld: "naam", kop: "NAAM", breed: "w-44" },
-  { veld: "email", kop: "E-MAIL", breed: "w-56" },
-  { veld: "telefoon", kop: "TELEFOON", breed: "w-36" },
+  { veld: "naam", kop: "naam", breed: "w-44" },
+  { veld: "email", kop: "e-mail", breed: "w-56" },
+  { veld: "telefoon", kop: "telefoon", breed: "w-36" },
 ] as const satisfies readonly { veld: keyof KlantVelden; kop: string; breed: string }[];
 
 /**
@@ -631,45 +632,31 @@ function Klanten() {
         </>
       }
       kop={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {[
+        <Cijferkaarten
+          cijfers={[
             {
               label: "Adressen in deze wijk",
               waarde: String(regels.length),
+              onder: "op de klantenlijst",
               icon: Users,
-              tegel: "bg-accent text-accent-foreground",
+              kleur: "blauw",
             },
             {
               label: "Met naam",
               waarde: String(metNaam),
+              onder: `${regels.length - metNaam} nog naamloos`,
               icon: SquarePen,
-              tegel: "bg-tint-amber text-tint-amber-ink",
+              kleur: "amber",
             },
             {
               label: "Bereikbaar",
               waarde: String(bereikbaar),
+              onder: "mail of telefoon bekend",
               icon: Mail,
-              tegel: "bg-tint-groen text-tint-groen-ink",
+              kleur: "groen",
             },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className="flex items-center gap-3 rounded-[14px] border border-border bg-card px-4 py-3.5"
-            >
-              <div
-                className={`flex size-9 shrink-0 items-center justify-center rounded-[11px] ${s.tegel}`}
-              >
-                <s.icon className="size-[17px]" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">{s.label}</p>
-                <p className="font-display text-[22px] font-semibold leading-tight tracking-[-0.02em] tabular-nums">
-                  {s.waarde}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
+          ]}
+        />
       }
     >
       <div className="space-y-3">
@@ -693,7 +680,7 @@ function Klanten() {
         )}
 
         {zichtbaar.length === 0 ? (
-          <div className="rounded-[14px] border border-dashed border-border bg-card/50 px-6 py-12 text-center">
+          <div className="rounded-[18px] border border-dashed border-border bg-card/50 px-6 py-12 text-center">
             <p className="font-display text-lg font-semibold">
               {regels.length === 0 ? "Nog geen adressen in deze wijk" : "Niets gevonden"}
             </p>
@@ -706,12 +693,12 @@ function Klanten() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-[14px] border border-border bg-card">
+          <div className="overflow-x-auto rounded-[18px] border border-border bg-card shadow-card">
             <table className="w-full min-w-[64rem] text-[13px]">
               <thead>
-                <tr className="border-b border-border bg-card-header text-left text-[10.5px] font-semibold tracking-[0.06em] text-muted-foreground">
+                <tr className="border-b border-border bg-card-header text-left text-[11px] font-medium text-muted-foreground/80">
                   <th className="w-9 px-2 py-2.5" />
-                  <th className="px-2 py-2.5">ADRES</th>
+                  <th className="px-2 py-2.5">adres</th>
                   {KOLOMMEN.map((k) => (
                     <th key={k.veld} className={`px-2 py-2.5 ${k.breed}`}>
                       {k.kop}
@@ -763,7 +750,7 @@ function Klanten() {
                 zelf in de wijklijst aangemaakt.
               </p>
             </div>
-            <div className="overflow-x-auto rounded-[14px] border border-dashed border-border bg-card">
+            <div className="overflow-x-auto rounded-[18px] border border-dashed border-border bg-card">
               <table className="w-full min-w-[52rem] text-[13px]">
                 <tbody>
                   {zichtbareLos.map((k) => (

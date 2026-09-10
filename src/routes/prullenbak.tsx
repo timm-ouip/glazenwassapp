@@ -156,14 +156,14 @@ function Prullenbak() {
       {vraag.isLoading ? (
         <p className="text-sm text-muted-foreground">Laden…</p>
       ) : rijen.length === 0 ? (
-        <div className="rounded-[14px] border border-border bg-card px-6 py-12 text-center">
+        <div className="rounded-[18px] border border-border bg-card shadow-card px-6 py-12 text-center">
           <p className="font-display text-lg font-semibold">Nog niets weggelegd</p>
           <p className="mt-1 text-sm text-muted-foreground">
             Wat je verwijdert komt hier terecht, zodat je het kunt terughalen.
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-[14px] border border-border bg-card">
+        <div className="overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
           {/* Op een smal scherm staan de gegevens onder elkaar in plaats van
               in kolommen; dan zijn kopjes overbodig. */}
           <div className="hidden items-center gap-3 border-b border-border bg-card-header px-4 py-2.5 text-[10px] font-semibold tracking-[0.06em] text-muted-foreground sm:flex">

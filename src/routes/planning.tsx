@@ -45,6 +45,7 @@ import { toast } from "sonner";
 
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
+import { Cijferkaarten } from "@/components/Cijferkaarten";
 import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { pushUndo, undoLaatste } from "@/lib/undo";
@@ -872,45 +873,31 @@ function Planning() {
       kruimel="Overzicht / Planning"
       onderschrift="Wat er per dag gewassen wordt — vooruit gepland en achteraf geteld."
       kop={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {[
+        <Cijferkaarten
+          cijfers={[
             {
               label: `Gewassen in ${format(maand, "MMMM", { locale: nl })}`,
               waarde: formatPrice(gedaan),
+              onder: "achteraf geteld",
               icon: Droplets,
-              tegel: "bg-tint-groen text-tint-groen-ink",
+              kleur: "groen",
             },
             {
               label: "Nog gepland",
               waarde: formatPrice(gepland),
+              onder: "staat nog voor je",
               icon: CalendarCheck,
-              tegel: "bg-accent text-accent-foreground",
+              kleur: "blauw",
             },
             {
               label: "Dagen met werk",
               waarde: String(werkdagen),
+              onder: `in ${format(maand, "MMMM", { locale: nl })}`,
               icon: Route2,
-              tegel: "bg-tint-amber text-tint-amber-ink",
+              kleur: "amber",
             },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className="flex items-center gap-3 rounded-[14px] border border-border bg-card px-4 py-3.5"
-            >
-              <div
-                className={`flex size-9 shrink-0 items-center justify-center rounded-[11px] ${s.tegel}`}
-              >
-                <s.icon className="size-[17px]" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">{s.label}</p>
-                <p className="font-display text-[22px] font-semibold leading-tight tracking-[-0.02em] tabular-nums">
-                  {s.waarde}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
+          ]}
+        />
       }
     >
       <DndContext
@@ -925,7 +912,7 @@ function Planning() {
       >
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
           {/* --- maandkalender --- */}
-          <div className="overflow-hidden rounded-[14px] border border-border bg-card">
+          <div className="overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
             <div className="flex items-center gap-2 border-b border-border bg-card-header px-3 py-2.5">
               <Button
                 size="icon"
@@ -961,18 +948,18 @@ function Planning() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-7 border-b border-border bg-card-header">
+            <div className="grid grid-cols-7 px-1.5 pt-1.5">
               {weekdagen.map((d) => (
                 <div
                   key={d.toISOString()}
-                  className="border-l border-border py-2 text-center text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground first:border-l-0"
+                  className="py-2 text-center text-[11px] font-medium text-muted-foreground/80"
                 >
                   {format(d, "EEEEEE", { locale: nl })}
                 </div>
               ))}
             </div>
 
-            <div className="grid grid-cols-7">
+            <div className="grid grid-cols-7 gap-1.5 p-1.5">
               {dagen.map((d) => {
                 const k = sleutel(d);
                 const info = perDag.get(k);
@@ -1012,8 +999,12 @@ function Planning() {
                             // die dag aan de beurt is; zo zie je een maand aan de
                             // kleuren, zonder namen te lezen.
                             style={vlak ? { background: vlak } : undefined}
-                            className={`relative flex min-h-[4.5rem] flex-col border-b border-r border-border p-1.5 text-left transition-colors [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0 sm:min-h-[6.25rem] ${
-                              buitenMaand ? "bg-card-header" : vlak ? "" : "hover:bg-muted/50"
+                            className={`relative flex min-h-[4.5rem] flex-col rounded-[12px] p-1.5 text-left transition-colors sm:min-h-[6.25rem] ${
+                              buitenMaand
+                                ? "bg-transparent"
+                                : vlak
+                                  ? ""
+                                  : "bg-surface/70 hover:bg-surface"
                             } ${isGekozen ? "outline outline-2 -outline-offset-2 outline-brand" : ""} ${
                               isGekozen && !vlak ? "bg-brand/10" : ""
                             } ${erboven ? "outline outline-2 -outline-offset-2 outline-brand ring-2 ring-brand/30" : ""}`}
@@ -1113,7 +1104,7 @@ function Planning() {
                                 staat gewoon op zijn plek in de lijst, met een
                                 merkje — verspringen zou je laten misklikken. */}
                                   {voorstel.get(k)?.wijkId === w.id && (
-                                    <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                    <span className="ml-auto shrink-0 text-[10.5px] text-muted-foreground">
                                       aan de beurt
                                     </span>
                                   )}
@@ -1168,7 +1159,7 @@ function Planning() {
           </div>
 
           {/* --- extra opdrachten: werk zonder maand --- */}
-          <div className="rounded-[14px] border border-border bg-card p-3 lg:col-start-1 lg:row-start-2">
+          <div className="rounded-[18px] border border-border bg-card shadow-card p-3 lg:col-start-1 lg:row-start-2">
             <div className="mb-2 flex items-center gap-2">
               <Hammer className="size-4 shrink-0 text-muted-foreground" />
               <h2 className="font-display text-[15px] font-semibold tracking-[-0.01em]">
@@ -1198,7 +1189,7 @@ function Planning() {
 
             {strook.aanDeBeurt.length > 0 && (
               <div className="space-y-1.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                <p className="text-[11.5px] font-medium text-muted-foreground/80">
                   Nu aan de beurt
                 </p>
                 {strook.aanDeBeurt.map((k) => klusRegel(k))}
@@ -1207,7 +1198,7 @@ function Planning() {
 
             {strook.ingedeeld.length > 0 && (
               <div className="mt-3 space-y-1.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                <p className="text-[11.5px] font-medium text-muted-foreground/80">
                   Staat op een dag
                 </p>
                 {strook.ingedeeld.map((k) => klusRegel(k))}
@@ -1216,7 +1207,7 @@ function Planning() {
 
             {strook.wachten.length > 0 && (
               <details className="mt-3">
-                <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                <summary className="cursor-pointer text-[11.5px] font-medium text-muted-foreground/80">
                   Wacht op een dag in die wijk ({strook.wachten.length})
                 </summary>
                 <div className="mt-1.5 space-y-1.5">{strook.wachten.map((k) => klusRegel(k))}</div>
@@ -1228,7 +1219,7 @@ function Planning() {
               Rechts naast de kalender en bovenaan beginnen: zonder row-start
               schuift hij onder de strook met opdrachten door, en dan staat
               het belangrijkste van de pagina onderin. */}
-          <div className="rounded-[14px] border border-border bg-card p-4 lg:col-start-2 lg:row-start-1">
+          <div className="rounded-[18px] border border-border bg-card shadow-card p-4 lg:col-start-2 lg:row-start-1">
             <p className="text-xs text-muted-foreground">
               {gekozenDag > nu ? "Gepland voor" : "Gewassen op"}
             </p>
