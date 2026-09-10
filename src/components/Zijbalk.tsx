@@ -79,15 +79,20 @@ export function Zijbalk() {
         to={p.to}
         title={ingeklapt ? p.label : undefined}
         aria-label={p.label}
-        className={`flex h-10 items-center rounded-lg text-[13.5px] transition-colors ${
+        // Het actieve item is een witte pil op de crème balk, niet een
+        // gekleurd vlak: de kleur zit in het icoon, en het wit tilt de pagina
+        // waar je bent op uit de rest.
+        className={`flex h-10 items-center rounded-[12px] text-[13.5px] transition-colors ${
           ingeklapt ? "justify-center px-0" : "gap-3 px-2.5"
         } ${
           actief
-            ? "bg-brand font-semibold text-brand-foreground"
-            : "text-foreground/80 hover:bg-accent hover:text-accent-foreground"
+            ? "border border-border bg-card font-semibold shadow-card"
+            : "border border-transparent text-foreground/75 hover:bg-card/70 hover:text-foreground"
         }`}
       >
-        <p.icon className="size-[17px] shrink-0" />
+        <p.icon
+          className={`size-[17px] shrink-0 ${actief ? "text-brand-ink" : "text-muted-foreground"}`}
+        />
         {!ingeklapt && <span className="truncate">{p.label}</span>}
       </Link>
     );
@@ -100,7 +105,7 @@ export function Zijbalk() {
       className={`${breed} sticky top-0 flex h-screen shrink-0 flex-col gap-5 border-r border-border bg-surface px-3.5 py-5 transition-[width] duration-200 print:hidden`}
     >
       <div className={`flex items-center ${ingeklapt ? "flex-col gap-3" : "gap-2.5"}`}>
-        <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[10px] bg-brand text-brand-foreground">
+        <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[12px] bg-foreground text-background">
           <Droplets className="size-[19px]" />
         </div>
         {/* Leeg tot het bedrijf geladen is: een placeholder die daarna
@@ -131,8 +136,8 @@ export function Zijbalk() {
 
       <nav className="flex flex-col gap-0.5">
         {!ingeklapt && (
-          <span className="px-2.5 pb-2 text-[10px] font-semibold tracking-[0.1em] text-muted-foreground">
-            WERK
+          <span className="px-2.5 pb-2 text-[10.5px] font-medium tracking-[0.09em] text-muted-foreground/80">
+            werk
           </span>
         )}
         {WERK.map((p) => (
@@ -143,8 +148,8 @@ export function Zijbalk() {
       {beheer.length > 0 && (
         <nav className="flex flex-col gap-0.5">
           {!ingeklapt && (
-            <span className="px-2.5 pb-2 text-[10px] font-semibold tracking-[0.1em] text-muted-foreground">
-              BEHEER
+            <span className="px-2.5 pb-2 text-[10.5px] font-medium tracking-[0.09em] text-muted-foreground/80">
+              beheer
             </span>
           )}
           {beheer.map((p) => (
@@ -155,7 +160,7 @@ export function Zijbalk() {
 
       <div className="mt-auto flex flex-col gap-2">
         {employee && !ingeklapt && (
-          <div className="flex items-center gap-2.5 rounded-[11px] border border-border bg-card p-2.5">
+          <div className="flex items-center gap-2.5 rounded-[14px] border border-border bg-card p-2.5 shadow-card">
             <div className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-brand text-xs font-semibold text-brand-foreground">
               {(employee.naam || employee.email).charAt(0).toUpperCase()}
             </div>
@@ -174,7 +179,7 @@ export function Zijbalk() {
           onClick={() => void signOut().then(() => void navigate({ to: "/login" }))}
           aria-label="Uitloggen"
           title="Uitloggen"
-          className={`flex h-10 items-center rounded-lg text-[13.5px] text-foreground/80 transition-colors hover:bg-accent hover:text-accent-foreground ${
+          className={`flex h-10 items-center rounded-[12px] text-[13.5px] text-foreground/75 transition-colors hover:bg-card/70 hover:text-foreground ${
             ingeklapt ? "justify-center px-0" : "gap-3 px-2.5"
           }`}
         >

@@ -1513,40 +1513,45 @@ function Index() {
             {
               label: "Adressen in beeld",
               waarde: String(totaal),
+              onder: `van ${customers.length} in de kaartenbak`,
               icon: Users,
-              tegel: "bg-accent text-accent-foreground",
+              kaart: "bg-accent text-accent-foreground",
+              chip: "bg-accent-foreground/15",
             },
             {
               label: "Straten",
               waarde: String(groepen.length),
+              onder: `${secties.length} in een groep`,
               icon: Route2,
-              tegel: "bg-tint-amber text-tint-amber-ink",
+              kaart: "bg-tint-amber text-tint-amber-ink",
+              chip: "bg-tint-amber-ink/15",
             },
             {
               label: "Omzet per ronde",
               waarde: formatPrice(omzet),
+              onder: isKalendermaand(filter) ? toonMaand(filter) : "alle maanden",
               icon: Euro,
-              tegel: "bg-tint-groen text-tint-groen-ink",
+              kaart: "bg-tint-groen text-tint-groen-ink",
+              chip: "bg-tint-groen-ink/15",
               verberg: !prijzenTonen,
             },
           ]
             .filter((s) => !s.verberg)
+            // Elke kaart één kleurfamilie: het vlak is de lichte tint, het
+            // icoonvakje een stap dieper, de tekst de donkere kant ervan.
+            // Zwart op pastel zou de kaart in tweeën trekken.
             .map((s) => (
-              <div
-                key={s.label}
-                className="flex items-center gap-3 rounded-[14px] border border-border bg-card px-4 py-3.5"
-              >
+              <div key={s.label} className={`rounded-[18px] px-4 py-3.5 ${s.kaart}`}>
                 <div
-                  className={`flex size-9 shrink-0 items-center justify-center rounded-[11px] ${s.tegel}`}
+                  className={`mb-2.5 flex size-8 items-center justify-center rounded-[10px] ${s.chip}`}
                 >
-                  <s.icon className="size-[17px]" />
+                  <s.icon className="size-[16px]" />
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">{s.label}</p>
-                  <p className="font-display text-[22px] font-semibold leading-tight tracking-[-0.02em] tabular-nums">
-                    {s.waarde}
-                  </p>
-                </div>
+                <p className="text-[12.5px] opacity-80">{s.label}</p>
+                <p className="font-display text-[24px] font-semibold leading-tight tracking-[-0.02em] tabular-nums">
+                  {s.waarde}
+                </p>
+                <p className="mt-0.5 truncate text-[11px] opacity-70">{s.onder}</p>
               </div>
             ))}
         </div>
@@ -1882,7 +1887,7 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
       // straten die er niet in zitten er gewoon onder verder gaan in plaats
       // van ernaast. Binnen de groep staan de straten zelf weer in twee
       // kolommen, net als daarbuiten.
-      className={`mb-3 break-inside-avoid-column rounded-[16px] border border-dashed border-border bg-muted/30 p-1.5 [column-span:all] ${
+      className={`mb-3 break-inside-avoid-column rounded-[22px] border border-dashed border-border bg-surface/70 p-2 [column-span:all] ${
         isDragging ? "opacity-50" : ""
       }`}
     >
@@ -1957,7 +1962,7 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
           {p.ingeklapt ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
         </button>
         <Layers className="size-3.5 shrink-0 text-muted-foreground" />
-        <h2 className="flex-1 truncate font-display text-[13px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+        <h2 className="flex-1 truncate font-display text-[13.5px] font-semibold tracking-[-0.01em] text-foreground/70">
           {p.groep.naam}
         </h2>
         <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">
@@ -2108,7 +2113,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
     <section
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`mb-3 break-inside-avoid-column overflow-hidden rounded-[14px] border border-border bg-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
+      className={`mb-3 break-inside-avoid-column overflow-hidden rounded-[18px] border border-border bg-card shadow-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
     >
       {/* Rechtermuisknop op de straatkop: hierin zit alles wat met
           groepen te maken heeft. Dat hoort niet in de kop zelf — die is al
@@ -2195,7 +2200,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
                 <ChevronDown className="size-3.5" />
               )}
             </button>
-            <h2 className="flex-1 truncate font-display text-[14.5px] font-semibold uppercase tracking-[0.01em] text-foreground">
+            <h2 className="flex-1 truncate font-display text-[15px] font-semibold tracking-[-0.01em] text-foreground">
               {p.street.name}
             </h2>
             <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">
@@ -2296,12 +2301,12 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
       <div className={`grid grid-cols-2 gap-px bg-border ${p.ingeklapt ? "hidden" : ""}`}>
         {(["even", "oneven"] as const).map((kant) => (
           <div key={kant} className="bg-card">
-            <div className="flex items-center gap-0.5 border-b border-border/60 px-1 py-1 text-[10px] font-semibold tracking-[0.06em] text-muted-foreground">
+            <div className="flex items-center gap-0.5 border-b border-border/60 px-1 py-1 text-[10.5px] font-medium text-muted-foreground/80">
               <span className="w-4" />
-              <span className="w-11">NR</span>
-              <span className="min-w-0 flex-1 truncate">NOTITIE</span>
-              {p.prijzenTonen && <span className="w-12 text-right">PRIJS</span>}
-              <span className="min-w-[3.25rem] max-w-[5.5rem] pl-1 text-center">FREQ</span>
+              <span className="w-11">nr</span>
+              <span className="min-w-0 flex-1 truncate">notitie</span>
+              {p.prijzenTonen && <span className="w-12 text-right">prijs</span>}
+              <span className="min-w-[3.25rem] max-w-[5.5rem] pl-1 text-center">ritme</span>
               <span className="w-4" />
             </div>
             <StraatKolom regels={p[kant]} blok={p} kant={kant} />

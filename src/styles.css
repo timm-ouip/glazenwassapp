@@ -89,17 +89,24 @@
 }
 
 :root {
-  --radius: 0.5rem;
-  /* Zeeblauw: warm gebroken wit als ondergrond, gedempt blauw als accent. */
-  --background: oklch(0.976 0.004 92);
-  --surface: oklch(0.963 0.004 92);
-  --foreground: oklch(0.18 0.004 285.9);
-  --card: oklch(1 0 0);
-  /* Iets lichter dan de pagina: de kopbalk van een straatkaart. */
-  --card-header: oklch(0.984 0.003 92);
-  --card-foreground: oklch(0.18 0.004 285.9);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.004 285.9);
+  /* Ruimer dan de gebruikelijke 8px: alles in deze app is een afgerond,
+     zwevend paneel. Knoppen en invulvakken volgen deze maat vanzelf. */
+  --radius: 0.75rem;
+  /*
+   * Crème. De ondergrond is warm papier, de kaarten liggen er wit op, en de
+   * zijbalk is een tint dieper — zo zweeft het werk boven de pagina in plaats
+   * van dat er lijnen omheen staan. Alle neutralen delen dezelfde warme
+   * kleurhoek (rond 78); alleen de lichtheid verschuift. Eén hue, meer niet.
+   */
+  --background: oklch(0.971 0.008 78);
+  --surface: oklch(0.944 0.012 78);
+  --foreground: oklch(0.245 0.008 70);
+  --card: oklch(0.995 0.002 80);
+  /* Iets dieper dan de kaart zelf: de kopbalk van een straatkaart. */
+  --card-header: oklch(0.968 0.008 78);
+  --card-foreground: oklch(0.245 0.008 70);
+  --popover: oklch(0.995 0.002 80);
+  --popover-foreground: oklch(0.245 0.008 70);
   --primary: oklch(0.28 0.042 252);
   --primary-foreground: oklch(0.98 0.004 90);
   /* --brand is de VULLING (licht); --brand-foreground de tekst daarop (donker).
@@ -109,64 +116,64 @@
   --brand-ink: oklch(0.45 0.1 245);
   /* Betekeniskleuren, los van het merk: amber voor even maanden en het
      aantal straten, groen voor bedragen. */
-  --tint-amber: oklch(0.955 0.038 68);
+  --tint-amber: oklch(0.936 0.05 68);
   --tint-amber-ink: oklch(0.5 0.115 62);
-  --tint-groen: oklch(0.952 0.045 155);
+  --tint-groen: oklch(0.934 0.056 155);
   --tint-groen-ink: oklch(0.46 0.115 156);
   /* Paars: al ingepland op een andere dag. Bewust geen blauw, want dat is
      het merk, en geen amber, want dat is al gewassen. */
-  --tint-paars: oklch(0.955 0.032 305);
+  --tint-paars: oklch(0.936 0.045 305);
   --tint-paars-ink: oklch(0.48 0.125 302);
   /* Rood: deze maand overgeslagen, dus hij staat niet op de printlijst. */
-  --tint-rood: oklch(0.955 0.032 25);
+  --tint-rood: oklch(0.936 0.045 25);
   --tint-rood-ink: oklch(0.5 0.145 27);
   /* Blauw: alleen om zelf een markering mee te maken. Lichter dan het merk,
      zodat een gekleurde regel geen knop lijkt. */
-  --tint-blauw: oklch(0.952 0.032 235);
+  --tint-blauw: oklch(0.934 0.045 235);
   --tint-blauw-ink: oklch(0.47 0.115 245);
   /* En deze vier ook: kleuren om zelf een betekenis aan te geven. De tinten
      liggen ver genoeg uit elkaar op de kleurencirkel om ze náást elkaar in
      één lijst nog uit elkaar te houden — dat is waar het hier om gaat. */
-  --tint-oranje: oklch(0.955 0.042 48);
+  --tint-oranje: oklch(0.936 0.055 48);
   --tint-oranje-ink: oklch(0.51 0.13 42);
-  --tint-roze: oklch(0.953 0.032 350);
+  --tint-roze: oklch(0.934 0.045 350);
   --tint-roze-ink: oklch(0.5 0.13 352);
-  --tint-turkoois: oklch(0.95 0.038 195);
+  --tint-turkoois: oklch(0.932 0.05 195);
   --tint-turkoois-ink: oklch(0.46 0.09 197);
-  --tint-limoen: oklch(0.952 0.048 128);
+  --tint-limoen: oklch(0.934 0.058 128);
   --tint-limoen-ink: oklch(0.47 0.11 130);
-  --secondary: oklch(0.955 0.002 286);
-  --secondary-foreground: oklch(0.28 0.004 285.9);
-  --muted: oklch(0.958 0.002 286);
-  --muted-foreground: oklch(0.53 0.006 286);
-  --accent: oklch(0.955 0.028 232);
+  --secondary: oklch(0.955 0.007 78);
+  --secondary-foreground: oklch(0.3 0.008 70);
+  --muted: oklch(0.957 0.007 78);
+  --muted-foreground: oklch(0.545 0.012 72);
+  --accent: oklch(0.936 0.042 232);
   --accent-foreground: oklch(0.45 0.1 245);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.905 0.002 286);
-  --input: oklch(0.905 0.002 286);
+  --border: oklch(0.902 0.008 78);
+  --input: oklch(0.902 0.008 78);
   --ring: oklch(0.82 0.075 232);
-  --shadow-card: 0 1px 2px oklch(0.18 0.004 285.9 / 6%), 0 1px 3px oklch(0.18 0.004 285.9 / 4%);
+  --shadow-card: 0 1px 2px oklch(0.4 0.02 70 / 5%), 0 4px 12px oklch(0.4 0.02 70 / 5%);
   --chart-1: oklch(0.58 0.11 245);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
 
-  --sidebar: oklch(0.963 0.004 92);
-  --sidebar-foreground: oklch(0.18 0.004 285.9);
+  --sidebar: oklch(0.944 0.012 78);
+  --sidebar-foreground: oklch(0.245 0.008 70);
   --sidebar-primary: oklch(0.82 0.075 232);
   --sidebar-primary-foreground: oklch(0.28 0.042 252);
-  --sidebar-accent: oklch(0.955 0.028 232);
+  --sidebar-accent: oklch(0.936 0.042 232);
   --sidebar-accent-foreground: oklch(0.45 0.1 245);
-  --sidebar-border: oklch(0.905 0.002 286);
+  --sidebar-border: oklch(0.902 0.008 78);
   --sidebar-ring: oklch(0.82 0.075 232);
 
   /* Hoe zacht een wijkkleur is als vlak. De code kent alleen de kleurhoek en
      bouwt daar `oklch(var(--wijk-l) var(--wijk-c) <hoek>)` mee; of dat licht
      of donker uitpakt hoort bij het thema, niet bij de code. */
-  --wijk-l: 0.958;
-  --wijk-c: 0.032;
+  --wijk-l: 0.94;
+  --wijk-c: 0.045;
 }
 
 .dark {
