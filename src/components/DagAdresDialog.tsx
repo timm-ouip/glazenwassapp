@@ -109,7 +109,7 @@ export function DagAdresDialog({
             <dd className="tabular-nums">{formatPrice(standaard)}</dd>
           </div>
           <div className="flex gap-2 py-0.5">
-            <dt className="w-24 shrink-0 text-muted-foreground">Ritme</dt>
+            <dt className="w-24 shrink-0 text-muted-foreground">Frequentie</dt>
             <dd>{ritmeLabel(c)}</dd>
           </div>
           <div className="flex gap-2 py-0.5">

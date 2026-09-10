@@ -110,13 +110,17 @@
   --card-foreground: oklch(0.245 0.008 70);
   --popover: oklch(0.995 0.002 80);
   --popover-foreground: oklch(0.245 0.008 70);
-  --primary: oklch(0.28 0.042 252);
-  --primary-foreground: oklch(0.98 0.004 90);
+  /* Donkere knoppen zijn warm zwart, geen marineblauw: op crème valt een
+     blauwzweem op als vuil. */
+  --primary: oklch(0.255 0.012 70);
+  --primary-foreground: oklch(0.985 0.005 80);
   /* --brand is de VULLING (licht); --brand-foreground de tekst daarop (donker).
      Voor blauwe tekst op een witte ondergrond is --brand-ink bedoeld. */
-  --brand: oklch(0.82 0.075 232);
-  --brand-foreground: oklch(0.28 0.042 252);
-  --brand-ink: oklch(0.45 0.1 245);
+  /* Frisser en lichter dan het oude zeeblauw, uit dezelfde pastelfamilie als
+     de kaarten: een vulling om tekst op te zetten, niet een vlak dat schreeuwt. */
+  --brand: oklch(0.906 0.04 250);
+  --brand-foreground: oklch(0.44 0.115 250);
+  --brand-ink: oklch(0.5 0.12 250);
   /* Betekeniskleuren, los van het merk: amber voor even maanden en het
      aantal straten, groen voor bedragen. */
   --tint-amber: oklch(0.936 0.05 68);
@@ -153,13 +157,13 @@
   --secondary-foreground: oklch(0.3 0.008 70);
   --muted: oklch(0.957 0.007 78);
   --muted-foreground: oklch(0.545 0.012 72);
-  --accent: oklch(0.936 0.042 232);
-  --accent-foreground: oklch(0.45 0.1 245);
+  --accent: oklch(0.936 0.042 250);
+  --accent-foreground: oklch(0.44 0.115 250);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.902 0.008 78);
   --input: oklch(0.902 0.008 78);
-  --ring: oklch(0.82 0.075 232);
+  --ring: oklch(0.78 0.085 250);
   --shadow-card: 0 1px 2px oklch(0.4 0.02 70 / 5%), 0 4px 12px oklch(0.4 0.02 70 / 5%);
   --chart-1: oklch(0.58 0.11 245);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -169,12 +173,12 @@
 
   --sidebar: oklch(0.944 0.012 78);
   --sidebar-foreground: oklch(0.245 0.008 70);
-  --sidebar-primary: oklch(0.82 0.075 232);
-  --sidebar-primary-foreground: oklch(0.28 0.042 252);
-  --sidebar-accent: oklch(0.936 0.042 232);
-  --sidebar-accent-foreground: oklch(0.45 0.1 245);
+  --sidebar-primary: oklch(0.906 0.04 250);
+  --sidebar-primary-foreground: oklch(0.44 0.115 250);
+  --sidebar-accent: oklch(0.936 0.042 250);
+  --sidebar-accent-foreground: oklch(0.44 0.115 250);
   --sidebar-border: oklch(0.902 0.008 78);
-  --sidebar-ring: oklch(0.82 0.075 232);
+  --sidebar-ring: oklch(0.78 0.085 250);
 
   /* Hoe zacht een wijkkleur is als vlak. De code kent alleen de kleurhoek en
      bouwt daar `oklch(var(--wijk-l) var(--wijk-c) <hoek>)` mee; of dat licht

@@ -91,7 +91,7 @@ export function Zijbalk() {
         }`}
       >
         <p.icon
-          className={`size-[17px] shrink-0 ${actief ? "text-brand-ink" : "text-muted-foreground"}`}
+          className={`size-[17px] shrink-0 ${actief ? "text-tint-oranje-ink" : "text-muted-foreground"}`}
         />
         {!ingeklapt && <span className="truncate">{p.label}</span>}
       </Link>

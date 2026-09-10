@@ -1548,7 +1548,7 @@ function Index() {
                 <button
                   className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[13px] capitalize transition-colors ${
                     isKalendermaand(filter)
-                      ? "bg-brand font-semibold text-brand-foreground"
+                      ? "bg-primary font-medium text-primary-foreground"
                       : "text-foreground/80 hover:text-foreground"
                   }`}
                 >
@@ -1574,7 +1574,7 @@ function Index() {
                 onClick={() => setFilter(f)}
                 className={`rounded-full px-4 py-1.5 text-[13px] transition-colors ${
                   filter === f
-                    ? "bg-brand font-semibold text-brand-foreground"
+                    ? "bg-primary font-medium text-primary-foreground"
                     : "text-foreground/80 hover:text-foreground"
                 }`}
               >
@@ -1946,8 +1946,8 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
         <h2 className="flex-1 truncate font-display text-[13.5px] font-semibold tracking-[-0.01em] text-foreground/70">
           {p.groep.naam}
         </h2>
-        <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">
-          {p.planmodus && erop > 0 && erop < p.aantal ? `${erop}/${p.aantal}` : p.aantal}
+        <span className="rounded-full bg-card px-2 py-[1px] text-[10.5px] tabular-nums text-muted-foreground">
+          {p.planmodus && erop > 0 && erop < p.aantal ? `${erop}/${p.aantal}` : `${p.aantal}×`}
         </span>
         {p.planmodus && alGedaan > 0 && (
           <span
@@ -1966,9 +1966,7 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
           </span>
         )}
         {p.prijzenTonen && (
-          <span className="text-[11px] font-medium tabular-nums text-brand-ink">
-            {formatPrice(p.totaal)}
-          </span>
+          <span className="text-[12.5px] font-semibold tabular-nums">{formatPrice(p.totaal)}</span>
         )}
         {!p.planmodus && (
           <>
@@ -2184,8 +2182,8 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
             <h2 className="flex-1 truncate font-display text-[15px] font-semibold tracking-[-0.01em] text-foreground">
               {p.street.name}
             </h2>
-            <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">
-              {p.planmodus && erop > 0 && erop < p.aantal ? `${erop}/${p.aantal}` : p.aantal}
+            <span className="rounded-full bg-surface px-2 py-[1px] text-[10.5px] tabular-nums text-muted-foreground">
+              {p.planmodus && erop > 0 && erop < p.aantal ? `${erop}/${p.aantal}` : `${p.aantal}×`}
             </span>
             {p.planmodus && alGedaan > 0 && (
               <span
@@ -2204,7 +2202,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
               </span>
             )}
             {p.prijzenTonen && (
-              <span className="text-[11px] font-medium tabular-nums text-brand-ink">
+              <span className="text-[12.5px] font-semibold tabular-nums">
                 {formatPrice(p.totaal)}
               </span>
             )}
@@ -2287,7 +2285,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
               <span className="w-11">nr</span>
               <span className="min-w-0 flex-1 truncate">notitie</span>
               {p.prijzenTonen && <span className="w-12 text-right">prijs</span>}
-              <span className="min-w-[3.25rem] max-w-[5.5rem] pl-1 text-center">ritme</span>
+              <span className="min-w-[3.25rem] max-w-[5.5rem] pl-1 text-center">freq.</span>
               <span className="w-4" />
             </div>
             <StraatKolom regels={p[kant]} blok={p} kant={kant} />
@@ -2766,8 +2764,8 @@ function NieuweRegel({ onSubmit, rowText }: { onSubmit: (nr: string) => void; ro
   const [waarde, setWaarde] = useState("");
   return (
     <input
-      className={`w-full bg-transparent px-1.5 py-1 ${rowText} text-muted-foreground placeholder:text-muted-foreground/50 focus:bg-accent/40 focus:outline-none`}
-      placeholder="+ nummer"
+      className={`mt-1 w-full rounded-[9px] border border-dashed border-border bg-transparent px-1.5 py-1.5 text-center ${rowText} text-muted-foreground placeholder:text-muted-foreground/60 focus:border-solid focus:bg-accent/40 focus:outline-none`}
+      placeholder="+ adres"
       inputMode="numeric"
       value={waarde}
       onChange={(e) => setWaarde(e.target.value)}
