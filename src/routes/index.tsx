@@ -48,6 +48,7 @@ import {
   ChevronsUpDown,
   CircleSlash,
   CornerDownRight,
+  Folder,
   Layers,
 } from "lucide-react";
 import {
@@ -1847,7 +1848,7 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
   const rond = p.klantIds.length > 0 && erop === 0 && alGedaan + alGepland === p.klantIds.length;
   const kopKleur =
     !p.planmodus || !rond
-      ? "bg-card-header"
+      ? "bg-transparent"
       : alGedaan >= alGepland
         ? "bg-tint-groen"
         : "bg-tint-paars";
@@ -1941,7 +1942,7 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
         >
           {p.ingeklapt ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
         </button>
-        <Layers className="size-3.5 shrink-0 text-muted-foreground" />
+        <Folder className="size-3.5 shrink-0 text-muted-foreground" />
         <h2 className="flex-1 truncate font-display text-[13.5px] font-semibold tracking-[-0.01em] text-foreground/70">
           {p.groep.naam}
         </h2>
@@ -2093,7 +2094,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
     <section
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`mb-3 break-inside-avoid-column overflow-hidden rounded-[18px] border border-border bg-card shadow-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
+      className={`mb-3 break-inside-avoid-column overflow-hidden rounded-[18px] border border-border bg-card p-1.5 shadow-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
     >
       {/* Rechtermuisknop op de straatkop: hierin zit alles wat met
           groepen te maken heeft. Dat hoort niet in de kop zelf — die is al
@@ -2131,7 +2132,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
                   }
                 : undefined
             }
-            className={`flex items-center gap-1 border-b border-border px-2.5 py-2 ${kopKleur} ${
+            className={`flex items-center gap-1 rounded-[12px] px-2.5 py-2 ${kopKleur} ${
               p.planmodus && zichtbaar.length > 0 && p.dagKlaar ? "cursor-pointer select-none" : ""
             }`}
           >
@@ -2278,10 +2279,10 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
         </ContextMenuContent>
       </ContextMenu>
 
-      <div className={`grid grid-cols-2 gap-px bg-border ${p.ingeklapt ? "hidden" : ""}`}>
+      <div className={`grid grid-cols-2 gap-2 px-1 pt-1 ${p.ingeklapt ? "hidden" : ""}`}>
         {(["even", "oneven"] as const).map((kant) => (
-          <div key={kant} className="bg-card">
-            <div className="flex items-center gap-0.5 border-b border-border/60 px-1 py-1 text-[10.5px] font-medium text-muted-foreground/80">
+          <div key={kant} className="min-w-0">
+            <div className="flex items-center gap-0.5 px-1 pb-0.5 text-[10.5px] font-medium text-muted-foreground/60">
               <span className="w-4" />
               <span className="w-11">nr</span>
               <span className="min-w-0 flex-1 truncate">notitie</span>
@@ -2653,7 +2654,7 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
     >
       <KlantRijSleep
         id={`c:${c.id}`}
-        className={`group relative flex items-center gap-0.5 border-b border-border/60 px-0.5 ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond}`}
+        className={`group relative flex items-center gap-0.5 rounded-[9px] px-0.5 ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond} ${!p.geselecteerd && !achtergrond ? "hover:bg-muted/70" : ""}`}
         verfKlant={p.planmodus ? c.id : undefined}
         onGreep={p.planmodus ? null : (e) => p.onSelect(c, e.shiftKey)}
       >

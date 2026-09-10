@@ -304,7 +304,10 @@ export function wijkHoek(index: number): string {
 }
 
 export function wijkKleur(index: number): string {
-  return `oklch(0.62 0.14 ${wijkHoek(index)})`;
+  // Zachter dan een volle kleur: het bolletje hoort bij dezelfde pastelfamilie
+  // als de kaarten en de dagtegels. Verzadigd genoeg om op zes pixels te zien,
+  // maar niet zo fel dat het naast een pastelvlak uit de toon valt.
+  return `oklch(0.71 0.105 ${wijkHoek(index)})`;
 }
 
 /**

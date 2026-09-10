@@ -102,8 +102,9 @@
   --surface: oklch(0.944 0.012 78);
   --foreground: oklch(0.245 0.008 70);
   --card: oklch(0.995 0.002 80);
-  /* Iets dieper dan de kaart zelf: de kopbalk van een straatkaart. */
-  --card-header: oklch(0.968 0.008 78);
+  /* Dieper dan de kaart zelf: de kopstrook van een straatkaart moet je
+     zien liggen. In het donker is deze kleur juist lichter dan de kaart. */
+  --card-header: oklch(0.944 0.012 78);
   --card-foreground: oklch(0.245 0.008 70);
   --popover: oklch(0.995 0.002 80);
   --popover-foreground: oklch(0.245 0.008 70);
