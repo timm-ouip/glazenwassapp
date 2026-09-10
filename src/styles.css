@@ -51,6 +51,8 @@
   --color-tint-turkoois-ink: var(--tint-turkoois-ink);
   --color-tint-limoen: var(--tint-limoen);
   --color-tint-limoen-ink: var(--tint-limoen-ink);
+  --color-tint-geel: var(--tint-geel);
+  --color-tint-geel-ink: var(--tint-geel-ink);
   --shadow-card: var(--shadow-card);
 
   --color-background: var(--background);
@@ -143,6 +145,10 @@
   --tint-turkoois-ink: oklch(0.46 0.09 197);
   --tint-limoen: oklch(0.934 0.058 128);
   --tint-limoen-ink: oklch(0.47 0.11 130);
+  /* Boter: hoort bij de extra opdrachten. Warmer dan amber en verder van de
+     betekeniskleuren af, zodat het opvalt zonder te waarschuwen. */
+  --tint-geel: oklch(0.945 0.068 95);
+  --tint-geel-ink: oklch(0.47 0.095 88);
   --secondary: oklch(0.955 0.007 78);
   --secondary-foreground: oklch(0.3 0.008 70);
   --muted: oklch(0.957 0.007 78);
@@ -175,6 +181,10 @@
      of donker uitpakt hoort bij het thema, niet bij de code. */
   --wijk-l: 0.94;
   --wijk-c: 0.045;
+  /* En de donkere kant ervan: het bedrag op een dagtegel is dezelfde kleur
+     als het vlak, maar dan diep genoeg om te lezen. */
+  --wijk-ink-l: 0.43;
+  --wijk-ink-c: 0.115;
 }
 
 .dark {
@@ -208,6 +218,8 @@
   --tint-turkoois-ink: oklch(0.8 0.09 197);
   --tint-limoen: oklch(0.29 0.05 128);
   --tint-limoen-ink: oklch(0.8 0.11 130);
+  --tint-geel: oklch(0.3 0.05 95);
+  --tint-geel-ink: oklch(0.83 0.1 95);
   --brand-foreground: oklch(0.2 0.03 252);
   --secondary: oklch(0.27 0.003 286);
   --secondary-foreground: oklch(0.97 0 0);
@@ -237,6 +249,8 @@
   --sidebar-ring: oklch(0.551 0.027 264.364);
   --wijk-l: 0.29;
   --wijk-c: 0.038;
+  --wijk-ink-l: 0.87;
+  --wijk-ink-c: 0.085;
 }
 
 @layer base {

@@ -31,7 +31,7 @@ import {
   ChevronLeft,
   ChevronsRight,
   ChevronRight,
-  Droplets,
+  Droplet,
   Eraser,
   Euro,
   Hammer,
@@ -58,6 +58,7 @@ import {
   formatPrice,
   prijsVoorMaand,
   wijkKleur,
+  wijkInkt,
   wijkVlak,
   type Customer,
   type District,
@@ -163,9 +164,13 @@ function KlusKaart({
   return (
     <div
       ref={setNodeRef}
-      className={`flex items-center gap-2 rounded-[11px] border border-border bg-card px-2.5 py-1.5 text-[13px] ${
-        isDragging ? "opacity-40" : ""
-      } ${sleepbaar ? "cursor-grab touch-none active:cursor-grabbing" : ""}`}
+      className={`flex items-center gap-2 rounded-[11px] px-2.5 py-1.5 text-[13px] ${
+        blijvenLiggen(klus)
+          ? "bg-tint-oranje text-tint-oranje-ink"
+          : "bg-card/70 text-card-foreground"
+      } ${isDragging ? "opacity-40" : ""} ${
+        sleepbaar ? "cursor-grab touch-none active:cursor-grabbing" : ""
+      }`}
       {...(sleepbaar ? attributes : {})}
       {...(sleepbaar ? listeners : {})}
     >
@@ -176,7 +181,7 @@ function KlusKaart({
       />
       <span className="min-w-0 flex-1 truncate">
         <span className="font-medium">{adres}</span>
-        <span className="text-muted-foreground"> — {klus.omschrijving}</span>
+        <span className="opacity-70"> — {klus.omschrijving}</span>
       </span>
       {klus.gepland_op && !blijvenLiggen(klus) && (
         <span className="shrink-0 text-[11px] text-muted-foreground">
@@ -184,8 +189,8 @@ function KlusKaart({
         </span>
       )}
       {blijvenLiggen(klus) && (
-        <span className="shrink-0 text-[11px] text-muted-foreground">
-          stond op {toonDatum(klus.gepland_op!)}
+        <span className="shrink-0 text-[11px] opacity-80">
+          bleef liggen op {toonDatum(klus.gepland_op!)}
         </span>
       )}
       <span className="shrink-0 tabular-nums">{formatPrice(klus.prijs)}</span>
@@ -879,7 +884,7 @@ function Planning() {
               label: `Gewassen in ${format(maand, "MMMM", { locale: nl })}`,
               waarde: formatPrice(gedaan),
               onder: "achteraf geteld",
-              icon: Droplets,
+              icon: Droplet,
               kleur: "groen",
             },
             {
@@ -887,7 +892,7 @@ function Planning() {
               waarde: formatPrice(gepland),
               onder: "staat nog voor je",
               icon: CalendarCheck,
-              kleur: "blauw",
+              kleur: "paars",
             },
             {
               label: "Dagen met werk",
@@ -913,39 +918,40 @@ function Planning() {
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
           {/* --- maandkalender --- */}
           <div className="overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
-            <div className="flex items-center gap-2 border-b border-border bg-card-header px-3 py-2.5">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-8 rounded-full"
-                onClick={() => setMaand((m) => addMonths(m, -1))}
-                aria-label="Vorige maand"
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <h2 className="font-display text-[17px] font-semibold capitalize tracking-[-0.01em]">
-                {format(maand, "LLLL yyyy", { locale: nl })}
-              </h2>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-8 rounded-full"
-                onClick={() => setMaand((m) => addMonths(m, 1))}
-                aria-label="Volgende maand"
-              >
-                <ChevronRight className="size-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="ml-auto rounded-full"
+            <div className="flex items-center gap-2 px-3 pt-3">
+              {/* De maand is één pil met de pijltjes erin: samen één ding om
+                  te bedienen, in plaats van drie losse knoppen naast elkaar. */}
+              <div className="flex items-center gap-0.5 rounded-full border border-border bg-card py-1 pl-1 pr-1 shadow-card">
+                <button
+                  type="button"
+                  className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
+                  onClick={() => setMaand((m) => addMonths(m, -1))}
+                  aria-label="Vorige maand"
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+                <h2 className="px-1.5 font-display text-[15.5px] font-semibold capitalize tracking-[-0.01em]">
+                  {format(maand, "LLLL yyyy", { locale: nl })}
+                </h2>
+                <button
+                  type="button"
+                  className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
+                  onClick={() => setMaand((m) => addMonths(m, 1))}
+                  aria-label="Volgende maand"
+                >
+                  <ChevronRight className="size-4" />
+                </button>
+              </div>
+              <button
+                type="button"
+                className="rounded-full bg-surface px-3.5 py-1.5 text-[12.5px] font-medium text-foreground/80 hover:bg-muted hover:text-foreground"
                 onClick={() => {
                   setMaand(startOfMonth(new Date()));
                   void navigate({ to: "/planning", search: { dag: vandaag() }, replace: true });
                 }}
               >
                 Vandaag
-              </Button>
+              </button>
             </div>
 
             <div className="grid grid-cols-7 px-1.5 pt-1.5">
@@ -970,14 +976,13 @@ function Planning() {
                 const isGedaan = k <= nu;
                 // Staan er meerdere wijken op één dag, dan krijgt het vak een
                 // baan per wijk in plaats van één kleur.
-                const vlak =
-                  buitenMaand || !info?.wijken.length
-                    ? ""
-                    : wijkVlak(
-                        info.wijken
-                          .map((id) => wijkInfo.get(id)?.index)
-                          .filter((i): i is number => i !== undefined),
-                      );
+                const indexen = (info?.wijken ?? [])
+                  .map((id) => wijkInfo.get(id)?.index)
+                  .filter((i): i is number => i !== undefined);
+                const vlak = buitenMaand || indexen.length === 0 ? "" : wijkVlak(indexen);
+                // Bij twee wijken op één dag de kleur van de eerste: één inkt
+                // voor één bedrag, anders wordt het een regenboog.
+                const inkt = vlak && indexen[0] !== undefined ? wijkInkt(indexen[0]) : undefined;
                 return (
                   <DagDrop key={k} datum={k}>
                     {(setDropRef, erboven) => (
@@ -1027,7 +1032,10 @@ function Planning() {
                           rijdt. Elke wijk heeft zijn eigen kleur, zodat je
                           een maand in één oogopslag ziet. */}
                                 {info.wijken.length > 0 && (
-                                  <span className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] font-medium">
+                                  <span
+                                    style={inkt ? { color: inkt } : undefined}
+                                    className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] font-medium"
+                                  >
                                     <span
                                       className="size-1.5 shrink-0 rounded-full"
                                       style={{ background: wijkInfo.get(info.wijken[0]!)?.kleur }}
@@ -1039,7 +1047,8 @@ function Planning() {
                                   </span>
                                 )}
                                 <span
-                                  className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.02em] tabular-nums sm:text-[16px] ${
+                                  style={inkt ? { color: inkt } : undefined}
+                                  className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.03em] tabular-nums sm:text-[15px] ${
                                     info.wijken.length > 0 ? "mt-0.5" : "mt-auto"
                                   }`}
                                 >
@@ -1053,10 +1062,13 @@ function Planning() {
                                 <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
                                   <span
                                     className={`block h-full rounded-full ${
-                                      isGedaan ? "bg-tint-groen-ink" : "bg-brand"
+                                      inkt ? "" : isGedaan ? "bg-tint-groen-ink" : "bg-brand"
                                     }`}
                                     style={{
                                       width: `${Math.round((info.bedrag / drukste) * 100)}%`,
+                                      ...(inkt
+                                        ? { background: inkt, opacity: isGedaan ? 1 : 0.5 }
+                                        : {}),
                                     }}
                                   />
                                 </span>
@@ -1159,29 +1171,28 @@ function Planning() {
           </div>
 
           {/* --- extra opdrachten: werk zonder maand --- */}
-          <div className="rounded-[18px] border border-border bg-card shadow-card p-3 lg:col-start-1 lg:row-start-2">
-            <div className="mb-2 flex items-center gap-2">
-              <Hammer className="size-4 shrink-0 text-muted-foreground" />
+          <div className="rounded-[18px] bg-tint-geel p-3 text-tint-geel-ink shadow-card lg:col-start-1 lg:row-start-2">
+            <div className="mb-2.5 flex items-center gap-2">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-tint-geel-ink/15">
+                <Hammer className="size-[15px]" />
+              </span>
               <h2 className="font-display text-[15px] font-semibold tracking-[-0.01em]">
                 Extra opdrachten
               </h2>
-              <span className="text-[12.5px] text-muted-foreground">
-                sleep ze op een dag waarop je in die wijk bent
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                className="ml-auto rounded-full"
+              <span className="text-[12px] opacity-75">sleep ze op een dag in die wijk</span>
+              <button
+                type="button"
+                className="ml-auto flex items-center gap-1 rounded-full bg-tint-geel-ink/12 px-3 py-1.5 text-[12.5px] font-medium hover:bg-tint-geel-ink/20"
                 onClick={() => setKlusOpen(true)}
               >
                 <Plus className="size-4" /> Opdracht
-              </Button>
+              </button>
             </div>
 
             {strook.aanDeBeurt.length === 0 &&
               strook.wachten.length === 0 &&
               strook.ingedeeld.length === 0 && (
-                <p className="text-[13px] text-muted-foreground">
+                <p className="text-[12.5px] opacity-75">
                   Niets openstaand. Werk dat niet aan een maand vastzit — een dakrand, een goot —
                   noteer je bij het adres, en het komt hier terug zodra die wijk een dag heeft.
                 </p>
@@ -1189,25 +1200,21 @@ function Planning() {
 
             {strook.aanDeBeurt.length > 0 && (
               <div className="space-y-1.5">
-                <p className="text-[11.5px] font-medium text-muted-foreground/80">
-                  Nu aan de beurt
-                </p>
+                <p className="text-[11.5px] font-medium opacity-70">Nu aan de beurt</p>
                 {strook.aanDeBeurt.map((k) => klusRegel(k))}
               </div>
             )}
 
             {strook.ingedeeld.length > 0 && (
               <div className="mt-3 space-y-1.5">
-                <p className="text-[11.5px] font-medium text-muted-foreground/80">
-                  Staat op een dag
-                </p>
+                <p className="text-[11.5px] font-medium opacity-70">Staat op een dag</p>
                 {strook.ingedeeld.map((k) => klusRegel(k))}
               </div>
             )}
 
             {strook.wachten.length > 0 && (
               <details className="mt-3">
-                <summary className="cursor-pointer text-[11.5px] font-medium text-muted-foreground/80">
+                <summary className="cursor-pointer text-[11.5px] font-medium opacity-70">
                   Wacht op een dag in die wijk ({strook.wachten.length})
                 </summary>
                 <div className="mt-1.5 space-y-1.5">{strook.wachten.map((k) => klusRegel(k))}</div>

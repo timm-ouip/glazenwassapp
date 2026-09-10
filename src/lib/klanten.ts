@@ -311,6 +311,16 @@ export function wijkKleur(index: number): string {
 }
 
 /**
+ * De donkere kant van een wijkkleur, om op zijn eigen pastelvlak te lezen —
+ * het bedrag op een dagtegel. Zelfde kleurhoek als het vlak, alleen diep
+ * genoeg voor tekst; zo hoort het getal zichtbaar bij de wijk eronder in
+ * plaats van er als zwarte tekst overheen te liggen.
+ */
+export function wijkInkt(index: number): string {
+  return `oklch(var(--wijk-ink-l) var(--wijk-ink-c) ${wijkHoek(index)})`;
+}
+
+/**
  * Achtergrond voor een vlak dat bij een of meer wijken hoort — een dag op de
  * kalender. Bij meerdere wijken wordt het even brede banen naast elkaar, met
  * harde overgangen: een verloop zou de kleuren juist onherkenbaar maken.
