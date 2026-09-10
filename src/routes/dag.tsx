@@ -1,9 +1,13 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowRight,
   CalendarDays,
   CheckSquare,
+  ChevronLeft,
+  ChevronRight,
+  Folder,
   Euro,
   Hammer,
   MapPin,
@@ -35,7 +39,9 @@ import {
   type Customer,
 } from "@/lib/klanten";
 import {
+  datumSleutel,
   fetchWasdag,
+  fetchWasdagen,
   haalUitWasdag,
   toonDatum,
   vandaag,
@@ -71,6 +77,19 @@ export const Route = createFileRoute("/dag")({
   component: DagPagina,
 });
 
+/**
+ * De banen van het staafje "waar het geld zit". Uit hetzelfde palet als de
+ * kaarten, maar dieper: een baan van drie pixels moet je nog zien liggen.
+ */
+const GELDKLEUREN = [
+  "bg-tint-paars-ink/60",
+  "bg-tint-oranje-ink/60",
+  "bg-tint-groen-ink/60",
+  "bg-brand-ink/60",
+  "bg-tint-roze-ink/60",
+  "bg-tint-turkoois-ink/60",
+];
+
 /** Aan, uit, of half — een kop waarvan maar een deel aanstaat. */
 function vinkStand(erop: number, totaal: number): boolean | "indeterminate" {
   if (erop === 0) return false;
@@ -91,7 +110,7 @@ function vulStijl(erop: number, totaal: number) {
   const gevuld = vulling(erop, totaal);
   return gevuld > 0
     ? {
-        backgroundImage: `linear-gradient(to right, var(--tint-amber) ${gevuld}%, transparent ${gevuld}%)`,
+        backgroundImage: `linear-gradient(to right, var(--accent) ${gevuld}%, transparent ${gevuld}%)`,
       }
     : undefined;
 }
@@ -128,6 +147,7 @@ type Blok =
  */
 function DagPagina() {
   useRequireAuth();
+  const navigate = useNavigate();
   const { datum: datumUitUrl } = Route.useSearch();
   const datum = datumUitUrl ?? vandaag();
 
@@ -145,6 +165,19 @@ function DagPagina() {
   const klussenQuery = useQuery({
     queryKey: ["klussen", datum, datum],
     queryFn: () => fetchKlussen(datum, datum),
+  });
+
+  /**
+   * Een half jaar terug, om te zien wat dezelfde wijk de vorige ronde opbracht.
+   * Dat is het getal waar je onderweg aan afmeet of je goed zit.
+   */
+  const terugblikQuery = useQuery({
+    queryKey: ["wasdagen", "terugblik", datum],
+    queryFn: () => {
+      const d = new Date(`${datum}T12:00:00`);
+      d.setDate(d.getDate() - 180);
+      return fetchWasdagen(datumSleutel(d), datum);
+    },
   });
 
   const maand = datum.slice(0, 7);
@@ -613,6 +646,88 @@ function DagPagina() {
     });
   }
 
+  /** Eén regel die zegt waar je vandaag heen gaat. */
+  const samenvatting = useMemo(() => {
+    if (perWijk.wijken.length === 0 && klussen.length === 0) {
+      return "Alles wat er deze dag te doen staat, straat voor straat.";
+    }
+    const namen = perWijk.wijken.map((w) => w.naam);
+    const wijk =
+      namen.length === 0
+        ? ""
+        : namen.length === 1
+          ? namen[0]!
+          : `${namen.slice(0, -1).join(", ")} en ${namen.at(-1)}`;
+    const delen = [`${straten} ${straten === 1 ? "straat" : "straten"}`];
+    if (klussen.length > 0) {
+      delen.push(`${klussen.length} extra ${klussen.length === 1 ? "opdracht" : "opdrachten"}`);
+    }
+    return [wijk, delen.join(", ")].filter(Boolean).join(" · ");
+  }, [perWijk.wijken, straten, klussen.length]);
+
+  /** De straat waar de meeste adressen van deze dag liggen. */
+  const drukstestraat = useMemo(() => {
+    const alle = perWijk.wijken.flatMap((w) =>
+      w.blokken.flatMap((b) => (b.soort === "groep" ? b.straten : [b.straat])),
+    );
+    const grootste = alle.reduce<(typeof alle)[number] | null>(
+      (a, b) => (a && a.klanten.length >= b.klanten.length ? a : b),
+      null,
+    );
+    return grootste ? `${grootste.klanten.length} op ${grootste.naam}` : "nog niets ingepland";
+  }, [perWijk.wijken]);
+
+  /**
+   * Wat dezelfde wijk de vorige keer opbracht. De laatste dag vóór vandaag
+   * waarop je in een van deze wijken was — niet zomaar de vorige werkdag,
+   * want dan vergelijk je Gouda met Madestein.
+   */
+  const vorigeRonde = useMemo(() => {
+    const rijen = terugblikQuery.data ?? [];
+    if (rijen.length === 0) return null;
+    const adres = new Map((customersQuery.data ?? []).map((c) => [c.id, c]));
+    const straat = new Map((streetsQuery.data ?? []).map((st) => [st.id, st]));
+    const hier = new Set(perWijk.wijken.map((w) => w.id));
+    if (hier.size === 0) return null;
+
+    const perDatum = new Map<string, { bedrag: number; wijken: Set<string> }>();
+    for (const r of rijen) {
+      if (r.datum >= datum) continue;
+      const dag = perDatum.get(r.datum) ?? { bedrag: 0, wijken: new Set<string>() };
+      dag.bedrag += Number(r.prijs);
+      const c = r.customer_id ? adres.get(r.customer_id) : undefined;
+      const st = c ? straat.get(c.street_id) : undefined;
+      if (st) dag.wijken.add(st.district_id);
+      perDatum.set(r.datum, dag);
+    }
+    const zelfdeWijk = [...perDatum.entries()]
+      .filter(([, d]) => [...d.wijken].some((id) => hier.has(id)))
+      .sort((a, b) => b[0].localeCompare(a[0]));
+    const laatste = zelfdeWijk[0];
+    return laatste ? { datum: laatste[0], bedrag: laatste[1].bedrag } : null;
+  }, [terugblikQuery.data, customersQuery.data, streetsQuery.data, perWijk.wijken, datum]);
+
+  /**
+   * Waar het geld van de dag zit, per straat. Twee straten kunnen evenveel
+   * adressen hebben en toch het dubbele opleveren; dat zie je aan een lijst
+   * met bedragen niet, en aan een balk wel.
+   */
+  const geldVerdeling = useMemo(() => {
+    const straatjes = perWijk.wijken
+      .flatMap((w) => w.blokken.flatMap((b) => (b.soort === "groep" ? b.straten : [b.straat])))
+      .map((st) => ({ naam: st.naam, bedrag: st.bedrag }));
+    const klusGeld = klussen.reduce((sum, k) => sum + k.prijs, 0);
+    if (klusGeld > 0) straatjes.push({ naam: "Extra opdrachten", bedrag: klusGeld });
+    const gesorteerd = straatjes.sort((a, b) => b.bedrag - a.bedrag);
+    const top = gesorteerd.slice(0, 5);
+    const rest = gesorteerd.slice(5).reduce((sum, g) => sum + g.bedrag, 0);
+    if (rest > 0) top.push({ naam: "overige straten", bedrag: rest });
+    return top.map((g, i) => ({
+      ...g,
+      kleur: g.naam === "Extra opdrachten" ? "bg-tint-geel-ink/60" : (GELDKLEUREN[i] ?? "bg-muted"),
+    }));
+  }, [perWijk.wijken, klussen]);
+
   /**
    * De aangevinkte adressen als adres en niet als id: overslaan werkt op het
    * adres zelf (zijn ritme), en heeft dus het hele ding nodig.
@@ -672,28 +787,45 @@ function DagPagina() {
     else toast("Niets om terug te draaien");
   }
 
+  /** De dag ervoor en erna, om met de pijltjes langs de week te lopen. */
+  function schuifDag(stappen: number) {
+    const d = new Date(`${datum}T12:00:00`);
+    d.setDate(d.getDate() + stappen);
+    void navigate({ to: "/dag", search: { datum: datumSleutel(d) } });
+  }
+
   return (
     <AppLayout
-      titel={toonDatum(datum)}
+      titel={datum === vandaag() ? "Vandaag op de route" : `De route van ${toonDatum(datum)}`}
       kruimel="Overzicht / Planning / Dag"
-      onderschrift="Alles wat er deze dag te doen staat, straat voor straat."
+      onderschrift={samenvatting}
       actiePositie="onder"
       acties={
         <>
-          <Button
-            size="sm"
-            variant={selecteren ? "default" : "outline"}
-            className="rounded-full"
-            onClick={() => {
-              setSelecteren((v) => !v);
-              setKeuze(new Set());
-              setKlusKeuze(new Set());
-            }}
-            disabled={teKiezen === 0}
-            title="Aanvinken wat er niet af gekomen is, om het te verplaatsen"
-          >
-            <CheckSquare className="size-4" /> Selecteren
-          </Button>
+          {/* De dag is één pil met de pijltjes erin: zo loop je met twee
+              klikken langs de week zonder terug naar de kalender te gaan. */}
+          <div className="flex items-center gap-0.5 rounded-full border border-border bg-card py-1 pl-1 pr-1 shadow-card">
+            <button
+              type="button"
+              className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
+              onClick={() => schuifDag(-1)}
+              aria-label="Dag ervoor"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+            <span className="px-1.5 text-[13px] font-medium first-letter:uppercase">
+              {toonDatum(datum)}
+            </span>
+            <button
+              type="button"
+              className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
+              onClick={() => schuifDag(1)}
+              aria-label="Dag erna"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
+
           {selecteren && (
             <>
               <Button
@@ -721,34 +853,40 @@ function DagPagina() {
               />
             </>
           )}
-          <Button size="sm" variant="outline" className="rounded-full" asChild>
-            <Link to="/planning" search={{ dag: datum }}>
-              <CalendarDays className="size-4" /> Naar de kalender
-            </Link>
-          </Button>
-          <Button size="sm" variant="outline" className="rounded-full" asChild>
-            <Link to="/" search={{ dag: datum }}>
-              <Euro className="size-4" /> Werk inplannen
-            </Link>
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="rounded-full"
-            disabled={!undoLabel}
-            onClick={() => void doeUndo()}
-            title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
-          >
-            <Undo2 className="size-4" /> Ongedaan
-          </Button>
-          <Button size="sm" className="rounded-full" asChild disabled={regels.length === 0}>
-            <Link
-              to="/printen"
-              search={{ wijk: "", maand, prijzen: false, liggend: true, dag: datum }}
+
+          {/* Rechts alleen ronde knoppen en één donkere pil: printen is wat je
+              hier komt doen, de rest is er als je hem nodig hebt. */}
+          <span className="ml-auto flex items-center gap-2">
+            <RondeKnop
+              actief={selecteren}
+              label="Aanvinken wat er niet af gekomen is"
+              onClick={() => {
+                setSelecteren((v) => !v);
+                setKeuze(new Set());
+                setKlusKeuze(new Set());
+              }}
+              uit={teKiezen === 0}
             >
-              <Printer className="size-4" /> Printlijst van deze dag
-            </Link>
-          </Button>
+              <CheckSquare className="size-4" />
+            </RondeKnop>
+            <RondeKnop label="Ongedaan maken" onClick={() => void doeUndo()} uit={!undoLabel}>
+              <Undo2 className="size-4" />
+            </RondeKnop>
+            <RondeKnop label="Naar de kalender" naar={{ to: "/planning", search: { dag: datum } }}>
+              <CalendarDays className="size-4" />
+            </RondeKnop>
+            <RondeKnop label="Werk inplannen" naar={{ to: "/", search: { dag: datum } }}>
+              <Euro className="size-4" />
+            </RondeKnop>
+            <Button size="sm" className="rounded-full" asChild disabled={regels.length === 0}>
+              <Link
+                to="/printen"
+                search={{ wijk: "", maand, prijzen: false, liggend: true, dag: datum }}
+              >
+                <Printer className="size-4" /> Printlijst
+              </Link>
+            </Button>
+          </span>
         </>
       }
       kop={
@@ -757,21 +895,24 @@ function DagPagina() {
             {
               label: "Adressen",
               waarde: String(regels.length),
-              onder: `${perWijk.wijken.length} ${perWijk.wijken.length === 1 ? "wijk" : "wijken"}`,
+              onder: drukstestraat,
               icon: Users,
-              kleur: "blauw",
+              kleur: "paars",
             },
             {
               label: "Straten",
               waarde: String(straten),
-              onder: klussen.length > 0 ? `${klussen.length} extra opdracht` : "geen extra werk",
+              onder:
+                perWijk.wijken.length === 1 ? "in één wijk" : `in ${perWijk.wijken.length} wijken`,
               icon: MapPin,
               kleur: "amber",
             },
             {
               label: "Opbrengst",
               waarde: formatPrice(bedrag),
-              onder: toonDatum(datum),
+              onder: vorigeRonde
+                ? `laatst hier ${formatPrice(vorigeRonde.bedrag)} · ${toonDatum(vorigeRonde.datum)}`
+                : "eerste keer in deze wijk",
               icon: Euro,
               kleur: "groen",
             },
@@ -790,153 +931,213 @@ function DagPagina() {
           </p>
         </div>
       ) : (
-        <div className="gap-3.5 md:columns-1 xl:columns-2">
-          {perWijk.wijken.map((w) => {
-            const eropWijk = w.klantIds.filter((id) => keuze.has(id)).length;
-            const { className: wijkKnop, ...wijkRest } = vakKnop(`w:${w.id}`) as {
-              className?: string;
-            } & Record<string, unknown>;
-            return (
-              <section
-                key={w.id}
-                className="mb-3.5 break-inside-avoid-column overflow-hidden rounded-[18px] border border-border bg-card shadow-card"
-              >
-                <div
-                  {...wijkRest}
-                  style={vulStijl(eropWijk, w.klantIds.length)}
-                  className={`flex items-baseline gap-2 border-b border-border bg-card-header px-3 py-2 ${wijkKnop ?? ""}`}
+        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_19rem]">
+          <div className="min-w-0 space-y-3">
+            {perWijk.wijken.map((w) => {
+              const eropWijk = w.klantIds.filter((id) => keuze.has(id)).length;
+              const { className: wijkKnop, ...wijkRest } = vakKnop(`w:${w.id}`) as {
+                className?: string;
+              } & Record<string, unknown>;
+              return (
+                <section
+                  key={w.id}
+                  className="rounded-[18px] border border-border bg-card p-2.5 shadow-card"
                 >
-                  {selecteren && (
-                    <Checkbox
-                      className="pointer-events-none size-3.5 shrink-0 translate-y-[2px]"
-                      checked={vinkStand(eropWijk, w.klantIds.length)}
-                      tabIndex={-1}
-                      aria-label={`Hele wijk ${w.naam}`}
-                    />
-                  )}
-                  <span
-                    className="size-2.5 shrink-0 translate-y-[-1px] rounded-full"
-                    style={{ background: w.kleur }}
-                  />
-                  <h2 className="min-w-0 flex-1 truncate font-display text-[15px] font-semibold tracking-[-0.01em]">
-                    {w.naam}
-                  </h2>
-                  <span className="text-[12px] text-muted-foreground">{w.aantal}×</span>
-                  <span className="text-[13px] font-semibold tabular-nums">
-                    {formatPrice(w.bedrag)}
-                  </span>
-                </div>
-
-                {w.blokken.map((b) =>
-                  b.soort === "groep" ? (
-                    <div key={`g:${b.id}`} className="border-b border-border/60 last:border-b-0">
-                      {/* Deze groep staat er compleet op, dus je verzet hem in
-                          één klik — zoals je hem ook in één klik ingepland hebt. */}
-                      <GroepKop
-                        naam={b.naam}
-                        bedrag={b.straten.reduce((sum, s) => sum + s.bedrag, 0)}
-                        erop={b.klantIds.filter((id) => keuze.has(id)).length}
-                        totaal={b.klantIds.length}
-                        selecteren={selecteren}
-                        knop={vakKnop(`g:${b.id}`)}
+                  <div
+                    {...wijkRest}
+                    style={vulStijl(eropWijk, w.klantIds.length)}
+                    className={`mb-1 flex items-center gap-2 rounded-[12px] px-2 py-1.5 ${wijkKnop ?? ""}`}
+                  >
+                    {selecteren && (
+                      <Checkbox
+                        className="pointer-events-none size-3.5 shrink-0"
+                        checked={vinkStand(eropWijk, w.klantIds.length)}
+                        tabIndex={-1}
+                        aria-label={`Hele wijk ${w.naam}`}
                       />
-                      {b.straten.map((s) => (
-                        <StraatRij
-                          key={s.id}
-                          straat={s}
-                          maand={maand}
-                          regelVan={perWijk.regelVan}
-                          onAdres={setBewerkt}
+                    )}
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ background: w.kleur }}
+                    />
+                    <h2 className="min-w-0 flex-1 truncate font-display text-[15px] font-semibold tracking-[-0.01em]">
+                      {w.naam}
+                    </h2>
+                    <span className="rounded-full bg-surface px-2 py-[1px] text-[10.5px] tabular-nums text-muted-foreground">
+                      {w.aantal} adressen
+                    </span>
+                    <span className="text-[13px] font-semibold tabular-nums">
+                      {formatPrice(w.bedrag)}
+                    </span>
+                  </div>
+
+                  {w.blokken.map((b) =>
+                    b.soort === "groep" ? (
+                      <div key={`g:${b.id}`}>
+                        {/* Deze groep staat er compleet op, dus je verzet hem in
+                            één klik — zoals je hem ook in één klik ingepland hebt. */}
+                        <GroepKop
+                          naam={b.naam}
+                          erop={b.klantIds.filter((id) => keuze.has(id)).length}
+                          totaal={b.klantIds.length}
                           selecteren={selecteren}
-                          keuze={keuze}
-                          vakKnop={vakKnop}
-                          inspringen
+                          knop={vakKnop(`g:${b.id}`)}
                         />
-                      ))}
-                    </div>
-                  ) : (
-                    <div key={`s:${b.id}`} className="border-b border-border/60 last:border-b-0">
+                        {b.straten.map((s) => (
+                          <StraatRij
+                            key={s.id}
+                            straat={s}
+                            maand={maand}
+                            regelVan={perWijk.regelVan}
+                            selecteren={selecteren}
+                            keuze={keuze}
+                            vakKnop={vakKnop}
+                            onAdres={setBewerkt}
+                          />
+                        ))}
+                      </div>
+                    ) : (
                       <StraatRij
+                        key={`s:${b.id}`}
                         straat={b.straat}
                         maand={maand}
                         regelVan={perWijk.regelVan}
-                        onAdres={setBewerkt}
                         selecteren={selecteren}
                         keuze={keuze}
                         vakKnop={vakKnop}
+                        onAdres={setBewerkt}
                       />
-                    </div>
-                  ),
-                )}
-              </section>
-            );
-          })}
+                    ),
+                  )}
+                </section>
+              );
+            })}
 
-          {/* Extra werk dat niet aan een maand vastzit. Onderaan, want het
-              hoort niet bij de ronde van een straat — je pikt het mee als je
-              er toch bent. Afvinken doe je hier: gebeurt dat niet, dan is hij
-              morgen weer van deze dag af en wacht hij op de planning. */}
-          {klussen.length > 0 && (
-            <section className="mb-3.5 break-inside-avoid-column overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
-              <div className="flex items-baseline gap-2 border-b border-border bg-card-header px-3 py-2">
-                <Hammer className="size-3.5 shrink-0 translate-y-[2px] text-muted-foreground" />
-                <h2 className="min-w-0 flex-1 truncate font-display text-[14.5px] font-semibold">
-                  Extra opdrachten
-                </h2>
-                <span className="tabular-nums text-[12.5px] text-muted-foreground">
-                  {formatPrice(klussen.reduce((sum, k) => sum + k.prijs, 0))}
+            {perWijk.kwijt > 0 && (
+              <p className="text-[12.5px] text-muted-foreground">
+                {perWijk.kwijt} {perWijk.kwijt === 1 ? "adres is" : "adressen zijn"} intussen
+                verwijderd; ze tellen wel mee in het bedrag.
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            {/* Extra werk dat niet aan een maand vastzit. Naast de route, want
+                het hoort niet bij de ronde van een straat — je pikt het mee als
+                je er toch bent. Afvinken doe je hier: gebeurt dat niet, dan is
+                hij morgen weer van deze dag af en wacht hij op de planning. */}
+            {klussen.length > 0 && (
+              <section className="rounded-[18px] bg-tint-geel p-3 text-tint-geel-ink shadow-card">
+                <div className="mb-2.5 flex items-center gap-2">
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-tint-geel-ink/15">
+                    <Hammer className="size-[15px]" />
+                  </span>
+                  <h2 className="min-w-0 flex-1 truncate font-display text-[14.5px] font-semibold">
+                    Extra opdrachten
+                  </h2>
+                  <span className="text-[12.5px] font-semibold tabular-nums">
+                    {formatPrice(klussen.reduce((sum, k) => sum + k.prijs, 0))}
+                  </span>
+                </div>
+                <ul className="space-y-1.5">
+                  {klussen.map((k) => {
+                    // Afgevinkt werk verplaats je niet: dat is gedaan, en het
+                    // hoort bij de omzet van deze dag.
+                    const kiesbaar = selecteren && !k.gedaan_op;
+                    const { className: klusKnop, ...klusRest } = (
+                      kiesbaar ? vakKnop(`k:${k.id}`) : {}
+                    ) as { className?: string } & Record<string, unknown>;
+                    return (
+                      <li
+                        key={k.id}
+                        {...klusRest}
+                        className={`flex items-center gap-2 rounded-[11px] px-2.5 py-1.5 text-[12.5px] ${klusKnop ?? ""} ${
+                          klusKeuze.has(k.id)
+                            ? "bg-accent text-accent-foreground"
+                            : "bg-card/70 text-card-foreground"
+                        } ${k.gedaan_op ? "opacity-60" : ""}`}
+                      >
+                        {/* Afvinken blijft afvinken, ook in de selecteerstand:
+                            dat vakje mag niet in de klik van de regel opgaan. */}
+                        <span
+                          className="flex shrink-0 items-center"
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            className="size-4"
+                            checked={!!k.gedaan_op}
+                            onCheckedChange={(v) => void vinkAf(k, v === true)}
+                            aria-label={`${k.omschrijving} gedaan`}
+                          />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span
+                            className={`block truncate font-medium ${k.gedaan_op ? "line-through" : ""}`}
+                          >
+                            {adresVan(k)}
+                          </span>
+                          <span className="block truncate text-[11px] text-muted-foreground">
+                            {k.omschrijving}
+                          </span>
+                        </span>
+                        <span className="shrink-0 tabular-nums">{formatPrice(k.prijs)}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
+
+            {/* Waar het geld van de dag zit. Twee straten kunnen evenveel
+                adressen hebben en toch het dubbele opleveren; dat zie je aan
+                een lijst met bedragen niet, en aan een balk wel. */}
+            {geldVerdeling.length > 1 && (
+              <section className="rounded-[18px] border border-border bg-card p-3 shadow-card">
+                <h2 className="mb-2 font-display text-[14px] font-semibold">Waar het geld zit</h2>
+                <span className="flex h-1.5 overflow-hidden rounded-full bg-surface">
+                  {geldVerdeling.map((g) => (
+                    <span
+                      key={g.naam}
+                      className={g.kleur}
+                      style={{ width: `${(g.bedrag / bedrag) * 100}%` }}
+                    />
+                  ))}
                 </span>
-              </div>
-              <ul className="py-1.5">
-                {klussen.map((k) => {
-                  // Afgevinkt werk verplaats je niet: dat is gedaan, en het
-                  // hoort bij de omzet van deze dag.
-                  const kiesbaar = selecteren && !k.gedaan_op;
-                  const { className: klusKnop, ...klusRest } = (
-                    kiesbaar ? vakKnop(`k:${k.id}`) : {}
-                  ) as { className?: string } & Record<string, unknown>;
-                  return (
-                    <li
-                      key={k.id}
-                      {...klusRest}
-                      className={`flex items-center gap-2 px-3 py-[3px] text-[13px] ${klusKnop ?? ""} ${klusKeuze.has(k.id) ? "bg-tint-amber" : ""}`}
-                    >
-                      {selecteren && (
-                        <Checkbox
-                          className="pointer-events-none size-3.5 shrink-0"
-                          checked={klusKeuze.has(k.id)}
-                          disabled={!!k.gedaan_op}
-                          tabIndex={-1}
-                          aria-label={`${k.omschrijving} selecteren`}
-                        />
-                      )}
-                      {/* Afvinken blijft afvinken, ook in de selecteerstand:
-                          dat vakje mag niet in de klik van de regel opgaan. */}
-                      <span
-                        className="flex shrink-0 items-center"
-                        onClick={(e) => e.stopPropagation()}
-                        onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        <Checkbox
-                          className="size-3.5"
-                          checked={!!k.gedaan_op}
-                          onCheckedChange={(v) => void vinkAf(k, v === true)}
-                          aria-label={`${k.omschrijving} gedaan`}
-                        />
+                <ul className="mt-2 space-y-0.5">
+                  {geldVerdeling.map((g) => (
+                    <li key={g.naam} className="flex items-center gap-2 text-[12px]">
+                      <span className={`size-2 shrink-0 rounded-[3px] ${g.kleur}`} />
+                      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                        {g.naam}
                       </span>
-                      <span className="w-24 shrink-0 truncate font-medium">{adresVan(k)}</span>
-                      <span
-                        className={`min-w-0 flex-1 truncate ${k.gedaan_op ? "text-muted-foreground line-through" : "text-muted-foreground"}`}
-                      >
-                        {k.omschrijving}
-                      </span>
-                      <span className="tabular-nums">{formatPrice(k.prijs)}</span>
+                      <span className="tabular-nums">{formatPrice(g.bedrag)}</span>
                     </li>
-                  );
-                })}
-              </ul>
-            </section>
-          )}
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {/* Wat je hier komt doen als de dag niet af kwam. Staat er alleen
+                als je nog niet aan het aanvinken bent. */}
+            {!selecteren && teKiezen > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelecteren(true)}
+                className="flex w-full items-center gap-2.5 rounded-[18px] border border-border bg-card p-3 text-left shadow-card hover:bg-card-header"
+              >
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-accent text-accent-foreground">
+                  <ArrowRight className="size-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[12.5px] font-medium">Niet af gekomen?</span>
+                  <span className="block text-[11.5px] text-muted-foreground">
+                    Vink aan en zet het op een andere dag
+                  </span>
+                </span>
+              </button>
+            )}
+          </div>
 
           <DagAdresDialog
             open={bewerkt !== null}
@@ -952,16 +1153,50 @@ function DagPagina() {
               if (bewerkt) void bewaarDag(bewerkt.customer, prijs, notitie);
             }}
           />
-
-          {perWijk.kwijt > 0 && (
-            <p className="text-[13px] text-muted-foreground">
-              {perWijk.kwijt} {perWijk.kwijt === 1 ? "adres is" : "adressen zijn"} intussen
-              verwijderd; ze tellen wel mee in het bedrag.
-            </p>
-          )}
         </div>
       )}
     </AppLayout>
+  );
+}
+
+/**
+ * Een ronde knop met alleen een icoon. Rechtsboven staan er een paar naast
+ * elkaar; met tekst erbij zou die balk twee regels lang worden en zou niets er
+ * meer uitspringen. De naam zit in `aria-label` en in de tooltip, dus hij is
+ * te vinden voor wie hem niet herkent.
+ */
+function RondeKnop({
+  label,
+  onClick,
+  naar,
+  actief = false,
+  uit = false,
+  children,
+}: {
+  label: string;
+  onClick?: () => void;
+  /** Een link in plaats van een knop, bijvoorbeeld naar de kalender. */
+  naar?: { to: string; search: Record<string, unknown> };
+  actief?: boolean;
+  uit?: boolean;
+  children: ReactNode;
+}) {
+  const klassen = `flex size-9 items-center justify-center rounded-full border transition-colors ${
+    actief
+      ? "border-primary bg-primary text-primary-foreground"
+      : "border-border bg-card text-muted-foreground hover:text-foreground"
+  } ${uit ? "pointer-events-none opacity-40" : ""}`;
+  if (naar) {
+    return (
+      <Link to={naar.to} search={naar.search} className={klassen} title={label} aria-label={label}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} className={klassen} title={label} aria-label={label}>
+      {children}
+    </button>
   );
 }
 
@@ -971,14 +1206,12 @@ type Knop = { className?: string } & Record<string, unknown>;
 /** De kop van een subgroep die die dag compleet ingepland staat. */
 function GroepKop({
   naam,
-  bedrag,
   erop,
   totaal,
   selecteren,
   knop,
 }: {
   naam: string;
-  bedrag: number;
   erop: number;
   totaal: number;
   selecteren: boolean;
@@ -988,19 +1221,18 @@ function GroepKop({
   return (
     <div
       {...rest}
-      style={vulStijl(erop, totaal)}
-      className={`flex items-baseline gap-2 bg-muted/40 px-3 py-1.5 ${className ?? ""}`}
+      className={`mt-2 flex items-center gap-1.5 px-2 pb-0.5 text-[11.5px] text-muted-foreground ${className ?? ""}`}
     >
       {selecteren && (
         <Checkbox
-          className="pointer-events-none size-3.5 shrink-0 translate-y-[2px]"
+          className="pointer-events-none size-3.5 shrink-0"
           checked={vinkStand(erop, totaal)}
           tabIndex={-1}
           aria-label={`Groep ${naam}`}
         />
       )}
-      <h3 className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{naam}</h3>
-      <span className="text-[12px] tabular-nums text-muted-foreground">{formatPrice(bedrag)}</span>
+      <Folder className="size-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{naam}</span>
     </div>
   );
 }
@@ -1014,7 +1246,6 @@ function StraatRij({
   keuze,
   vakKnop,
   onAdres,
-  inspringen = false,
 }: {
   straat: Straat;
   maand: string;
@@ -1024,34 +1255,33 @@ function StraatRij({
   vakKnop: (vak: string) => Knop;
   /** Klikken buiten de selecteerstand opent het schermpje van dit adres. */
   onAdres: (keuze: { customer: Customer; straat: string }) => void;
-  /** Staat hij onder een groepskop? Dan een streepje naar binnen. */
-  inspringen?: boolean;
 }) {
   const erop = straat.klantIds.filter((id) => keuze.has(id)).length;
   const { className: kopKnop, ...kopRest } = vakKnop(`s:${straat.id}`);
   return (
-    <div className={inspringen ? "pl-3" : undefined}>
+    <div>
+      {/* De straatnaam ligt als een strookje in de kaart: hij hoort erbij,
+          maar hij is niet zelf een kaart. */}
       <div
         {...kopRest}
         style={vulStijl(erop, straat.klantIds.length)}
-        className={`flex items-baseline gap-2 px-3 pb-1 pt-2 ${kopKnop ?? ""}`}
+        className={`mt-1.5 flex items-center gap-2 rounded-[11px] bg-card-header px-2.5 py-1.5 ${kopKnop ?? ""}`}
       >
         {selecteren && (
           <Checkbox
-            className="pointer-events-none size-3.5 shrink-0 translate-y-[2px]"
+            className="pointer-events-none size-3.5 shrink-0"
             checked={vinkStand(erop, straat.klantIds.length)}
             tabIndex={-1}
             aria-label={`Hele straat ${straat.naam}`}
           />
         )}
-        <h3 className="min-w-0 flex-1 truncate text-[12.5px] font-semibold tracking-[-0.01em] text-foreground/70">
-          {straat.naam}
-        </h3>
-        <span className="text-[12px] tabular-nums text-muted-foreground">
-          {formatPrice(straat.bedrag)}
+        <h3 className="min-w-0 flex-1 truncate text-[13px] font-medium">{straat.naam}</h3>
+        <span className="text-[10.5px] tabular-nums text-muted-foreground">
+          {straat.klanten.length}×
         </span>
+        <span className="text-[12px] font-semibold tabular-nums">{formatPrice(straat.bedrag)}</span>
       </div>
-      <ul className="pb-2">
+      <ul className="mt-0.5">
         {straat.klanten.map((c) => {
           // De notitie zoals hij die maand geldt, dus inclusief het werk dat er
           // alleen in bepaalde maanden bij komt.
@@ -1061,33 +1291,42 @@ function StraatRij({
           // je onderweg moet weten, en het bedrag ernaast hoort erbij.
           const anders = regel?.notitie?.trim() ?? "";
           const aangepast = anders !== "" || (regel && regel.prijs !== prijsVoorMaand(c, maand));
+          const gekozen = keuze.has(c.id);
           const { className: rijKnop, ...rijRest } = selecteren
             ? vakKnop(`c:${c.id}`)
             : {
                 onClick: () => onAdres({ customer: c, straat: straat.naam }),
-                className: "cursor-pointer hover:bg-accent/40",
+                className: "cursor-pointer hover:bg-card-header",
               };
           return (
             <li
               key={c.id}
               {...rijRest}
-              className={`flex items-baseline gap-2 px-3 py-[2px] text-[13px] ${rijKnop ?? ""} ${keuze.has(c.id) ? "bg-tint-amber" : ""}`}
+              className={`flex items-center gap-2 rounded-[9px] px-2.5 py-[3px] text-[12.5px] ${rijKnop ?? ""} ${
+                gekozen
+                  ? "bg-accent text-accent-foreground"
+                  : anders
+                    ? "bg-tint-oranje text-tint-oranje-ink"
+                    : ""
+              }`}
             >
               {selecteren && (
                 <Checkbox
-                  className="pointer-events-none size-3.5 shrink-0 translate-y-[1px]"
-                  checked={keuze.has(c.id)}
+                  className="pointer-events-none size-3.5 shrink-0"
+                  checked={gekozen}
                   tabIndex={-1}
                   aria-label={`${straat.naam} ${formatNumber(c)}`}
                 />
               )}
-              <span className="w-10 shrink-0 font-medium tabular-nums">{formatNumber(c)}</span>
+              <span className="w-9 shrink-0 font-medium tabular-nums">{formatNumber(c)}</span>
               <span
-                className={`min-w-0 flex-1 truncate ${anders ? "italic text-foreground" : "text-muted-foreground"}`}
+                className={`min-w-0 flex-1 truncate ${
+                  anders ? "italic" : gekozen ? "" : "text-muted-foreground"
+                }`}
               >
                 {anders || notitie}
               </span>
-              <span className={`tabular-nums ${aangepast ? "font-medium" : ""}`}>
+              <span className={`shrink-0 tabular-nums ${aangepast ? "font-medium" : ""}`}>
                 {formatPrice(regel?.prijs ?? c.price)}
               </span>
             </li>
