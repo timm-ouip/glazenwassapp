@@ -531,6 +531,7 @@ export type Database = {
           customer_id: string | null
           datum: string
           id: string
+          notitie: string | null
           prijs: number
         }
         Insert: {
@@ -539,6 +540,7 @@ export type Database = {
           customer_id?: string | null
           datum: string
           id?: string
+          notitie?: string | null
           prijs?: number
         }
         Update: {
@@ -547,6 +549,7 @@ export type Database = {
           customer_id?: string | null
           datum?: string
           id?: string
+          notitie?: string | null
           prijs?: number
         }
         Relationships: [

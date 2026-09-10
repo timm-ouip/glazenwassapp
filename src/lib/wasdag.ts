@@ -12,6 +12,12 @@ export interface WasdagRegel {
   /** Leeg als het adres later definitief uit de prullenbak gewist is. */
   customer_id: string | null;
   prijs: number;
+  /**
+   * Wat er die dag anders ging dan anders — "alleen de voorkant", "kon er
+   * niet bij". Leeg is: gewoon zoals altijd. Hoort bij de dag en niet bij het
+   * adres, net als het bedrag hierboven.
+   */
+  notitie?: string | null;
 }
 
 /**
@@ -45,7 +51,7 @@ export function toonDatum(datum: string): string {
 export async function fetchWasdag(datum: string): Promise<WasdagRegel[]> {
   const { data, error } = await supabase
     .from("wasdag_regels")
-    .select("customer_id,prijs")
+    .select("customer_id,prijs,notitie")
     .eq("datum", datum);
   if (error) throw error;
   return (data ?? []) as WasdagRegel[];
@@ -74,11 +80,18 @@ export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagD
  */
 export async function voegToeAanWasdag(
   datum: string,
-  regels: { customer_id: string; prijs: number }[],
+  regels: { customer_id: string; prijs: number; notitie?: string | null }[],
 ) {
   if (regels.length === 0) return;
   const { error } = await supabase.from("wasdag_regels").upsert(
-    regels.map((r) => ({ datum, customer_id: r.customer_id, prijs: r.prijs })),
+    regels.map((r) => ({
+      datum,
+      customer_id: r.customer_id,
+      prijs: r.prijs,
+      // Verhuist een adres naar een andere dag, dan gaat wat er die keer
+      // anders ging mee. Anders zou het bij het opschuiven verdwijnen.
+      notitie: r.notitie ?? null,
+    })),
     { onConflict: "company_id,datum,customer_id" },
   );
   if (error) throw error;
@@ -98,6 +111,24 @@ export async function haalUitWasdag(datum: string, customerIds: string[]) {
       .in("customer_id", customerIds.slice(i, i + PER_KEER));
     if (error) throw error;
   }
+}
+
+/**
+ * Past één regel aan: het bedrag van deze dag, de notitie van deze dag, of
+ * allebei. Bewust een `update` en geen upsert — de regel bestáát, je bent hem
+ * aan het bijstellen. Stond hij er niet, dan valt er ook niets bij te stellen.
+ */
+export async function werkWasdagRegelBij(
+  datum: string,
+  customerId: string,
+  patch: { prijs?: number; notitie?: string | null },
+) {
+  const { error } = await supabase
+    .from("wasdag_regels")
+    .update(patch)
+    .eq("datum", datum)
+    .eq("customer_id", customerId);
+  if (error) throw error;
 }
 
 /** Veegt een hele dag leeg — op datum, dus zonder lijst met id's. */

@@ -19,6 +19,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { VerplaatsNaarKnop } from "@/components/VerplaatsNaarKnop";
 import { OverslaanKnop } from "@/components/OverslaanKnop";
+import { DagAdresDialog } from "@/components/DagAdresDialog";
 import {
   fetchCustomers,
   fetchDistricts,
@@ -27,11 +28,19 @@ import {
   formatNumber,
   formatPrice,
   noteVoorMaand,
+  prijsVoorMaand,
   sortCustomers,
   wijkKleur,
   type Customer,
 } from "@/lib/klanten";
-import { fetchWasdag, haalUitWasdag, toonDatum, vandaag, voegToeAanWasdag } from "@/lib/wasdag";
+import {
+  fetchWasdag,
+  haalUitWasdag,
+  toonDatum,
+  vandaag,
+  voegToeAanWasdag,
+  werkWasdagRegelBij,
+} from "@/lib/wasdag";
 import { fetchKlussen, telDagVan, vinkKlusAf, zetKlusOpDag, type Klus } from "@/lib/klussen";
 import { Checkbox } from "@/components/ui/checkbox";
 import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
@@ -92,6 +101,12 @@ interface Straat {
   klanten: Customer[];
   bedrag: number;
   klantIds: string[];
+}
+
+/** Wat er op de regel van deze dag staat: het bedrag en wat er anders ging. */
+interface DagRegel {
+  prijs: number;
+  notitie: string | null;
 }
 
 /**
@@ -216,7 +231,9 @@ function DagPagina() {
     const straat = new Map((streetsQuery.data ?? []).map((s) => [s.id, s]));
     const wijkIndex = new Map((districtsQuery.data ?? []).map((d, i) => [d.id, i]));
     const wijkNaam = new Map((districtsQuery.data ?? []).map((d) => [d.id, d.name]));
-    const prijsVan = new Map(regels.map((r) => [r.customer_id, Number(r.prijs)]));
+    const regelVan = new Map<string | null, DagRegel>(
+      regels.map((r) => [r.customer_id, { prijs: Number(r.prijs), notitie: r.notitie ?? null }]),
+    );
 
     // Hoeveel straten telt een subgroep in totaal? Daar meten we "compleet"
     // aan af, dus dat komt van de stratenlijst en niet van de dag.
@@ -338,7 +355,7 @@ function DagPagina() {
         };
       });
 
-    return { wijken: wijkenUit, kwijt, prijsVan, idsVan };
+    return { wijken: wijkenUit, kwijt, regelVan, idsVan };
   }, [
     wasdagQuery.data,
     customersQuery.data,
@@ -530,7 +547,8 @@ function DagPagina() {
 
     const regelsMee = ids.map((id) => ({
       customer_id: id,
-      prijs: perWijk.prijsVan.get(id) ?? 0,
+      prijs: perWijk.regelVan.get(id)?.prijs ?? 0,
+      notitie: perWijk.regelVan.get(id)?.notitie ?? null,
     }));
 
     setBezig(true);
@@ -602,6 +620,50 @@ function DagPagina() {
     () => (customersQuery.data ?? []).filter((c) => keuze.has(c.id)),
     [customersQuery.data, keuze],
   );
+
+  /**
+   * Het adres waar je op klikte. Buiten de selecteerstand opent dat het
+   * schermpje van die dag: wat er vast bij het adres hoort, en wat er die
+   * keer anders ging.
+   */
+  const [bewerkt, setBewerkt] = useState<{ customer: Customer; straat: string } | null>(null);
+
+  /**
+   * Het bedrag en de notitie van deze ene dag opslaan. De vaste prijs van het
+   * adres blijft staan: een keer alleen de voorkant hoort de volgende ronde
+   * niet goedkoper te maken.
+   */
+  async function bewaarDag(c: Customer, prijs: number, notitie: string | null) {
+    const oud = perWijk.regelVan.get(c.id);
+    if (!oud) return;
+    if (oud.prijs === prijs && (oud.notitie ?? null) === notitie) return;
+    try {
+      await werkWasdagRegelBij(datum, c.id, { prijs, notitie });
+    } catch (e) {
+      toast.error("Opslaan mislukt: " + (e as Error).message);
+      return;
+    }
+    pushUndo({
+      label: `${formatNumber(c)} op ${toonDatum(datum)}`,
+      undo: async () => {
+        await werkWasdagRegelBij(datum, c.id, { prijs: oud.prijs, notitie: oud.notitie });
+        qc.invalidateQueries({ queryKey: ["wasdag"] });
+        qc.invalidateQueries({ queryKey: ["wasdagen"] });
+      },
+    });
+    qc.invalidateQueries({ queryKey: ["wasdag"] });
+    qc.invalidateQueries({ queryKey: ["wasdagen"] });
+    toast.success(`Bijgewerkt voor ${toonDatum(datum)}`, {
+      action: {
+        label: "Ongedaan maken",
+        onClick: () => {
+          void undoLaatste().then((label) => {
+            if (label) toast.success("Teruggedraaid: " + label);
+          });
+        },
+      },
+    });
+  }
 
   async function doeUndo() {
     const label = await undoLaatste();
@@ -796,7 +858,8 @@ function DagPagina() {
                           key={s.id}
                           straat={s}
                           maand={maand}
-                          prijsVan={perWijk.prijsVan}
+                          regelVan={perWijk.regelVan}
+                          onAdres={setBewerkt}
                           selecteren={selecteren}
                           keuze={keuze}
                           vakKnop={vakKnop}
@@ -809,7 +872,8 @@ function DagPagina() {
                       <StraatRij
                         straat={b.straat}
                         maand={maand}
-                        prijsVan={perWijk.prijsVan}
+                        regelVan={perWijk.regelVan}
+                        onAdres={setBewerkt}
                         selecteren={selecteren}
                         keuze={keuze}
                         vakKnop={vakKnop}
@@ -887,6 +951,21 @@ function DagPagina() {
             </section>
           )}
 
+          <DagAdresDialog
+            open={bewerkt !== null}
+            onOpenChange={(v) => {
+              if (!v) setBewerkt(null);
+            }}
+            customer={bewerkt?.customer ?? null}
+            straat={bewerkt?.straat ?? ""}
+            datum={datum}
+            prijs={bewerkt ? (perWijk.regelVan.get(bewerkt.customer.id)?.prijs ?? 0) : 0}
+            notitie={bewerkt ? (perWijk.regelVan.get(bewerkt.customer.id)?.notitie ?? null) : null}
+            onOpslaan={(prijs, notitie) => {
+              if (bewerkt) void bewaarDag(bewerkt.customer, prijs, notitie);
+            }}
+          />
+
           {perWijk.kwijt > 0 && (
             <p className="text-[13px] text-muted-foreground">
               {perWijk.kwijt} {perWijk.kwijt === 1 ? "adres is" : "adressen zijn"} intussen
@@ -943,18 +1022,21 @@ function GroepKop({
 function StraatRij({
   straat,
   maand,
-  prijsVan,
+  regelVan,
   selecteren,
   keuze,
   vakKnop,
+  onAdres,
   inspringen = false,
 }: {
   straat: Straat;
   maand: string;
-  prijsVan: Map<string | null, number>;
+  regelVan: Map<string | null, DagRegel>;
   selecteren: boolean;
   keuze: Set<string>;
   vakKnop: (vak: string) => Knop;
+  /** Klikken buiten de selecteerstand opent het schermpje van dit adres. */
+  onAdres: (keuze: { customer: Customer; straat: string }) => void;
   /** Staat hij onder een groepskop? Dan een streepje naar binnen. */
   inspringen?: boolean;
 }) {
@@ -987,7 +1069,17 @@ function StraatRij({
           // De notitie zoals hij die maand geldt, dus inclusief het werk dat er
           // alleen in bepaalde maanden bij komt.
           const notitie = noteVoorMaand(c, maand);
-          const { className: rijKnop, ...rijRest } = vakKnop(`c:${c.id}`);
+          const regel = regelVan.get(c.id);
+          // Wat er die dag anders ging gaat vóór de vaste notitie: dát is wat
+          // je onderweg moet weten, en het bedrag ernaast hoort erbij.
+          const anders = regel?.notitie?.trim() ?? "";
+          const aangepast = anders !== "" || (regel && regel.prijs !== prijsVoorMaand(c, maand));
+          const { className: rijKnop, ...rijRest } = selecteren
+            ? vakKnop(`c:${c.id}`)
+            : {
+                onClick: () => onAdres({ customer: c, straat: straat.naam }),
+                className: "cursor-pointer hover:bg-accent/40",
+              };
           return (
             <li
               key={c.id}
@@ -1003,8 +1095,14 @@ function StraatRij({
                 />
               )}
               <span className="w-10 shrink-0 font-medium tabular-nums">{formatNumber(c)}</span>
-              <span className="min-w-0 flex-1 truncate text-muted-foreground">{notitie}</span>
-              <span className="tabular-nums">{formatPrice(prijsVan.get(c.id) ?? c.price)}</span>
+              <span
+                className={`min-w-0 flex-1 truncate ${anders ? "italic text-foreground" : "text-muted-foreground"}`}
+              >
+                {anders || notitie}
+              </span>
+              <span className={`tabular-nums ${aangepast ? "font-medium" : ""}`}>
+                {formatPrice(regel?.prijs ?? c.price)}
+              </span>
             </li>
           );
         })}

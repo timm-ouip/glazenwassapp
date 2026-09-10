@@ -96,7 +96,14 @@ export function AppLayout({
           </div>
         </header>
         {actiePositie === "boven" && balk}
-        {kop && <div className="px-6 pt-4">{kop}</div>}
+        {/* Komt er een knoppenbalk onder de cijferkaarten, dan zorgt die voor
+            de ruimte eronder. Anders zouden de kaarten tegen de inhoud aan
+            plakken: erboven lucht, eronder niets. */}
+        {kop && (
+          <div className={`px-6 pt-4 ${acties && actiePositie === "onder" ? "" : "pb-4"}`}>
+            {kop}
+          </div>
+        )}
         {actiePositie === "onder" && balk}
         <main className="min-w-0 flex-1 px-6 pb-4">{children}</main>
       </div>

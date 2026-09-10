@@ -950,10 +950,14 @@ export function formatNumber(c: Customer) {
 
 export function formatPrice(value: number) {
   const n = Number(value ?? 0);
+  // Ronde bedragen zonder centen — een lijst met "€ 35,00" achter elke regel
+  // leest slechter dan "€ 35". Zitten er wel centen in, dan altijd twee
+  // cijfers: "€ 20,5" is geen bedrag.
+  const centen = Math.round(n * 100) % 100 !== 0;
   return new Intl.NumberFormat("nl-NL", {
     style: "currency",
     currency: "EUR",
-    minimumFractionDigits: 0,
+    minimumFractionDigits: centen ? 2 : 0,
     maximumFractionDigits: 2,
   }).format(n);
 }
