@@ -633,7 +633,8 @@ function Planning() {
   }, [customersQuery.data, streetsQuery.data]);
 
   /** Een lijst die al op wijk staat in groepjes, met een kopje per wijk.
-   *  Binnen een wijk op straat en huisnummer, zodat De Slufter bij elkaar staat. */
+   *  Binnen een wijk eerst wat al op een dag staat (op datum), dan wat bleef
+   *  liggen, dan de rest — steeds op straat en huisnummer. */
   function perWijkGroep(lijst: Klus[]) {
     const groepen: { wijkId: string; naam: string; kleur: string; klussen: Klus[] }[] = [];
     for (const k of lijst) {
@@ -651,9 +652,13 @@ function Planning() {
       }
       groep.klussen.push(k);
     }
+    const rang = (k: Klus) => (telDagVan(k) !== null ? 0 : blijvenLiggen(k) ? 1 : 2);
     for (const g of groepen) {
-      g.klussen.sort((a, b) =>
-        adresVan(a).localeCompare(adresVan(b), "nl", { numeric: true }),
+      g.klussen.sort(
+        (a, b) =>
+          rang(a) - rang(b) ||
+          (rang(a) === 0 ? (a.gepland_op ?? "").localeCompare(b.gepland_op ?? "") : 0) ||
+          adresVan(a).localeCompare(adresVan(b), "nl", { numeric: true }),
       );
     }
     return groepen;
