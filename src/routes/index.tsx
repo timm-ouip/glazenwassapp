@@ -2653,6 +2653,9 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
 
   // De rechtermuisknop hangt om de hele regel: kleur, overslaan en het
   // dossier zitten daarin, want in de regel zelf is er geen plek voor.
+  // Zolang het menu open is krijgt de regel een rand (het menu zet daarvoor
+  // data-state="open" op de regel): anders zie je niet over welk adres het
+  // menu gaat. Een rand en geen vlak, want het vlak is al de kleur van de regel.
   return (
     <KlantMenu
       customer={c}
@@ -2664,7 +2667,7 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
     >
       <KlantRijSleep
         id={`c:${c.id}`}
-        className={`group relative flex items-center gap-0.5 rounded-[9px] px-0.5 ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond} ${!p.geselecteerd && !achtergrond ? "hover:bg-muted/70" : ""}`}
+        className={`group relative flex items-center gap-0.5 rounded-[9px] px-0.5 ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond} ${!p.geselecteerd && !achtergrond ? "hover:bg-muted/70" : ""} data-[state=open]:ring-2 data-[state=open]:ring-inset data-[state=open]:ring-foreground/60`}
         verfKlant={p.planmodus ? c.id : undefined}
         onGreep={p.planmodus ? null : (e) => p.onSelect(c, e.shiftKey)}
       >

@@ -7,7 +7,7 @@ import {
   Flag,
   Hammer,
 } from "lucide-react";
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useRef, useState, type ReactNode } from "react";
 
 import {
   ContextMenu,
@@ -85,21 +85,50 @@ export function KlantMenu({
     onPatch({ markering: c.markering === kleur ? "" : kleur });
   }
 
+  // De maanden die je in "Overslaan in…" aanvinkt, bewaren we pas als het
+  // menu dichtgaat. Sla je de maand over die in beeld staat, dan verdwijnt
+  // het adres uit de lijst — en het menu met hem, nog voor je een tweede
+  // maand kon aanvinken. Een ref ernaast, want het sluiten komt in dezelfde
+  // klik als een ander menu-item en ziet de state dan nog niet.
+  const [wachtend, setWachtend] = useState<string[] | null>(null);
+  const wachtendRef = useRef<string[] | null>(null);
+  const overslaan = wachtend ?? c.overslaan;
+
+  function zetWachtend(lijst: string[] | null) {
+    wachtendRef.current = lijst;
+    setWachtend(lijst);
+  }
+
+  function vinkMaand(maand: string) {
+    const aan = overslaan.includes(maand);
+    zetWachtend(aan ? overslaan.filter((m) => m !== maand) : [...overslaan, maand].sort());
+  }
+
   function wisselMaand(maand: string) {
-    const aan = c.overslaan.includes(maand);
+    const aan = overslaan.includes(maand);
+    zetWachtend(null);
     onPatch({
-      overslaan: aan ? c.overslaan.filter((m) => m !== maand) : [...c.overslaan, maand].sort(),
+      overslaan: aan ? overslaan.filter((m) => m !== maand) : [...overslaan, maand].sort(),
     });
   }
 
   /** Alles t/m deze maand overslaan — voor een langere pauze in één klik. */
   function slaOverTot(maand: string) {
     const tot = maanden.filter((m) => m <= maand);
-    onPatch({ overslaan: [...new Set([...c.overslaan, ...tot])].sort() });
+    zetWachtend(null);
+    onPatch({ overslaan: [...new Set([...overslaan, ...tot])].sort() });
+  }
+
+  function menuOpenDicht(open: boolean) {
+    if (open || !wachtendRef.current) return;
+    const lijst = wachtendRef.current;
+    zetWachtend(null);
+    // Niets veranderd (twee keer dezelfde maand geklikt)? Dan ook niets opslaan.
+    if (lijst.join() !== c.overslaan.join()) onPatch({ overslaan: lijst });
   }
 
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChange={menuOpenDicht}>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="w-60">
         <ContextMenuItem onSelect={onDossier}>
@@ -113,7 +142,7 @@ export function KlantMenu({
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => wisselMaand(komende)}>
           <CalendarOff className="size-4" />
-          {c.overslaan.includes(komende) ? `${toonMaand(komende)} toch doen` : "Overslaan"}
+          {overslaan.includes(komende) ? `${toonMaand(komende)} toch doen` : "Overslaan"}
         </ContextMenuItem>
 
         <ContextMenuSub>
@@ -125,11 +154,11 @@ export function KlantMenu({
               <Fragment key={m}>
                 {jaarwissel(m, i) && <ContextMenuSeparator />}
                 <ContextMenuCheckboxItem
-                  checked={c.overslaan.includes(m)}
+                  checked={overslaan.includes(m)}
                   onSelect={(e) => {
                     // Openhouden: meestal vink je er meer dan één aan.
                     e.preventDefault();
-                    wisselMaand(m);
+                    vinkMaand(m);
                   }}
                 >
                   <span className="capitalize">{toonMaand(m)}</span>
@@ -157,9 +186,14 @@ export function KlantMenu({
           </ContextMenuSubContent>
         </ContextMenuSub>
 
-        {c.overslaan.length > 0 && (
-          <ContextMenuItem onSelect={() => onPatch({ overslaan: [] })}>
-            <CircleSlash className="size-4" /> Niets meer overslaan ({c.overslaan.length})
+        {overslaan.length > 0 && (
+          <ContextMenuItem
+            onSelect={() => {
+              zetWachtend(null);
+              onPatch({ overslaan: [] });
+            }}
+          >
+            <CircleSlash className="size-4" /> Niets meer overslaan ({overslaan.length})
           </ContextMenuItem>
         )}
 
