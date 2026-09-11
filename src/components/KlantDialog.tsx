@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,10 @@ interface Props {
   streets: Street[];
   customer: Customer | null;
   defaultStreetId?: string | undefined;
+  /** Het nummer dat je al in "+ adres" typte; dan staat de cursor meteen bij de prijs. */
+  defaultNumber?: string | undefined;
+  /** Plek in de straat voor een nieuw adres: achteraan, zoals je hem intypt. */
+  nieuweSortOrder?: number | undefined;
   quickNotes: QuickNote[];
   onAddQuickNote: (label: string) => void;
   onSaved: () => void;
@@ -49,6 +53,8 @@ export function KlantDialog({
   streets,
   customer,
   defaultStreetId,
+  defaultNumber,
+  nieuweSortOrder,
   quickNotes,
   onAddQuickNote,
   onSaved,
@@ -59,23 +65,36 @@ export function KlantDialog({
   const [addition, setAddition] = useState("");
   const [note, setNote] = useState("");
   const [price, setPrice] = useState("");
-  const [ritme, setRitme] = useState<BasisRitme | "anders">("elke");
+  // Leeg bij een nieuw adres: de frequentie kies je zelf, anders staat er
+  // ongemerkt "elke maand" op een adres dat om de twee moet.
+  const [ritme, setRitme] = useState<BasisRitme | "anders" | "">("");
   const [saving, setSaving] = useState(false);
+  const prijsRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setStreetId(customer?.street_id ?? defaultStreetId ?? streets[0]?.id ?? "");
-    setNumber(customer ? String(customer.house_number) : "");
+    setNumber(customer ? String(customer.house_number) : (defaultNumber ?? ""));
     setAddition(customer?.addition ?? "");
     setNote(customer?.note ?? "");
     setPrice(customer ? String(customer.price) : "");
-    setRitme(customer ? basisRitmeVan(customer) : "elke");
-  }, [open, customer, defaultStreetId, streets]);
+    setRitme(customer ? basisRitmeVan(customer) : "");
+  }, [open, customer, defaultStreetId, defaultNumber, streets]);
 
   async function save() {
     const huisnummer = parseInt(number, 10);
     if (!streetId || Number.isNaN(huisnummer)) {
       toast.error("Kies een straat en vul een huisnummer in.");
+      return;
+    }
+    const prijs = Number(price.trim().replace(",", "."));
+    if (price.trim() === "" || Number.isNaN(prijs)) {
+      toast.error("Vul een prijs in.");
+      prijsRef.current?.focus();
+      return;
+    }
+    if (ritme === "") {
+      toast.error("Kies een frequentie.");
       return;
     }
     setSaving(true);
@@ -85,10 +104,11 @@ export function KlantDialog({
       house_number: huisnummer,
       addition: addition.trim(),
       note: note.trim(),
-      price: price.trim() === "" ? 0 : Number(price.replace(",", ".")),
+      price: prijs,
       // Bij "anders" laten we het ritme staan: dat stel je in de wijklijst in,
       // waar de maanden erbij staan.
       ...(basis ? { interval_maanden: basis.interval_maanden, ritme: basis.ritme } : {}),
+      ...(!customer && nieuweSortOrder !== undefined ? { sort_order: nieuweSortOrder } : {}),
     };
     const { error } = customer
       ? await supabase.from("customers").update(payload).eq("id", customer.id)
@@ -108,6 +128,13 @@ export function KlantDialog({
       <DialogContent
         className="max-h-[90vh] overflow-y-auto sm:max-w-md"
         onKeyDown={opslaanBijEnter(save)}
+        onOpenAutoFocus={(e) => {
+          // Kwam je via "+ adres", dan staan straat en nummer er al: begin bij de prijs.
+          if (!customer && defaultNumber) {
+            e.preventDefault();
+            prijsRef.current?.focus();
+          }
+        }}
       >
         <DialogHeader>
           <DialogTitle>{customer ? "Klant bewerken" : "Klant toevoegen"}</DialogTitle>
@@ -204,6 +231,7 @@ export function KlantDialog({
               <Label htmlFor="prijs">Prijs (€)</Label>
               <Input
                 id="prijs"
+                ref={prijsRef}
                 inputMode="decimal"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
@@ -213,7 +241,7 @@ export function KlantDialog({
               <Label>Frequentie</Label>
               <Select value={ritme} onValueChange={(v) => setRitme(v as BasisRitme)}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Kies…" />
                 </SelectTrigger>
                 <SelectContent>
                   {BASISRITMES.map((b) => (

@@ -233,6 +233,9 @@ function Index() {
     open: boolean;
     customer: Customer | null;
     streetId?: string;
+    /** Getypt in "+ adres". */
+    nummer?: string;
+    sortOrder?: number;
   }>({
     open: false,
     customer: null,
@@ -874,8 +877,11 @@ function Index() {
   }
 
   async function verwijderKlant(c: Customer) {
+    // Met de straat erbij: "Klant 8" zegt niet welke 8, en elke straat heeft er een.
+    const straat = streets.find((s) => s.id === c.street_id)?.name;
+    const adres = straat ? `${straat} ${formatNumber(c)}` : `Klant ${formatNumber(c)}`;
     const ja = await bevestig({
-      titel: `Klant ${formatNumber(c)} verwijderen?`,
+      titel: `${adres} verwijderen?`,
       tekst: "Je kunt dit direct daarna nog ongedaan maken.",
       gevaarlijk: true,
     });
@@ -887,14 +893,14 @@ function Index() {
       return;
     }
     pushUndo({
-      label: `Verwijderen ${formatNumber(c)}`,
+      label: `Verwijderen ${adres}`,
       undo: async () => {
         await haalTerug("customers", [c.id]);
         herlaad();
       },
     });
     herlaad();
-    meldUndo(`Klant ${formatNumber(c)} verwijderd`);
+    meldUndo(`${adres} verwijderd`);
   }
 
   async function verwijderStraat(s: Street) {
@@ -1028,33 +1034,19 @@ function Index() {
     meldUndo(`Groep "${groep.naam}" verwijderd`);
   }
 
-  async function nieuweRegel(streetId: string, nummer: string) {
-    const huisnummer = parseInt(nummer, 10);
-    if (Number.isNaN(huisnummer)) return;
+  /**
+   * "+ adres": niet meteen een kaal nummer wegschrijven, maar het schermpje
+   * openen met straat en nummer al ingevuld. Een adres zonder prijs en
+   * frequentie is niet af — en een oneven nummer springt naar de andere
+   * kolom, dus dan ben je hem kwijt voor je hem kon aanvullen.
+   */
+  function nieuweRegel(streetId: string, nummer: string) {
+    if (Number.isNaN(parseInt(nummer, 10))) return;
     const max = Math.max(
       0,
       ...customers.filter((c) => c.street_id === streetId).map((c) => c.sort_order),
     );
-    const { data, error } = await supabase
-      .from("customers")
-      .insert({ street_id: streetId, house_number: huisnummer, sort_order: max + 1 })
-      .select("id")
-      .single();
-    if (error) {
-      toast.error("Toevoegen mislukt: " + error.message);
-      return;
-    }
-    const nieuwId = (data as { id: string } | null)?.id;
-    if (nieuwId) {
-      pushUndo({
-        label: `Toevoegen nr ${huisnummer}`,
-        undo: async () => {
-          await supabase.from("customers").delete().eq("id", nieuwId);
-          herlaad();
-        },
-      });
-    }
-    qc.invalidateQueries({ queryKey: ["customers"] });
+    setKlantDialog({ open: true, customer: null, streetId, nummer, sortOrder: max + 1 });
   }
 
   async function nieuweStraat(naam: string) {
@@ -1757,6 +1749,8 @@ function Index() {
         streets={streets}
         customer={klantDialog.customer}
         defaultStreetId={klantDialog.streetId}
+        defaultNumber={klantDialog.nummer}
+        nieuweSortOrder={klantDialog.sortOrder}
         quickNotes={quickNotes}
         onAddQuickNote={nieuweSnelkeuze}
         onSaved={herlaad}
