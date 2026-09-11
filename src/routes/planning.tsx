@@ -64,6 +64,7 @@ import {
   type District,
 } from "@/lib/klanten";
 import { meetTempo, stelVoor, werkPerWijk, type Voorstel } from "@/lib/wijkritme";
+import { laatsteWijk } from "@/lib/wijkgeheugen";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -405,11 +406,36 @@ function Planning() {
   );
 
   /**
-   * De opdrachten die nog openstaan, in twee groepjes: wat aan de beurt is
-   * omdat die wijk deze maand een dag heeft, en wat nog op zo'n dag wacht.
+   * De wijk waar je nu zit: die van de laatste werkdag t/m vandaag. Rijd je
+   * die dag twee wijken, dan telt die met de meeste adressen. Is er nog niets
+   * gewassen, dan de wijk die je het laatst open had, anders de eerste.
+   */
+  const wijkNu = useMemo(() => {
+    const alles = [...(historieQuery.data ?? []), ...regels].filter((r) => r.datum <= nu);
+    const laatsteDag = alles.reduce((max, r) => (r.datum > max ? r.datum : max), "");
+    const telling = new Map<string, number>();
+    for (const r of alles) {
+      if (r.datum !== laatsteDag || !r.customer_id) continue;
+      const w = wijkVanKlant.get(r.customer_id);
+      if (w) telling.set(w, (telling.get(w) ?? 0) + 1);
+    }
+    const drukste = [...telling].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const bewaard = laatsteWijk();
+    return (
+      drukste ??
+      (bewaard && wijkInfo.has(bewaard) ? bewaard : null) ??
+      districtsQuery.data?.[0]?.id ??
+      null
+    );
+  }, [historieQuery.data, regels, nu, wijkVanKlant, wijkInfo, districtsQuery.data]);
+
+  /**
+   * De opdrachten die nog openstaan, per wijk: eerst de wijk waar je nu zit,
+   * dan de wijken die daarna komen in de ronde — na de laatste wijk begint het
+   * weer vooraan. Binnen een wijk eerst wat bleef liggen (het werk dat je
+   * bijna vergat), dan wat op een dag staat, dan de rest.
    *
-   * Een opdracht die op een dag staat die geweest is zonder dat je hem
-   * afvinkte, staat weer bovenaan: die is van die dag af.
+   * Wat nog op een dag in die wijk wacht, staat apart en ingeklapt.
    */
   const strook = useMemo(() => {
     const wijkenMetDag = new Set<string>();
@@ -417,18 +443,30 @@ function Planning() {
       if (datum < sleutel(startOfMonth(maand)) || datum > sleutel(endOfMonth(maand))) continue;
       for (const w of dag.wijken) wijkenMetDag.add(w);
     }
-    const open = klussen.filter((k) => staatOpen(k) && telDagVan(k) === null);
-    const opDagen = klussen.filter((k) => staatOpen(k) && telDagVan(k) !== null);
-    const aanDeBeurt: Klus[] = [];
+
+    const aantalWijken = Math.max(1, wijkInfo.size);
+    const startIndex = wijkNu ? (wijkInfo.get(wijkNu)?.index ?? 0) : 0;
+    /** Hoeveel wijken verderop in de ronde; onbekend achteraan. */
+    const plekInRonde = (k: Klus) => {
+      const index = wijkInfo.get(wijkVanKlant.get(k.customer_id) ?? "")?.index;
+      return index === undefined ? aantalWijken : (index - startIndex + aantalWijken) % aantalWijken;
+    };
+    const binnenWijk = (k: Klus) => (blijvenLiggen(k) ? 0 : telDagVan(k) !== null ? 1 : 2);
+    const opVolgorde = (a: Klus, b: Klus) =>
+      plekInRonde(a) - plekInRonde(b) ||
+      binnenWijk(a) - binnenWijk(b) ||
+      (a.gepland_op ?? "").localeCompare(b.gepland_op ?? "");
+
+    const lijst: Klus[] = [];
     const wachten: Klus[] = [];
-    for (const k of open) {
+    for (const k of klussen) {
+      if (!staatOpen(k)) continue;
       const wijkId = wijkVanKlant.get(k.customer_id);
-      (wijkId && wijkenMetDag.has(wijkId) ? aanDeBeurt : wachten).push(k);
+      const heeftDag = telDagVan(k) !== null || (wijkId && wijkenMetDag.has(wijkId));
+      (heeftDag ? lijst : wachten).push(k);
     }
-    // Blijven liggen staat vooraan: dat is het werk dat je bijna vergat.
-    aanDeBeurt.sort((a, b) => Number(blijvenLiggen(b)) - Number(blijvenLiggen(a)));
-    return { aanDeBeurt, wachten, ingedeeld: opDagen };
-  }, [klussen, perDag, wijkVanKlant, maand]);
+    return { lijst: lijst.sort(opVolgorde), wachten: wachten.sort(opVolgorde) };
+  }, [klussen, perDag, wijkVanKlant, wijkInfo, wijkNu, maand]);
 
   async function zetOpDag(k: Klus, datum: string | null) {
     const vorige = k.gepland_op;
@@ -1189,27 +1227,15 @@ function Planning() {
               </button>
             </div>
 
-            {strook.aanDeBeurt.length === 0 &&
-              strook.wachten.length === 0 &&
-              strook.ingedeeld.length === 0 && (
-                <p className="text-[12.5px] opacity-75">
-                  Niets openstaand. Werk dat niet aan een maand vastzit — een dakrand, een goot —
-                  noteer je bij het adres, en het komt hier terug zodra die wijk een dag heeft.
-                </p>
-              )}
-
-            {strook.aanDeBeurt.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-[11.5px] font-medium opacity-70">Nu aan de beurt</p>
-                {strook.aanDeBeurt.map((k) => klusRegel(k))}
-              </div>
+            {strook.lijst.length === 0 && strook.wachten.length === 0 && (
+              <p className="text-[12.5px] opacity-75">
+                Niets openstaand. Werk dat niet aan een maand vastzit — een dakrand, een goot —
+                noteer je bij het adres, en het komt hier terug zodra die wijk een dag heeft.
+              </p>
             )}
 
-            {strook.ingedeeld.length > 0 && (
-              <div className="mt-3 space-y-1.5">
-                <p className="text-[11.5px] font-medium opacity-70">Staat op een dag</p>
-                {strook.ingedeeld.map((k) => klusRegel(k))}
-              </div>
+            {strook.lijst.length > 0 && (
+              <div className="space-y-1.5">{strook.lijst.map((k) => klusRegel(k))}</div>
             )}
 
             {strook.wachten.length > 0 && (
@@ -1309,15 +1335,20 @@ function Planning() {
               )}
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-5 flex flex-col gap-2">
               {/* De dag zelf: welke huisnummers je langsgaat, en de printlijst
                 van precies dat deel van de wijk. */}
-              <Button size="sm" className="rounded-full" asChild>
+              <Button size="sm" className="w-full justify-start rounded-full" asChild>
                 <Link to="/dag" search={{ datum: gekozenDag }}>
                   <ListChecks className="size-4" /> Dagplanning
                 </Link>
               </Button>
-              <Button size="sm" variant="outline" className="rounded-full" asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full justify-start rounded-full"
+                asChild
+              >
                 <Link to="/" search={{ dag: gekozenDag }}>
                   <Euro className="size-4" /> Werk inplannen
                 </Link>
@@ -1326,7 +1357,7 @@ function Planning() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-full"
+                  className="w-full justify-start rounded-full"
                   onClick={() => void maakDagLeeg()}
                 >
                   <Eraser className="size-4" /> Dag leegmaken
