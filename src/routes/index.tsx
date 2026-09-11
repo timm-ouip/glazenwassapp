@@ -1540,7 +1540,7 @@ function Index() {
     >
       <div className="space-y-3">
         <div className="sticky top-[var(--plakrand)] z-[9] -mx-6 flex flex-wrap items-center gap-3 border-b border-border/70 bg-background/85 px-6 py-2 backdrop-blur">
-          <div className="inline-flex gap-0.5 rounded-full border border-border bg-card p-[3px]">
+          <div className="inline-flex gap-0.5 rounded-full bg-card p-[3px] shadow-card">
             {/* Dezelfde keuze als op de printlijst: wat je hier ziet is wat je
                 straks meeneemt. */}
             <DropdownMenu>
@@ -2092,7 +2092,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
     <section
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`mb-3 break-inside-avoid-column overflow-hidden rounded-[18px] border border-border bg-card p-1.5 shadow-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
+      className={`mb-3 break-inside-avoid-column overflow-hidden rounded-[18px] bg-card p-1.5 shadow-card transition-shadow ${isDragging ? "opacity-50" : ""}`}
     >
       {/* Rechtermuisknop op de straatkop: hierin zit alles wat met
           groepen te maken heeft. Dat hoort niet in de kop zelf — die is al

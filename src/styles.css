@@ -237,7 +237,7 @@
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.7 0.09 250);
   /* Schaduw doet in het donker niets; een dun randje licht wel. */
-  --shadow-card: 0 0 0 1px oklch(1 0 0 / 6%);
+  --shadow-card: 0 0 0 1px oklch(1 0 0 / 10%);
 
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);

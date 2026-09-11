@@ -68,7 +68,7 @@ export function ZoekBalk({
   return (
     <div
       className={cn(
-        "relative flex min-h-9 w-full flex-wrap items-center gap-1 rounded-full border border-input bg-card py-1 pl-9 pr-3 text-sm focus-within:ring-1 focus-within:ring-ring sm:w-56",
+        "relative flex min-h-9 w-full flex-wrap items-center gap-1 rounded-full bg-card py-1 pl-9 pr-3 text-sm shadow-card focus-within:ring-1 focus-within:ring-ring sm:w-56",
         className,
       )}
       onClick={() => invoer.current?.focus()}
