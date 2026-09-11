@@ -2579,7 +2579,7 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
       {!planmodus && (
         <>
           <Overgeslagen customer={c} />
-          <WassenVanaf customer={c} onPatch={(patch) => onPatch(c, patch)} />
+          <WassenVanaf customer={c} ronde={dezeMaand} onPatch={(patch) => onPatch(c, patch)} />
         </>
       )}
       {prijzenTonen && (

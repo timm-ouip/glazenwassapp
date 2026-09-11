@@ -31,6 +31,16 @@ import {
 } from "@/lib/klanten";
 import { Plus } from "lucide-react";
 import { opslaanBijEnter } from "@/lib/dialoog";
+import { eersteBeurtVanaf, maandSleutel } from "@/lib/klanten";
+
+function startMaandVoorNieuw(ritme: {
+  interval_maanden: number;
+  ritme: number;
+}): { start_maand?: string } {
+  const dezeMaand = maandSleutel(new Date());
+  const start = eersteBeurtVanaf(dezeMaand, ritme);
+  return start === dezeMaand ? {} : { start_maand: start };
+}
 
 interface Props {
   open: boolean;
@@ -109,6 +119,10 @@ export function KlantDialog({
       // waar de maanden erbij staan.
       ...(basis ? { interval_maanden: basis.interval_maanden, ritme: basis.ritme } : {}),
       ...(!customer && nieuweSortOrder !== undefined ? { sort_order: nieuweSortOrder } : {}),
+      // Een nieuw adres begint in de eerste maand van zijn ritme: maak je in
+      // september een adres voor de even maanden, dan is hij pas in oktober
+      // nieuw. Valt deze maand al in het ritme, dan hoeft er niets vast.
+      ...(!customer && basis ? startMaandVoorNieuw(basis) : {}),
     };
     const { error } = customer
       ? await supabase.from("customers").update(payload).eq("id", customer.id)

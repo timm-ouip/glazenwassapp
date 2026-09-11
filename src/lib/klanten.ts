@@ -808,6 +808,27 @@ export function eersteMaand(c: Pick<Customer, "start_maand" | "created_at">): st
 }
 
 /**
+ * De eerste maand vanaf `maand` die in het ritme van dit adres valt. Voor
+ * een nieuw adres: een adres voor de even maanden dat je in september maakt,
+ * begint in oktober — en is dus ook pas in oktober nieuw en groen.
+ *
+ * Dit rekenen we uit bij het aanmaken en zetten het vast als startmaand, en
+ * niet achteraf in eersteMaand: geïmporteerde vaste klanten hebben ook een
+ * aanmaakmaand buiten hun ritme, en die zijn niet nieuw.
+ */
+export function eersteBeurtVanaf(
+  maand: string,
+  c: Pick<Customer, "interval_maanden" | "ritme">,
+): string {
+  const beurten = ritmeMaanden(c);
+  // Hooguit een jaar vooruit: elk ritme heeft daarin een beurt.
+  for (let i = 0; i < 12 && !beurten.includes(Number(maand.slice(5, 7))); i++) {
+    maand = volgendeMaand(maand);
+  }
+  return maand;
+}
+
+/**
  * Hoort dit adres in deze ronde op de lijst? Nee als hij nog niet begonnen
  * is, en nee als je die maand hebt overgeslagen.
  */

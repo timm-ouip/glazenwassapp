@@ -21,22 +21,26 @@ import type { Customer } from "@/lib/klanten";
 
 interface Props {
   customer: Customer;
+  /** De maand die je bekijkt: daarin is hij "nieuw", en groen, of niet.
+   *  Zonder maand (de klantenpagina) is dat gewoon deze maand. */
+  ronde?: string;
   onPatch: (patch: Partial<Customer>) => void;
 }
 
 /**
  * De maand waarin dit adres voor het eerst meegaat, als hij nog niet begonnen
- * is. Een adres dat deze maand start kleurt in de lijst groen; zonder dit
- * badge is nergens te zien waaróm, of vanaf wanneer hij meedoet.
+ * is. In die maand kleurt de regel groen en staat hier "nieuw"; in de andere
+ * maanden zegt het badge grijs vanaf wanneer hij meedoet.
  *
  * Niets te melden zodra de startmaand achter ons ligt: dan doet hij gewoon
  * mee en zou het badge alleen ruimte kosten.
  */
-export function WassenVanaf({ customer: c, onPatch: ruwePatch }: Props) {
+export function WassenVanaf({ customer: c, ronde, onPatch: ruwePatch }: Props) {
   const onPatch = (p: Partial<Customer>) => ruwePatch(schuifStartOp(c, p));
   const dezeMaand = maandSleutel(new Date());
   const start = eersteMaand(c);
   if (start < dezeMaand) return null;
+  const nieuw = start === (ronde ?? dezeMaand);
 
   const maanden = komendeMaanden();
 
@@ -49,14 +53,12 @@ export function WassenVanaf({ customer: c, onPatch: ruwePatch }: Props) {
           title={`Wassen vanaf ${toonMaand(start)}`}
           aria-label="Wassen vanaf"
           className={`shrink-0 whitespace-nowrap rounded-full px-1.5 py-[2px] text-[10px] font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-            start === dezeMaand
+            nieuw
               ? "bg-tint-groen text-tint-groen-ink ring-1 ring-inset ring-tint-groen-ink/25"
               : "bg-muted text-muted-foreground"
           }`}
         >
-          {/* Zonder eigen startmaand begint hij in zijn aanmaakmaand — en dat
-              is, waar dit badge te zien is, altijd deze maand. */}
-          {c.start_maand ? `vanaf ${toonMaandKort(start)}` : "nieuw"}
+          {nieuw ? "nieuw" : `vanaf ${toonMaandKort(start)}`}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-72 w-48 overflow-y-auto">
