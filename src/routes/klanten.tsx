@@ -601,23 +601,18 @@ function Klanten() {
 
   return (
     <AppLayout
-      // Dezelfde opbouw als op de wijkenpagina: de kiespil erboven, de naam
-      // van de wijk eronder als kop.
+      // Dezelfde opbouw als op de wijkenpagina: de wijkkiezer is de titel.
       titel={
-        <h1 className="truncate font-sans text-[26px] font-medium leading-tight tracking-[-0.02em]">
-          {wijkVanNu?.name ?? "Kies een wijk"}
-        </h1>
-      }
-      actiePositie="onder"
-      kruimel={
         <WijkKiezer
-          variant="pil"
+          variant="titel"
           districts={districts}
           activeId={actieveWijk}
           onSelect={(id) => void navigate({ to: "/klanten", search: { wijk: id } })}
           onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
         />
       }
+      actiePositie="onder"
+      kruimel="Overzicht / Klanten"
       onderschrift={
         actieveWijk
           ? [

@@ -432,8 +432,7 @@ function Planning() {
   /**
    * De opdrachten die nog openstaan, per wijk: eerst de wijk waar je nu zit,
    * dan de wijken die daarna komen in de ronde — na de laatste wijk begint het
-   * weer vooraan. Binnen een wijk eerst wat bleef liggen (het werk dat je
-   * bijna vergat), dan wat op een dag staat, dan de rest.
+   * weer vooraan.
    *
    * Wat nog op een dag in die wijk wacht, staat apart en ingeklapt.
    */
@@ -451,11 +450,8 @@ function Planning() {
       const index = wijkInfo.get(wijkVanKlant.get(k.customer_id) ?? "")?.index;
       return index === undefined ? aantalWijken : (index - startIndex + aantalWijken) % aantalWijken;
     };
-    const binnenWijk = (k: Klus) => (blijvenLiggen(k) ? 0 : telDagVan(k) !== null ? 1 : 2);
-    const opVolgorde = (a: Klus, b: Klus) =>
-      plekInRonde(a) - plekInRonde(b) ||
-      binnenWijk(a) - binnenWijk(b) ||
-      (a.gepland_op ?? "").localeCompare(b.gepland_op ?? "");
+    // Binnen een wijk komen ze op adres; dat doet perWijkGroep hieronder.
+    const opVolgorde = (a: Klus, b: Klus) => plekInRonde(a) - plekInRonde(b);
 
     const lijst: Klus[] = [];
     const wachten: Klus[] = [];
@@ -635,6 +631,46 @@ function Planning() {
       return `${s?.name ?? "?"} ${formatNumber(c)}`;
     };
   }, [customersQuery.data, streetsQuery.data]);
+
+  /** Een lijst die al op wijk staat in groepjes, met een kopje per wijk.
+   *  Binnen een wijk op straat en huisnummer, zodat De Slufter bij elkaar staat. */
+  function perWijkGroep(lijst: Klus[]) {
+    const groepen: { wijkId: string; naam: string; kleur: string; klussen: Klus[] }[] = [];
+    for (const k of lijst) {
+      const wijkId = wijkVanKlant.get(k.customer_id) ?? "";
+      let groep = groepen[groepen.length - 1];
+      if (!groep || groep.wijkId !== wijkId) {
+        const info = wijkInfo.get(wijkId);
+        groep = {
+          wijkId,
+          naam: info?.naam ?? "Onbekende wijk",
+          kleur: info?.kleur ?? "transparent",
+          klussen: [],
+        };
+        groepen.push(groep);
+      }
+      groep.klussen.push(k);
+    }
+    for (const g of groepen) {
+      g.klussen.sort((a, b) =>
+        adresVan(a).localeCompare(adresVan(b), "nl", { numeric: true }),
+      );
+    }
+    return groepen;
+  }
+
+  /** Kopje met de wijknaam en daaronder zijn opdrachten. */
+  function klussenPerWijk(lijst: Klus[]) {
+    return perWijkGroep(lijst).map((g, i) => (
+      <div key={g.wijkId || "onbekend"} className={`space-y-1.5 ${i > 0 ? "mt-3" : ""}`}>
+        <p className="flex items-center gap-1.5 text-[11.5px] font-medium opacity-70">
+          <span className="size-2 rounded-full" style={{ background: g.kleur }} />
+          {g.naam}
+        </p>
+        {g.klussen.map((k) => klusRegel(k))}
+      </div>
+    ));
+  }
 
   /** De dag uitgesplitst per wijk, en daarbinnen per straat. */
   const perWijk = useMemo(() => {
@@ -1235,7 +1271,7 @@ function Planning() {
             )}
 
             {strook.lijst.length > 0 && (
-              <div className="space-y-1.5">{strook.lijst.map((k) => klusRegel(k))}</div>
+              <div>{klussenPerWijk(strook.lijst)}</div>
             )}
 
             {strook.wachten.length > 0 && (
@@ -1243,7 +1279,7 @@ function Planning() {
                 <summary className="cursor-pointer text-[11.5px] font-medium opacity-70">
                   Wacht op een dag in die wijk ({strook.wachten.length})
                 </summary>
-                <div className="mt-1.5 space-y-1.5">{strook.wachten.map((k) => klusRegel(k))}</div>
+                <div className="mt-1.5">{klussenPerWijk(strook.wachten)}</div>
               </details>
             )}
           </div>

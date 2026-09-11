@@ -11,9 +11,7 @@ type Props = {
   /** Meestal gewoon tekst. Een node mag ook: de wijkenpagina zet er de
    *  wijkkiezer neer, zodat je de wijk wisselt door op de titel te klikken. */
   titel: ReactNode;
-  /** Klein kruimelpad boven de titel, bijvoorbeeld "Overzicht / Klanten".
-   *  Mag ook een knopje zijn: op de wijkenpagina staat hier de wijkkiezer,
-   *  zodat de naam eronder groot kan staan. */
+  /** Klein kruimelpad boven de titel, bijvoorbeeld "Overzicht / Klanten". */
   kruimel?: ReactNode;
   onderschrift?: ReactNode;
   /** Knoppen rechtsboven: de besturing van deze pagina. */

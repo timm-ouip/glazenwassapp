@@ -1398,27 +1398,19 @@ function Index() {
 
   return (
     <AppLayout
-      // De titel ís de wijkkiezer: je wisselt van wijk door op de naam te
-      // klikken. Dat scheelt een keuzevak in de knoppenbalk eronder.
-      // De kiespil staat bóven de naam: wisselen doe je daar, en de naam
-      // eronder is gewoon de kop van wat je nu bekijkt. In een ander lettertype
-      // dan de rest van de koppen, want de wijk is geen paginanaam maar de
-      // inhoud zelf.
+      // De titel ís de wijkkiezer: de naam groot, met het pijltje erachter om
+      // te wisselen en de wijkknopjes ernaast.
       titel={
-        <h1 className="truncate font-sans text-[26px] font-medium leading-tight tracking-[-0.02em]">
-          {districts.find((d) => d.id === actieveWijk)?.name ?? "Kies een wijk"}
-        </h1>
-      }
-      actiePositie="onder"
-      kruimel={
         <WijkKiezer
-          variant="pil"
+          variant="titel"
           districts={districts}
           activeId={actieveWijk}
           onSelect={(id) => void navigate({ to: "/", search: (oud) => ({ ...oud, wijk: id }) })}
           onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
         />
       }
+      actiePositie="onder"
+      kruimel="Overzicht / Wijken"
       onderschrift={
         actieveWijk
           ? [
