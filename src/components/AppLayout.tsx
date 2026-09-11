@@ -11,8 +11,10 @@ type Props = {
   /** Meestal gewoon tekst. Een node mag ook: de wijkenpagina zet er de
    *  wijkkiezer neer, zodat je de wijk wisselt door op de titel te klikken. */
   titel: ReactNode;
-  /** Klein kruimelpad boven de titel, bijvoorbeeld "Overzicht / Klanten". */
-  kruimel?: string;
+  /** Klein kruimelpad boven de titel, bijvoorbeeld "Overzicht / Klanten".
+   *  Mag ook een knopje zijn: op de wijkenpagina staat hier de wijkkiezer,
+   *  zodat de naam eronder groot kan staan. */
+  kruimel?: ReactNode;
   onderschrift?: ReactNode;
   /** Knoppen rechtsboven: de besturing van deze pagina. */
   acties?: ReactNode;
@@ -80,9 +82,12 @@ export function AppLayout({
         >
           <div className="flex flex-wrap items-center gap-3 px-6 py-3.5">
             <div className="mr-auto min-w-0">
-              {kruimel && (
-                <p className="text-[11.5px] leading-tight text-muted-foreground">{kruimel}</p>
-              )}
+              {kruimel &&
+                (typeof kruimel === "string" ? (
+                  <p className="text-[11.5px] leading-tight text-muted-foreground">{kruimel}</p>
+                ) : (
+                  <div className="mb-1 flex min-w-0 flex-wrap items-center gap-1.5">{kruimel}</div>
+                ))}
               {typeof titel === "string" ? (
                 <h1 className={TITEL_KLASSEN}>{titel}</h1>
               ) : (

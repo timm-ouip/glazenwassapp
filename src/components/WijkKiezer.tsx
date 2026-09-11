@@ -38,9 +38,10 @@ interface Props {
   onSelect: (id: string) => void;
   onChanged: () => void;
   /** "balk" is de gewone keuzelijst tussen de knoppen. "titel" maakt de
-   *  paginakop zelf aanklikbaar: je wisselt van wijk door op de naam te
-   *  klikken, wat een keuzevak in de knoppenbalk scheelt. */
-  variant?: "balk" | "titel";
+   *  paginakop zelf aanklikbaar. "pil" is het kleine kiesknopje boven de
+   *  titel: de naam van de wijk staat daaronder groot, en dit is waar je hem
+   *  wisselt. */
+  variant?: "balk" | "titel" | "pil";
 }
 
 export function WijkKiezer({ districts, activeId, onSelect, onChanged, variant = "balk" }: Props) {
@@ -150,6 +151,7 @@ export function WijkKiezer({ districts, activeId, onSelect, onChanged, variant =
   }
 
   const alsTitel = variant === "titel";
+  const alsPil = variant === "pil";
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -158,7 +160,9 @@ export function WijkKiezer({ districts, activeId, onSelect, onChanged, variant =
           className={
             alsTitel
               ? `${TITEL_KLASSEN} h-auto w-auto gap-1.5 border-0 bg-transparent p-0 shadow-none focus:ring-0 [&>svg]:size-5 [&>svg]:opacity-40`
-              : "h-9 w-52 rounded-full bg-card"
+              : alsPil
+                ? "h-7 w-auto gap-1.5 rounded-full border-0 bg-card px-3 text-[12.5px] font-medium shadow-card focus:ring-0 [&>svg]:size-3.5 [&>svg]:opacity-50"
+                : "h-9 w-52 rounded-full bg-card"
           }
           aria-label="Wijk kiezen"
         >
@@ -180,28 +184,33 @@ export function WijkKiezer({ districts, activeId, onSelect, onChanged, variant =
           ))}
         </SelectContent>
       </Select>
-      <Button size="sm" variant="outline" className="rounded-full" onClick={openNieuw}>
-        <Plus className="size-4" /> Wijk
+      <Button
+        size="sm"
+        variant="outline"
+        className={alsPil ? "h-7 rounded-full px-2.5 text-[12px]" : "rounded-full"}
+        onClick={openNieuw}
+      >
+        <Plus className={alsPil ? "size-3.5" : "size-4"} /> Wijk
       </Button>
       {actief && (
         <>
           <Button
             size="icon"
             variant="ghost"
-            className="size-9 rounded-full"
+            className={alsPil ? "size-7 rounded-full" : "size-9 rounded-full"}
             onClick={openHernoem}
             aria-label="Wijk hernoemen"
           >
-            <Pencil className="size-4" />
+            <Pencil className={alsPil ? "size-3.5" : "size-4"} />
           </Button>
           <Button
             size="icon"
             variant="ghost"
-            className="size-9 rounded-full"
+            className={alsPil ? "size-7 rounded-full" : "size-9 rounded-full"}
             onClick={verwijder}
             aria-label="Wijk verwijderen"
           >
-            <Trash2 className="size-4" />
+            <Trash2 className={alsPil ? "size-3.5" : "size-4"} />
           </Button>
         </>
       )}

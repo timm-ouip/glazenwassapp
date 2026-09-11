@@ -1400,17 +1400,40 @@ function Index() {
     <AppLayout
       // De titel ís de wijkkiezer: je wisselt van wijk door op de naam te
       // klikken. Dat scheelt een keuzevak in de knoppenbalk eronder.
+      // De kiespil staat bóven de naam: wisselen doe je daar, en de naam
+      // eronder is gewoon de kop van wat je nu bekijkt. In een ander lettertype
+      // dan de rest van de koppen, want de wijk is geen paginanaam maar de
+      // inhoud zelf.
       titel={
+        <h1 className="truncate font-sans text-[26px] font-medium leading-tight tracking-[-0.02em]">
+          {districts.find((d) => d.id === actieveWijk)?.name ?? "Kies een wijk"}
+        </h1>
+      }
+      actiePositie="onder"
+      kruimel={
         <WijkKiezer
-          variant="titel"
+          variant="pil"
           districts={districts}
           activeId={actieveWijk}
           onSelect={(id) => void navigate({ to: "/", search: (oud) => ({ ...oud, wijk: id }) })}
           onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
         />
       }
-      actiePositie="onder"
-      kruimel="Overzicht / Wijken"
+      onderschrift={
+        actieveWijk
+          ? [
+              `${groepen.length} ${groepen.length === 1 ? "straat" : "straten"}`,
+              `${totaal} ${totaal === 1 ? "klant" : "klanten"}`,
+              // De plaats alleen als hij iets toevoegt: "Gouda · Gouda"
+              // zegt twee keer hetzelfde.
+              wijkPlaats && wijkPlaats !== districts.find((d) => d.id === actieveWijk)?.name
+                ? wijkPlaats
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : "Kies links een wijk om zijn straten te zien."
+      }
       acties={
         <>
           <ZoekBalk placeholder="Zoek straat" onTermen={setZoektermen} />
@@ -1588,9 +1611,6 @@ function Index() {
               Prijzen
             </Label>
           </div>
-          <span className="ml-auto text-[12.5px] text-muted-foreground">
-            {groepen.length} straten · {totaal} klanten
-          </span>
 
           {selecteren && (
             // Blijft in beeld terwijl je naar beneden vinkt: het bedrag is

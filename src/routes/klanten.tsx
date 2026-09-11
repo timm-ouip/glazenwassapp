@@ -601,18 +601,33 @@ function Klanten() {
 
   return (
     <AppLayout
-      // "Klanten" staat al in het kruimelpad erboven; de titel is de wijk.
+      // Dezelfde opbouw als op de wijkenpagina: de kiespil erboven, de naam
+      // van de wijk eronder als kop.
       titel={
+        <h1 className="truncate font-sans text-[26px] font-medium leading-tight tracking-[-0.02em]">
+          {wijkVanNu?.name ?? "Kies een wijk"}
+        </h1>
+      }
+      actiePositie="onder"
+      kruimel={
         <WijkKiezer
-          variant="titel"
+          variant="pil"
           districts={districts}
           activeId={actieveWijk}
           onSelect={(id) => void navigate({ to: "/klanten", search: { wijk: id } })}
           onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
         />
       }
-      actiePositie="onder"
-      kruimel="Overzicht / Klanten"
+      onderschrift={
+        actieveWijk
+          ? [
+              `${regels.length} ${regels.length === 1 ? "adres" : "adressen"}`,
+              wijkVanNu?.plaats !== wijkVanNu?.name ? wijkVanNu?.plaats : "",
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : "Kies een wijk om zijn klanten te zien."
+      }
       acties={
         <>
           <ZoekBalk placeholder="Zoek adres of naam" onTermen={setZoektermen} />
