@@ -50,6 +50,7 @@ import {
   CornerDownRight,
   Folder,
   Layers,
+  ListOrdered,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -145,6 +146,7 @@ import {
   persistCustomerOrder,
   persistGroepOrder,
   persistStreetOrder,
+  setStreetDoorlopend,
   setStreetSortDesc,
   sortCustomers,
   splitEvenOdd,
@@ -373,7 +375,7 @@ function Index() {
         );
         return {
           street: s,
-          ...splitEvenOdd(klanten, order),
+          ...splitEvenOdd(klanten, order, s.doorlopend),
           aantal: klanten.length,
           totaal: klanten.reduce((sum, c) => sum + prijsVoorMaand(c, filter), 0),
         };
@@ -1077,6 +1079,28 @@ function Index() {
     qc.invalidateQueries({ queryKey: ["streets"] });
   }
 
+  /** Lopen de nummers van deze straat per 1 op, of is het even en oneven?
+   *  Zie splitEvenOdd: dit verandert alleen hoe de straat verdeeld wordt. */
+  async function wisselDoorlopend(s: Street) {
+    const nieuw = !s.doorlopend;
+    qc.setQueryData<Street[]>(["streets"], (old) =>
+      (old ?? []).map((x) => (x.id === s.id ? { ...x, doorlopend: nieuw } : x)),
+    );
+    try {
+      await setStreetDoorlopend(s.id, nieuw);
+      pushUndo({
+        label: `Nummering ${s.name}`,
+        undo: async () => {
+          await setStreetDoorlopend(s.id, s.doorlopend);
+          herlaad();
+        },
+      });
+    } catch (e) {
+      toast.error("Opslaan mislukt: " + (e as Error).message);
+      herlaad();
+    }
+  }
+
   async function wisselSort(s: Street) {
     const nieuw = !s.sort_desc;
     qc.setQueryData<Street[]>(["streets"], (old) =>
@@ -1132,6 +1156,7 @@ function Index() {
     setKlantDialog({ open: true, customer: null, streetId }),
   );
   const opToggleSort = useStabiel((street: Street) => void wisselSort(street));
+  const opToggleDoorlopend = useStabiel((street: Street) => void wisselDoorlopend(street));
   const opKlap = useStabiel((streetId: string) => klapStraat(streetId));
   const opStraatOpDag = useStabiel((streetId: string, aan: boolean) => {
     const g = groepen.find((x) => x.street.id === streetId);
@@ -1291,9 +1316,14 @@ function Index() {
     const verplaatstIds = new Set(verplaatst.map((c) => c.id));
 
     /** Sta je aan de kant die je huisnummer aanwijst, dan hoef je niets vast
-     *  te leggen; sta je ergens anders, dan is dat een hoekadres. */
+     *  te leggen; sta je ergens anders, dan is dat een hoekadres.
+     *
+     *  In een straat die per 1 oploopt zegt de kolom niets over de kant van
+     *  de straat — daar is het gewoon de eerste of de tweede helft van één
+     *  doorlopende rij — dus dan blijft de hoekkant zoals hij was. */
+    const doorlopendeStraat = streets.find((s) => s.id === doelStraat)?.doorlopend ?? false;
     function kantVoor(c: Customer): Kant | "" {
-      if (!doelKant || !verplaatstIds.has(c.id)) return c.hoek_kant;
+      if (doorlopendeStraat || !doelKant || !verplaatstIds.has(c.id)) return c.hoek_kant;
       return doelKant === natuurlijkeKant(c) ? "" : doelKant;
     }
 
@@ -1371,6 +1401,7 @@ function Index() {
       onDeleteStreet={opDeleteStreet}
       onAddKlant={opAddKlant}
       onToggleSort={opToggleSort}
+      onToggleDoorlopend={opToggleDoorlopend}
       ingeklapt={ingeklapt.has(g.street.id)}
       onKlap={opKlap}
       groepen={subgroepen}
@@ -2036,6 +2067,8 @@ interface BlokProps {
   onDeleteStreet: (street: Street) => void;
   onAddKlant: (streetId: string) => void;
   onToggleSort: (street: Street) => void;
+  /** Zet de straat om van even/oneven naar doorlopend genummerd, en terug. */
+  onToggleDoorlopend: (street: Street) => void;
   ingeklapt: boolean;
   onKlap: (streetId: string) => void;
   /** De subgroepen van deze wijk, voor het menu onder de rechtermuisknop. */
@@ -2280,6 +2313,14 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
               )}
             </ContextMenuSubContent>
           </ContextMenuSub>
+
+          {/* Niet elke straat is even links en oneven rechts: soms staan alle
+              nummers aan dezelfde kant en loop je ze op volgorde af. */}
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => p.onToggleDoorlopend(p.street)}>
+            <ListOrdered className="size-4" /> Nummers lopen per 1 op
+            {p.street.doorlopend && <Check className="ml-auto size-4" />}
+          </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
 

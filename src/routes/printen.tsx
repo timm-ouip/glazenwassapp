@@ -455,7 +455,7 @@ function PrintPagina() {
         const klanten = perStraat.get(s.id) ?? [];
         return {
           street: s,
-          ...splitEvenOdd(klanten, s.sort_desc ? "desc" : "asc"),
+          ...splitEvenOdd(klanten, s.sort_desc ? "desc" : "asc", s.doorlopend),
           aantal: klanten.length,
         };
       })

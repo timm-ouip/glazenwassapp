@@ -467,6 +467,7 @@ export type Database = {
           print_row: number | null
           sort_desc: boolean
           kolom_start: boolean
+          doorlopend: boolean
           sort_order: number
           volledige_naam: string
         }
@@ -482,6 +483,7 @@ export type Database = {
           print_row?: number | null
           sort_desc?: boolean
           kolom_start?: boolean
+          doorlopend?: boolean
           sort_order?: number
           volledige_naam?: string
         }
@@ -497,6 +499,7 @@ export type Database = {
           print_row?: number | null
           sort_desc?: boolean
           kolom_start?: boolean
+          doorlopend?: boolean
           sort_order?: number
           volledige_naam?: string
         }

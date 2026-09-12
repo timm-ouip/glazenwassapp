@@ -115,6 +115,9 @@ export interface Street {
   groep_id: string | null;
   sort_desc: boolean;
   kolom_start: boolean;
+  /** Lopen de nummers per 1 op, in plaats van even links en oneven rechts?
+   *  Dan telt de app de straat door: eerste helft links, tweede helft rechts. */
+  doorlopend: boolean;
   print_col: number | null;
   print_row: number | null;
 }
@@ -415,7 +418,7 @@ export async function fetchStreets(): Promise<Street[]> {
   const { data, error } = await supabase
     .from("streets")
     .select(
-      "id,name,volledige_naam,sort_order,district_id,groep_id,sort_desc,kolom_start,print_col,print_row",
+      "id,name,volledige_naam,sort_order,district_id,groep_id,sort_desc,kolom_start,doorlopend,print_col,print_row",
     )
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
@@ -1028,10 +1031,28 @@ export function isHoekadres(
   );
 }
 
-/** Splits klanten in even en oneven huisnummers, elk in de ingestelde volgorde. */
-export function splitEvenOdd(customers: Customer[], order: "asc" | "desc" = "asc") {
+/**
+ * Splits klanten over de twee kolommen van een straatblok, elk in de
+ * ingestelde volgorde.
+ *
+ * Normaal is dat even links en oneven rechts: zo loop je de straat ook, de
+ * ene kant heen en de andere terug. Loopt de straat per 1 op — alle nummers
+ * aan dezelfde kant — dan telt hij gewoon door: de eerste helft links, de
+ * tweede helft rechts.
+ */
+export function splitEvenOdd(
+  customers: Customer[],
+  order: "asc" | "desc" = "asc",
+  doorlopend = false,
+) {
   const sorted = sortCustomers(customers);
   const lijst = order === "desc" ? [...sorted].reverse() : sorted;
+  if (doorlopend) {
+    // De linkerkolom krijgt er bij een oneven aantal één meer: je leest links
+    // naar beneden en rechts verder, dus daar hoort de rest niet onderaan.
+    const helft = Math.ceil(lijst.length / 2);
+    return { even: lijst.slice(0, helft), oneven: lijst.slice(helft) };
+  }
   return {
     even: lijst.filter((c) => kantVan(c) === "even"),
     oneven: lijst.filter((c) => kantVan(c) === "oneven"),
@@ -1208,6 +1229,12 @@ export async function persistKolomStart(vlaggen: { id: string; kolom_start: bool
 
 export async function setStreetSortDesc(id: string, desc: boolean) {
   const { error } = await supabase.from("streets").update({ sort_desc: desc }).eq("id", id);
+  if (error) throw error;
+}
+
+/** Lopen de nummers van deze straat per 1 op? Zie `splitEvenOdd`. */
+export async function setStreetDoorlopend(id: string, aan: boolean) {
+  const { error } = await supabase.from("streets").update({ doorlopend: aan }).eq("id", id);
   if (error) throw error;
 }
 
