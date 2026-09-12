@@ -119,8 +119,12 @@ function AanmeldPagina() {
       toast.error("Vul je naam in.");
       return;
     }
-    if (!telefoon.trim() && !email.trim()) {
-      toast.error("Vul een telefoonnummer of een e-mailadres in, zodat we je kunnen bereiken.");
+    if (!telefoon.trim()) {
+      toast.error("Vul je telefoonnummer in.");
+      return;
+    }
+    if (!email.trim()) {
+      toast.error("Vul je e-mailadres in.");
       return;
     }
     setBezig(true);
@@ -322,9 +326,6 @@ function AanmeldPagina() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Een telefoonnummer of een e-mailadres is genoeg — beide mag ook.
-              </p>
             </div>
 
             <div className="flex gap-2">

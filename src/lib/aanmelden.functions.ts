@@ -220,7 +220,10 @@ export const dienGegevensIn = createServerFn({ method: "POST" })
     const plaats = kort(data.plaats, MAXIMA.plaats);
 
     if (!naam) throw new Error("Vul je naam in.");
-    if (!telefoon && !email) throw new Error("Vul een telefoonnummer of een e-mailadres in.");
+    // Alle drie verplicht: een klant met alleen een telefoonnummer kost een
+    // belletje waar een mailtje had gekund, en omgekeerd.
+    if (!telefoon) throw new Error("Vul je telefoonnummer in.");
+    if (!email) throw new Error("Vul je e-mailadres in.");
     const nr = splitsNummer(huisnummer);
     if (!straat || !nr) throw new Error("Vul je straat en huisnummer in.");
 
