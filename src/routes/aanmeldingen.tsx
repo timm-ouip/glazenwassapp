@@ -15,10 +15,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Inbox, MapPin, Phone, Mail, UserPlus, X } from "lucide-react";
+import { ArrowRight, Check, Inbox, Link2, MapPin, Phone, Mail, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { requireSession, useRequireAuth } from "@/lib/auth";
+import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { aanmeldAdres, fetchAanmeldingen, zetStatus, type Aanmelding } from "@/lib/aanmeldingen";
 import {
   fetchDistricts,
@@ -29,6 +29,9 @@ import {
 } from "@/lib/klanten";
 import { AppLayout } from "@/components/AppLayout";
 import { AanmeldingDialog } from "@/components/AanmeldingDialog";
+import { AanmeldInstellingen } from "@/components/AanmeldInstellingen";
+import { Dialog } from "@/components/ui/dialog";
+import { PopupBody, PopupKader, PopupKop, PopupVoet } from "@/components/Popup";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -54,6 +57,8 @@ function Aanmeldingen() {
   const [blad, setBlad] = useState<"open" | "klaar">("open");
   const [toevoegen, setToevoegen] = useState<Aanmelding | null>(null);
   const qc = useQueryClient();
+  const [link, setLink] = useState(false);
+  const { employee } = useAuth();
 
   const alles = useQuery({ queryKey: ["aanmeldingen"], queryFn: fetchAanmeldingen });
   const wijken = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
@@ -91,6 +96,11 @@ function Aanmeldingen() {
       titel="Aanmeldingen"
       kruimel="Overzicht / Aanmeldingen"
       onderschrift="Wat klanten zelf via de aanmeldpagina hebben doorgegeven."
+      acties={
+        <Button variant="outline" className="rounded-full" onClick={() => setLink(true)}>
+          <Link2 className="size-4" /> Link en QR-code
+        </Button>
+      }
     >
       <Tabs value={blad} onValueChange={(v) => setBlad(v as "open" | "klaar")}>
         <TabsList className="mb-4">
@@ -164,6 +174,28 @@ function Aanmeldingen() {
         districts={wijken.data ?? []}
         onKlaar={() => void opnieuw()}
       />
+
+      {/* De link en de QR-code binnen handbereik: wie aanmeldingen nakijkt,
+          wil ze kunnen doorsturen of ophangen zonder deze pagina te verlaten.
+          Hetzelfde blok als bij Instellingen, niet een tweede kopie. */}
+      <Dialog open={link} onOpenChange={setLink}>
+        <PopupKader className="sm:max-w-lg">
+          <PopupKop
+            kleur="blauw"
+            icoon={<Link2 className="size-5" />}
+            titel="Aanmeldpagina"
+            subtitel="Deel de link of hang de QR-code op"
+          />
+          <PopupBody>
+            <AanmeldInstellingen isEigenaar={employee?.rol === "eigenaar"} />
+          </PopupBody>
+          <PopupVoet>
+            <Button variant="ghost" className="rounded-full" onClick={() => setLink(false)}>
+              Sluiten
+            </Button>
+          </PopupVoet>
+        </PopupKader>
+      </Dialog>
     </AppLayout>
   );
 }
