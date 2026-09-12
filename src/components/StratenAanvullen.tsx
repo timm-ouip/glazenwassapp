@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,6 +24,10 @@ interface Props {
   streets: Street[];
   plaats: string;
   onSaved: () => void;
+  /** Aangestuurd van buitenaf — vanuit het wijkmenu. Dan tekent dit alleen
+   *  het schermpje en geen eigen knop, en begint het zoeken bij het opengaan. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -33,8 +37,17 @@ interface Props {
  * Ze stuk voor stuk in de straat-dialog nalopen is bij 43 straten geen doen,
  * dus dit scherm haalt de voorstellen op en laat je ze in één keer bevestigen.
  */
-export function StratenAanvullen({ streets, plaats, onSaved }: Props) {
-  const [open, setOpen] = useState(false);
+export function StratenAanvullen({
+  streets,
+  plaats,
+  onSaved,
+  open: vanBuiten,
+  onOpenChange,
+}: Props) {
+  const gestuurd = vanBuiten !== undefined;
+  const [eigenOpen, setEigenOpen] = useState(false);
+  const open = gestuurd ? vanBuiten : eigenOpen;
+  const setOpen = (o: boolean) => (gestuurd ? onOpenChange?.(o) : setEigenOpen(o));
   const [bezig, setBezig] = useState(false);
   const [voortgang, setVoortgang] = useState(0);
   const [voorstellen, setVoorstellen] = useState<Voorstel[]>([]);
@@ -43,8 +56,15 @@ export function StratenAanvullen({ streets, plaats, onSaved }: Props) {
 
   const teDoen = stratenZonderNaam(streets);
 
+  // Opengaan is het startsein voor het zoeken, ook als dat van buitenaf komt.
+  useEffect(() => {
+    if (!open) return;
+    void zoek();
+    // Alleen op het opengaan: zoek() is bij elke render een nieuwe functie.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   async function zoek() {
-    setOpen(true);
     setBezig(true);
     setVoorstellen([]);
     setVoortgang(0);
@@ -105,22 +125,24 @@ export function StratenAanvullen({ streets, plaats, onSaved }: Props) {
 
   return (
     <>
-      <Button
-        size="sm"
-        variant="outline"
-        className="rounded-full"
-        disabled={!plaats.trim() || teDoen.length === 0}
-        title={
-          !plaats.trim()
-            ? "Vul eerst de plaats van deze wijk in"
-            : teDoen.length === 0
-              ? "Alle straten hebben al een volledige naam"
-              : `${teDoen.length} straten zonder volledige naam`
-        }
-        onClick={() => void zoek()}
-      >
-        <Wand2 className="size-4" /> Straatnamen
-      </Button>
+      {!gestuurd && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="rounded-full"
+          disabled={!plaats.trim() || teDoen.length === 0}
+          title={
+            !plaats.trim()
+              ? "Vul eerst de plaats van deze wijk in"
+              : teDoen.length === 0
+                ? "Alle straten hebben al een volledige naam"
+                : `${teDoen.length} straten zonder volledige naam`
+          }
+          onClick={() => setOpen(true)}
+        >
+          <Wand2 className="size-4" /> Straatnamen
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={(o) => !bezig && setOpen(o)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">

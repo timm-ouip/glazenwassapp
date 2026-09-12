@@ -17,7 +17,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, MoreHorizontal, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   addDistrict,
   deleteDistrict,
@@ -40,9 +47,23 @@ interface Props {
    *  naam van de wijk zelf de kop: groot, met een pijltje erachter om te
    *  wisselen, en de knopjes voor maken, hernoemen en weggooien klein ernaast. */
   variant?: "balk" | "titel";
+  /** Hoeveel straten van deze wijk nog geen volledige naam hebben. Alleen de
+   *  wijkenpagina weet dat; zonder onStraatnamen staat het item er niet. */
+  straatnamenNodig?: number;
+  /** Opent "Straatnamen aanvullen". Dat hoort bij de wijk en niet in de
+   *  knoppenbalk: je doet het één keer per wijk en daarna nooit meer. */
+  onStraatnamen?: () => void;
 }
 
-export function WijkKiezer({ districts, activeId, onSelect, onChanged, variant = "balk" }: Props) {
+export function WijkKiezer({
+  districts,
+  activeId,
+  onSelect,
+  onChanged,
+  variant = "balk",
+  straatnamenNodig = 0,
+  onStraatnamen,
+}: Props) {
   const [dialog, setDialog] = useState<{ open: boolean; mode: "nieuw" | "hernoem" }>({
     open: false,
     mode: "nieuw",
@@ -191,26 +212,47 @@ export function WijkKiezer({ districts, activeId, onSelect, onChanged, variant =
         <Plus className={klein ? "size-3.5" : "size-4"} /> Wijk
       </Button>
       {actief && (
-        <>
-          <Button
-            size="icon"
-            variant="ghost"
-            className={klein ? "size-7 rounded-full" : "size-9 rounded-full"}
-            onClick={openHernoem}
-            aria-label="Wijk hernoemen"
-          >
-            <Pencil className={klein ? "size-3.5" : "size-4"} />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className={klein ? "size-7 rounded-full" : "size-9 rounded-full"}
-            onClick={verwijder}
-            aria-label="Wijk verwijderen"
-          >
-            <Trash2 className={klein ? "size-3.5" : "size-4"} />
-          </Button>
-        </>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              className={`relative ${klein ? "size-7 rounded-full" : "size-9 rounded-full"}`}
+              aria-label="Wijkopties"
+            >
+              <MoreHorizontal className={klein ? "size-4" : "size-5"} />
+              {/* Een stipje zolang er nog straatnamen aan te vullen zijn:
+                  anders zit dat werk verstopt in een menu dat je nooit opent. */}
+              {straatnamenNodig > 0 && onStraatnamen && (
+                <span className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-tint-amber-ink" />
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuItem onSelect={openHernoem}>
+              <Pencil className="size-4" /> Wijk hernoemen…
+            </DropdownMenuItem>
+            {onStraatnamen &&
+              (straatnamenNodig > 0 ? (
+                <DropdownMenuItem onSelect={onStraatnamen}>
+                  <Wand2 className="size-4" /> Straatnamen aanvullen
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {straatnamenNodig}
+                  </span>
+                </DropdownMenuItem>
+              ) : (
+                // Niet weghalen als het klaar is: dan lijkt de app iets kwijt
+                // te zijn. Een vinkje zegt dat er niets meer te doen is.
+                <DropdownMenuItem disabled>
+                  <Check className="size-4" /> Straatnamen zijn compleet
+                </DropdownMenuItem>
+              ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={verwijder}>
+              <Trash2 className="size-4" /> Wijk verwijderen…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
 
       <Dialog open={dialog.open} onOpenChange={(open) => setDialog((s) => ({ ...s, open }))}>

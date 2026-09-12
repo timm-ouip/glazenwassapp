@@ -80,6 +80,7 @@ import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { StraatDialog } from "@/components/StraatDialog";
 import { GroepDialog } from "@/components/GroepDialog";
 import { StratenAanvullen } from "@/components/StratenAanvullen";
+import { stratenZonderNaam } from "@/lib/aanvullen";
 import { DubbeleStraten } from "@/components/DubbeleStraten";
 
 import { WijkKiezer } from "@/components/WijkKiezer";
@@ -242,6 +243,8 @@ function Index() {
     open: false,
     customer: null,
   });
+  /** Het schermpje "Straatnamen aanvullen"; het wijkmenu zet hem open. */
+  const [straatnamenOpen, setStraatnamenOpen] = useState(false);
   const [straatDialog, setStraatDialog] = useState<{ open: boolean; street: Street | null }>({
     open: false,
     street: null,
@@ -1430,6 +1433,14 @@ function Index() {
           activeId={actieveWijk}
           onSelect={(id) => void navigate({ to: "/", search: (oud) => ({ ...oud, wijk: id }) })}
           onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
+          // Straatnamen aanvullen doe je één keer per wijk; die hoort bij de
+          // wijk zelf en niet in de knoppenbalk die je elke dag gebruikt.
+          straatnamenNodig={
+            wijkPlaats.trim()
+              ? stratenZonderNaam(streets.filter((s) => s.district_id === actieveWijk)).length
+              : 0
+          }
+          onStraatnamen={() => setStraatnamenOpen(true)}
         />
       }
       actiePositie="onder"
@@ -1452,16 +1463,6 @@ function Index() {
       acties={
         <>
           <ZoekBalk placeholder="Zoek straat" onTermen={setZoektermen} />
-          {/* Straatnamen aanvullen is werk aan de wijklijst zelf; in de
-              selecteerstand ben je een dag aan het samenstellen en staat die
-              knop alleen in de weg. */}
-          {!selecteren && (
-            <StratenAanvullen
-              streets={streets.filter((s) => s.district_id === actieveWijk)}
-              plaats={wijkPlaats}
-              onSaved={() => qc.invalidateQueries({ queryKey: ["streets"] })}
-            />
-          )}
           <Button
             size="sm"
             variant={selecteren ? "default" : "outline"}
@@ -1818,6 +1819,13 @@ function Index() {
           herlaad();
           qc.invalidateQueries({ queryKey: ["klanten"] });
         }}
+      />
+      <StratenAanvullen
+        open={straatnamenOpen}
+        onOpenChange={setStraatnamenOpen}
+        streets={streets.filter((s) => s.district_id === actieveWijk)}
+        plaats={wijkPlaats}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["streets"] })}
       />
       <StraatDialog
         districtId={actieveWijk ?? undefined}
