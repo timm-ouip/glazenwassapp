@@ -27,10 +27,11 @@ import {
 
 interface Verzoek {
   /**
-   * `tellen` bouwt de lijst zonder te versturen, `versturen` doet allebei, en
-   * `reactie` stuurt één antwoord terug op een binnengekomen bericht.
+   * `tellen` bouwt de lijst zonder te versturen, `versturen` doet allebei,
+   * `reactie` stuurt één antwoord terug op een binnengekomen bericht, en
+   * `controle` kijkt alleen of de verbinding met Brevo klopt.
    */
-  actie: "tellen" | "versturen" | "reactie";
+  actie: "tellen" | "versturen" | "reactie" | "controle";
   /** De wasdag waarvan de adressen komen, als 'jjjj-mm-dd'. */
   datum: string;
   onderwerp: string;
@@ -102,6 +103,11 @@ Deno.serve(async (req) => {
     verzoek = (await req.json()) as Verzoek;
   } catch {
     return antwoord({ fout: "Onleesbaar verzoek." }, 400);
+  }
+
+  // Alleen kijken of alles klaarstaat. Verstuurt niets en verandert niets.
+  if (verzoek.actie === "controle") {
+    return await controleer(bedrijf, brevo, inboxDomein);
   }
 
   // Een reactie op een binnengekomen bericht gaat langs dezelfde Brevo-sleutel
@@ -239,6 +245,81 @@ Deno.serve(async (req) => {
     eersteFout: rijen.find((r) => r.status === "mislukt")?.fout ?? "",
   });
 });
+
+/**
+ * Staat alles klaar om te kunnen versturen?
+ *
+ * Vraagt het aan Brevo zelf en gokt niets: of de sleutel werkt, en of het
+ * afzenderadres dat hier is ingevuld daar ook echt als afzender bekend staat.
+ * Dat laatste is de fout die je anders pas merkt als de eerste honderd mails
+ * geweigerd zijn.
+ */
+async function controleer(
+  bedrijf: Record<string, unknown>,
+  brevo: string,
+  inboxDomein: string,
+): Promise<Response> {
+  const afzender = String(bedrijf["mail_afzender_email"] ?? "").trim().toLowerCase();
+
+  const uit: Record<string, unknown> = {
+    sleutel: false,
+    account: "",
+    afzenderIngevuld: afzender,
+    afzenderBekend: false,
+    afzenderActief: false,
+    antwoordadres: inboxDomein
+      ? `antwoord+${String(bedrijf["mail_token"] ?? "")}@${inboxDomein}`
+      : "",
+    melding: "",
+  };
+
+  if (!brevo) {
+    uit["melding"] = "Er staat nog geen Brevo-sleutel op de server.";
+    return antwoord(uit);
+  }
+
+  try {
+    const acc = await fetch("https://api.brevo.com/v3/account", {
+      headers: { "api-key": brevo, Accept: "application/json" },
+    });
+    if (!acc.ok) {
+      uit["melding"] =
+        acc.status === 401
+          ? "Brevo herkent de sleutel niet. Staat er een typefout in?"
+          : `Brevo antwoordde met ${acc.status}.`;
+      return antwoord(uit);
+    }
+    const gegevens = (await acc.json()) as {
+      companyName?: string;
+      email?: string;
+    };
+    uit["sleutel"] = true;
+    uit["account"] = gegevens.companyName || gegevens.email || "";
+
+    // De lijst met adressen waarvandaan dit account mag versturen.
+    const lijst = await fetch("https://api.brevo.com/v3/senders", {
+      headers: { "api-key": brevo, Accept: "application/json" },
+    });
+    if (lijst.ok) {
+      const senders = (await lijst.json()) as {
+        senders?: { email?: string; active?: boolean }[];
+      };
+      const gevonden = (senders.senders ?? []).find(
+        (s) => (s.email ?? "").trim().toLowerCase() === afzender,
+      );
+      uit["afzenderBekend"] = !!gevonden;
+      uit["afzenderActief"] = gevonden?.active === true;
+      uit["bekendeAfzenders"] = (senders.senders ?? [])
+        .map((s) => s.email ?? "")
+        .filter(Boolean)
+        .slice(0, 10);
+    }
+  } catch (e) {
+    uit["melding"] = e instanceof Error ? e.message : "Onbekende fout.";
+  }
+
+  return antwoord(uit);
+}
 
 /**
  * Eén antwoord terug op een bericht uit het postvak. De tekst komt uit het

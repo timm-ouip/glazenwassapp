@@ -52,6 +52,33 @@ async function leesFout(error: unknown): Promise<string> {
   }
 }
 
+/**
+ * Wat de controle teruggeeft. Alles wat er mis kan zijn voordat er ook maar
+ * één mail weggaat, op één plek — zodat je het merkt vóór de eerste honderd
+ * geweigerd worden en niet erna.
+ */
+export interface Controle {
+  /** Werkt de sleutel die op de server staat? */
+  sleutel: boolean;
+  /** De naam van het Brevo-account, als de sleutel werkt. */
+  account: string;
+  afzenderIngevuld: string;
+  /** Staat dat adres bij Brevo als afzender bekend? */
+  afzenderBekend: boolean;
+  /** En is het daar ook goedgekeurd? */
+  afzenderActief: boolean;
+  /** De adressen die Brevo wél kent — meestal zie je zo de typefout. */
+  bekendeAfzenders?: string[];
+  /** Leeg als antwoorden nog niet binnenkomen bij de app. */
+  antwoordadres: string;
+  melding: string;
+}
+
+/** Kijkt of alles klaarstaat. Verstuurt niets en verandert niets. */
+export function controleerVerbinding(): Promise<Controle> {
+  return roep<Controle>({ actie: "controle" });
+}
+
 /** Hoeveel mensen krijgen de mail van deze dag? Verstuurt niets. */
 export function telOntvangers(datum: string): Promise<Telling> {
   return roep<Telling>({ actie: "tellen", datum });

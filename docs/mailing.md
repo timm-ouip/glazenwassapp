@@ -98,6 +98,12 @@ mail die een mens moet lezen, meer niet.
 
 ## Als er iets misgaat
 
+Eerst de knop **Controleer verbinding** op de mailingpagina, onder het kaartje
+Afzender. Die vraagt het aan Brevo zelf — of de sleutel werkt, of het
+afzenderadres daar mag versturen, en of antwoorden binnenkomen — en verstuurt
+zelf niets. Kent Brevo het afzenderadres niet, dan laat hij zien welke
+adressen hij wél kent; daar zie je een typefout meestal meteen aan.
+
 - **"Tellen lukte niet"** op de pagina: de Edge Function staat er niet op, of
   is niet bereikbaar. `supabase functions deploy mail-versturen`.
 - **Mail komt niet aan**: kijk in de tabel `mail_ontvangers` — daar staat per

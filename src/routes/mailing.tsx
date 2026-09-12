@@ -25,8 +25,10 @@ import {
   Mail,
   MailCheck,
   Send,
+  ShieldCheck,
   Sparkles,
   Users,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -45,6 +47,7 @@ import {
   bewaarAfzender,
   categorieNamen,
   categorieTint,
+  controleerVerbinding,
   fetchAfzender,
   fetchMailAntwoorden,
   fetchMailingen,
@@ -53,6 +56,7 @@ import {
   verstuurAankondiging,
   verstuurReactie,
   zetAntwoordStatus,
+  type Controle,
   type MailAntwoord,
 } from "@/lib/mailing";
 
@@ -420,7 +424,105 @@ function Afzenderkaart() {
           </button>
         </p>
       )}
+      <Verbindingscontrole />
     </Kaart>
+  );
+}
+
+/**
+ * "Kan ik versturen?" — in gewone taal, en gevraagd aan Brevo zelf.
+ *
+ * Staat hier en niet in een handleiding, want dit is precies de plek waar je
+ * het je afvraagt. Elke regel is een ding dat kapot kan zijn, met erbij wat
+ * je eraan doet; een enkel groen vinkje zou niet zeggen wélk deel klopt.
+ */
+function Verbindingscontrole() {
+  const [uitslag, setUitslag] = useState<Controle | null>(null);
+  const [bezig, setBezig] = useState(false);
+
+  async function kijk() {
+    setBezig(true);
+    try {
+      setUitslag(await controleerVerbinding());
+    } catch (e) {
+      toast.error("Controleren lukte niet: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <Button
+        size="sm"
+        variant="outline"
+        className="w-full rounded-full"
+        disabled={bezig}
+        onClick={() => void kijk()}
+      >
+        <ShieldCheck className="size-4" /> {bezig ? "Bezig…" : "Controleer verbinding"}
+      </Button>
+
+      {uitslag && (
+        <ul className="mt-3 space-y-1.5 text-[12.5px]">
+          <Regel
+            goed={uitslag.sleutel}
+            goedTekst={`Brevo werkt${uitslag.account ? ` (${uitslag.account})` : ""}`}
+            foutTekst={uitslag.melding || "Brevo herkent de sleutel niet"}
+          />
+          <Regel
+            goed={uitslag.afzenderBekend && uitslag.afzenderActief}
+            goedTekst={`${uitslag.afzenderIngevuld} mag versturen`}
+            foutTekst={
+              !uitslag.sleutel
+                ? "Afzender nog niet te controleren"
+                : uitslag.afzenderBekend
+                  ? `${uitslag.afzenderIngevuld} is bij Brevo nog niet goedgekeurd`
+                  : `${uitslag.afzenderIngevuld} staat niet bij Brevo als afzender`
+            }
+          />
+          <Regel
+            goed={!!uitslag.antwoordadres}
+            goedTekst="Antwoorden komen binnen in het postvak"
+            foutTekst="Antwoorden komen nog niet binnen (dat is optioneel)"
+            zacht
+          />
+          {uitslag.sleutel &&
+            !uitslag.afzenderBekend &&
+            (uitslag.bekendeAfzenders?.length ?? 0) > 0 && (
+              <li className="pt-1 text-[12px] text-muted-foreground">
+                Brevo kent wel: {uitslag.bekendeAfzenders?.join(", ")}
+              </li>
+            )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Eén regel van de controle. `zacht` is voor wat niet per se hoeft. */
+function Regel({
+  goed,
+  goedTekst,
+  foutTekst,
+  zacht,
+}: {
+  goed: boolean;
+  goedTekst: string;
+  foutTekst: string;
+  zacht?: boolean;
+}) {
+  return (
+    <li className="flex items-start gap-1.5">
+      {goed ? (
+        <Check className="mt-0.5 size-3.5 shrink-0 text-tint-groen-ink" />
+      ) : (
+        <X
+          className={`mt-0.5 size-3.5 shrink-0 ${zacht ? "text-muted-foreground" : "text-tint-oranje-ink"}`}
+        />
+      )}
+      <span className={goed ? "" : "text-muted-foreground"}>{goed ? goedTekst : foutTekst}</span>
+    </li>
   );
 }
 
