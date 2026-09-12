@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import { Check } from "lucide-react";
 
 import {
@@ -6,7 +5,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -41,12 +42,14 @@ function kleur(c: Pick<Customer, "interval_maanden" | "ritme">): string {
  * vragen in één menu, want de tweede volgt uit de eerste: bij om de 2 kies je
  * even of oneven, bij om de 3 kies je welk van de drie kwartaalritmes.
  *
+ * Achter elke frequentie zit daarom een pijltje met de maanden die erbij
+ * kunnen horen: zo zet één keuze allebei tegelijk, in plaats van eerst de
+ * frequentie te kiezen en dan het menu opnieuw te openen voor de maanden.
+ *
  * Het badge zegt de maanden en niet het interval, want dat is wat je wilt
  * weten als je langs de lijst gaat.
  */
 export function RitmeKiezer({ customer: c, onPatch }: Props) {
-  const varianten = ritmeVarianten(c.interval_maanden);
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -62,27 +65,45 @@ export function RitmeKiezer({ customer: c, onPatch }: Props) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-52">
         <DropdownMenuLabel>Frequentie</DropdownMenuLabel>
-        {INTERVALLEN.map((n) => (
-          <DropdownMenuItem key={n} onSelect={() => onPatch({ interval_maanden: n })}>
-            {intervalLabels[n]}
-            {c.interval_maanden === n && <Check className="ml-auto size-4" />}
-          </DropdownMenuItem>
-        ))}
+        {INTERVALLEN.map((n) => {
+          const varianten = ritmeVarianten(n);
+          const gekozen = c.interval_maanden === n;
 
-        {varianten.length > 1 && (
-          <Fragment>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>In welke maanden</DropdownMenuLabel>
-            {varianten.map((r) => (
-              <DropdownMenuItem key={r} onSelect={() => onPatch({ ritme: r })}>
-                {ritmeLabel({ interval_maanden: c.interval_maanden, ritme: r })}
-                {zelfdeRitme(c.ritme, r, c.interval_maanden) && (
-                  <Check className="ml-auto size-4" />
-                )}
+          // Elke maand kan maar op één manier: dan is er niets te kiezen en
+          // hoort er geen pijltje bij.
+          if (varianten.length <= 1) {
+            return (
+              <DropdownMenuItem key={n} onSelect={() => onPatch({ interval_maanden: n })}>
+                {intervalLabels[n]}
+                {gekozen && <Check className="ml-auto size-4" />}
               </DropdownMenuItem>
-            ))}
-          </Fragment>
-        )}
+            );
+          }
+
+          return (
+            <DropdownMenuSub key={n}>
+              <DropdownMenuSubTrigger>
+                {intervalLabels[n]}
+                {gekozen && <Check className="ml-1 size-4" />}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="max-h-72 w-44 overflow-y-auto">
+                <DropdownMenuLabel>In welke maanden</DropdownMenuLabel>
+                {varianten.map((r) => (
+                  <DropdownMenuItem
+                    key={r}
+                    // Allebei tegelijk: kies je hier de maanden van een andere
+                    // frequentie, dan moet het interval mee, anders komt het
+                    // ritme op een maandenrijtje uit dat er niet bij hoort.
+                    onSelect={() => onPatch({ interval_maanden: n, ritme: r })}
+                  >
+                    {ritmeLabel({ interval_maanden: n, ritme: r })}
+                    {gekozen && zelfdeRitme(c.ritme, r, n) && <Check className="ml-auto size-4" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

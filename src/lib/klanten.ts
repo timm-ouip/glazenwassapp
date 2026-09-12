@@ -275,12 +275,13 @@ export function maandwerkVanEvenOneven(even: string, oneven: string): Maandwerk[
 }
 
 /** Om de hoeveel maanden een adres gewassen kan worden. */
-export const INTERVALLEN = [1, 2, 3, 6, 12] as const;
+export const INTERVALLEN = [1, 2, 3, 4, 6, 12] as const;
 
 export const intervalLabels: Record<number, string> = {
   1: "Elke maand",
   2: "Om de 2 maanden",
   3: "Om de 3 maanden",
+  4: "Om de 4 maanden",
   6: "Om de 6 maanden",
   12: "Eén keer per jaar",
 };
