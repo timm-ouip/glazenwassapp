@@ -126,6 +126,72 @@ export async function zoekAdres(
   return { postcode: netjes(treffer.postcode), plaats: treffer.woonplaatsnaam ?? plaats.trim() };
 }
 
+export interface PostcodeTreffer {
+  straat: string;
+  plaats: string;
+  postcode: string;
+}
+
+/**
+ * De andere kant op: van postcode + huisnummer naar straat en plaats.
+ *
+ * Dit is wat de aanmeldpagina nodig heeft. Een klant kent zijn postcode uit
+ * zijn hoofd, en twee velden op een telefoon invullen is minder werk dan vier.
+ * Hij ziet daarna "Kerkstraat 12 · 3811 CV Amersfoort" en kan bevestigen —
+ * dat vangt een typefout in de postcode af voordat zijn gegevens bij de buren
+ * belanden.
+ *
+ * Geeft `null` bij geen of meerdere treffers en bij elke fout. De pagina valt
+ * dan terug op straat en plaats zelf invullen; een dienst die het even niet
+ * doet mag nooit betekenen dat iemand zich niet kan aanmelden.
+ */
+export async function zoekOpPostcode(
+  postcode: string,
+  huisnummer: string,
+  signal?: AbortSignal,
+): Promise<PostcodeTreffer | null> {
+  const p = postcode.replace(/\s+/g, "").toUpperCase();
+  const nr = splitsNummer(huisnummer);
+  if (!/^\d{4}[A-Z]{2}$/.test(p) || !nr) return null;
+
+  const url = new URL(BASIS);
+  url.searchParams.set("q", "*:*");
+  url.searchParams.append("fq", "type:adres");
+  url.searchParams.append("fq", `postcode:${p}`);
+  url.searchParams.append("fq", `huisnummer:${nr.nummer}`);
+  url.searchParams.set("rows", "25");
+  url.searchParams.set(
+    "fl",
+    "postcode,straatnaam,huisnummer,huisletter,huisnummertoevoeging,woonplaatsnaam",
+  );
+
+  const json = await haalOp<{ response?: { docs?: PdokDoc[] } }>(url, signal);
+  if (!json) return null;
+  const docs = json.response?.docs ?? [];
+
+  // Dezelfde afweging als bij zoekAdres: bij een toevoeging de bijpassende,
+  // zonder toevoeging het kale nummer, en bij meerdere overblijvers niks. Eén
+  // postcode met huisnummer 12 en 12a levert twee rijen; de straatnaam is dan
+  // toch dezelfde, dus daar mogen we wel het eerste antwoord van pakken.
+  const passend = docs.filter((d) => {
+    const rest = `${d.huisletter ?? ""}${d.huisnummertoevoeging ?? ""}`
+      .replace(/[\s-]/g, "")
+      .toLowerCase();
+    return rest === nr.toevoeging;
+  });
+  const kandidaten = passend.length > 0 ? passend : nr.toevoeging === "" ? docs : [];
+  const straten = new Set(kandidaten.map((d) => d.straatnaam ?? ""));
+  if (kandidaten.length === 0 || straten.size !== 1) return null;
+
+  const treffer = kandidaten[0]!;
+  if (!treffer.straatnaam || !treffer.woonplaatsnaam) return null;
+  return {
+    straat: treffer.straatnaam,
+    plaats: treffer.woonplaatsnaam,
+    postcode: netjes(treffer.postcode ?? p),
+  };
+}
+
 const SUGGEST = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/suggest";
 
 /**

@@ -116,6 +116,41 @@ const KOLOMMEN = [
 ] as const satisfies readonly { veld: keyof KlantVelden; kop: string; breed: string }[];
 
 /**
+ * Het vlaggetje bij een adres waarvan de klant zelf zijn gegevens heeft
+ * doorgegeven. Klik erop en het gaat weg: "gezien".
+ *
+ * Dit is de werklijst achter de aanmeldpagina. Bij zo'n adres stond nog geen
+ * naam, en bij een adres dat via het postvak is toegevoegd staat de prijs er
+ * nu pas op — dus dit is het rijtje dat je nog even wilt nakijken.
+ */
+function Aangemeld({
+  customer,
+  onPatch,
+}: {
+  customer: Customer;
+  onPatch: (patch: Partial<Customer>) => void;
+}) {
+  if (!customer.aangemeld_op) return null;
+  const wanneer = new Date(customer.aangemeld_op).toLocaleDateString("nl-NL", {
+    day: "numeric",
+    month: "long",
+  });
+  return (
+    <button
+      type="button"
+      title={`Zelf doorgegeven op ${wanneer} — klik om het vlaggetje weg te halen`}
+      className="shrink-0 rounded-full bg-tint-groen px-1.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-tint-groen-ink hover:opacity-80"
+      onClick={(e) => {
+        e.stopPropagation();
+        onPatch({ aangemeld_op: null });
+      }}
+    >
+      Aangemeld
+    </button>
+  );
+}
+
+/**
  * Eén regel in de klantenlijst.
  *
  * Apart component en gememoïseerd, want een wijk telt er honderden en bij elke
@@ -186,6 +221,7 @@ const KlantRegel = memo(function KlantRegel({
               </span>
             )}
             <Overgeslagen customer={r.customer} />
+            <Aangemeld customer={r.customer} onPatch={(patch) => onPatch(r.customer, patch)} />
             <WassenVanaf customer={r.customer} onPatch={(patch) => onPatch(r.customer, patch)} />
           </span>
         </td>

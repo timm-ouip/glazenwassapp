@@ -14,8 +14,70 @@ export type Database = {
   }
   public: {
     Tables: {
+      aanmeldingen: {
+        Row: {
+          company_id: string
+          created_at: string
+          customer_id: string | null
+          deleted_at: string | null
+          email: string
+          huisnummer: string
+          id: string
+          ip: string
+          klant_id: string | null
+          naam: string
+          plaats: string
+          postcode: string
+          soort: string
+          status: string
+          straat: string
+          telefoon: string
+          toevoeging: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          customer_id?: string | null
+          deleted_at?: string | null
+          email?: string
+          huisnummer?: string
+          id?: string
+          ip?: string
+          klant_id?: string | null
+          naam?: string
+          plaats?: string
+          postcode?: string
+          soort: string
+          status?: string
+          straat?: string
+          telefoon?: string
+          toevoeging?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          customer_id?: string | null
+          deleted_at?: string | null
+          email?: string
+          huisnummer?: string
+          id?: string
+          ip?: string
+          klant_id?: string | null
+          naam?: string
+          plaats?: string
+          postcode?: string
+          soort?: string
+          status?: string
+          straat?: string
+          telefoon?: string
+          toevoeging?: string
+        }
+        Relationships: []
+      }
       companies: {
         Row: {
+          aanmeld_aan: boolean
+          aanmeld_token: string
           adres: string
           btw: string
           created_at: string
@@ -29,6 +91,8 @@ export type Database = {
           telefoon: string
         }
         Insert: {
+          aanmeld_aan?: boolean
+          aanmeld_token?: string
           adres?: string
           btw?: string
           created_at?: string
@@ -42,6 +106,8 @@ export type Database = {
           telefoon?: string
         }
         Update: {
+          aanmeld_aan?: boolean
+          aanmeld_token?: string
           adres?: string
           btw?: string
           created_at?: string
@@ -58,6 +124,7 @@ export type Database = {
       }
       customers: {
         Row: {
+          aangemeld_op: string | null
           addition: string
           company_id: string
           created_at: string
@@ -85,6 +152,7 @@ export type Database = {
           street_id: string
         }
         Insert: {
+          aangemeld_op?: string | null
           addition?: string
           company_id?: string
           created_at?: string
@@ -112,6 +180,7 @@ export type Database = {
           street_id: string
         }
         Update: {
+          aangemeld_op?: string | null
           addition?: string
           company_id?: string
           created_at?: string

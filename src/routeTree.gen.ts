@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AanmeldenRouteImport } from './routes/aanmelden'
+import { Route as AanmeldingenRouteImport } from './routes/aanmeldingen'
 import { Route as DagRouteImport } from './routes/dag'
 import { Route as ImporterenRouteImport } from './routes/importeren'
 import { Route as InstellingenRouteImport } from './routes/instellingen'
@@ -25,6 +27,16 @@ import { Route as UitnodigingRouteImport } from './routes/uitnodiging'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AanmeldenRoute = AanmeldenRouteImport.update({
+  id: '/aanmelden',
+  path: '/aanmelden',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AanmeldingenRoute = AanmeldingenRouteImport.update({
+  id: '/aanmeldingen',
+  path: '/aanmeldingen',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DagRoute = DagRouteImport.update({
@@ -85,6 +97,8 @@ const UitnodigingRoute = UitnodigingRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/aanmelden': typeof AanmeldenRoute
+  '/aanmeldingen': typeof AanmeldingenRoute
   '/dag': typeof DagRoute
   '/importeren': typeof ImporterenRoute
   '/instellingen': typeof InstellingenRoute
@@ -99,6 +113,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/aanmelden': typeof AanmeldenRoute
+  '/aanmeldingen': typeof AanmeldingenRoute
   '/dag': typeof DagRoute
   '/importeren': typeof ImporterenRoute
   '/instellingen': typeof InstellingenRoute
@@ -114,6 +130,8 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/aanmelden': typeof AanmeldenRoute
+  '/aanmeldingen': typeof AanmeldingenRoute
   '/dag': typeof DagRoute
   '/importeren': typeof ImporterenRoute
   '/instellingen': typeof InstellingenRoute
@@ -130,6 +148,8 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/aanmelden'
+    | '/aanmeldingen'
     | '/dag'
     | '/importeren'
     | '/instellingen'
@@ -144,6 +164,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/aanmelden'
+    | '/aanmeldingen'
     | '/dag'
     | '/importeren'
     | '/instellingen'
@@ -158,6 +180,8 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/aanmelden'
+    | '/aanmeldingen'
     | '/dag'
     | '/importeren'
     | '/instellingen'
@@ -173,6 +197,8 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AanmeldenRoute: typeof AanmeldenRoute
+  AanmeldingenRoute: typeof AanmeldingenRoute
   DagRoute: typeof DagRoute
   ImporterenRoute: typeof ImporterenRoute
   InstellingenRoute: typeof InstellingenRoute
@@ -193,6 +219,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/aanmelden': {
+      id: '/aanmelden'
+      path: '/aanmelden'
+      fullPath: '/aanmelden'
+      preLoaderRoute: typeof AanmeldenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/aanmeldingen': {
+      id: '/aanmeldingen'
+      path: '/aanmeldingen'
+      fullPath: '/aanmeldingen'
+      preLoaderRoute: typeof AanmeldingenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dag': {
@@ -277,6 +317,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AanmeldenRoute: AanmeldenRoute,
+  AanmeldingenRoute: AanmeldingenRoute,
   DagRoute: DagRoute,
   ImporterenRoute: ImporterenRoute,
   InstellingenRoute: InstellingenRoute,

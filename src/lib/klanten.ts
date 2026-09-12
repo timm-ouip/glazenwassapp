@@ -167,6 +167,11 @@ export interface Customer {
   /** Kwam dit adres via een import binnen? Dan zegt created_at alleen wanneer
    *  de import draaide — die klant was er daarvóór al. */
   geimporteerd: boolean;
+  /** Wanneer de klant zijn gegevens zelf heeft doorgegeven via de
+   *  aanmeldpagina. Leeg is het gewone geval; staat er een datum, dan is dit
+   *  adres nog niet nagekeken — en bij een nieuw adres staat de prijs nog op
+   *  nul. Het stempel gaat weg zodra je het gezien hebt. */
+  aangemeld_op: string | null;
 }
 
 /**
@@ -437,7 +442,7 @@ export async function fetchCustomers(): Promise<Customer[]> {
     // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
     // met een samengestelde string lukt dat niet meer.
     .select(
-      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd",
+      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op",
     )
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
@@ -614,6 +619,40 @@ export function alsRij(
 /** Losse velden van één adres bijwerken — kleur, overslaan, startmaand. */
 export async function patchCustomer(id: string, patch: Partial<Customer>) {
   const { error } = await supabase.from("customers").update(alsRij(patch)).eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Vult de postcode van een adres aan, maar overschrijft nooit wat er al staat.
+ *
+ * Wat er staat komt uit het adressenregister (de knop "Postcodes" op de
+ * wijkenpagina); wat hier binnenkomt heeft een klant zelf getypt. Bij twijfel
+ * wint het register.
+ */
+export async function vulPostcodeAan(customerId: string, postcode: string) {
+  const schoon = postcode.trim();
+  if (!schoon) return;
+  const { data } = await supabase
+    .from("customers")
+    .select("postcode")
+    .eq("id", customerId)
+    .maybeSingle();
+  if ((data?.postcode ?? "").trim()) return;
+  const { error } = await supabase
+    .from("customers")
+    .update({ postcode: schoon })
+    .eq("id", customerId);
+  if (error) throw error;
+}
+
+/**
+ * Haalt het aanmeld-stempel van een of meer adressen af: "gezien". Het adres
+ * zelf en de klantgegevens blijven staan — alleen het vlaggetje gaat weg,
+ * zodat de lijst met "hier moet nog een prijs bij" weer korter wordt.
+ */
+export async function haalStempelWeg(ids: string[]) {
+  if (ids.length === 0) return;
+  const { error } = await supabase.from("customers").update({ aangemeld_op: null }).in("id", ids);
   if (error) throw error;
 }
 

@@ -1,11 +1,13 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Droplets,
   LogOut,
   CalendarDays,
   Map,
   History,
+  Inbox,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -15,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { useAuth, signOut } from "@/lib/auth";
+import { aantalOpenAanmeldingen } from "@/lib/aanmeldingen";
 
 const OPSLAG = "zijbalk-ingeklapt";
 
@@ -32,6 +35,7 @@ const WERK: Pagina[] = [
   // op dat moment naar kijkt, en zit daarom op de wijkenpagina zelf.
   { label: "Planning", to: "/planning", icon: CalendarDays },
   { label: "Klanten", to: "/klanten", icon: Users },
+  { label: "Aanmeldingen", to: "/aanmeldingen", icon: Inbox },
   { label: "Importeren", to: "/importeren", icon: Upload },
 ];
 
@@ -45,6 +49,14 @@ export function Zijbalk() {
   const { employee, company } = useAuth();
   const navigate = useNavigate();
   const pad = useRouterState({ select: (s) => s.location.pathname });
+
+  // Wat er in het postvak op een mens wacht. Staat in de balk en niet op
+  // de pagina zelf, want je moet het zien zonder ernaartoe te gaan.
+  const { data: teDoen } = useQuery({
+    queryKey: ["aanmeldingen-open"],
+    queryFn: aantalOpenAanmeldingen,
+    enabled: !!employee,
+  });
 
   // Begint uitgeklapt; de keuze van de gebruiker wordt na het eerste
   // renderen ingelezen, zodat server en client hetzelfde beginnen.
@@ -74,6 +86,7 @@ export function Zijbalk() {
 
   function Item({ p }: { p: Pagina }) {
     const actief = p.to === "/" ? pad === "/" : pad.startsWith(p.to);
+    const telletje = p.to === "/aanmeldingen" ? (teDoen ?? 0) : 0;
     return (
       <Link
         to={p.to}
@@ -82,7 +95,7 @@ export function Zijbalk() {
         // Het actieve item is een witte pil op de crème balk, niet een
         // gekleurd vlak: de kleur zit in het icoon, en het wit tilt de pagina
         // waar je bent op uit de rest.
-        className={`flex h-10 items-center rounded-[12px] text-[13.5px] transition-colors ${
+        className={`relative flex h-10 items-center rounded-[12px] text-[13.5px] transition-colors ${
           ingeklapt ? "justify-center px-0" : "gap-3 px-2.5"
         } ${
           actief
@@ -94,6 +107,16 @@ export function Zijbalk() {
           className={`size-[17px] shrink-0 ${actief ? "text-tint-oranje-ink" : "text-muted-foreground"}`}
         />
         {!ingeklapt && <span className="truncate">{p.label}</span>}
+        {/* Ingeklapt is er geen ruimte voor een getal: dan alleen een stip,
+            zodat je toch ziet dat er iets ligt. */}
+        {telletje > 0 &&
+          (ingeklapt ? (
+            <span className="absolute right-2 top-2 size-2 rounded-full bg-tint-amber-ink" />
+          ) : (
+            <span className="ml-auto rounded-full bg-tint-amber px-1.5 text-[11px] font-semibold tabular-nums text-tint-amber-ink">
+              {telletje}
+            </span>
+          ))}
       </Link>
     );
   }
