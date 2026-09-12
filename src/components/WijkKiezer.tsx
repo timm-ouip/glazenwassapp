@@ -2,13 +2,17 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog } from "@/components/ui/dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  PopupBlok,
+  PopupBody,
+  PopupHint,
+  PopupKader,
+  PopupKop,
+  PopupVeld,
+  PopupVoet,
+  popupInvoer,
+} from "@/components/Popup";
 import {
   Select,
   SelectContent,
@@ -17,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Check, MoreHorizontal, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
+import { Check, Map, MapPin, MoreHorizontal, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -256,46 +260,59 @@ export function WijkKiezer({
       )}
 
       <Dialog open={dialog.open} onOpenChange={(open) => setDialog((s) => ({ ...s, open }))}>
-        <DialogContent className="sm:max-w-sm" onKeyDown={opslaanBijEnter(opslaan)}>
-          <DialogHeader>
-            <DialogTitle>
-              {dialog.mode === "nieuw" ? "Wijk toevoegen" : "Wijk hernoemen"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="wijknaam">Naam van de wijk</Label>
-              <Input id="wijknaam" value={naam} onChange={(e) => setNaam(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="wijkplaats">Plaats</Label>
-              <Input
-                id="wijkplaats"
-                list="wijk-plaatsen"
-                placeholder="Gouda"
-                value={plaats}
-                onChange={(e) => setPlaats(e.target.value)}
-              />
+        <PopupKader className="sm:max-w-sm" onKeyDown={opslaanBijEnter(opslaan)}>
+          <PopupKop
+            icoon={<Map className="size-[22px]" />}
+            titel={dialog.mode === "nieuw" ? "Wijk toevoegen" : "Wijk hernoemen"}
+            subtitel={plaats.trim() || "Een ronde die je in één keer rijdt"}
+          />
+          <PopupBody>
+            <PopupBlok label="Naam van de wijk">
+              <PopupVeld icoon={<Map className="size-4" />}>
+                <Input
+                  id="wijknaam"
+                  className={popupInvoer}
+                  placeholder="bijv. Madestein"
+                  value={naam}
+                  onChange={(e) => setNaam(e.target.value)}
+                />
+              </PopupVeld>
+            </PopupBlok>
+            <PopupBlok label="Plaats">
+              <PopupVeld icoon={<MapPin className="size-4" />}>
+                <Input
+                  id="wijkplaats"
+                  list="wijk-plaatsen"
+                  className={popupInvoer}
+                  placeholder="Gouda"
+                  value={plaats}
+                  onChange={(e) => setPlaats(e.target.value)}
+                />
+              </PopupVeld>
               <datalist id="wijk-plaatsen">
                 {plaatsSuggesties.map((p) => (
                   <option key={p} value={p} />
                 ))}
               </datalist>
-              <p className="text-xs text-muted-foreground">
+              <PopupHint>
                 De echte woonplaats, ook als de wijk anders heet — "Madestein" ligt in
                 &apos;s-Gravenhage. Hiermee worden straatnamen en postcodes opgezocht.
-              </p>
-            </div>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setDialog((s) => ({ ...s, open: false }))}>
+              </PopupHint>
+            </PopupBlok>
+          </PopupBody>
+          <PopupVoet>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setDialog((s) => ({ ...s, open: false }))}
+            >
               Annuleren
             </Button>
-            <Button onClick={opslaan} disabled={bezig}>
+            <Button className="rounded-full" onClick={opslaan} disabled={bezig}>
               {bezig ? "Bezig…" : "Opslaan"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
+          </PopupVoet>
+        </PopupKader>
       </Dialog>
     </div>
   );

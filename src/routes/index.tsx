@@ -96,7 +96,7 @@ import { KlusDialog } from "@/components/KlusDialog";
 import { KlantMenu } from "@/components/KlantMenu";
 import { Overgeslagen } from "@/components/Overgeslagen";
 import { PrijsCel } from "@/components/PrijsCel";
-import { RitmeKiezer } from "@/components/RitmeKiezer";
+import { FrequentieKiezer } from "@/components/FrequentieKiezer";
 import { WassenVanaf } from "@/components/WassenVanaf";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
 import { useStabiel } from "@/hooks/use-stabiel";
@@ -2636,7 +2636,7 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
           <PrijsCel customer={c} ronde={dezeMaand} onPatch={(patch) => onPatch(c, patch)} />
         </div>
       )}
-      <RitmeKiezer customer={c} onPatch={(patch) => onPatch(c, patch)} />
+      <FrequentieKiezer customer={c} onPatch={(patch) => onPatch(c, patch)} />
       {/* Vaste breedte, ook zonder klant: anders krimpt de notitiekolom van
           precies die ene rij en lopen de kolommen uit de pas. */}
       <span className="w-3 shrink-0">

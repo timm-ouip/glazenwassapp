@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
+import { AlertTriangle, HelpCircle } from "lucide-react";
 
 import {
   AlertDialog,
@@ -28,6 +29,10 @@ const Ctx = createContext<BevestigFn | null>(null);
  * previews, of een browser waarin de gebruiker "geen dialogen meer" heeft
  * aangevinkt) stilzwijgend geblokkeerd: confirm() geeft dan false terug
  * zonder iets te tonen, waardoor knoppen dood lijken.
+ *
+ * Dezelfde vorm als de andere schermpjes (zie Popup.tsx): een kopstrook met
+ * een icoontje en de vraag, en onderaan de knoppen. Bij iets onomkeerbaars is
+ * het icoontje rood — dat is het enige verschil, en het valt meteen op.
  */
 export function BevestigProvider({ children }: { children: ReactNode }) {
   const [vraag, setVraag] = useState<Vraag | null>(null);
@@ -46,6 +51,8 @@ export function BevestigProvider({ children }: { children: ReactNode }) {
     setVraag(null);
   }
 
+  const gevaarlijk = vraag?.gevaarlijk ?? false;
+
   return (
     <Ctx.Provider value={bevestig}>
       {children}
@@ -56,20 +63,45 @@ export function BevestigProvider({ children }: { children: ReactNode }) {
           if (!open) sluit(false);
         }}
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{vraag?.titel}</AlertDialogTitle>
-            {vraag?.tekst && <AlertDialogDescription>{vraag.tekst}</AlertDialogDescription>}
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => sluit(false)}>Annuleren</AlertDialogCancel>
+        <AlertDialogContent className="gap-0 overflow-hidden border-0 bg-card p-0 shadow-[0_2px_6px_oklch(0.4_0.02_70/6%),0_24px_60px_oklch(0.35_0.02_70/14%)] sm:max-w-sm sm:rounded-[22px]">
+          <div className="bg-surface px-6 py-5">
+            <AlertDialogHeader className="space-y-0 text-left">
+              <div className="flex items-start gap-3.5">
+                <span
+                  className={`flex size-[46px] shrink-0 items-center justify-center rounded-[14px] shadow-card ${
+                    gevaarlijk
+                      ? "bg-tint-rood text-tint-rood-ink"
+                      : "bg-brand text-brand-foreground"
+                  }`}
+                >
+                  {gevaarlijk ? (
+                    <AlertTriangle className="size-[22px]" />
+                  ) : (
+                    <HelpCircle className="size-[22px]" />
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <AlertDialogTitle className="font-display text-[19px] font-semibold leading-tight tracking-[-0.02em]">
+                    {vraag?.titel}
+                  </AlertDialogTitle>
+                  {vraag?.tekst && (
+                    <AlertDialogDescription className="mt-1 text-[13px] leading-relaxed">
+                      {vraag.tekst}
+                    </AlertDialogDescription>
+                  )}
+                </div>
+              </div>
+            </AlertDialogHeader>
+          </div>
+          <AlertDialogFooter className="flex-row justify-end gap-2 border-t border-border/70 bg-card px-6 py-3.5 sm:space-x-0">
+            <AlertDialogCancel className="mt-0 rounded-full" onClick={() => sluit(false)}>
+              Annuleren
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => sluit(true)}
-              className={
-                vraag?.gevaarlijk
-                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  : undefined
-              }
+              className={`rounded-full ${
+                gevaarlijk ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""
+              }`}
             >
               {vraag?.bevestigLabel ?? "Verwijderen"}
             </AlertDialogAction>

@@ -49,7 +49,7 @@ function kleur(c: Pick<Customer, "interval_maanden" | "ritme">): string {
  * Het badge zegt de maanden en niet het interval, want dat is wat je wilt
  * weten als je langs de lijst gaat.
  */
-export function RitmeKiezer({ customer: c, onPatch }: Props) {
+export function FrequentieKiezer({ customer: c, onPatch }: Props) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

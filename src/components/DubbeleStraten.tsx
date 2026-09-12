@@ -2,14 +2,15 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, Merge } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  PopupBlok,
+  PopupBody,
+  PopupHint,
+  PopupKader,
+  PopupKop,
+  PopupVoet,
+} from "@/components/Popup";
 import { toast } from "sonner";
 import { pushUndo } from "@/lib/undo";
 import {
@@ -143,74 +144,85 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
       </div>
 
       <Dialog open={!!actief} onOpenChange={(o) => !o && setActief(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>"{actief?.naam}" samenvoegen?</DialogTitle>
-            <DialogDescription>
-              {actief?.straten.length} straten met dezelfde naam worden één straat. Alle klanten
-              komen achter elkaar te staan in de eerste straat. Dit kun je met Ongedaan maken
-              terugdraaien.
-            </DialogDescription>
-          </DialogHeader>
+        <PopupKader className="sm:max-w-lg">
+          <PopupKop
+            icoon={<Merge className="size-[22px]" />}
+            titel={`"${actief?.naam}" samenvoegen?`}
+            subtitel={`${actief?.straten.length} straten met dezelfde naam worden één straat`}
+          />
+          <PopupBody>
+            <PopupHint>
+              Alle klanten komen achter elkaar te staan in de eerste straat. Dit kun je met Ongedaan
+              maken terugdraaien.
+            </PopupHint>
 
-          {actief && (
-            <div className="space-y-3 text-sm">
-              <ul className="space-y-1">
-                {actief.straten.map((s, i) => (
-                  <li
-                    key={s.id}
-                    className="flex justify-between rounded border border-border px-2 py-1"
-                  >
-                    <span>
-                      {s.name}{" "}
-                      {i === 0 && (
-                        <span className="text-xs text-muted-foreground">(blijft bestaan)</span>
-                      )}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {customers.filter((c) => c.street_id === s.id).length} klanten
-                    </span>
-                  </li>
-                ))}
-              </ul>
-
-              {dubbels.length > 0 ? (
-                <div className="rounded border border-destructive/50 bg-destructive/10 p-2">
-                  <p className="flex items-center gap-1.5 font-medium text-destructive">
-                    <AlertTriangle className="size-4" /> Let op: {dubbels.length} huisnummer(s)
-                    komen dubbel voor
-                  </p>
-                  <ul className="mt-1 space-y-0.5 text-xs">
-                    {dubbels.map((lijst) => (
-                      <li key={lijst[0]!.id}>
-                        <span className="font-medium">nr {formatNumber(lijst[0]!)}</span> —{" "}
-                        {lijst.length}× (
-                        {lijst
-                          .map((c) => `€ ${c.price}${c.note ? ` · ${c.note}` : ""}`)
-                          .join(" / ")}
-                        )
+            {actief && (
+              <>
+                <PopupBlok label="Wordt samengevoegd">
+                  <ul className="divide-y divide-border/60 rounded-xl border border-input text-sm">
+                    {actief.straten.map((s, i) => (
+                      <li key={s.id} className="flex justify-between gap-2 px-3 py-2">
+                        <span>
+                          {s.name}{" "}
+                          {i === 0 && (
+                            <span className="text-xs text-muted-foreground">(blijft bestaan)</span>
+                          )}
+                        </span>
+                        <span className="shrink-0 text-muted-foreground">
+                          {customers.filter((c) => c.street_id === s.id).length} klanten
+                        </span>
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Deze regels blijven allemaal staan; controleer ze na het samenvoegen zelf.
-                  </p>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">Geen dubbele huisnummers gevonden.</p>
-              )}
-            </div>
-          )}
+                </PopupBlok>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setActief(null)} disabled={bezig}>
+                {dubbels.length > 0 ? (
+                  <div className="rounded-xl border border-tint-rood-ink/25 bg-tint-rood px-3 py-2.5 text-tint-rood-ink">
+                    <p className="flex items-center gap-1.5 text-[13px] font-medium">
+                      <AlertTriangle className="size-4" /> Let op: {dubbels.length} huisnummer(s)
+                      komen dubbel voor
+                    </p>
+                    <ul className="mt-1 space-y-0.5 text-xs">
+                      {dubbels.map((lijst) => (
+                        <li key={lijst[0]!.id}>
+                          <span className="font-medium">nr {formatNumber(lijst[0]!)}</span> —{" "}
+                          {lijst.length}× (
+                          {lijst
+                            .map((c) => `€ ${c.price}${c.note ? ` · ${c.note}` : ""}`)
+                            .join(" / ")}
+                          )
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-1 text-xs opacity-80">
+                      Deze regels blijven allemaal staan; controleer ze na het samenvoegen zelf.
+                    </p>
+                  </div>
+                ) : (
+                  <PopupHint>Geen dubbele huisnummers gevonden.</PopupHint>
+                )}
+              </>
+            )}
+          </PopupBody>
+
+          <PopupVoet>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setActief(null)}
+              disabled={bezig}
+            >
               Annuleren
             </Button>
-            <Button onClick={() => actief && void samenvoegen(actief)} disabled={bezig}>
+            <Button
+              className="rounded-full"
+              onClick={() => actief && void samenvoegen(actief)}
+              disabled={bezig}
+            >
               Samenvoegen
             </Button>
-          </DialogFooter>
-        </DialogContent>
+          </PopupVoet>
+        </PopupKader>
       </Dialog>
     </>
   );

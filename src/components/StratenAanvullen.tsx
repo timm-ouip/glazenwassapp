@@ -1,13 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Wand2 } from "lucide-react";
@@ -18,6 +12,13 @@ import {
   type StraatVoorstel as Voorstel,
 } from "@/lib/aanvullen";
 import { pushUndo, undoLaatste } from "@/lib/undo";
+import {
+  PopupBody,
+  PopupHint,
+  PopupKader,
+  PopupKop,
+  PopupVoet,
+} from "@/components/Popup";
 
 interface Props {
   /** De straten van de actieve wijk. */
@@ -145,76 +146,87 @@ export function StratenAanvullen({
       )}
 
       <Dialog open={open} onOpenChange={(o) => !bezig && setOpen(o)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Straatnamen aanvullen</DialogTitle>
-          </DialogHeader>
+        <PopupKader className="sm:max-w-xl">
+          <PopupKop
+            icoon={<Wand2 className="size-[22px]" />}
+            titel="Straatnamen aanvullen"
+            subtitel={
+              bezig
+                ? `Bezig met opzoeken — ${voortgang} van ${teDoen.length}…`
+                : `Voorstellen voor ${plaats}`
+            }
+          />
+          <PopupBody className="max-h-[60vh]">
+            <PopupHint>Vink aan wat klopt; wat je leeg laat blijft ongewijzigd.</PopupHint>
 
-          <p className="text-sm text-muted-foreground">
-            {bezig
-              ? `Bezig met opzoeken — ${voortgang} van ${teDoen.length}…`
-              : `Voorstellen voor ${plaats}. Vink aan wat klopt; wat je leeg laat blijft ongewijzigd.`}
-          </p>
+            {afgebroken && (
+              <p className="rounded-xl border border-tint-amber-ink/25 bg-tint-amber px-3 py-2 text-[13px] text-tint-amber-ink">
+                De adressendienst gaf geen antwoord meer — waarschijnlijk te veel opvragingen kort na
+                elkaar. Sla op wat hier staat en draai dit over een paar minuten nog eens voor de
+                rest.
+              </p>
+            )}
 
-          {afgebroken && (
-            <p className="rounded-[10px] border border-border bg-tint-amber/40 px-3 py-2 text-[13px]">
-              De adressendienst gaf geen antwoord meer — waarschijnlijk te veel opvragingen kort na
-              elkaar. Sla op wat hier staat en draai dit over een paar minuten nog eens voor de
-              rest.
-            </p>
-          )}
-
-          <div className="space-y-1">
-            {voorstellen.map((v) => (
-              <div
-                key={v.street.id}
-                className="grid grid-cols-[1.5rem_9rem_1fr] items-center gap-2 rounded-lg px-1 py-1 hover:bg-accent/40"
-              >
-                <Checkbox
-                  checked={v.aan}
-                  disabled={!v.waarde.trim()}
-                  onCheckedChange={(c) => zet(v.street.id, { aan: c === true })}
-                  aria-label={`${v.street.name} aanvullen`}
-                />
-                <span className="truncate text-[13px] text-muted-foreground">{v.street.name}</span>
-                {v.opties.length > 1 ? (
-                  <select
-                    className="h-8 rounded-md border border-border bg-card px-2 text-[13px]"
-                    value={v.waarde}
-                    onChange={(e) =>
-                      zet(v.street.id, { waarde: e.target.value, aan: Boolean(e.target.value) })
-                    }
-                  >
-                    <option value="">— kies —</option>
-                    {v.opties.map((o) => (
-                      <option key={o} value={o}>
-                        {o}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <Input
-                    className="h-8 text-[13px]"
-                    placeholder="geen voorstel — zelf invullen"
-                    value={v.waarde}
-                    onChange={(e) =>
-                      zet(v.street.id, { waarde: e.target.value, aan: Boolean(e.target.value) })
-                    }
+            <div className="space-y-1">
+              {voorstellen.map((v) => (
+                <div
+                  key={v.street.id}
+                  className="grid grid-cols-[1.5rem_9rem_1fr] items-center gap-2 rounded-lg px-1 py-1 hover:bg-accent/40"
+                >
+                  <Checkbox
+                    checked={v.aan}
+                    disabled={!v.waarde.trim()}
+                    onCheckedChange={(c) => zet(v.street.id, { aan: c === true })}
+                    aria-label={`${v.street.name} aanvullen`}
                   />
-                )}
-              </div>
-            ))}
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={bezig}>
+                  <span className="truncate text-[13px] text-muted-foreground">{v.street.name}</span>
+                  {v.opties.length > 1 ? (
+                    <select
+                      className="h-9 rounded-xl border border-input bg-background/70 px-2 text-[13px]"
+                      value={v.waarde}
+                      onChange={(e) =>
+                        zet(v.street.id, { waarde: e.target.value, aan: Boolean(e.target.value) })
+                      }
+                    >
+                      <option value="">— kies —</option>
+                      {v.opties.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      className="h-9 rounded-xl border-input bg-background/70 text-[13px]"
+                      placeholder="geen voorstel — zelf invullen"
+                      value={v.waarde}
+                      onChange={(e) =>
+                        zet(v.street.id, { waarde: e.target.value, aan: Boolean(e.target.value) })
+                      }
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </PopupBody>
+          <PopupVoet>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setOpen(false)}
+              disabled={bezig}
+            >
               Annuleren
             </Button>
-            <Button onClick={() => void bewaar()} disabled={bezig || opslaan || aantalAan === 0}>
+            <Button
+              className="rounded-full"
+              onClick={() => void bewaar()}
+              disabled={bezig || opslaan || aantalAan === 0}
+            >
               {opslaan ? "Bezig…" : `${aantalAan} opslaan`}
             </Button>
-          </DialogFooter>
-        </DialogContent>
+          </PopupVoet>
+        </PopupKader>
       </Dialog>
     </>
   );

@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
-import { CornerDownRight } from "lucide-react";
+import { CornerDownRight, Signpost, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { formatNumber, isHoekadres, type Customer, type Street } from "@/lib/klanten";
 import { opslaanBijEnter } from "@/lib/dialoog";
+import {
+  PopupBlok,
+  PopupBody,
+  PopupHint,
+  PopupKader,
+  PopupKop,
+  PopupVeld,
+  PopupVoet,
+  popupInvoer,
+} from "@/components/Popup";
 
 interface Props {
   open: boolean;
@@ -70,44 +73,49 @@ export function HoekadresDialog({ open, onOpenChange, customer, straten, onOpsla
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm" onKeyDown={opslaanBijEnter(opslaan)}>
-        <DialogHeader>
-          <DialogTitle>Hoekadres — {formatNumber(customer)}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="hoekstraat">Straat waar dit pand echt aan ligt</Label>
-            <Input
-              id="hoekstraat"
-              list="hoek-straten"
-              placeholder="bijv. Aleid"
-              value={straat}
-              onChange={(e) => {
-                setStraat(e.target.value);
-                vulAan(e.target.value, "kort");
-              }}
-            />
+      <PopupKader className="sm:max-w-sm" onKeyDown={opslaanBijEnter(opslaan)}>
+        <PopupKop
+          icoon={<CornerDownRight className="size-[22px]" />}
+          titel={`Hoekadres ${formatNumber(customer)}`}
+          subtitel="Dit pand ligt aan een andere straat"
+        />
+        <PopupBody>
+          <PopupBlok label="Straat waar dit pand echt aan ligt">
+            <PopupVeld icoon={<Signpost className="size-4" />}>
+              <Input
+                id="hoekstraat"
+                list="hoek-straten"
+                className={popupInvoer}
+                placeholder="bijv. Aleid"
+                value={straat}
+                onChange={(e) => {
+                  setStraat(e.target.value);
+                  vulAan(e.target.value, "kort");
+                }}
+              />
+            </PopupVeld>
             <datalist id="hoek-straten">
               {straten.map((s) => (
                 <option key={s.id} value={s.name} />
               ))}
             </datalist>
-            <p className="text-xs text-muted-foreground">
-              Zoals hij op de lijst staat — kort, want hij komt op de printlijst.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="hoekvolledig">Volledige straatnaam</Label>
-            <Input
-              id="hoekvolledig"
-              list="hoek-straten-vol"
-              placeholder={straat.trim() ? `bijv. ${straat.trim()}straat` : "Aleidisstraat"}
-              value={volledig}
-              onChange={(e) => {
-                setVolledig(e.target.value);
-                vulAan(e.target.value, "volledig");
-              }}
-            />
+            <PopupHint>Zoals hij op de lijst staat — kort, want hij komt op de printlijst.</PopupHint>
+          </PopupBlok>
+
+          <PopupBlok label="Volledige straatnaam">
+            <PopupVeld icoon={<Type className="size-4" />}>
+              <Input
+                id="hoekvolledig"
+                list="hoek-straten-vol"
+                className={popupInvoer}
+                placeholder={straat.trim() ? `bijv. ${straat.trim()}straat` : "Aleidisstraat"}
+                value={volledig}
+                onChange={(e) => {
+                  setVolledig(e.target.value);
+                  vulAan(e.target.value, "volledig");
+                }}
+              />
+            </PopupVeld>
             <datalist id="hoek-straten-vol">
               {straten
                 .filter((s) => s.volledige_naam.trim())
@@ -115,34 +123,42 @@ export function HoekadresDialog({ open, onOpenChange, customer, straten, onOpsla
                   <option key={s.id} value={s.volledige_naam} />
                 ))}
             </datalist>
-            <p className="text-xs text-muted-foreground">
+            <PopupHint>
               Dít is het adres van de klant, en de naam waarmee de postcode wordt opgezocht.
-            </p>
-          </div>
-          <p className="flex items-start gap-1 pt-2 text-xs text-muted-foreground">
+            </PopupHint>
+          </PopupBlok>
+
+          <p className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground">
             <CornerDownRight className="mt-px size-3.5 shrink-0" />
             <span>
               Staat hij aan de verkeerde kant van de straat? Sleep hem naar de andere kolom, op de
               plek waar je hem tegenkomt. Daar blijft hij staan.
             </span>
           </p>
-        </div>
-        <DialogFooter className="gap-2 sm:gap-0">
-          {isHoekadres(customer) && (
-            <Button
-              variant="outline"
-              className="sm:mr-auto"
-              onClick={() => bewaar({ hoek_straat: "", hoek_straat_volledig: "", hoek_kant: "" })}
-            >
-              Hoekadres weghalen
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        </PopupBody>
+        <PopupVoet
+          links={
+            isHoekadres(customer) && (
+              <Button
+                variant="ghost"
+                className="rounded-full text-muted-foreground"
+                onClick={() =>
+                  bewaar({ hoek_straat: "", hoek_straat_volledig: "", hoek_kant: "" })
+                }
+              >
+                Hoekadres weghalen
+              </Button>
+            )
+          }
+        >
+          <Button variant="outline" className="rounded-full" onClick={() => onOpenChange(false)}>
             Annuleren
           </Button>
-          <Button onClick={opslaan}>Opslaan</Button>
-        </DialogFooter>
-      </DialogContent>
+          <Button className="rounded-full" onClick={opslaan}>
+            Opslaan
+          </Button>
+        </PopupVoet>
+      </PopupKader>
     </Dialog>
   );
 }

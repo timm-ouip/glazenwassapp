@@ -1,19 +1,21 @@
 import { useEffect, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { CalendarCheck, MessageSquare, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { opslaanBijEnter } from "@/lib/dialoog";
+import {
+  PopupBlok,
+  PopupBody,
+  PopupHint,
+  PopupKader,
+  PopupKop,
+  PopupVeld,
+  PopupVoet,
+  popupInvoer,
+} from "@/components/Popup";
 import {
   formatNumber,
   formatPrice,
@@ -93,87 +95,89 @@ export function DagAdresDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" onKeyDown={opslaanBijEnter(bewaar)}>
-        <DialogHeader>
-          <DialogTitle>
-            {straat} {formatNumber(c)}
-          </DialogTitle>
-          <DialogDescription>Alleen voor {toonDatum(datum)}</DialogDescription>
-        </DialogHeader>
+      <PopupKader onKeyDown={opslaanBijEnter(bewaar)}>
+        <PopupKop
+          icoon={<CalendarCheck className="size-[22px]" />}
+          titel={`${straat} ${formatNumber(c)}`}
+          subtitel={`Alleen voor ${toonDatum(datum)}`}
+        />
+        <PopupBody>
+          {/* Wat er vast bij dit adres hoort. Niet te wijzigen: dat doe je op
+              de wijkenpagina, want daar geldt het voor elke ronde. */}
+          <PopupBlok label="Vast bij dit adres">
+            <dl className="divide-y divide-border/60 rounded-xl border border-input text-[13px]">
+              <div className="flex gap-2 px-3 py-2">
+                <dt className="w-24 shrink-0 text-muted-foreground">Vaste prijs</dt>
+                <dd className="tabular-nums">{formatPrice(standaard)}</dd>
+              </div>
+              <div className="flex gap-2 px-3 py-2">
+                <dt className="w-24 shrink-0 text-muted-foreground">Frequentie</dt>
+                <dd>{ritmeLabel(c)}</dd>
+              </div>
+              <div className="flex gap-2 px-3 py-2">
+                <dt className="w-24 shrink-0 text-muted-foreground">Notitie</dt>
+                <dd className="min-w-0 flex-1">
+                  {vast || <span className="text-muted-foreground">—</span>}
+                </dd>
+              </div>
+            </dl>
+          </PopupBlok>
 
-        {/* Wat er vast bij dit adres hoort. Niet te wijzigen: dat doe je op de
-            wijkenpagina, want daar geldt het voor elke ronde. */}
-        <dl className="rounded-[12px] border border-border bg-muted/40 px-3 py-2 text-[13px]">
-          <div className="flex gap-2 py-0.5">
-            <dt className="w-24 shrink-0 text-muted-foreground">Vaste prijs</dt>
-            <dd className="tabular-nums">{formatPrice(standaard)}</dd>
-          </div>
-          <div className="flex gap-2 py-0.5">
-            <dt className="w-24 shrink-0 text-muted-foreground">Frequentie</dt>
-            <dd>{ritmeLabel(c)}</dd>
-          </div>
-          <div className="flex gap-2 py-0.5">
-            <dt className="w-24 shrink-0 text-muted-foreground">Notitie</dt>
-            <dd className="min-w-0 flex-1">
-              {vast || <span className="text-muted-foreground">—</span>}
-            </dd>
-          </div>
-        </dl>
-
-        <div className="grid gap-3">
-          <div className="grid gap-1.5">
-            <Label htmlFor="dagprijs">Prijs deze dag</Label>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">€</span>
+          <PopupBlok label="Prijs deze dag">
+            <PopupVeld icoon={<span className="text-sm">€</span>}>
               <Input
                 id="dagprijs"
                 inputMode="decimal"
+                className={`${popupInvoer} tabular-nums`}
                 value={bedrag}
                 onChange={(e) => setBedrag(e.target.value)}
-                className="tabular-nums"
               />
-            </div>
-          </div>
+            </PopupVeld>
+          </PopupBlok>
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="dagnotitie">Wat ging er anders?</Label>
-            <Textarea
-              id="dagnotitie"
-              rows={2}
-              value={tekst}
-              onChange={(e) => setTekst(e.target.value)}
-              placeholder="bijvoorbeeld: alleen de voorkant gewassen"
-            />
-            <p className="text-[12px] text-muted-foreground">
-              Komt straks zo op de factuur te staan.
-            </p>
-          </div>
-        </div>
-
-        <DialogFooter className="sm:justify-between">
+          <PopupBlok label="Wat ging er anders?">
+            <PopupVeld className="items-start py-2.5" icoon={<MessageSquare className="size-4" />}>
+              <Textarea
+                id="dagnotitie"
+                rows={2}
+                className={`${popupInvoer} resize-none`}
+                value={tekst}
+                onChange={(e) => setTekst(e.target.value)}
+                placeholder="bijvoorbeeld: alleen de voorkant gewassen"
+              />
+            </PopupVeld>
+            <PopupHint>Komt straks zo op de factuur te staan.</PopupHint>
+          </PopupBlok>
+        </PopupBody>
+        <PopupVoet
+          links={
+            <Button
+              type="button"
+              variant="ghost"
+              className="rounded-full text-muted-foreground"
+              disabled={!afwijkend}
+              onClick={() => {
+                setBedrag(String(standaard).replace(".", ","));
+                setTekst("");
+              }}
+            >
+              <RotateCcw className="size-4" /> Terug naar gewoon
+            </Button>
+          }
+        >
           <Button
             type="button"
-            variant="ghost"
-            size="sm"
+            variant="outline"
             className="rounded-full"
-            disabled={!afwijkend}
-            onClick={() => {
-              setBedrag(String(standaard).replace(".", ","));
-              setTekst("");
-            }}
+            onClick={() => onOpenChange(false)}
           >
-            <RotateCcw className="size-4" /> Terug naar gewoon
+            Annuleren
           </Button>
-          <span className="flex gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuleren
-            </Button>
-            <Button type="button" onClick={bewaar}>
-              Opslaan
-            </Button>
-          </span>
-        </DialogFooter>
-      </DialogContent>
+          <Button type="button" className="rounded-full" onClick={bewaar}>
+            Opslaan
+          </Button>
+        </PopupVoet>
+      </PopupKader>
     </Dialog>
   );
 }

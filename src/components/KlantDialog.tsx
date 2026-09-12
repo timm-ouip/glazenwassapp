@@ -2,14 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -29,9 +22,20 @@ import {
   type QuickNote,
   type Street,
 } from "@/lib/klanten";
-import { Plus } from "lucide-react";
+import { CalendarDays, Hash, House, MessageSquare, Plus, User } from "lucide-react";
 import { opslaanBijEnter } from "@/lib/dialoog";
 import { eersteBeurtVanaf, maandSleutel } from "@/lib/klanten";
+import {
+  PopupBlok,
+  PopupBody,
+  PopupHint,
+  PopupKader,
+  PopupKop,
+  PopupPaar,
+  PopupVeld,
+  PopupVoet,
+  popupInvoer,
+} from "@/components/Popup";
 
 function startMaandVoorNieuw(ritme: {
   interval_maanden: number;
@@ -119,9 +123,9 @@ export function KlantDialog({
       // waar de maanden erbij staan.
       ...(basis ? { interval_maanden: basis.interval_maanden, ritme: basis.ritme } : {}),
       ...(!customer && nieuweSortOrder !== undefined ? { sort_order: nieuweSortOrder } : {}),
-      // Een nieuw adres begint in de eerste maand van zijn ritme: maak je in
-      // september een adres voor de even maanden, dan is hij pas in oktober
-      // nieuw. Valt deze maand al in het ritme, dan hoeft er niets vast.
+      // Een nieuw adres begint in de eerste maand van zijn frequentie: maak je
+      // in september een adres voor de even maanden, dan is hij pas in oktober
+      // nieuw. Valt deze maand al in de frequentie, dan hoeft er niets vast.
       ...(!customer && basis ? startMaandVoorNieuw(basis) : {}),
     };
     const { error } = customer
@@ -137,10 +141,11 @@ export function KlantDialog({
     onSaved();
   }
 
+  const straatNaam = streets.find((s) => s.id === streetId)?.name ?? "";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-md"
+      <PopupKader
         onKeyDown={opslaanBijEnter(save)}
         onOpenAutoFocus={(e) => {
           // Kwam je via "+ adres", dan staan straat en nummer er al: begin bij de prijs.
@@ -150,49 +155,65 @@ export function KlantDialog({
           }
         }}
       >
-        <DialogHeader>
-          <DialogTitle>{customer ? "Klant bewerken" : "Klant toevoegen"}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Straat</Label>
-            <Select value={streetId} onValueChange={setStreetId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Kies een straat" />
-              </SelectTrigger>
-              <SelectContent>
-                {streets.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="nr">Huisnummer</Label>
+        <PopupKop
+          icoon={<User className="size-[22px]" />}
+          titel={customer ? "Klant bewerken" : "Klant toevoegen"}
+          subtitel={
+            straatNaam && number.trim()
+              ? `${straatNaam} ${number.trim()}${addition.trim()}`
+              : "Een adres in deze wijk"
+          }
+        />
+        <PopupBody>
+          <PopupBlok label="Waar">
+            <PopupVeld icoon={<House className="size-4" />}>
+              <Select value={streetId} onValueChange={setStreetId}>
+                <SelectTrigger className="h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0">
+                  <SelectValue placeholder="Kies een straat" />
+                </SelectTrigger>
+                <SelectContent>
+                  {streets.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </PopupVeld>
+            <PopupPaar smal>
+              <PopupVeld icoon={<Hash className="size-4" />}>
+                <Input
+                  id="nr"
+                  inputMode="numeric"
+                  className={popupInvoer}
+                  placeholder="Huisnummer"
+                  value={number}
+                  onChange={(e) => setNumber(e.target.value)}
+                />
+              </PopupVeld>
+              <PopupVeld>
+                <Input
+                  id="toev"
+                  className={popupInvoer}
+                  placeholder="a, bis…"
+                  value={addition}
+                  onChange={(e) => setAddition(e.target.value)}
+                />
+              </PopupVeld>
+            </PopupPaar>
+          </PopupBlok>
+
+          <PopupBlok label="Notitie">
+            <PopupVeld icoon={<MessageSquare className="size-4" />}>
               <Input
-                id="nr"
-                inputMode="numeric"
-                value={number}
-                onChange={(e) => setNumber(e.target.value)}
+                id="notitie"
+                className={popupInvoer}
+                placeholder="wat er bij dit adres hoort"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="toev">Toevoeging</Label>
-              <Input
-                id="toev"
-                placeholder="a, bis…"
-                value={addition}
-                onChange={(e) => setAddition(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="notitie">Notitie</Label>
-            <Input id="notitie" value={note} onChange={(e) => setNote(e.target.value)} />
-            <div className="flex flex-wrap gap-1.5 pt-1">
+            </PopupVeld>
+            <div className="flex flex-wrap gap-1.5">
               {quickNotes.map((q) => {
                 const aan = noteTokens(note).some((t) => t.toLowerCase() === q.label.toLowerCase());
                 return (
@@ -200,10 +221,10 @@ export function KlantDialog({
                     key={q.id}
                     type="button"
                     onClick={() => setNote(toggleNoteToken(note, q.label))}
-                    className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                    className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
                       aan
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-secondary text-secondary-foreground hover:bg-accent"
+                        ? "border-transparent bg-primary text-primary-foreground"
+                        : "border-border bg-card text-muted-foreground hover:bg-accent"
                     }`}
                   >
                     {q.label}
@@ -211,25 +232,27 @@ export function KlantDialog({
                 );
               })}
             </div>
-            <div className="flex gap-1.5 pt-1">
-              <Input
-                value={nieuweSnelkeuze}
-                placeholder="Nieuwe snelkeuze"
-                className="h-8 text-xs"
-                onChange={(e) => setNieuweSnelkeuze(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && nieuweSnelkeuze.trim()) {
-                    e.preventDefault();
-                    onAddQuickNote(nieuweSnelkeuze.trim());
-                    setNieuweSnelkeuze("");
-                  }
-                }}
-              />
+            <div className="flex gap-1.5">
+              <PopupVeld className="min-h-9">
+                <Input
+                  value={nieuweSnelkeuze}
+                  placeholder="Nieuwe snelkeuze"
+                  className={`${popupInvoer} text-xs`}
+                  onChange={(e) => setNieuweSnelkeuze(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && nieuweSnelkeuze.trim()) {
+                      e.preventDefault();
+                      onAddQuickNote(nieuweSnelkeuze.trim());
+                      setNieuweSnelkeuze("");
+                    }
+                  }}
+                />
+              </PopupVeld>
               <Button
                 type="button"
-                size="sm"
+                size="icon"
                 variant="outline"
-                className="h-8 px-2"
+                className="size-9 shrink-0 rounded-full"
                 onClick={() => {
                   if (!nieuweSnelkeuze.trim()) return;
                   onAddQuickNote(nieuweSnelkeuze.trim());
@@ -239,49 +262,56 @@ export function KlantDialog({
                 <Plus className="size-3.5" />
               </Button>
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="prijs">Prijs (€)</Label>
-              <Input
-                id="prijs"
-                ref={prijsRef}
-                inputMode="decimal"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Frequentie</Label>
-              <Select value={ritme} onValueChange={(v) => setRitme(v as BasisRitme)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Kies…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {BASISRITMES.map((b) => (
-                    <SelectItem key={b.waarde} value={b.waarde}>
-                      {b.label}
-                    </SelectItem>
-                  ))}
-                  {ritme === "anders" && customer && (
-                    <SelectItem value="anders" disabled>
-                      {ritmeLabel(customer)} (stel je in de lijst in)
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          </PopupBlok>
+
+          <PopupBlok label="Prijs en frequentie">
+            <PopupPaar>
+              <PopupVeld icoon={<span className="text-sm">€</span>}>
+                <Input
+                  id="prijs"
+                  ref={prijsRef}
+                  inputMode="decimal"
+                  className={`${popupInvoer} tabular-nums`}
+                  placeholder="0,00"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
+              </PopupVeld>
+              <PopupVeld icoon={<CalendarDays className="size-4" />}>
+                <Select value={ritme} onValueChange={(v) => setRitme(v as BasisRitme)}>
+                  <SelectTrigger className="h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0">
+                    <SelectValue placeholder="Kies…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BASISRITMES.map((b) => (
+                      <SelectItem key={b.waarde} value={b.waarde}>
+                        {b.label}
+                      </SelectItem>
+                    ))}
+                    {ritme === "anders" && customer && (
+                      <SelectItem value="anders" disabled>
+                        {ritmeLabel(customer)} (stel je in de lijst in)
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </PopupVeld>
+            </PopupPaar>
+            <PopupHint>
+              Allebei nodig: zonder prijs en frequentie weet de app niet wanneer dit adres aan de
+              beurt is of wat het opbrengt.
+            </PopupHint>
+          </PopupBlok>
+        </PopupBody>
+        <PopupVoet>
+          <Button variant="outline" className="rounded-full" onClick={() => onOpenChange(false)}>
             Annuleren
           </Button>
-          <Button onClick={save} disabled={saving}>
+          <Button className="rounded-full" onClick={save} disabled={saving}>
             {saving ? "Bezig…" : "Opslaan"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </PopupVoet>
+      </PopupKader>
     </Dialog>
   );
 }

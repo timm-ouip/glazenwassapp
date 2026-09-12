@@ -1,18 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Hammer, House, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { opslaanBijEnter } from "@/lib/dialoog";
+import {
+  PopupBlok,
+  PopupBody,
+  PopupHint,
+  PopupKader,
+  PopupKop,
+  PopupVeld,
+  PopupVoet,
+  popupInvoer,
+} from "@/components/Popup";
 import {
   fetchCustomers,
   fetchDistricts,
@@ -115,41 +119,51 @@ export function KlusDialog({ open, onOpenChange, customer, klus, onOpslaan }: Pr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm" onKeyDown={opslaanBijEnter(save)}>
-        <DialogHeader>
-          <DialogTitle>{klus ? "Opdracht wijzigen" : "Extra opdracht"}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
+      <PopupKader className="sm:max-w-sm" onKeyDown={opslaanBijEnter(save)}>
+        <PopupKop
+          icoon={<Hammer className="size-[22px]" />}
+          titel={klus ? "Opdracht wijzigen" : "Extra opdracht"}
+          subtitel={customer ? formatNumber(customer) : "Werk zonder vaste maand"}
+        />
+        <PopupBody>
           {!customer && (
-            <div className="space-y-2">
-              <Label htmlFor="klus-adres">Adres</Label>
+            <PopupBlok label="Adres">
               {gekozen ? (
-                <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-                  <span className="min-w-0 flex-1 truncate">
+                <PopupVeld
+                  icoon={<House className="size-4" />}
+                  achter={
+                    <button
+                      type="button"
+                      className="text-xs underline underline-offset-2"
+                      onClick={() => setGekozen(null)}
+                    >
+                      anders
+                    </button>
+                  }
+                >
+                  <span className="block truncate">
                     {treffers.find((t) => t.c.id === gekozen.id)?.label ?? formatNumber(gekozen)}
                   </span>
-                  <button
-                    className="text-xs text-muted-foreground underline"
-                    onClick={() => setGekozen(null)}
-                  >
-                    anders
-                  </button>
-                </div>
+                </PopupVeld>
               ) : (
                 <>
-                  <Input
-                    id="klus-adres"
-                    autoFocus
-                    placeholder="Zoek op straat en huisnummer"
-                    value={zoek}
-                    onChange={(e) => setZoek(e.target.value)}
-                  />
+                  <PopupVeld icoon={<Search className="size-4" />}>
+                    <Input
+                      id="klus-adres"
+                      autoFocus
+                      className={popupInvoer}
+                      placeholder="Zoek op straat en huisnummer"
+                      value={zoek}
+                      onChange={(e) => setZoek(e.target.value)}
+                    />
+                  </PopupVeld>
                   {treffers.length > 0 && (
-                    <ul className="max-h-40 divide-y divide-border/60 overflow-y-auto rounded-md border border-border">
+                    <ul className="max-h-40 divide-y divide-border/60 overflow-y-auto rounded-xl border border-input">
                       {treffers.map((t) => (
                         <li key={t.c.id}>
                           <button
-                            className="w-full px-3 py-1.5 text-left text-sm hover:bg-accent"
+                            type="button"
+                            className="w-full px-3 py-2 text-left text-[13.5px] hover:bg-accent"
                             onClick={() => setGekozen(t.c)}
                           >
                             {t.label}
@@ -160,40 +174,48 @@ export function KlusDialog({ open, onOpenChange, customer, klus, onOpslaan }: Pr
                   )}
                 </>
               )}
-            </div>
+            </PopupBlok>
           )}
-          <div className="space-y-2">
-            <Label htmlFor="klus-wat">Wat er gedaan moet worden</Label>
-            <Input
-              id="klus-wat"
-              autoFocus={!!customer}
-              placeholder="bijv. dakrand schoonmaken"
-              value={omschrijving}
-              onChange={(e) => setOmschrijving(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="klus-prijs">Prijs</Label>
-            <Input
-              id="klus-prijs"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={prijs}
-              onChange={(e) => setPrijs(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
+
+          <PopupBlok label="Wat er gedaan moet worden">
+            <PopupVeld icoon={<Hammer className="size-4" />}>
+              <Input
+                id="klus-wat"
+                autoFocus={!!customer}
+                className={popupInvoer}
+                placeholder="bijv. dakrand schoonmaken"
+                value={omschrijving}
+                onChange={(e) => setOmschrijving(e.target.value)}
+              />
+            </PopupVeld>
+          </PopupBlok>
+
+          <PopupBlok label="Prijs">
+            <PopupVeld icoon={<span className="text-sm">€</span>}>
+              <Input
+                id="klus-prijs"
+                inputMode="decimal"
+                className={`${popupInvoer} tabular-nums`}
+                placeholder="0,00"
+                value={prijs}
+                onChange={(e) => setPrijs(e.target.value)}
+              />
+            </PopupVeld>
+            <PopupHint>
               Komt bij de omzet van de dag waarop je hem doet. Er hoort geen maand bij: hij blijft
               openstaan tot je hem afvinkt.
-            </p>
-          </div>
-        </div>
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            </PopupHint>
+          </PopupBlok>
+        </PopupBody>
+        <PopupVoet>
+          <Button variant="outline" className="rounded-full" onClick={() => onOpenChange(false)}>
             Annuleren
           </Button>
-          <Button onClick={save}>Opslaan</Button>
-        </DialogFooter>
-      </DialogContent>
+          <Button className="rounded-full" onClick={save}>
+            Opslaan
+          </Button>
+        </PopupVoet>
+      </PopupKader>
     </Dialog>
   );
 }

@@ -4,13 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   Select,
@@ -19,9 +13,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Folder, ListOrdered, Signpost, Type } from "lucide-react";
 import { nieuweStraatGroep, type StraatGroep, type Street } from "@/lib/klanten";
 import { zoekStraten } from "@/lib/postcode";
 import { opslaanBijEnter } from "@/lib/dialoog";
+import {
+  PopupBlok,
+  PopupBody,
+  PopupHint,
+  PopupKader,
+  PopupKop,
+  PopupVeld,
+  PopupVoet,
+  popupInvoer,
+} from "@/components/Popup";
 
 interface Props {
   open: boolean;
@@ -139,87 +144,110 @@ export function StraatDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm" onKeyDown={opslaanBijEnter(save)}>
-        <DialogHeader>
-          <DialogTitle>{street ? "Straat bewerken" : "Straat toevoegen"}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="straat">Naam op de lijst</Label>
-            <Input id="straat" value={name} onChange={(e) => setName(e.target.value)} />
-            <p className="text-xs text-muted-foreground">
-              Kort houden — zo staat hij op de printlijst.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="volledig">Volledige straatnaam</Label>
-            <Input
-              id="volledig"
-              list="straat-suggesties"
-              placeholder={name.trim() ? `bijv. ${name.trim()}straat` : "Amelandstraat"}
-              value={volledig}
-              onChange={(e) => setVolledig(e.target.value)}
-            />
+      <PopupKader className="sm:max-w-sm" onKeyDown={opslaanBijEnter(save)}>
+        <PopupKop
+          icoon={<Signpost className="size-[22px]" />}
+          titel={street ? "Straat bewerken" : "Straat toevoegen"}
+          subtitel={volledig.trim() || plaats || "Een straat in deze wijk"}
+        />
+        <PopupBody>
+          <PopupBlok label="Naam op de lijst">
+            <PopupVeld icoon={<Signpost className="size-4" />}>
+              <Input
+                id="straat"
+                className={popupInvoer}
+                placeholder="bijv. Ameland"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </PopupVeld>
+            <PopupHint>Kort houden — zo staat hij op de printlijst.</PopupHint>
+          </PopupBlok>
+
+          <PopupBlok label="Volledige straatnaam">
+            <PopupVeld icoon={<Type className="size-4" />}>
+              <Input
+                id="volledig"
+                list="straat-suggesties"
+                className={popupInvoer}
+                placeholder={name.trim() ? `bijv. ${name.trim()}straat` : "Amelandstraat"}
+                value={volledig}
+                onChange={(e) => setVolledig(e.target.value)}
+              />
+            </PopupVeld>
             <datalist id="straat-suggesties">
               {suggesties.map((v) => (
                 <option key={v} value={v} />
               ))}
             </datalist>
-            <p className="text-xs text-muted-foreground">
+            <PopupHint>
               De officiële naam, waarmee postcodes opgezocht worden. Mag leeg blijven als dit geen
               echte straat is, zoals een blok of complex.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="groep">Onderdeel van</Label>
-            <Select value={groep} onValueChange={setGroep}>
-              <SelectTrigger id="groep">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={GEEN}>Geen groep</SelectItem>
-                {groepen.map((g) => (
-                  <SelectItem key={g.id} value={g.id}>
-                    {g.naam}
-                  </SelectItem>
-                ))}
-                <SelectItem value={NIEUW}>Nieuwe groep…</SelectItem>
-              </SelectContent>
-            </Select>
+            </PopupHint>
+          </PopupBlok>
+
+          <PopupBlok label="Onderdeel van">
+            <PopupVeld icoon={<Folder className="size-4" />}>
+              <Select value={groep} onValueChange={setGroep}>
+                <SelectTrigger
+                  id="groep"
+                  className="h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={GEEN}>Geen groep</SelectItem>
+                  {groepen.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.naam}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={NIEUW}>Nieuwe groep…</SelectItem>
+                </SelectContent>
+              </Select>
+            </PopupVeld>
             {groep === NIEUW && (
-              <Input
-                autoFocus
-                placeholder="Naam van de groep, bijv. Noordkant"
-                value={nieuweNaam}
-                onChange={(e) => setNieuweNaam(e.target.value)}
-              />
+              <PopupVeld icoon={<Type className="size-4" />}>
+                <Input
+                  autoFocus
+                  className={popupInvoer}
+                  placeholder="Naam van de groep, bijv. Noordkant"
+                  value={nieuweNaam}
+                  onChange={(e) => setNieuweNaam(e.target.value)}
+                />
+              </PopupVeld>
             )}
-            <p className="text-xs text-muted-foreground">
+            <PopupHint>
               Een groep is een stuk van de wijk dat je in één keer kunt inklappen of inplannen.
               Straten zonder groep staan er gewoon los onder.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Switch id="doorlopend" checked={doorlopend} onCheckedChange={setDoorlopend} />
-              <Label htmlFor="doorlopend">Nummers lopen per 1 op</Label>
-            </div>
-            <p className="text-xs text-muted-foreground">
+            </PopupHint>
+          </PopupBlok>
+
+          <PopupBlok label="Nummering">
+            <PopupVeld icoon={<ListOrdered className="size-4" />}>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="doorlopend" className="cursor-pointer font-normal">
+                  Nummers lopen per 1 op
+                </Label>
+                <Switch id="doorlopend" checked={doorlopend} onCheckedChange={setDoorlopend} />
+              </div>
+            </PopupVeld>
+            <PopupHint>
               Voor een straat waar alle nummers aan dezelfde kant staan. De straat wordt dan
               doorgeteld: de eerste helft links, de tweede helft rechts. Uit is even links en oneven
               rechts.
-            </p>
-          </div>
-        </div>
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            </PopupHint>
+          </PopupBlok>
+        </PopupBody>
+        <PopupVoet>
+          <Button variant="outline" className="rounded-full" onClick={() => onOpenChange(false)}>
             Annuleren
           </Button>
-          <Button onClick={save} disabled={saving}>
+          <Button className="rounded-full" onClick={save} disabled={saving}>
             {saving ? "Bezig…" : "Opslaan"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </PopupVoet>
+      </PopupKader>
     </Dialog>
   );
 }

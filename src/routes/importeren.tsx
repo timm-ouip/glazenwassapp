@@ -14,15 +14,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Check, Eye, Trash2, Upload } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+  AlertTriangle,
+  ArrowLeft,
+  Check,
+  Eye,
+  FileSpreadsheet,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog } from "@/components/ui/dialog";
+import { PopupBody, PopupHint, PopupKader, PopupKop } from "@/components/Popup";
 
 import { AppLayout } from "@/components/AppLayout";
 import { InlineCel } from "@/components/InlineCel";
@@ -1302,17 +1305,17 @@ function BronVenster({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[85vh] max-w-6xl overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>“{straat}” in het originele bestand</DialogTitle>
-          <DialogDescription>
-            {bestandsnaam} —{" "}
-            {bruikbaar.length > 1
+      <PopupKader className="max-h-[85vh] sm:max-w-6xl">
+        <PopupKop
+          icoon={<FileSpreadsheet className="size-[22px]" />}
+          titel={`“${straat}” in het originele bestand`}
+          subtitel={`${bestandsnaam} — ${
+            bruikbaar.length > 1
               ? `staat in ${bruikbaar.length} tabbladen`
-              : `tabblad “${bruikbaar[0]?.tabblad ?? ""}”`}
-          </DialogDescription>
-        </DialogHeader>
-
+              : `tabblad “${bruikbaar[0]?.tabblad ?? ""}”`
+          }`}
+        />
+        <PopupBody>
         {bruikbaar.length > 1 && (
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -1346,11 +1349,12 @@ function BronVenster({
           )}
         </div>
 
-        <p className="text-xs text-muted-foreground">
+        <PopupHint>
           Zo staat het in je Excel-bestand, met de originele kleuren. Het oranje omlijnde vakje is
           wat de app heeft ingelezen.
-        </p>
-      </DialogContent>
+        </PopupHint>
+        </PopupBody>
+      </PopupKader>
     </Dialog>
   );
 }
