@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FrequentieOpties } from "@/components/FrequentieKiezer";
 import {
   PopupBlok,
   PopupBody,
@@ -33,11 +34,10 @@ import {
 } from "@/components/Popup";
 import { opslaanBijEnter } from "@/lib/dialoog";
 import {
-  BASISRITMES,
   bewaarKlant,
   koppelKlant,
   patchCustomer,
-  ritmeVelden,
+  leesRitmeWaarde,
   vulPostcodeAan,
   zorgVoorAdresRegel,
   type District,
@@ -58,7 +58,7 @@ export function AanmeldingDialog({ open, onOpenChange, aanmelding, districts, on
   const [straat, setStraat] = useState("");
   const [nummer, setNummer] = useState("");
   const [prijs, setPrijs] = useState("");
-  const [ritme, setRitme] = useState<string>("elke");
+  const [ritme, setRitme] = useState<string>("");
   const [bezig, setBezig] = useState(false);
 
   // Bij het openen alles terugzetten naar wat de klant opgaf. De wijk raden we
@@ -69,7 +69,7 @@ export function AanmeldingDialog({ open, onOpenChange, aanmelding, districts, on
     setStraat(aanmelding.straat);
     setNummer(aanmeldNummer(aanmelding));
     setPrijs("");
-    setRitme("elke");
+    setRitme("");
     const plaats = aanmelding.plaats.trim().toLowerCase();
     const passend = districts.filter((d) => (d.plaats ?? "").trim().toLowerCase() === plaats);
     setWijkId(passend.length === 1 ? passend[0]!.id : "");
@@ -91,6 +91,11 @@ export function AanmeldingDialog({ open, onOpenChange, aanmelding, districts, on
       toast.error("Vul een prijs in.");
       return;
     }
+    const gekozen = leesRitmeWaarde(ritme);
+    if (!gekozen) {
+      toast.error("Kies een frequentie.");
+      return;
+    }
 
     setBezig(true);
     try {
@@ -105,7 +110,7 @@ export function AanmeldingDialog({ open, onOpenChange, aanmelding, districts, on
       await patchCustomer(customerId, {
         price: bedrag,
         aangemeld_op: new Date().toISOString(),
-        ...ritmeVelden(ritme),
+        ...gekozen,
       });
       // De postcode hoort bij het pand en niet bij de bewoner, dus die gaat op
       // de adresregel — tenzij er al een staat.
@@ -199,14 +204,10 @@ export function AanmeldingDialog({ open, onOpenChange, aanmelding, districts, on
               <PopupVeld>
                 <Select value={ritme} onValueChange={setRitme}>
                   <SelectTrigger className={popupInvoer}>
-                    <SelectValue />
+                    <SelectValue placeholder="Kies…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {BASISRITMES.map((b) => (
-                      <SelectItem key={b.waarde} value={b.waarde}>
-                        {b.label}
-                      </SelectItem>
-                    ))}
+                    <FrequentieOpties />
                   </SelectContent>
                 </Select>
               </PopupVeld>

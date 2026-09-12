@@ -6,18 +6,15 @@ import { Dialog } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FrequentieOpties } from "@/components/FrequentieKiezer";
 import { toast } from "sonner";
 import {
-  INTERVALLEN,
-  intervalLabels,
-  ritmeLabel,
-  ritmeVarianten,
+  leesRitmeWaarde,
+  ritmeWaarde,
   noteTokens,
   toggleNoteToken,
   type Customer,
@@ -38,28 +35,6 @@ import {
   PopupVoet,
   popupInvoer,
 } from "@/components/Popup";
-
-/**
- * De frequentie als één waarde in de keuzelijst: "om de hoeveel maanden" en
- * "welke maanden" in één, gescheiden door een streepje — "2-2" is om de 2 in
- * de even maanden, "3-1" is om de 3 vanaf januari.
- *
- * Eén lijst en niet twee keuzes onder elkaar, want de tweede volgt uit de
- * eerste: bij om de 2 kies je even of oneven, bij om de 12 welke maand.
- */
-function ritmeWaarde(c: { interval_maanden: number; ritme: number }): string {
-  const stap = c.interval_maanden || 1;
-  // Ritme 4 bij om de 2 is hetzelfde als ritme 2: terugbrengen tot het anker
-  // binnen één cyclus, anders staat er een keuze die niet in de lijst staat.
-  const anker = ((((c.ritme - 1) % stap) + stap) % stap) + 1;
-  return `${stap}-${anker}`;
-}
-
-function leesRitmeWaarde(waarde: string): { interval_maanden: number; ritme: number } | null {
-  const [stap, anker] = waarde.split("-").map(Number);
-  if (!stap || !anker) return null;
-  return { interval_maanden: stap, ritme: anker };
-}
 
 function startMaandVoorNieuw(ritme: { interval_maanden: number; ritme: number }): {
   start_maand?: string;
@@ -314,24 +289,7 @@ export function KlantDialog({
                         wijkenlijst, zodat je hier niet minder kunt kiezen dan
                         daar. Bij om de 1 is er één mogelijkheid, dus dan is de
                         maandkeuze geen keuze. */}
-                    {INTERVALLEN.map((n) =>
-                      // Om de 1 heeft maar één mogelijkheid, dus daar zou een
-                      // kopje boven één keuze met dezelfde woorden staan.
-                      n <= 1 ? (
-                        <SelectItem key={n} value={`${n}-1`}>
-                          {intervalLabels[n]}
-                        </SelectItem>
-                      ) : (
-                        <SelectGroup key={n}>
-                          <SelectLabel>{intervalLabels[n]}</SelectLabel>
-                          {ritmeVarianten(n).map((v) => (
-                            <SelectItem key={v} value={`${n}-${v}`}>
-                              {ritmeLabel({ interval_maanden: n, ritme: v })}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      ),
-                    )}
+                    <FrequentieOpties />
                   </SelectContent>
                 </Select>
               </PopupVeld>

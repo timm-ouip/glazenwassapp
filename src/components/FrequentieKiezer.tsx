@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 
+import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -106,5 +107,43 @@ export function FrequentieKiezer({ customer: c, onPatch }: Props) {
         })}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * Dezelfde keuzes, maar als inhoud van een keuzelijst in een invulschermpje:
+ * per interval een groepje met de maanden die erbij kunnen horen.
+ *
+ * Op de lijst is de frequentie een badge waar een menu achter zit (hierboven);
+ * in een schermpje waar je een adres invult is het een veld tussen de andere
+ * velden. Twee vormen, maar één set keuzes — anders kun je bij het aanmaken van
+ * een adres minder kiezen dan bij het wijzigen ervan, en dat was precies het
+ * gat dat hier zat.
+ *
+ * De waarde die eruit komt is die van `ritmeWaarde`; met `leesRitmeWaarde`
+ * maak je er weer interval en ritme van.
+ */
+export function FrequentieOpties() {
+  return (
+    <>
+      {INTERVALLEN.map((n) =>
+        // Om de 1 heeft maar één mogelijkheid, dus daar zou een kopje boven
+        // één keuze met dezelfde woorden staan.
+        n <= 1 ? (
+          <SelectItem key={n} value={`${n}-1`}>
+            {intervalLabels[n]}
+          </SelectItem>
+        ) : (
+          <SelectGroup key={n}>
+            <SelectLabel>{intervalLabels[n]}</SelectLabel>
+            {ritmeVarianten(n).map((v) => (
+              <SelectItem key={v} value={`${n}-${v}`}>
+                {ritmeLabel({ interval_maanden: n, ritme: v })}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ),
+      )}
+    </>
   );
 }

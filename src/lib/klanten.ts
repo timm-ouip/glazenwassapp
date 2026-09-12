@@ -940,6 +940,33 @@ export function ritmeVarianten(interval: number): number[] {
   return Array.from({ length: stap }, (_, i) => i + 1);
 }
 
+/**
+ * De frequentie als één waarde voor een keuzelijst: "om de hoeveel maanden" en
+ * "welke maanden" in één, gescheiden door een streepje — "2-2" is om de 2 in
+ * de even maanden, "3-1" is om de 3 vanaf januari.
+ *
+ * Eén lijst en niet twee keuzes onder elkaar, want de tweede volgt uit de
+ * eerste: bij om de 2 kies je even of oneven, bij om de 12 welke maand. Zo
+ * werkt het menu op de wijkenlijst ook (zie FrequentieKiezer).
+ */
+export function ritmeWaarde(c: Pick<Customer, "interval_maanden" | "ritme">): string {
+  const stap = c.interval_maanden || 1;
+  // Ritme 4 bij om de 2 is hetzelfde als ritme 2: terugbrengen tot het anker
+  // binnen één cyclus, anders staat er een keuze die niet in de lijst staat.
+  const anker = ((((c.ritme - 1) % stap) + stap) % stap) + 1;
+  return `${stap}-${anker}`;
+}
+
+/** De andere kant op. Geeft null bij iets onleesbaars, zodat de aanroeper
+ *  "kies een frequentie" kan zeggen in plaats van iets te gokken. */
+export function leesRitmeWaarde(
+  waarde: string,
+): { interval_maanden: number; ritme: number } | null {
+  const [stap, anker] = waarde.split("-").map(Number);
+  if (!stap || !anker) return null;
+  return { interval_maanden: stap, ritme: anker };
+}
+
 /** Komen deze twee ankers op dezelfde maanden uit? Ritme 9 en ritme 3 doen
  *  dat bij om de 3, want ze schelen precies een hele cyclus. */
 export function zelfdeRitme(a: number, b: number, interval: number): boolean {
