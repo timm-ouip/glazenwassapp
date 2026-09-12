@@ -8,6 +8,7 @@ import {
   Map,
   History,
   Inbox,
+  Mail,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -36,6 +37,7 @@ const WERK: Pagina[] = [
   { label: "Planning", to: "/planning", icon: CalendarDays },
   { label: "Klanten", to: "/klanten", icon: Users },
   { label: "Aanmeldingen", to: "/aanmeldingen", icon: Inbox },
+  { label: "Mailing", to: "/mailing", icon: Mail },
   { label: "Importeren", to: "/importeren", icon: Upload },
 ];
 

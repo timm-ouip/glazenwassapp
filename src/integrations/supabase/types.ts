@@ -85,6 +85,9 @@ export type Database = {
           iban: string
           id: string
           kvk: string
+          mail_afzender_email: string
+          mail_afzender_naam: string
+          mail_token: string
           name: string
           plaats: string
           postcode: string
@@ -100,6 +103,9 @@ export type Database = {
           iban?: string
           id?: string
           kvk?: string
+          mail_afzender_email?: string
+          mail_afzender_naam?: string
+          mail_token?: string
           name: string
           plaats?: string
           postcode?: string
@@ -115,6 +121,9 @@ export type Database = {
           iban?: string
           id?: string
           kvk?: string
+          mail_afzender_email?: string
+          mail_afzender_naam?: string
+          mail_token?: string
           name?: string
           plaats?: string
           postcode?: string
@@ -410,6 +419,215 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mail_antwoorden: {
+        Row: {
+          ai_fout: string
+          beantwoord_op: string | null
+          bericht_id: string
+          categorie: string
+          company_id: string
+          concept: string
+          deleted_at: string | null
+          doorgevoerd_op: string | null
+          id: string
+          klant_id: string | null
+          mailing_id: string | null
+          onderwerp: string
+          ontvangen_op: string
+          samenvatting: string
+          status: string
+          tekst: string
+          van_email: string
+          van_naam: string
+          voorstel_adressen: string[]
+          voorstel_maanden: string[]
+          zekerheid: number
+        }
+        Insert: {
+          ai_fout?: string
+          beantwoord_op?: string | null
+          bericht_id?: string
+          categorie?: string
+          company_id: string
+          concept?: string
+          deleted_at?: string | null
+          doorgevoerd_op?: string | null
+          id?: string
+          klant_id?: string | null
+          mailing_id?: string | null
+          onderwerp?: string
+          ontvangen_op?: string
+          samenvatting?: string
+          status?: string
+          tekst?: string
+          van_email?: string
+          van_naam?: string
+          voorstel_adressen?: string[]
+          voorstel_maanden?: string[]
+          zekerheid?: number
+        }
+        Update: {
+          ai_fout?: string
+          beantwoord_op?: string | null
+          bericht_id?: string
+          categorie?: string
+          company_id?: string
+          concept?: string
+          deleted_at?: string | null
+          doorgevoerd_op?: string | null
+          id?: string
+          klant_id?: string | null
+          mailing_id?: string | null
+          onderwerp?: string
+          ontvangen_op?: string
+          samenvatting?: string
+          status?: string
+          tekst?: string
+          van_email?: string
+          van_naam?: string
+          voorstel_adressen?: string[]
+          voorstel_maanden?: string[]
+          zekerheid?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mail_antwoorden_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mail_antwoorden_klant_id_fkey"
+            columns: ["klant_id"]
+            isOneToOne: false
+            referencedRelation: "klanten"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mail_antwoorden_mailing_id_fkey"
+            columns: ["mailing_id"]
+            isOneToOne: false
+            referencedRelation: "mailingen"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mail_ontvangers: {
+        Row: {
+          adressen: string
+          company_id: string
+          created_at: string
+          email: string
+          fout: string
+          id: string
+          klant_id: string | null
+          mailing_id: string
+          naam: string
+          status: string
+        }
+        Insert: {
+          adressen?: string
+          company_id: string
+          created_at?: string
+          email: string
+          fout?: string
+          id?: string
+          klant_id?: string | null
+          mailing_id: string
+          naam?: string
+          status?: string
+        }
+        Update: {
+          adressen?: string
+          company_id?: string
+          created_at?: string
+          email?: string
+          fout?: string
+          id?: string
+          klant_id?: string | null
+          mailing_id?: string
+          naam?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mail_ontvangers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mail_ontvangers_klant_id_fkey"
+            columns: ["klant_id"]
+            isOneToOne: false
+            referencedRelation: "klanten"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mail_ontvangers_mailing_id_fkey"
+            columns: ["mailing_id"]
+            isOneToOne: false
+            referencedRelation: "mailingen"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mailingen: {
+        Row: {
+          aantal: number
+          company_id: string
+          created_at: string
+          datum: string | null
+          id: string
+          mislukt: number
+          onderwerp: string
+          tekst: string
+          test: boolean
+          verzonden_door: string | null
+        }
+        Insert: {
+          aantal?: number
+          company_id: string
+          created_at?: string
+          datum?: string | null
+          id?: string
+          mislukt?: number
+          onderwerp: string
+          tekst: string
+          test?: boolean
+          verzonden_door?: string | null
+        }
+        Update: {
+          aantal?: number
+          company_id?: string
+          created_at?: string
+          datum?: string | null
+          id?: string
+          mislukt?: number
+          onderwerp?: string
+          tekst?: string
+          test?: boolean
+          verzonden_door?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mailingen_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mailingen_verzonden_door_fkey"
+            columns: ["verzonden_door"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]

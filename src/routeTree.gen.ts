@@ -17,6 +17,7 @@ import { Route as ImporterenRouteImport } from './routes/importeren'
 import { Route as InstellingenRouteImport } from './routes/instellingen'
 import { Route as KlantenRouteImport } from './routes/klanten'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MailingRouteImport } from './routes/mailing'
 import { Route as PlanningRouteImport } from './routes/planning'
 import { Route as PrintenRouteImport } from './routes/printen'
 import { Route as PrullenbakRouteImport } from './routes/prullenbak'
@@ -64,6 +65,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MailingRoute = MailingRouteImport.update({
+  id: '/mailing',
+  path: '/mailing',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlanningRoute = PlanningRouteImport.update({
   id: '/planning',
   path: '/planning',
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/instellingen': typeof InstellingenRoute
   '/klanten': typeof KlantenRoute
   '/login': typeof LoginRoute
+  '/mailing': typeof MailingRoute
   '/planning': typeof PlanningRoute
   '/printen': typeof PrintenRoute
   '/prullenbak': typeof PrullenbakRoute
@@ -120,6 +127,7 @@ export interface FileRoutesByTo {
   '/instellingen': typeof InstellingenRoute
   '/klanten': typeof KlantenRoute
   '/login': typeof LoginRoute
+  '/mailing': typeof MailingRoute
   '/planning': typeof PlanningRoute
   '/printen': typeof PrintenRoute
   '/prullenbak': typeof PrullenbakRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   '/instellingen': typeof InstellingenRoute
   '/klanten': typeof KlantenRoute
   '/login': typeof LoginRoute
+  '/mailing': typeof MailingRoute
   '/planning': typeof PlanningRoute
   '/printen': typeof PrintenRoute
   '/prullenbak': typeof PrullenbakRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/instellingen'
     | '/klanten'
     | '/login'
+    | '/mailing'
     | '/planning'
     | '/printen'
     | '/prullenbak'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/instellingen'
     | '/klanten'
     | '/login'
+    | '/mailing'
     | '/planning'
     | '/printen'
     | '/prullenbak'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/instellingen'
     | '/klanten'
     | '/login'
+    | '/mailing'
     | '/planning'
     | '/printen'
     | '/prullenbak'
@@ -204,6 +216,7 @@ export interface RootRouteChildren {
   InstellingenRoute: typeof InstellingenRoute
   KlantenRoute: typeof KlantenRoute
   LoginRoute: typeof LoginRoute
+  MailingRoute: typeof MailingRoute
   PlanningRoute: typeof PlanningRoute
   PrintenRoute: typeof PrintenRoute
   PrullenbakRoute: typeof PrullenbakRoute
@@ -270,6 +283,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mailing': {
+      id: '/mailing'
+      path: '/mailing'
+      fullPath: '/mailing'
+      preLoaderRoute: typeof MailingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/planning': {
       id: '/planning'
       path: '/planning'
@@ -324,6 +344,7 @@ const rootRouteChildren: RootRouteChildren = {
   InstellingenRoute: InstellingenRoute,
   KlantenRoute: KlantenRoute,
   LoginRoute: LoginRoute,
+  MailingRoute: MailingRoute,
   PlanningRoute: PlanningRoute,
   PrintenRoute: PrintenRoute,
   PrullenbakRoute: PrullenbakRoute,

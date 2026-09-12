@@ -36,6 +36,7 @@ import {
   Euro,
   Hammer,
   ListChecks,
+  Mail,
   Milestone as Route2,
   Check,
   Plus,
@@ -1240,6 +1241,11 @@ function Planning() {
                           >
                             <Euro className="size-4" /> Werk inplannen
                           </ContextMenuItem>
+                          <ContextMenuItem
+                            onSelect={() => void navigate({ to: "/mailing", search: { dag: k } })}
+                          >
+                            <Mail className="size-4" /> Deze dag aankondigen
+                          </ContextMenuItem>
                         </ContextMenuContent>
                       </ContextMenu>
                     )}
@@ -1394,6 +1400,20 @@ function Planning() {
                   <Euro className="size-4" /> Werk inplannen
                 </Link>
               </Button>
+              {/* De aankondiging hoort bij de dag: je kijkt naar wie er morgen
+                  aan de beurt is, en stuurt ze vanaf hier een bericht. */}
+              {dagRegels.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full justify-start rounded-full"
+                  asChild
+                >
+                  <Link to="/mailing" search={{ dag: gekozenDag }}>
+                    <Mail className="size-4" /> Deze dag aankondigen
+                  </Link>
+                </Button>
+              )}
               {dagRegels.length > 0 && (
                 <Button
                   size="sm"

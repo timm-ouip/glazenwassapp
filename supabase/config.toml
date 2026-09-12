@@ -1,1 +1,12 @@
 project_id = "xsioixuerbwgbzzroyke"
+
+# De inbox-functie staat open op internet: Brevo levert daar binnengekomen
+# mail af, en Brevo heeft geen Supabase-inlog. De poort is de sleutel in de
+# URL (MAIL_INBOX_SLEUTEL), zie supabase/functions/mail-inbox/index.ts.
+[functions.mail-inbox]
+verify_jwt = false
+
+# Versturen mag alleen wie ingelogd is; de functie kijkt zelf welk bedrijf
+# daarbij hoort.
+[functions.mail-versturen]
+verify_jwt = true
