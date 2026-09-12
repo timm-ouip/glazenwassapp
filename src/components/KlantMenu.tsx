@@ -222,6 +222,7 @@ export function KlantMenu({
           </ContextMenuSubContent>
         </ContextMenuSub>
 
+        <ContextMenuSeparator />
         <ContextMenuItem onSelect={onKlus}>
           <Hammer className="size-4" /> Extra opdracht…
         </ContextMenuItem>
