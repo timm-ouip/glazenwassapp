@@ -146,6 +146,7 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
       <Dialog open={!!actief} onOpenChange={(o) => !o && setActief(null)}>
         <PopupKader className="sm:max-w-lg">
           <PopupKop
+            kleur="amber"
             icoon={<Merge className="size-[22px]" />}
             titel={`"${actief?.naam}" samenvoegen?`}
             subtitel={`${actief?.straten.length} straten met dezelfde naam worden één straat`}

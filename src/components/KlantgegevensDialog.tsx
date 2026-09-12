@@ -447,7 +447,9 @@ export function KlantgegevensDialog({
     ? maandSleutel(new Date(dossierCustomer.created_at))
     : "";
   const klantSinds = sindsMaand
-    ? `klant sinds ${toonMaandKort(sindsMaand)} ${sindsMaand.slice(0, 4)}`
+    ? `${dossierCustomer?.geimporteerd ? "geïmporteerd op" : "klant sinds"} ${toonMaandKort(
+        sindsMaand,
+      )} ${sindsMaand.slice(0, 4)}`
     : undefined;
 
   /** De ankermaanden waar je uit kiest bij om de 2, 3, 6 of 12 maanden. */

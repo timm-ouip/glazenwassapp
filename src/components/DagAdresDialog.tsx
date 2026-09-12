@@ -97,6 +97,8 @@ export function DagAdresDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <PopupKader onKeyDown={opslaanBijEnter(bewaar)}>
         <PopupKop
+          // Groen: dit gaat over het bedrag van één dag.
+          kleur="groen"
           icoon={<CalendarCheck className="size-[22px]" />}
           titel={`${straat} ${formatNumber(c)}`}
           subtitel={`Alleen voor ${toonDatum(datum)}`}

@@ -52,12 +52,30 @@ export function PopupKader({
  * Rechts blijft ruimte vrij voor het kruisje dat de dialoog zelf tekent —
  * zonder die ruimte loopt een lange titel eronderdoor.
  */
+/**
+ * De kleurfamilies van de kopstrook, dezelfde taal als de cijfertegels
+ * bovenaan een pagina: het vlak is de lichte tint, het tegeltje een stap
+ * dieper, de tekst de donkere kant ervan. Zo hoort een straat-schermpje bij
+ * de tegel "Straten", en een dag bij het groen van de omzet.
+ */
+export type PopupKleur = "blauw" | "amber" | "groen" | "paars" | "roze" | "geel" | "rood";
+
+const KOPKLEUREN: Record<PopupKleur, { band: string; tegel: string }> = {
+  blauw: { band: "bg-accent text-accent-foreground", tegel: "bg-accent-foreground/15" },
+  amber: { band: "bg-tint-amber text-tint-amber-ink", tegel: "bg-tint-amber-ink/15" },
+  groen: { band: "bg-tint-groen text-tint-groen-ink", tegel: "bg-tint-groen-ink/15" },
+  paars: { band: "bg-tint-paars text-tint-paars-ink", tegel: "bg-tint-paars-ink/15" },
+  roze: { band: "bg-tint-roze text-tint-roze-ink", tegel: "bg-tint-roze-ink/15" },
+  geel: { band: "bg-tint-geel text-tint-geel-ink", tegel: "bg-tint-geel-ink/15" },
+  rood: { band: "bg-tint-rood text-tint-rood-ink", tegel: "bg-tint-rood-ink/15" },
+};
+
 export function PopupKop({
   icoon,
   titel,
   subtitel,
   tabs,
-  tegelKleur = "bg-brand text-brand-foreground",
+  kleur = "blauw",
 }: {
   icoon: ReactNode;
   titel: ReactNode;
@@ -65,18 +83,20 @@ export function PopupKop({
   subtitel?: ReactNode;
   /** Optionele tabbladen, die op de onderrand van de kop staan. */
   tabs?: ReactNode;
-  /** De kleur van het tegeltje. Dezelfde tint als waar het schermpje over
-   *  gaat — straten zijn amber, net als de tegel op de wijkenpagina. */
-  tegelKleur?: string;
+  /** De kleurfamilie van de kopstrook; zie KOPKLEUREN. */
+  kleur?: PopupKleur;
 }) {
+  const kleuren = KOPKLEUREN[kleur];
   return (
-    <div className="bg-surface px-6 pt-5">
+    <div className={cn("px-6 pt-5", kleuren.band)}>
       <DialogHeader className="space-y-0 text-left">
         <div className="flex items-start gap-3.5 pr-8">
           <span
             className={cn(
-              "flex size-[46px] shrink-0 items-center justify-center rounded-[14px] shadow-card",
-              tegelKleur,
+              // Geen schaduw: op een gekleurde band is het tegeltje een stap
+              // dieper in dezelfde kleur, net als bij de cijfertegels.
+              "flex size-[46px] shrink-0 items-center justify-center rounded-[14px]",
+              kleuren.tegel,
             )}
           >
             {icoon}
@@ -119,7 +139,9 @@ export function PopupTab({
       aria-selected={actief}
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-t-[11px] border border-b-0 border-transparent px-3 py-2 text-[13px] font-medium transition-colors",
+        // Eigen focusrandje: zonder dit tekent het systeem er zijn eigen
+        // accentkleur omheen, en dat vloekt met de kleur van de kopstrook.
+        "inline-flex items-center gap-1.5 rounded-t-[11px] border border-b-0 border-transparent px-3 py-2 text-[13px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-current/40",
         actief
           ? "border-border/70 bg-card text-foreground"
           : "text-muted-foreground hover:text-foreground",

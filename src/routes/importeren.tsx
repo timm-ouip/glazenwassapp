@@ -770,6 +770,8 @@ function ImportPagina() {
         // het jaar meegaat; dat is precies wat maandwerk beschrijft.
         maandwerk: maandwerkVanEvenOneven(r.notitieEven, r.notitieOneven) as unknown as Json,
         ...ritmeVelden(r.frequency),
+        // Zo weet het dossier straks dat deze klant er vóór deze datum al was.
+        geimporteerd: true,
       }));
       const { error } = await supabase.from("customers").insert(payload);
       if (error) throw error;
@@ -1307,6 +1309,7 @@ function BronVenster({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <PopupKader className="max-h-[85vh] sm:max-w-6xl">
         <PopupKop
+          kleur="paars"
           icoon={<FileSpreadsheet className="size-[22px]" />}
           titel={`“${straat}” in het originele bestand`}
           subtitel={`${bestandsnaam} — ${

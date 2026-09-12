@@ -63,6 +63,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           frequency: string
+          geimporteerd: boolean
           house_number: number
           hoek_straat: string
           hoek_straat_volledig: string
@@ -89,6 +90,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           frequency?: string
+          geimporteerd?: boolean
           house_number: number
           hoek_straat?: string
           hoek_straat_volledig?: string
@@ -115,6 +117,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           frequency?: string
+          geimporteerd?: boolean
           house_number?: number
           hoek_straat?: string
           hoek_straat_volledig?: string

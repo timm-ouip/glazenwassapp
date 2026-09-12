@@ -121,6 +121,8 @@ export function KlusDialog({ open, onOpenChange, customer, klus, onOpslaan }: Pr
     <Dialog open={open} onOpenChange={onOpenChange}>
       <PopupKader className="sm:max-w-sm" onKeyDown={opslaanBijEnter(save)}>
         <PopupKop
+          // Geel, net als de strook met extra opdrachten op de planning.
+          kleur="geel"
           icoon={<Hammer className="size-[22px]" />}
           titel={klus ? "Opdracht wijzigen" : "Extra opdracht"}
           subtitel={customer ? formatNumber(customer) : "Werk zonder vaste maand"}

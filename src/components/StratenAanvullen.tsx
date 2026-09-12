@@ -148,6 +148,7 @@ export function StratenAanvullen({
       <Dialog open={open} onOpenChange={(o) => !bezig && setOpen(o)}>
         <PopupKader className="sm:max-w-xl">
           <PopupKop
+            kleur="amber"
             icoon={<Wand2 className="size-[22px]" />}
             titel="Straatnamen aanvullen"
             subtitel={

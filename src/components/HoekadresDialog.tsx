@@ -75,6 +75,8 @@ export function HoekadresDialog({ open, onOpenChange, customer, straten, onOpsla
     <Dialog open={open} onOpenChange={onOpenChange}>
       <PopupKader className="sm:max-w-sm" onKeyDown={opslaanBijEnter(opslaan)}>
         <PopupKop
+          // Amber, want dit gaat over straten.
+          kleur="amber"
           icoon={<CornerDownRight className="size-[22px]" />}
           titel={`Hoekadres ${formatNumber(customer)}`}
           subtitel="Dit pand ligt aan een andere straat"

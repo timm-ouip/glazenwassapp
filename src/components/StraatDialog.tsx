@@ -147,7 +147,7 @@ export function StraatDialog({
         <PopupKop
           // Dezelfde amber als de tegel "Straten" bovenaan de wijkenpagina:
           // straten hebben in deze app één kleur, waar je ze ook tegenkomt.
-          tegelKleur="bg-tint-amber text-tint-amber-ink"
+          kleur="amber"
           icoon={<Signpost className="size-[22px]" />}
           titel={street ? "Straat bewerken" : "Straat toevoegen"}
           subtitel={volledig.trim() || plaats || "Een straat in deze wijk"}

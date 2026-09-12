@@ -48,6 +48,7 @@ export function GroepDialog({ open, onOpenChange, groep, onOpslaan }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <PopupKader className="sm:max-w-sm" onKeyDown={opslaanBijEnter(save)}>
         <PopupKop
+          kleur="paars"
           icoon={<Folder className="size-[22px]" />}
           titel={groep ? "Groep hernoemen" : "Nieuwe groep"}
           subtitel="Een stuk van de wijk dat je in één keer inplant"

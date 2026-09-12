@@ -64,14 +64,18 @@ export function BevestigProvider({ children }: { children: ReactNode }) {
         }}
       >
         <AlertDialogContent className="gap-0 overflow-hidden border-0 bg-card p-0 shadow-[0_2px_6px_oklch(0.4_0.02_70/6%),0_24px_60px_oklch(0.35_0.02_70/14%)] sm:max-w-sm sm:rounded-[22px]">
-          <div className="bg-surface px-6 py-5">
+          <div
+            className={`px-6 py-5 ${
+              gevaarlijk
+                ? "bg-tint-rood text-tint-rood-ink"
+                : "bg-accent text-accent-foreground"
+            }`}
+          >
             <AlertDialogHeader className="space-y-0 text-left">
               <div className="flex items-start gap-3.5">
                 <span
-                  className={`flex size-[46px] shrink-0 items-center justify-center rounded-[14px] shadow-card ${
-                    gevaarlijk
-                      ? "bg-tint-rood text-tint-rood-ink"
-                      : "bg-brand text-brand-foreground"
+                  className={`flex size-[46px] shrink-0 items-center justify-center rounded-[14px] ${
+                    gevaarlijk ? "bg-tint-rood-ink/15" : "bg-accent-foreground/15"
                   }`}
                 >
                   {gevaarlijk ? (

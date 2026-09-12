@@ -164,6 +164,9 @@ export interface Customer {
   hoek_straat_volledig: string;
   /** In welke kolom de regel hoort; leeg = het huisnummer beslist. */
   hoek_kant: Kant | "";
+  /** Kwam dit adres via een import binnen? Dan zegt created_at alleen wanneer
+   *  de import draaide — die klant was er daarvóór al. */
+  geimporteerd: boolean;
 }
 
 /**
@@ -434,7 +437,7 @@ export async function fetchCustomers(): Promise<Customer[]> {
     // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
     // met een samengestelde string lukt dat niet meer.
     .select(
-      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant",
+      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd",
     )
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
