@@ -6,16 +6,18 @@ import { Dialog } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  BASISRITMES,
-  basisRitmeVan,
+  INTERVALLEN,
+  intervalLabels,
   ritmeLabel,
-  type BasisRitme,
+  ritmeVarianten,
   noteTokens,
   toggleNoteToken,
   type Customer,
@@ -37,10 +39,31 @@ import {
   popupInvoer,
 } from "@/components/Popup";
 
-function startMaandVoorNieuw(ritme: {
-  interval_maanden: number;
-  ritme: number;
-}): { start_maand?: string } {
+/**
+ * De frequentie als één waarde in de keuzelijst: "om de hoeveel maanden" en
+ * "welke maanden" in één, gescheiden door een streepje — "2-2" is om de 2 in
+ * de even maanden, "3-1" is om de 3 vanaf januari.
+ *
+ * Eén lijst en niet twee keuzes onder elkaar, want de tweede volgt uit de
+ * eerste: bij om de 2 kies je even of oneven, bij om de 12 welke maand.
+ */
+function ritmeWaarde(c: { interval_maanden: number; ritme: number }): string {
+  const stap = c.interval_maanden || 1;
+  // Ritme 4 bij om de 2 is hetzelfde als ritme 2: terugbrengen tot het anker
+  // binnen één cyclus, anders staat er een keuze die niet in de lijst staat.
+  const anker = ((((c.ritme - 1) % stap) + stap) % stap) + 1;
+  return `${stap}-${anker}`;
+}
+
+function leesRitmeWaarde(waarde: string): { interval_maanden: number; ritme: number } | null {
+  const [stap, anker] = waarde.split("-").map(Number);
+  if (!stap || !anker) return null;
+  return { interval_maanden: stap, ritme: anker };
+}
+
+function startMaandVoorNieuw(ritme: { interval_maanden: number; ritme: number }): {
+  start_maand?: string;
+} {
   const dezeMaand = maandSleutel(new Date());
   const start = eersteBeurtVanaf(dezeMaand, ritme);
   return start === dezeMaand ? {} : { start_maand: start };
@@ -81,7 +104,7 @@ export function KlantDialog({
   const [price, setPrice] = useState("");
   // Leeg bij een nieuw adres: de frequentie kies je zelf, anders staat er
   // ongemerkt "elke maand" op een adres dat om de twee moet.
-  const [ritme, setRitme] = useState<BasisRitme | "anders" | "">("");
+  const [ritme, setRitme] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const prijsRef = useRef<HTMLInputElement>(null);
 
@@ -92,7 +115,7 @@ export function KlantDialog({
     setAddition(customer?.addition ?? "");
     setNote(customer?.note ?? "");
     setPrice(customer ? String(customer.price) : "");
-    setRitme(customer ? basisRitmeVan(customer) : "");
+    setRitme(customer ? ritmeWaarde(customer) : "");
   }, [open, customer, defaultStreetId, defaultNumber, streets]);
 
   async function save() {
@@ -111,22 +134,25 @@ export function KlantDialog({
       toast.error("Kies een frequentie.");
       return;
     }
+    const gekozen = leesRitmeWaarde(ritme);
+    if (!gekozen) {
+      toast.error("Kies een frequentie.");
+      return;
+    }
     setSaving(true);
-    const basis = BASISRITMES.find((b) => b.waarde === ritme);
     const payload = {
       street_id: streetId,
       house_number: huisnummer,
       addition: addition.trim(),
       note: note.trim(),
       price: prijs,
-      // Bij "anders" laten we het ritme staan: dat stel je in de wijklijst in,
-      // waar de maanden erbij staan.
-      ...(basis ? { interval_maanden: basis.interval_maanden, ritme: basis.ritme } : {}),
+      interval_maanden: gekozen.interval_maanden,
+      ritme: gekozen.ritme,
       ...(!customer && nieuweSortOrder !== undefined ? { sort_order: nieuweSortOrder } : {}),
       // Een nieuw adres begint in de eerste maand van zijn frequentie: maak je
       // in september een adres voor de even maanden, dan is hij pas in oktober
       // nieuw. Valt deze maand al in de frequentie, dan hoeft er niets vast.
-      ...(!customer && basis ? startMaandVoorNieuw(basis) : {}),
+      ...(!customer ? startMaandVoorNieuw(gekozen) : {}),
     };
     const { error } = customer
       ? await supabase.from("customers").update(payload).eq("id", customer.id)
@@ -278,20 +304,33 @@ export function KlantDialog({
                 />
               </PopupVeld>
               <PopupVeld icoon={<CalendarDays className="size-4" />}>
-                <Select value={ritme} onValueChange={(v) => setRitme(v as BasisRitme)}>
+                <Select value={ritme} onValueChange={setRitme}>
                   <SelectTrigger className="h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0">
                     <SelectValue placeholder="Kies…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {BASISRITMES.map((b) => (
-                      <SelectItem key={b.waarde} value={b.waarde}>
-                        {b.label}
-                      </SelectItem>
-                    ))}
-                    {ritme === "anders" && customer && (
-                      <SelectItem value="anders" disabled>
-                        {ritmeLabel(customer)} (stel je in de lijst in)
-                      </SelectItem>
+                    {/* Per interval een groepje met de maanden die erbij
+                        kunnen horen — dezelfde indeling als het menu op de
+                        wijkenlijst, zodat je hier niet minder kunt kiezen dan
+                        daar. Bij om de 1 is er één mogelijkheid, dus dan is de
+                        maandkeuze geen keuze. */}
+                    {INTERVALLEN.map((n) =>
+                      // Om de 1 heeft maar één mogelijkheid, dus daar zou een
+                      // kopje boven één keuze met dezelfde woorden staan.
+                      n <= 1 ? (
+                        <SelectItem key={n} value={`${n}-1`}>
+                          {intervalLabels[n]}
+                        </SelectItem>
+                      ) : (
+                        <SelectGroup key={n}>
+                          <SelectLabel>{intervalLabels[n]}</SelectLabel>
+                          {ritmeVarianten(n).map((v) => (
+                            <SelectItem key={v} value={`${n}-${v}`}>
+                              {ritmeLabel({ interval_maanden: n, ritme: v })}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ),
                     )}
                   </SelectContent>
                 </Select>

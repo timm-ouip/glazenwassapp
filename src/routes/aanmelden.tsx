@@ -119,12 +119,8 @@ function AanmeldPagina() {
       toast.error("Vul je naam in.");
       return;
     }
-    if (!telefoon.trim()) {
-      toast.error("Vul je telefoonnummer in.");
-      return;
-    }
-    if (!email.trim()) {
-      toast.error("Vul je e-mailadres in.");
+    if (!telefoon.trim() && !email.trim()) {
+      toast.error("Vul een telefoonnummer of een e-mailadres in, zodat we je kunnen bereiken.");
       return;
     }
     setBezig(true);
