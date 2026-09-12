@@ -1,7 +1,14 @@
 import type { ReactNode } from "react";
+import { Info } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 /**
  * De vaste indeling van elk schermpje in deze app.
@@ -50,6 +57,7 @@ export function PopupKop({
   titel,
   subtitel,
   tabs,
+  tegelKleur = "bg-brand text-brand-foreground",
 }: {
   icoon: ReactNode;
   titel: ReactNode;
@@ -57,12 +65,20 @@ export function PopupKop({
   subtitel?: ReactNode;
   /** Optionele tabbladen, die op de onderrand van de kop staan. */
   tabs?: ReactNode;
+  /** De kleur van het tegeltje. Dezelfde tint als waar het schermpje over
+   *  gaat — straten zijn amber, net als de tegel op de wijkenpagina. */
+  tegelKleur?: string;
 }) {
   return (
     <div className="bg-surface px-6 pt-5">
       <DialogHeader className="space-y-0 text-left">
         <div className="flex items-start gap-3.5 pr-8">
-          <span className="flex size-[46px] shrink-0 items-center justify-center rounded-[14px] bg-brand text-brand-foreground shadow-card">
+          <span
+            className={cn(
+              "flex size-[46px] shrink-0 items-center justify-center rounded-[14px] shadow-card",
+              tegelKleur,
+            )}
+          >
             {icoon}
           </span>
           <div className="min-w-0 flex-1">
@@ -134,19 +150,24 @@ export function PopupBody({ className, children }: { className?: string; childre
 export function PopupBlok({
   label,
   terzijde,
+  info,
   children,
 }: {
   label?: ReactNode;
   terzijde?: ReactNode;
+  /** Uitleg die je alleen ziet als je hem zoekt: een puntje achter het
+   *  opschrift. Lange lappen tekst onder elk veld maken een schermpje druk. */
+  info?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-2">
-      {(label || terzijde) && (
+      {(label || terzijde || info) && (
         <div className="flex items-center justify-between gap-3">
           {label && (
-            <span className="text-[11.5px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+            <span className="flex items-center gap-1 text-[11.5px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
               {label}
+              {info && <PopupInfo>{info}</PopupInfo>}
             </span>
           )}
           {terzijde && (
@@ -201,6 +222,34 @@ export function PopupVeld({
  *  tekent de rand al, dus het veld zelf is onzichtbaar. */
 export const popupInvoer =
   "h-auto border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0";
+
+/**
+ * Een informatiepuntje: houd je muis erboven en de uitleg verschijnt.
+ *
+ * Zo hoeft niet elke uitleg onder een veld te staan. Je leest een schermpje
+ * één keer; daarna wil je alleen de vakjes zien.
+ */
+export function PopupInfo({ children }: { children: ReactNode }) {
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Uitleg"
+            className="text-muted-foreground/70 transition-colors hover:text-foreground"
+          >
+            <Info className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-64 text-[12px] leading-relaxed normal-case tracking-normal">
+          {children}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 /** Uitleg onder een veld. Klein en stil: het is een bijzin, geen opschrift. */
 export function PopupHint({ children }: { children: ReactNode }) {

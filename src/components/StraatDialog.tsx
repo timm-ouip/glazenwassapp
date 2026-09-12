@@ -20,7 +20,6 @@ import { opslaanBijEnter } from "@/lib/dialoog";
 import {
   PopupBlok,
   PopupBody,
-  PopupHint,
   PopupKader,
   PopupKop,
   PopupVeld,
@@ -146,12 +145,15 @@ export function StraatDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <PopupKader className="sm:max-w-sm" onKeyDown={opslaanBijEnter(save)}>
         <PopupKop
+          // Dezelfde amber als de tegel "Straten" bovenaan de wijkenpagina:
+          // straten hebben in deze app één kleur, waar je ze ook tegenkomt.
+          tegelKleur="bg-tint-amber text-tint-amber-ink"
           icoon={<Signpost className="size-[22px]" />}
           titel={street ? "Straat bewerken" : "Straat toevoegen"}
           subtitel={volledig.trim() || plaats || "Een straat in deze wijk"}
         />
         <PopupBody>
-          <PopupBlok label="Naam op de lijst">
+          <PopupBlok label="Naam op de lijst" info="Kort houden — zo staat hij op de printlijst.">
             <PopupVeld icoon={<Signpost className="size-4" />}>
               <Input
                 id="straat"
@@ -161,10 +163,12 @@ export function StraatDialog({
                 onChange={(e) => setName(e.target.value)}
               />
             </PopupVeld>
-            <PopupHint>Kort houden — zo staat hij op de printlijst.</PopupHint>
           </PopupBlok>
 
-          <PopupBlok label="Volledige straatnaam">
+          <PopupBlok
+            label="Volledige straatnaam"
+            info="De officiële naam, waarmee postcodes opgezocht worden. Mag leeg blijven als dit geen echte straat is, zoals een blok of complex."
+          >
             <PopupVeld icoon={<Type className="size-4" />}>
               <Input
                 id="volledig"
@@ -180,13 +184,12 @@ export function StraatDialog({
                 <option key={v} value={v} />
               ))}
             </datalist>
-            <PopupHint>
-              De officiële naam, waarmee postcodes opgezocht worden. Mag leeg blijven als dit geen
-              echte straat is, zoals een blok of complex.
-            </PopupHint>
           </PopupBlok>
 
-          <PopupBlok label="Onderdeel van">
+          <PopupBlok
+            label="Onderdeel van"
+            info="Een groep is een stuk van de wijk dat je in één keer kunt inklappen of inplannen. Straten zonder groep staan er gewoon los onder."
+          >
             <PopupVeld icoon={<Folder className="size-4" />}>
               <Select value={groep} onValueChange={setGroep}>
                 <SelectTrigger
@@ -217,13 +220,12 @@ export function StraatDialog({
                 />
               </PopupVeld>
             )}
-            <PopupHint>
-              Een groep is een stuk van de wijk dat je in één keer kunt inklappen of inplannen.
-              Straten zonder groep staan er gewoon los onder.
-            </PopupHint>
           </PopupBlok>
 
-          <PopupBlok label="Nummering">
+          <PopupBlok
+            label="Nummering"
+            info="Voor een straat waar alle nummers aan dezelfde kant staan. De straat wordt dan doorgeteld: de eerste helft links, de tweede helft rechts. Uit is even links en oneven rechts."
+          >
             <PopupVeld icoon={<ListOrdered className="size-4" />}>
               <div className="flex items-center justify-between gap-3">
                 <Label htmlFor="doorlopend" className="cursor-pointer font-normal">
@@ -232,11 +234,6 @@ export function StraatDialog({
                 <Switch id="doorlopend" checked={doorlopend} onCheckedChange={setDoorlopend} />
               </div>
             </PopupVeld>
-            <PopupHint>
-              Voor een straat waar alle nummers aan dezelfde kant staan. De straat wordt dan
-              doorgeteld: de eerste helft links, de tweede helft rechts. Uit is even links en oneven
-              rechts.
-            </PopupHint>
           </PopupBlok>
         </PopupBody>
         <PopupVoet>

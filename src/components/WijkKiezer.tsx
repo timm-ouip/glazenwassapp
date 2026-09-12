@@ -6,7 +6,6 @@ import { Dialog } from "@/components/ui/dialog";
 import {
   PopupBlok,
   PopupBody,
-  PopupHint,
   PopupKader,
   PopupKop,
   PopupVeld,
@@ -278,7 +277,10 @@ export function WijkKiezer({
                 />
               </PopupVeld>
             </PopupBlok>
-            <PopupBlok label="Plaats">
+            <PopupBlok
+              label="Plaats"
+              info="Hiermee worden straatnamen en postcodes automatisch opgehaald. Gebruik de echte woonplaats, ook als de wijk anders heet — Madestein ligt in 's-Gravenhage."
+            >
               <PopupVeld icoon={<MapPin className="size-4" />}>
                 <Input
                   id="wijkplaats"
@@ -294,10 +296,6 @@ export function WijkKiezer({
                   <option key={p} value={p} />
                 ))}
               </datalist>
-              <PopupHint>
-                De echte woonplaats, ook als de wijk anders heet — "Madestein" ligt in
-                &apos;s-Gravenhage. Hiermee worden straatnamen en postcodes opgezocht.
-              </PopupHint>
             </PopupBlok>
           </PopupBody>
           <PopupVoet>

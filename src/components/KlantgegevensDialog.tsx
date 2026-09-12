@@ -47,7 +47,6 @@ import {
   Palette,
   Phone,
   Signpost,
-  Sparkles,
   User,
   X,
 } from "lucide-react";
@@ -60,6 +59,7 @@ import {
   INTERVALLEN,
   intervalLabels,
   komendeMaanden,
+  maandSleutel,
   koppelKlant,
   fetchMarkeringen,
   tintStip,
@@ -202,7 +202,6 @@ export function KlantgegevensDialog({
   const [saving, setSaving] = useState(false);
   // Zodra de gebruiker zelf een postcode typt, houdt de opzoeking zijn mond.
   const [postcodeHandmatig, setPostcodeHandmatig] = useState(false);
-  const [postcodeGevonden, setPostcodeGevonden] = useState(false);
   const [straatSuggesties, setStraatSuggesties] = useState<string[]>([]);
 
   const beginKoppeling = useRef<string[]>([]);
@@ -262,7 +261,6 @@ export function KlantgegevensDialog({
     setKoppelOpen(false);
     setTab("klant");
     setPostcodeHandmatig(Boolean(klant?.postcode));
-    setPostcodeGevonden(false);
     // Alleen bij openen opnieuw vullen; verder is dit een vrij formulier.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, klant, voorstelCustomer]);
@@ -278,7 +276,6 @@ export function KlantgegevensDialog({
       void zoekAdres({ straat, huisnummer, plaats }, ac.signal).then((treffer) => {
         if (!treffer || ac.signal.aborted) return;
         setVelden((v) => ({ ...v, postcode: treffer.postcode, plaats: treffer.plaats }));
-        setPostcodeGevonden(true);
       });
     }, 400);
 
@@ -443,6 +440,16 @@ export function KlantgegevensDialog({
 
   const nieuwAdres = !dossierCustomer && Boolean(velden.straat.trim() && velden.huisnummer.trim());
 
+  /** Sinds wanneer dit adres op de lijst staat. Bij een wijk die je in één
+   *  keer geïmporteerd hebt is dat de dag van die import — de app houdt geen
+   *  apart importstempel bij, dus verder kan hij die twee niet uit elkaar. */
+  const sindsMaand = dossierCustomer
+    ? maandSleutel(new Date(dossierCustomer.created_at))
+    : "";
+  const klantSinds = sindsMaand
+    ? `klant sinds ${toonMaandKort(sindsMaand)} ${sindsMaand.slice(0, 4)}`
+    : undefined;
+
   /** De ankermaanden waar je uit kiest bij om de 2, 3, 6 of 12 maanden. */
   const ritmeKeuzes = ritmeVarianten(pand.interval_maanden);
   /** De kalendermaanden waarin dit adres sowieso langskomt — het meerwerk-
@@ -478,7 +485,7 @@ export function KlantgegevensDialog({
                 onClick={() => setTab("klant")}
                 icoon={<User className="size-[15px]" />}
               >
-                De klant
+                Gegevens
               </PopupTab>
               <PopupTab
                 actief={tab === "adres"}
@@ -502,12 +509,12 @@ export function KlantgegevensDialog({
         <PopupBody className="max-h-[60vh]">
           {tab === "klant" && (
             <>
-              <PopupBlok label="De klant">
+              <PopupBlok label="De klant" terzijde={klantSinds}>
                 <PopupVeld icoon={<User className="size-4" />}>
                   <Input
                     id="naam"
                     className={popupInvoer}
-                    placeholder="nog onbekend"
+                    placeholder="Naam"
                     value={velden.naam}
                     onChange={(e) => zet({ naam: e.target.value })}
                     autoFocus
@@ -539,7 +546,7 @@ export function KlantgegevensDialog({
                 </PopupPaar>
               </PopupBlok>
 
-              <PopupBlok label="Waar">
+              <PopupBlok>
                 <PopupPaar smal>
                   <PopupVeld icoon={<Signpost className="size-4" />}>
                     <Input
@@ -586,7 +593,6 @@ export function KlantgegevensDialog({
                       value={velden.postcode}
                       onChange={(e) => {
                         setPostcodeHandmatig(true);
-                        setPostcodeGevonden(false);
                         zet({ postcode: e.target.value });
                       }}
                     />
@@ -597,13 +603,6 @@ export function KlantgegevensDialog({
                     <option key={p} value={p} />
                   ))}
                 </datalist>
-
-                {postcodeGevonden && (
-                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Sparkles className="size-3.5" /> Postcode automatisch gevonden — je kunt hem
-                    overschrijven.
-                  </p>
-                )}
 
                 {/* Een adres dat nog niet op een wijklijst staat, wordt bij
                     opslaan aangemaakt. In welke wijk staat hier, en is te
@@ -627,12 +626,12 @@ export function KlantgegevensDialog({
                 )}
               </PopupBlok>
 
-              <PopupBlok label="Notitie bij de persoon">
+              <PopupBlok>
                 <PopupVeld icoon={<MessageSquare className="size-4" />}>
                   <Input
                     id="notitie"
                     className={popupInvoer}
-                    placeholder="wat je over deze klant wilt onthouden"
+                    placeholder="Notitie bij klant"
                     value={velden.notitie}
                     onChange={(e) => zet({ notitie: e.target.value })}
                   />
@@ -673,7 +672,7 @@ export function KlantgegevensDialog({
                         type="button"
                         className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-muted-foreground hover:bg-accent hover:text-foreground"
                       >
-                        <Link2 className="size-3.5" /> adres koppelen
+                        <Link2 className="size-3.5" /> nog een adres koppelen
                       </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-80 p-0" align="start">
