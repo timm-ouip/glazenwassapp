@@ -645,17 +645,6 @@ export async function vulPostcodeAan(customerId: string, postcode: string) {
   if (error) throw error;
 }
 
-/**
- * Haalt het aanmeld-stempel van een of meer adressen af: "gezien". Het adres
- * zelf en de klantgegevens blijven staan — alleen het vlaggetje gaat weg,
- * zodat de lijst met "hier moet nog een prijs bij" weer korter wordt.
- */
-export async function haalStempelWeg(ids: string[]) {
-  if (ids.length === 0) return;
-  const { error } = await supabase.from("customers").update({ aangemeld_op: null }).in("id", ids);
-  if (error) throw error;
-}
-
 /** Slaat de officiële straatnamen op voor een groep straten tegelijk. */
 export async function persistVolledigeNamen(namen: { id: string; volledige_naam: string }[]) {
   await Promise.all(
