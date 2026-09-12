@@ -134,11 +134,6 @@ export function KlantMenu({
         <ContextMenuItem onSelect={onDossier}>
           <FileText className="size-4" /> Dossier
         </ContextMenuItem>
-        <ContextMenuItem onSelect={onKlus}>
-          <Hammer className="size-4" /> Extra opdracht…
-        </ContextMenuItem>
-
-        <ContextMenuSeparator />
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => wisselMaand(komende)}>
           <CalendarOff className="size-4" />
@@ -197,6 +192,40 @@ export function KlantMenu({
           </ContextMenuItem>
         )}
 
+        {/* Vanaf wanneer hij meedoet hoort bij overslaan: allebei gaan ze over
+            de maanden waarin je hier langskomt. Zonder maand in de naam — die
+            is meestal al voorbij, en zolang hij nog moet beginnen staat hij in
+            de regel zelf als "vanaf okt". */}
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <Flag className="size-4" /> Nieuw vanaf:
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="max-h-72 overflow-y-auto">
+            {maanden.map((m, i) => (
+              <Fragment key={m}>
+                {jaarwissel(m, i) && <ContextMenuSeparator />}
+                <ContextMenuItem onSelect={() => onPatch({ start_maand: m })}>
+                  <span className="capitalize">{toonMaand(m)}</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
+                </ContextMenuItem>
+              </Fragment>
+            ))}
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={() => onPatch({ start_maand: vorigeMaand() })}>
+              <CircleSlash className="size-4" /> Niet nieuw, al langer klant
+            </ContextMenuItem>
+            {c.start_maand && (
+              <ContextMenuItem onSelect={() => onPatch({ start_maand: "" })}>
+                <CircleSlash className="size-4" /> Meteen (aanmaakmaand)
+              </ContextMenuItem>
+            )}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+
+        <ContextMenuItem onSelect={onKlus}>
+          <Hammer className="size-4" /> Extra opdracht…
+        </ContextMenuItem>
+
         <ContextMenuSeparator />
         <ContextMenuLabel>Kleur op printlijst</ContextMenuLabel>
         {markeringen.length === 0 && (
@@ -223,33 +252,6 @@ export function KlantMenu({
             </ContextMenuLabel>
           )
         )}
-
-        <ContextMenuSeparator />
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <Flag className="size-4" /> Wassen vanaf {toonMaand(start)}
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="max-h-72 overflow-y-auto">
-            {maanden.map((m, i) => (
-              <Fragment key={m}>
-                {jaarwissel(m, i) && <ContextMenuSeparator />}
-                <ContextMenuItem onSelect={() => onPatch({ start_maand: m })}>
-                  <span className="capitalize">{toonMaand(m)}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
-                </ContextMenuItem>
-              </Fragment>
-            ))}
-            <ContextMenuSeparator />
-            <ContextMenuItem onSelect={() => onPatch({ start_maand: vorigeMaand() })}>
-              <CircleSlash className="size-4" /> Niet nieuw, al langer klant
-            </ContextMenuItem>
-            {c.start_maand && (
-              <ContextMenuItem onSelect={() => onPatch({ start_maand: "" })}>
-                <CircleSlash className="size-4" /> Meteen (aanmaakmaand)
-              </ContextMenuItem>
-            )}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
 
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={onHoekadres}>
