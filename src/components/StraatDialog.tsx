@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -57,6 +58,9 @@ export function StraatDialog({
   const [groep, setGroep] = useState<string>(GEEN);
   /** De naam die je intikt als je NIEUW koos. */
   const [nieuweNaam, setNieuweNaam] = useState("");
+  /** Lopen de nummers per 1 op? Staat ook onder de rechtermuisknop op de
+   *  straatkop; hier hoort hij bij de rest van wat een straat is. */
+  const [doorlopend, setDoorlopend] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -65,6 +69,7 @@ export function StraatDialog({
     setSuggesties([]);
     setGroep(street?.groep_id ?? GEEN);
     setNieuweNaam("");
+    setDoorlopend(street?.doorlopend ?? false);
   }, [open, street]);
 
   // Officiële straatnamen voorstellen op basis van wat er in het korte veld
@@ -115,6 +120,7 @@ export function StraatDialog({
       name: name.trim(),
       volledige_naam: volledig.trim(),
       groep_id: groepId,
+      doorlopend,
     };
     const { error } = street
       ? await supabase.from("streets").update(payload).eq("id", street.id)
@@ -191,6 +197,17 @@ export function StraatDialog({
             <p className="text-xs text-muted-foreground">
               Een groep is een stuk van de wijk dat je in één keer kunt inklappen of inplannen.
               Straten zonder groep staan er gewoon los onder.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Switch id="doorlopend" checked={doorlopend} onCheckedChange={setDoorlopend} />
+              <Label htmlFor="doorlopend">Nummers lopen per 1 op</Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Voor een straat waar alle nummers aan dezelfde kant staan. De straat wordt dan
+              doorgeteld: de eerste helft links, de tweede helft rechts. Uit is even links en oneven
+              rechts.
             </p>
           </div>
         </div>
