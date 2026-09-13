@@ -72,11 +72,34 @@ export interface Controle {
   /** Leeg als antwoorden nog niet binnenkomen bij de app. */
   antwoordadres: string;
   melding: string;
+  /** Hoe het postvak ervoor staat, per stap. */
+  inbox: {
+    /** Het subdomein waar antwoorden op binnenkomen; leeg is niet ingesteld. */
+    domein: string;
+    /** Wijzen de MX-records van dat domein naar Brevo? */
+    dnsGoed: boolean;
+    /** Waar ze nu naartoe wijzen, om te zien wat er anders moet. */
+    dnsGevonden: string[];
+    /** Kent Brevo de koppeling naar onze inbox? */
+    gekoppeld: boolean;
+    /** Staat de sleutel van de assistent op de server? */
+    assistent: boolean;
+    /** Krijgen aankondigingen het antwoordadres al mee? */
+    actief: boolean;
+  };
 }
 
 /** Kijkt of alles klaarstaat. Verstuurt niets en verandert niets. */
 export function controleerVerbinding(): Promise<Controle> {
   return roep<Controle>({ actie: "controle" });
+}
+
+/**
+ * Zet het postvak open. Weigert zolang de DNS nog niet goed staat, en maakt
+ * daarna bij Brevo de koppeling aan — twee keer klikken geeft geen tweede.
+ */
+export function koppelPostvak(): Promise<{ ok: true; adres: string }> {
+  return roep<{ ok: true; adres: string }>({ actie: "inbox-koppelen" });
 }
 
 /** Hoeveel mensen krijgen de mail van deze dag? Verstuurt niets. */

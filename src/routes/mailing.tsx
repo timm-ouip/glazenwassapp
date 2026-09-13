@@ -50,6 +50,7 @@ import {
   categorieTint,
   controleerVerbinding,
   fetchAfzender,
+  koppelPostvak,
   fetchMailAntwoorden,
   fetchMailingen,
   stempelDoorgevoerd,
@@ -482,12 +483,7 @@ function Verbindingscontrole() {
                   : `${uitslag.afzenderIngevuld} staat niet bij Brevo als afzender`
             }
           />
-          <Regel
-            goed={!!uitslag.antwoordadres}
-            goedTekst="Antwoorden komen binnen in het postvak"
-            foutTekst="Antwoorden lezen staat nog uit — versturen kan gewoon"
-            zacht
-          />
+          <Postvakstappen uitslag={uitslag} onVeranderd={kijk} />
           {uitslag.sleutel &&
             !uitslag.afzenderBekend &&
             (uitslag.bekendeAfzenders?.length ?? 0) > 0 && (
@@ -498,6 +494,104 @@ function Verbindingscontrole() {
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * Het postvak, als rijtje stappen. Elke stap zegt wat er nog moet gebeuren en
+ * waar — want "werkt niet" helpt niemand die de DNS van zijn domein nog nooit
+ * heeft gezien. De stappen hangen aan elkaar: zolang de MX-records niet
+ * zichtbaar zijn heeft koppelen geen zin, en de knop verschijnt pas als dat
+ * wel zo is.
+ */
+function Postvakstappen({
+  uitslag,
+  onVeranderd,
+}: {
+  uitslag: Controle;
+  onVeranderd: () => Promise<void>;
+}) {
+  const { employee } = useAuth();
+  const [bezig, setBezig] = useState(false);
+  const inbox = uitslag.inbox;
+
+  if (!inbox?.domein) {
+    return (
+      <Regel
+        goed={false}
+        goedTekst=""
+        foutTekst="Antwoorden lezen staat nog uit — versturen kan gewoon"
+        zacht
+      />
+    );
+  }
+
+  async function koppel() {
+    setBezig(true);
+    try {
+      const uit = await koppelPostvak();
+      toast.success(`Postvak staat open: antwoorden komen binnen op ${uit.adres}`);
+      await onVeranderd();
+    } catch (e) {
+      toast.error("Koppelen lukte niet: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  const eigenaar = employee?.rol === "eigenaar";
+
+  return (
+    <>
+      <li className="pt-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+        Postvak
+      </li>
+      <Regel
+        goed={inbox.dnsGoed}
+        goedTekst={`${inbox.domein} komt bij Brevo aan`}
+        foutTekst={
+          inbox.dnsGevonden.length === 0
+            ? `MX-records voor ${inbox.domein} nog niet zichtbaar (kan uren duren)`
+            : `${inbox.domein} wijst nog naar ${inbox.dnsGevonden.join(", ")}`
+        }
+      />
+      <Regel
+        goed={inbox.gekoppeld}
+        goedTekst="Brevo stuurt antwoorden door naar de app"
+        foutTekst="Nog niet gekoppeld bij Brevo"
+        zacht={!inbox.dnsGoed}
+      />
+      <Regel
+        goed={inbox.assistent}
+        goedTekst="De assistent leest mee"
+        foutTekst="Sleutel van de assistent ontbreekt — berichten komen wel binnen, maar ongelezen"
+        zacht
+      />
+      <Regel
+        goed={inbox.actief}
+        goedTekst="Aankondigingen krijgen het antwoordadres mee"
+        foutTekst="Aankondigingen gebruiken nog het gewone antwoordadres"
+        zacht
+      />
+      {inbox.dnsGoed && !(inbox.gekoppeld && inbox.actief) && (
+        <li className="pt-1.5">
+          {eigenaar ? (
+            <Button
+              size="sm"
+              className="w-full rounded-full"
+              disabled={bezig}
+              onClick={() => void koppel()}
+            >
+              <Mail className="size-4" /> {bezig ? "Bezig…" : "Postvak koppelen"}
+            </Button>
+          ) : (
+            <span className="text-[12px] text-muted-foreground">
+              De eigenaar kan het postvak nu koppelen.
+            </span>
+          )}
+        </li>
+      )}
+    </>
   );
 }
 

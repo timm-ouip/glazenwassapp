@@ -77,7 +77,11 @@ async function verwerkBericht(db: Db, ruw: unknown): Promise<boolean> {
   if (!ruw || typeof ruw !== "object") return false;
   const item = ruw as Record<string, unknown>;
 
-  const naarAdressen = adressenUit(item["To"]).concat(adressenUit(item["Cc"]));
+  // `Recipients` erbij: daar staat het adres waarop de post werkelijk binnenkwam,
+  // ook als het in To anders is weergegeven of de klant ons in de Bcc zette.
+  const naarAdressen = adressenUit(item["Recipients"])
+    .concat(adressenUit(item["To"]))
+    .concat(adressenUit(item["Cc"]));
   const token = tokenUit(naarAdressen);
   if (!token) return false;
 

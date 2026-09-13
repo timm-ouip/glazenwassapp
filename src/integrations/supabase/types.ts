@@ -87,6 +87,7 @@ export type Database = {
           kvk: string
           mail_afzender_email: string
           mail_afzender_naam: string
+          mail_inbox_actief: boolean
           mail_token: string
           name: string
           plaats: string
@@ -105,6 +106,7 @@ export type Database = {
           kvk?: string
           mail_afzender_email?: string
           mail_afzender_naam?: string
+          mail_inbox_actief?: boolean
           mail_token?: string
           name: string
           plaats?: string
@@ -123,6 +125,7 @@ export type Database = {
           kvk?: string
           mail_afzender_email?: string
           mail_afzender_naam?: string
+          mail_inbox_actief?: boolean
           mail_token?: string
           name?: string
           plaats?: string

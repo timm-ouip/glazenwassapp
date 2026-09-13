@@ -62,19 +62,26 @@ spammap.
 Nodig als je wilt dat de assistent meeleest.
 
 1. Kies een subdomein dat je alleen hiervoor gebruikt, bijvoorbeeld
-   `antwoord.deramensopperij.nl`.
-2. Zet bij je domeinbeheerder een MX-record voor dat subdomein naar Brevo
-   (`inbound-smtp.brevo.com`, prioriteit 10).
-3. Zet in Brevo onder *Inbound parsing* de webhook op:
+   `antwoord.deramensopperij.nl`. Nooit het hoofddomein: dan komt ook de
+   gewone post voor info@ niet meer in je mailbox aan.
+2. Zet bij je domeinbeheerder twee MX-records voor dat subdomein:
 
-   ```
-   https://<project>.supabase.co/functions/v1/mail-inbox?sleutel=<MAIL_INBOX_SLEUTEL>
-   ```
+   | Naam | Type | Prioriteit | Waarde |
+   | --- | --- | --- | --- |
+   | `antwoord` | MX | 10 | `inbound1.sendinblue.com` |
+   | `antwoord` | MX | 20 | `inbound2.sendinblue.com` |
 
-4. Zet `BREVO_INBOX_DOMEIN` op datzelfde subdomein.
+3. Zet `BREVO_INBOX_DOMEIN` op datzelfde subdomein, en `MAIL_INBOX_SLEUTEL`
+   op een lange willekeurige reeks.
+4. Klik op de mailingpagina op **Postvak koppelen** (alleen de eigenaar). Die
+   kijkt eerst of de MX-records al zichtbaar zijn, maakt dan bij Brevo de
+   koppeling naar `mail-inbox` aan — Brevo kent daar alleen een API voor, geen
+   scherm — en zet pas daarna het postvak aan.
 
-Vanaf dan krijgt elke uitgaande mail een antwoordadres
-`antwoord+<mail_token>@<domein>`. Dat token hoort bij het bedrijf: zo weet de
+Pas vanaf dat moment krijgt een uitgaande mail het antwoordadres
+`antwoord+<mail_token>@<domein>`. Daarvóór gaan antwoorden gewoon naar de
+afzender (`companies.mail_inbox_actief` staat dan uit), zodat een klant nooit
+een mail terugkrijgt omdat het postvak nog niet klaar was. Dat token hoort bij het bedrijf: zo weet de
 inbox-functie waar een binnengekomen mail thuishoort, zonder de afzender te
 hoeven geloven.
 

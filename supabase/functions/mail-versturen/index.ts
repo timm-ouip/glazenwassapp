@@ -28,10 +28,11 @@ import {
 interface Verzoek {
   /**
    * `tellen` bouwt de lijst zonder te versturen, `versturen` doet allebei,
-   * `reactie` stuurt één antwoord terug op een binnengekomen bericht, en
-   * `controle` kijkt alleen of de verbinding met Brevo klopt.
+   * `reactie` stuurt één antwoord terug op een binnengekomen bericht,
+   * `controle` kijkt alleen of de verbinding met Brevo klopt, en
+   * `inbox-koppelen` zet het postvak open zodra de DNS goed staat.
    */
-  actie: "tellen" | "versturen" | "reactie" | "controle";
+  actie: "tellen" | "versturen" | "reactie" | "controle" | "inbox-koppelen";
   /** De wasdag waarvan de adressen komen, als 'jjjj-mm-dd'. */
   datum: string;
   onderwerp: string;
@@ -81,7 +82,7 @@ Deno.serve(async (req) => {
   // Langs RLS: deze rij mag je alleen zien als je hem bent.
   const { data: medewerker } = await alsGebruiker
     .from("employees")
-    .select("id,company_id,naam,email")
+    .select("id,company_id,naam,email,rol")
     .eq("id", gebruiker.user.id)
     .maybeSingle();
   if (!medewerker) return antwoord({ fout: "Geen bedrijf gevonden." }, 403);
@@ -92,7 +93,7 @@ Deno.serve(async (req) => {
 
   const { data: bedrijf } = await beheerder
     .from("companies")
-    .select("id,name,mail_afzender_naam,mail_afzender_email,mail_token")
+    .select("id,name,mail_afzender_naam,mail_afzender_email,mail_token,mail_inbox_actief")
     .eq("id", medewerker.company_id)
     .maybeSingle();
   if (!bedrijf) return antwoord({ fout: "Geen bedrijf gevonden." }, 403);
@@ -108,6 +109,15 @@ Deno.serve(async (req) => {
   // Alleen kijken of alles klaarstaat. Verstuurt niets en verandert niets.
   if (verzoek.actie === "controle") {
     return await controleer(bedrijf, brevo, inboxDomein);
+  }
+
+  // Het postvak openzetten is een instelling van het hele bedrijf, en het
+  // maakt een koppeling aan bij Brevo. Dat is iets voor de eigenaar.
+  if (verzoek.actie === "inbox-koppelen") {
+    if (medewerker.rol !== "eigenaar") {
+      return antwoord({ fout: "Alleen de eigenaar kan het postvak koppelen." }, 403);
+    }
+    return await koppelInbox(beheerder, bedrijf, brevo, inboxDomein, url);
   }
 
   // Een reactie op een binnengekomen bericht gaat langs dezelfde Brevo-sleutel
@@ -164,12 +174,7 @@ Deno.serve(async (req) => {
     email: afzenderEmail,
   };
 
-  // Het antwoordadres draagt de sleutel van het bedrijf. Zonder inboxdomein
-  // komen antwoorden gewoon bij de afzender terecht — dan werkt de assistent
-  // nog niet, maar de mail gaat wel gewoon weg.
-  const antwoordNaar = inboxDomein
-    ? `antwoord+${bedrijf.mail_token}@${inboxDomein}`
-    : undefined;
+  const antwoordNaar = antwoordAdres(bedrijf, inboxDomein);
 
   // Een proef gaat naar jezelf, maar met de gegevens van de eerste echte
   // ontvanger erin: zo zie je wat er in de plaatshouders terechtkomt.
@@ -267,10 +272,9 @@ async function controleer(
     afzenderIngevuld: afzender,
     afzenderBekend: false,
     afzenderActief: false,
-    antwoordadres: inboxDomein
-      ? `antwoord+${String(bedrijf["mail_token"] ?? "")}@${inboxDomein}`
-      : "",
+    antwoordadres: antwoordAdres(bedrijf, inboxDomein) ?? "",
     melding: "",
+    inbox: await inboxStatus(bedrijf, brevo, inboxDomein),
   };
 
   if (!brevo) {
@@ -342,6 +346,178 @@ async function controleer(
 }
 
 /**
+ * Het antwoordadres van een aankondiging — of niets.
+ *
+ * Alleen als het postvak werkelijk openstaat. Zolang dat niet zo is, zou een
+ * klant die op "beantwoorden" drukt zijn mail zien terugkaatsen; dan liever
+ * gewoon naar de afzender, zoals bij elke andere mail.
+ */
+function antwoordAdres(
+  bedrijf: Record<string, unknown>,
+  inboxDomein: string,
+): string | undefined {
+  if (!inboxDomein || bedrijf["mail_inbox_actief"] !== true) return undefined;
+  return `antwoord+${String(bedrijf["mail_token"] ?? "")}@${inboxDomein}`;
+}
+
+/** De mailservers van Brevo voor binnenkomende post. */
+const BREVO_INBOUND = ["inbound1.sendinblue.com", "inbound2.sendinblue.com"];
+
+/**
+ * Waar de post voor een domein naartoe gaat, gevraagd aan een openbare
+ * DNS-dienst. Niet aan de server zelf: die kan een oud antwoord onthouden, en
+ * dan zou de knop "nog niet klaar" blijven zeggen terwijl het al goed staat.
+ */
+async function mailserversVan(domein: string): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domein)}&type=MX`,
+      { headers: { accept: "application/dns-json" } },
+    );
+    if (!res.ok) return [];
+    const json = (await res.json()) as { Answer?: { type: number; data: string }[] };
+    return (json.Answer ?? [])
+      .filter((a) => a.type === 15)
+      .map((a) => (a.data.split(" ").pop() ?? "").replace(/\.$/, "").toLowerCase())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+interface BrevoWebhook {
+  id: number;
+  url?: string;
+  domain?: string;
+  type?: string;
+}
+
+/** De koppelingen voor binnenkomende post die Brevo al kent. */
+async function inboundKoppelingen(brevo: string): Promise<BrevoWebhook[] | null> {
+  try {
+    const res = await fetch("https://api.brevo.com/v3/webhooks?type=inbound", {
+      headers: { "api-key": brevo.trim(), Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { webhooks?: BrevoWebhook[] };
+    return json.webhooks ?? [];
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Hoe het postvak ervoor staat, stap voor stap. Elk onderdeel apart, zodat de
+ * pagina kan zeggen wélke stap nog ontbreekt in plaats van alleen "werkt niet".
+ * Het adres van de koppeling gaat nooit mee naar buiten: daar zit de sleutel
+ * van de inbox in.
+ */
+async function inboxStatus(
+  bedrijf: Record<string, unknown>,
+  brevo: string,
+  inboxDomein: string,
+) {
+  const servers = inboxDomein ? await mailserversVan(inboxDomein) : [];
+  const koppelingen = brevo && inboxDomein ? await inboundKoppelingen(brevo) : null;
+  return {
+    domein: inboxDomein,
+    dnsGoed: servers.some((m) => BREVO_INBOUND.includes(m)),
+    dnsGevonden: servers,
+    gekoppeld: (koppelingen ?? []).some(
+      (w) => (w.domain ?? "").toLowerCase() === inboxDomein.toLowerCase(),
+    ),
+    assistent: !!(Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim(),
+    actief: bedrijf["mail_inbox_actief"] === true,
+  };
+}
+
+/**
+ * Het postvak openzetten.
+ *
+ * In deze volgorde, en elke stap pas als de vorige klopt:
+ *  1. Staat de DNS goed? Anders komt er niets binnen, wat we ook koppelen.
+ *  2. Kent Brevo de koppeling naar onze inbox al? Zo niet, dan maken we hem;
+ *     staat hij er met een oud adres, dan werken we dat bij.
+ *  3. Pas dan de vlag aan, en krijgen nieuwe aankondigingen het antwoordadres.
+ *
+ * Twee keer klikken kan geen kwaad: bestaat de koppeling al, dan blijft het
+ * bij die ene.
+ */
+async function koppelInbox(
+  db: ReturnType<typeof createClient>,
+  bedrijf: Record<string, unknown>,
+  brevo: string,
+  inboxDomein: string,
+  supabaseUrl: string,
+): Promise<Response> {
+  const sleutel = (Deno.env.get("MAIL_INBOX_SLEUTEL") ?? "").trim();
+  if (!brevo || !inboxDomein || !sleutel) {
+    return antwoord({ fout: "De server mist nog een instelling voor het postvak." }, 500);
+  }
+
+  const servers = await mailserversVan(inboxDomein);
+  if (!servers.some((m) => BREVO_INBOUND.includes(m))) {
+    return antwoord(
+      {
+        fout:
+          servers.length === 0
+            ? `Voor ${inboxDomein} staat nog geen MX-record. Het kan een paar uur duren voor een nieuwe instelling zichtbaar is.`
+            : `${inboxDomein} wijst nog naar ${servers.join(", ")} in plaats van naar Brevo.`,
+      },
+      409,
+    );
+  }
+
+  const webhookUrl = `${supabaseUrl}/functions/v1/mail-inbox?sleutel=${sleutel}`;
+  const bestaand = await inboundKoppelingen(brevo);
+  if (bestaand === null) {
+    return antwoord({ fout: "Brevo gaf de lijst met koppelingen niet." }, 502);
+  }
+  const zelfde = bestaand.find(
+    (w) => (w.domain ?? "").toLowerCase() === inboxDomein.toLowerCase(),
+  );
+
+  const kop = {
+    "api-key": brevo.trim(),
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+
+  if (!zelfde) {
+    const res = await fetch("https://api.brevo.com/v3/webhooks", {
+      method: "POST",
+      headers: kop,
+      body: JSON.stringify({
+        type: "inbound",
+        events: ["inboundEmailProcessed"],
+        url: webhookUrl,
+        domain: inboxDomein,
+        description: "Wasapp — antwoorden op aankondigingen",
+      }),
+    });
+    if (!res.ok) {
+      return antwoord({ fout: `Brevo weigerde de koppeling: ${(await res.text()).slice(0, 300)}` }, 502);
+    }
+  } else if (zelfde.url !== webhookUrl) {
+    const res = await fetch(`https://api.brevo.com/v3/webhooks/${zelfde.id}`, {
+      method: "PUT",
+      headers: kop,
+      body: JSON.stringify({ url: webhookUrl }),
+    });
+    if (!res.ok) {
+      return antwoord({ fout: `Brevo weigerde het bijwerken: ${(await res.text()).slice(0, 300)}` }, 502);
+    }
+  }
+
+  await db
+    .from("companies")
+    .update({ mail_inbox_actief: true })
+    .eq("id", bedrijf["id"] as string);
+
+  return antwoord({ ok: true, adres: `antwoord+${String(bedrijf["mail_token"] ?? "")}@${inboxDomein}` });
+}
+
+/**
  * Eén antwoord terug op een bericht uit het postvak. De tekst komt uit het
  * scherm en niet uit de database: wat de assistent klaarzette mag je eerst
  * bijschaven, en wat je verstuurt is wat je zag staan.
@@ -386,9 +562,7 @@ async function stuurReactie(
       },
       onderwerp: onderwerp.slice(0, MAX_ONDERWERP),
       tekst,
-      antwoordNaar: inboxDomein
-        ? `antwoord+${String(bedrijf["mail_token"] ?? "")}@${inboxDomein}`
-        : undefined,
+      antwoordNaar: antwoordAdres(bedrijf, inboxDomein),
     },
   );
   if (!res.ok) return antwoord({ fout: res.fout }, 502);
