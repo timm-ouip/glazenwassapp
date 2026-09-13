@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
 import { useBevestig } from "@/components/Bevestig";
+import { PopupInfo } from "@/components/Popup";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -58,8 +59,7 @@ import {
   draaiWijzigingTerug,
   fetchWijzigingen,
   fetchAssistentInstellingen,
-  bewaarAssistentInstellingen,
-  aantalVerstuurdeAntwoorden,
+  zetZelfDoorvoeren,
   type Wijziging,
   fetchMailAntwoorden,
   fetchMailingen,
@@ -989,8 +989,9 @@ function AntwoordKaart({
 }
 
 /**
- * Wat de assistent zelf mag, en hoe hij schrijft. Staat boven het postvak:
- * daar zie je wat hij doet, en daar wil je het ook kunnen bijsturen.
+ * Mag de assistent zelf doorvoeren? Staat boven het postvak, want daar zie je
+ * wat hij doet. De uitleg zit achter het infopuntje: die lees je één keer.
+ * Hoe hij schrijft staat bij Instellingen — dat stel je niet vaak bij.
  */
 function AssistentKaart() {
   const { company, employee } = useAuth();
@@ -999,25 +1000,20 @@ function AssistentKaart() {
     queryKey: ["assistent-instellingen"],
     queryFn: fetchAssistentInstellingen,
   });
-  const verstuurd = useQuery({
-    queryKey: ["aantal-verstuurde-antwoorden"],
-    queryFn: aantalVerstuurdeAntwoorden,
-  });
-  const [stijl, setStijl] = useState("");
   const [bezig, setBezig] = useState(false);
   const eigenaar = employee?.rol === "eigenaar";
 
-  useEffect(() => {
-    if (instellingen.data) setStijl(instellingen.data.schrijfstijl);
-  }, [instellingen.data]);
-
-  async function bewaar(automatisch: boolean, schrijfstijl: string, melding: string) {
+  async function zet(aan: boolean) {
     if (!company?.id) return;
     setBezig(true);
     try {
-      await bewaarAssistentInstellingen(company.id, { automatisch, schrijfstijl });
+      await zetZelfDoorvoeren(company.id, aan);
       await qc.invalidateQueries({ queryKey: ["assistent-instellingen"] });
-      toast.success(melding);
+      toast.success(
+        aan
+          ? "Hij voert voortaan zelf door als hij het zeker weet."
+          : "Hij stelt weer alleen voor.",
+      );
     } catch (e) {
       toast.error("Opslaan mislukte: " + (e instanceof Error ? e.message : String(e)));
     } finally {
@@ -1025,74 +1021,30 @@ function AssistentKaart() {
     }
   }
 
-  const automatisch = instellingen.data?.automatisch ?? false;
-  const aantal = verstuurd.data ?? 0;
-  const stijlVeranderd = stijl.trim() !== (instellingen.data?.schrijfstijl ?? "").trim();
-
   return (
     <Kaart titel="Assistent">
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         <Switch
-          checked={automatisch}
+          checked={instellingen.data?.automatisch ?? false}
           disabled={!eigenaar || bezig || instellingen.isLoading}
-          onCheckedChange={(aan) =>
-            void bewaar(
-              aan,
-              instellingen.data?.schrijfstijl ?? "",
-              aan
-                ? "Hij voert voortaan zelf door als hij het zeker weet."
-                : "Hij stelt weer alleen voor.",
-            )
-          }
+          onCheckedChange={(aan) => void zet(aan)}
           aria-label="Zelf doorvoeren"
         />
-        <div className="text-[13px]">
-          <p className="font-medium">Zelf doorvoeren als hij het zeker weet</p>
-          <p className="text-muted-foreground">
-            Schrijft een klant dat hij een keer overslaat en is de assistent minstens 90% zeker, dan
-            gaat het adres meteen van de planning — voor hooguit drie maanden. Twijfelt hij, dan
-            krijg je een voorstel met een knop. Alles komt in het tabblad Rapport, en daar draai je
-            het terug.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-4 border-t border-border pt-4">
-        <label className="block text-[13px] font-medium">Schrijfstijl</label>
-        <p className="text-[12.5px] text-muted-foreground">
-          Hoe moeten klaargezette antwoorden klinken? Bijvoorbeeld: &ldquo;u-vorm, kort, afsluiten
-          met Groet, Timmie&rdquo;.
-        </p>
-        <Textarea
-          value={stijl}
-          onChange={(e) => setStijl(e.target.value)}
-          rows={3}
-          maxLength={1000}
-          disabled={!eigenaar}
-          className="mt-2 text-[13.5px]"
-          placeholder="Laat leeg voor een gewone, vriendelijke je-vorm."
-        />
-        {eigenaar && stijlVeranderd && (
-          <Button
-            size="sm"
-            className="mt-2 rounded-full"
-            disabled={bezig}
-            onClick={() => void bewaar(automatisch, stijl, "Schrijfstijl opgeslagen.")}
-          >
-            Opslaan
-          </Button>
-        )}
-        <p className="mt-2 flex items-start gap-1.5 text-[12.5px] text-muted-foreground">
-          <Sparkles className="mt-0.5 size-3.5 shrink-0" />
-          {aantal === 0
-            ? "Pas je een klaargezet antwoord aan en verstuur je het, dan kijkt hij daar de volgende keer naar. Hoe meer je zelf verstuurt, hoe meer het op jou lijkt."
-            : `Hij kijkt ook naar je laatste ${Math.min(aantal, 5)} verstuurde ${Math.min(aantal, 5) === 1 ? "antwoord" : "antwoorden"}, en schrijft zoals jij daar schreef.`}
-        </p>
-        {!eigenaar && (
-          <p className="mt-2 text-[12px] text-muted-foreground">
-            Alleen de eigenaar kan dit aanpassen.
-          </p>
-        )}
+        <p className="text-[13px] font-medium">Zelf doorvoeren als hij het zeker weet</p>
+        <PopupInfo>
+          Schrijft een klant dat hij een keer overslaat en is de assistent minstens 90% zeker, dan
+          gaat het adres meteen van de planning — voor hooguit drie maanden. Twijfelt hij, dan krijg
+          je een voorstel met een knop. Alles komt in het tabblad Rapport, en daar draai je het
+          terug.
+          {!eigenaar && " Alleen de eigenaar kan dit aan- of uitzetten."}
+        </PopupInfo>
+        <Link
+          to="/instellingen"
+          search={{ tab: "voorkeuren" }}
+          className="ml-auto text-[12px] text-muted-foreground underline hover:text-foreground"
+        >
+          Schrijfstijl
+        </Link>
       </div>
     </Kaart>
   );

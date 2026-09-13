@@ -350,16 +350,23 @@ export async function fetchAssistentInstellingen(): Promise<AssistentInstellinge
   };
 }
 
-export async function bewaarAssistentInstellingen(
-  companyId: string,
-  instellingen: AssistentInstellingen,
-) {
+/**
+ * De schakelaar en de schrijfstijl slaan elk alleen hun eigen veld op. Ze
+ * staan op verschillende pagina's; zou de een ook het veld van de ander
+ * meesturen, dan zet een pagina die nog de oude waarde kent die terug.
+ */
+export async function zetZelfDoorvoeren(companyId: string, aan: boolean) {
   const { error } = await supabase
     .from("companies")
-    .update({
-      mail_auto_doorvoeren: instellingen.automatisch,
-      mail_schrijfstijl: instellingen.schrijfstijl.trim(),
-    })
+    .update({ mail_auto_doorvoeren: aan })
+    .eq("id", companyId);
+  if (error) throw error;
+}
+
+export async function bewaarSchrijfstijl(companyId: string, schrijfstijl: string) {
+  const { error } = await supabase
+    .from("companies")
+    .update({ mail_schrijfstijl: schrijfstijl.trim() })
     .eq("id", companyId);
   if (error) throw error;
 }

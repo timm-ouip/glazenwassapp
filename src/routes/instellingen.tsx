@@ -53,6 +53,7 @@ import {
   updateMyProfile,
 } from "@/lib/team.functions";
 import { AanmeldInstellingen } from "@/components/AanmeldInstellingen";
+import { SchrijfstijlInstellingen } from "@/components/SchrijfstijlInstellingen";
 import { AppLayout } from "@/components/AppLayout";
 import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
@@ -145,6 +146,14 @@ function Instellingen() {
           <TabsContent value="voorkeuren" className="space-y-4">
             <NotitiesTab />
             <KleurenTab />
+            {/* Hoe de assistent antwoorden laat klinken: stel je één keer in,
+                daarna leert hij verder van wat je zelf verstuurt. */}
+            <Kaart
+              titel="Schrijfstijl van de assistent"
+              uitleg="Voor de antwoorden die hij klaarzet in het postvak van Mailing."
+            >
+              <SchrijfstijlInstellingen isEigenaar={isEigenaar} />
+            </Kaart>
           </TabsContent>
         </div>
       </Tabs>
