@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
 
   const uitslag = await perGroepje(teVersturen, 6, async (o) => {
     const velden = { naam: o.naam || "buurtbewoner", adres: o.adressen.join(" en ") };
-    const res = await stuurMail(brevo, afzender, {
+    const res = await stuurMail(brevo.trim(), afzender, {
       naar: { email: o.email, naam: o.naam },
       onderwerp: (test ? "[PROEF] " : "") + vulIn(onderwerp, velden),
       tekst: vulIn(tekst, velden),
@@ -278,15 +278,35 @@ async function controleer(
     return antwoord(uit);
   }
 
+  // Hoe de sleutel eruitziet, zonder hem prijs te geven. Het begin verraadt
+  // welke soort sleutel het is — een API-sleutel begint met `xkeysib-`, een
+  // SMTP-sleutel met `xsmtpsib-`, en die laatste werkt hier niet — en de
+  // lengte laat zien of er bij het plakken iets is weggevallen. Spaties of
+  // een enter aan de rand zijn de derde klassieker.
+  uit["sleutelBegin"] = brevo.slice(0, 8);
+  uit["sleutelLengte"] = brevo.length;
+  uit["sleutelRommel"] = brevo !== brevo.trim();
+
   try {
     const acc = await fetch("https://api.brevo.com/v3/account", {
-      headers: { "api-key": brevo, Accept: "application/json" },
+      headers: { "api-key": brevo.trim(), Accept: "application/json" },
     });
     if (!acc.ok) {
+      // Brevo's eigen woorden erbij. "Key not found" betekent iets anders dan
+      // "account not activated", en dat verschil bepaalt wat je eraan doet —
+      // zonder die tekst sta je te gokken bij dezelfde foutcode.
+      let reden = "";
+      try {
+        const body = (await acc.json()) as { message?: string; code?: string };
+        reden = [body.code, body.message].filter(Boolean).join(": ");
+      } catch {
+        reden = "";
+      }
+      uit["brevoAntwoord"] = `${acc.status} ${reden}`.trim();
       uit["melding"] =
         acc.status === 401
-          ? "Brevo herkent de sleutel niet. Staat er een typefout in?"
-          : `Brevo antwoordde met ${acc.status}.`;
+          ? `Brevo weigert de sleutel${reden ? ` — ${reden}` : ""}.`
+          : `Brevo antwoordde met ${acc.status}${reden ? ` — ${reden}` : ""}.`;
       return antwoord(uit);
     }
     const gegevens = (await acc.json()) as {
@@ -298,7 +318,7 @@ async function controleer(
 
     // De lijst met adressen waarvandaan dit account mag versturen.
     const lijst = await fetch("https://api.brevo.com/v3/senders", {
-      headers: { "api-key": brevo, Accept: "application/json" },
+      headers: { "api-key": brevo.trim(), Accept: "application/json" },
     });
     if (lijst.ok) {
       const senders = (await lijst.json()) as {
@@ -354,7 +374,7 @@ async function stuurReactie(
     ("Re: " + String(bericht["onderwerp"] ?? "")).trim();
 
   const res = await stuurMail(
-    brevo,
+    brevo.trim(),
     {
       naam: String(bedrijf["mail_afzender_naam"] ?? "") || String(bedrijf["name"] ?? ""),
       email: afzenderEmail,

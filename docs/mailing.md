@@ -104,6 +104,11 @@ afzenderadres daar mag versturen, en of antwoorden binnenkomen — en verstuurt
 zelf niets. Kent Brevo het afzenderadres niet, dan laat hij zien welke
 adressen hij wél kent; daar zie je een typefout meestal meteen aan.
 
+- **"Brevo weigert de sleutel — unrecognised IP address"**: bij Brevo staat de
+  beveiliging op *Authorised IPs*. Een Edge Function draait elke keer vanaf een
+  ander IP-adres, dus een lijstje met toegestane adressen valt niet bij te
+  houden. Zet die beveiliging uit op
+  <https://app.brevo.com/security/authorised_ips>.
 - **"Tellen lukte niet"** op de pagina: de Edge Function staat er niet op, of
   is niet bereikbaar. `supabase functions deploy mail-versturen`.
 - **Mail komt niet aan**: kijk in de tabel `mail_ontvangers` — daar staat per
