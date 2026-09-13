@@ -15,7 +15,7 @@
  * sleutel gebruiken we pas daarna, om te schrijven wat er verstuurd is.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
-import Anthropic from "npm:@anthropic-ai/sdk";
+import Anthropic from "npm:@anthropic-ai/sdk@0.125.0";
 
 import {
   antwoord,
@@ -25,22 +25,24 @@ import {
   stuurMail,
   vulIn,
 } from "../_gedeeld/mail.ts";
+import { leesBericht } from "../_gedeeld/assistent.ts";
 
 interface Verzoek {
   /**
    * `tellen` bouwt de lijst zonder te versturen, `versturen` doet allebei,
    * `reactie` stuurt één antwoord terug op een binnengekomen bericht,
    * `controle` kijkt alleen of de verbinding met Brevo klopt, en
-   * `inbox-koppelen` zet het postvak open zodra de DNS goed staat.
+   * `inbox-koppelen` zet het postvak open zodra de DNS goed staat, en
+   * `opnieuw-lezen` laat de assistent een binnengekomen bericht nog eens lezen.
    */
-  actie: "tellen" | "versturen" | "reactie" | "controle" | "inbox-koppelen";
+  actie: "tellen" | "versturen" | "reactie" | "controle" | "inbox-koppelen" | "opnieuw-lezen";
   /** De wasdag waarvan de adressen komen, als 'jjjj-mm-dd'. */
   datum: string;
   onderwerp: string;
   tekst: string;
   /** Proef: alleen naar jezelf, met de eerste echte ontvanger als voorbeeld. */
   test?: boolean;
-  /** Alleen bij `reactie`: op welk binnengekomen bericht dit het antwoord is. */
+  /** Bij `reactie` en `opnieuw-lezen`: om welk binnengekomen bericht het gaat. */
   antwoord_id?: string;
 }
 
@@ -119,6 +121,32 @@ Deno.serve(async (req) => {
       return antwoord({ fout: "Alleen de eigenaar kan het postvak koppelen." }, 403);
     }
     return await koppelInbox(beheerder, bedrijf, brevo, inboxDomein, url);
+  }
+
+  // Nog een keer lezen, als het de eerste keer misging. Alleen de uitleg van de
+  // assistent wordt vervangen: wat de klant schreef, en of iemand het al heeft
+  // afgehandeld, blijft zoals het was.
+  if (verzoek.actie === "opnieuw-lezen") {
+    const id = String(verzoek.antwoord_id ?? "");
+    const { data: rij } = await beheerder
+      .from("mail_antwoorden")
+      .select("id,van_email,van_naam,onderwerp,tekst,mailing_id")
+      .eq("company_id", bedrijf.id)
+      .eq("id", id)
+      .maybeSingle();
+    if (!rij) return antwoord({ fout: "Dat bericht bestaat niet." }, 404);
+
+    const gelezen = await leesBericht(beheerder, {
+      companyId: bedrijf.id,
+      bedrijfNaam: (bedrijf.mail_afzender_naam ?? "").trim() || bedrijf.name,
+      vanEmail: rij.van_email,
+      vanNaam: rij.van_naam,
+      onderwerp: rij.onderwerp,
+      tekst: rij.tekst,
+      mailingId: rij.mailing_id,
+    });
+    await beheerder.from("mail_antwoorden").update(gelezen).eq("id", id);
+    return antwoord({ ok: gelezen.ai_fout === "", ai_fout: gelezen.ai_fout });
   }
 
   // Een reactie op een binnengekomen bericht gaat langs dezelfde Brevo-sleutel

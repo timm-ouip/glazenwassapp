@@ -52,6 +52,7 @@ import {
   controleerVerbinding,
   fetchAfzender,
   koppelPostvak,
+  leesOpnieuw,
   fetchMailAntwoorden,
   fetchMailingen,
   stempelDoorgevoerd,
@@ -766,6 +767,9 @@ function AntwoordKaart({
   const qc = useQueryClient();
   const bevestig = useBevestig();
   const [concept, setConcept] = useState(bericht.concept);
+  // Na opnieuw lezen komt er een nieuw klaargezet antwoord binnen; zonder dit
+  // bleef het oude (lege) vak staan.
+  useEffect(() => setConcept(bericht.concept), [bericht.concept]);
   const [bezig, setBezig] = useState(false);
   const afgehandeld = bericht.status !== "nieuw";
 
@@ -798,6 +802,20 @@ function AntwoordKaart({
       await slaSelectieOver(gekozen, maanden, qc);
       await stempelDoorgevoerd(bericht.id);
       await onVeranderd();
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  async function opnieuwLezen() {
+    setBezig(true);
+    try {
+      const uit = await leesOpnieuw(bericht.id);
+      if (uit.ok) toast.success("De assistent heeft het bericht gelezen.");
+      else toast.error("Lukte weer niet: " + uit.ai_fout);
+      await onVeranderd();
+    } catch (e) {
+      toast.error("Opnieuw lezen mislukte: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setBezig(false);
     }
@@ -867,9 +885,20 @@ function AntwoordKaart({
         </p>
       )}
       {bericht.ai_fout && (
-        <p className="mt-2 text-[12.5px] text-tint-oranje-ink">
-          De assistent kon dit bericht niet lezen ({bericht.ai_fout}). Lees het zelf even.
-        </p>
+        <div className="mt-2 space-y-1.5">
+          <p className="text-[12.5px] text-tint-oranje-ink">
+            De assistent kon dit bericht niet lezen ({bericht.ai_fout}).
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-full"
+            disabled={bezig}
+            onClick={() => void opnieuwLezen()}
+          >
+            <Sparkles className="size-4" /> {bezig ? "Bezig…" : "Opnieuw laten lezen"}
+          </Button>
+        </div>
       )}
 
       <details className="mt-2">

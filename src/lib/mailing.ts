@@ -123,6 +123,15 @@ export function verstuurAankondiging(opdracht: {
   return roep<Verzending>({ actie: "versturen", ...opdracht });
 }
 
+/**
+ * Laat de assistent een binnengekomen bericht nog een keer lezen — als het de
+ * eerste keer misging door een storing of een leeg tegoed. Wat de klant schreef
+ * en of het al is afgehandeld blijft staan.
+ */
+export function leesOpnieuw(antwoord_id: string): Promise<{ ok: boolean; ai_fout: string }> {
+  return roep<{ ok: boolean; ai_fout: string }>({ actie: "opnieuw-lezen", antwoord_id });
+}
+
 /** Eén antwoord terugsturen op een bericht uit het postvak. */
 export function verstuurReactie(opdracht: {
   antwoord_id: string;
