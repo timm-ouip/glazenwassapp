@@ -15,6 +15,7 @@
  * sleutel gebruiken we pas daarna, om te schrijven wat er verstuurd is.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
+import Anthropic from "npm:@anthropic-ai/sdk";
 
 import {
   antwoord,
@@ -407,6 +408,25 @@ async function inboundKoppelingen(brevo: string): Promise<BrevoWebhook[] | null>
 }
 
 /**
+ * Werkt de sleutel van de assistent? Niet alleen "staat hij er", maar gevraagd
+ * aan Anthropic zelf — een verlopen of ingetrokken sleutel staat er ook, en
+ * dan komen berichten ongelezen binnen zonder dat iemand weet waarom.
+ *
+ * Het opvragen van een model kost niets: er wordt geen tekst gelezen of
+ * geschreven, dus er gaat geen tegoed af.
+ */
+async function assistentWerkt(): Promise<boolean> {
+  const sleutel = (Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim();
+  if (!sleutel) return false;
+  try {
+    await new Anthropic({ apiKey: sleutel, maxRetries: 0 }).models.retrieve("claude-opus-5");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Hoe het postvak ervoor staat, stap voor stap. Elk onderdeel apart, zodat de
  * pagina kan zeggen wélke stap nog ontbreekt in plaats van alleen "werkt niet".
  * Het adres van de koppeling gaat nooit mee naar buiten: daar zit de sleutel
@@ -426,7 +446,7 @@ async function inboxStatus(
     gekoppeld: (koppelingen ?? []).some(
       (w) => (w.domain ?? "").toLowerCase() === inboxDomein.toLowerCase(),
     ),
-    assistent: !!(Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim(),
+    assistent: await assistentWerkt(),
     actief: bedrijf["mail_inbox_actief"] === true,
   };
 }
@@ -492,7 +512,7 @@ async function koppelInbox(
         events: ["inboundEmailProcessed"],
         url: webhookUrl,
         domain: inboxDomein,
-        description: "Wasapp — antwoorden op aankondigingen",
+        description: "Wooshy — antwoorden op aankondigingen",
       }),
     });
     if (!res.ok) {
