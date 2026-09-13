@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   Check,
   CircleSlash,
+  Copy,
   Mail,
   MailCheck,
   Minus,
@@ -556,6 +557,19 @@ function Postvakstappen({
         }
       />
       <Regel
+        goed={inbox.brevoKeurtGoed}
+        goedTekst={`Brevo heeft ${inbox.domein} goedgekeurd`}
+        foutTekst={
+          inbox.brevoKentDomein
+            ? `Brevo wacht op goedkeuring van ${inbox.domein}`
+            : `${inbox.domein} staat nog niet bij Brevo (gaat vanzelf bij koppelen)`
+        }
+        zacht={!inbox.brevoKentDomein}
+      />
+      {inbox.dnsNodig.filter((r) => !r.goed).length > 0 && (
+        <DnsRegels regels={inbox.dnsNodig.filter((r) => !r.goed)} />
+      )}
+      <Regel
         goed={inbox.gekoppeld}
         goedTekst="Brevo stuurt antwoorden door naar de app"
         foutTekst="Nog niet gekoppeld bij Brevo"
@@ -592,6 +606,66 @@ function Postvakstappen({
         </li>
       )}
     </>
+  );
+}
+
+/**
+ * De regels die er bij de domeinbeheerder nog bij moeten, klaar om over te
+ * nemen. Elke waarde heeft een eigen kopieerknop: een DKIM-sleutel is honderden
+ * tekens, en overtypen gaat gegarandeerd een keer mis.
+ */
+function DnsRegels({ regels }: { regels: { naam: string; type: string; waarde: string }[] }) {
+  async function kopieer(tekst: string) {
+    try {
+      await navigator.clipboard.writeText(tekst);
+      toast.success("Gekopieerd.");
+    } catch {
+      toast.error("Kopiëren lukte niet. Selecteer de tekst en kopieer hem zelf.");
+    }
+  }
+
+  return (
+    <li className="space-y-2 rounded-[12px] bg-surface p-2.5">
+      <p className="text-[12px] text-muted-foreground">
+        Zet deze {regels.length === 1 ? "regel" : "regels"} erbij bij je domeinbeheerder:
+      </p>
+      {regels.map((r) => (
+        <div
+          key={`${r.type}-${r.naam}-${r.waarde.slice(0, 12)}`}
+          className="space-y-1 border-t border-border pt-2 text-[12px]"
+        >
+          <KopieerVeld label="Naam" waarde={r.naam} onKopieer={kopieer} />
+          <KopieerVeld label="Type" waarde={r.type} onKopieer={kopieer} />
+          <KopieerVeld label="Waarde" waarde={r.waarde} onKopieer={kopieer} />
+        </div>
+      ))}
+    </li>
+  );
+}
+
+function KopieerVeld({
+  label,
+  waarde,
+  onKopieer,
+}: {
+  label: string;
+  waarde: string;
+  onKopieer: (tekst: string) => Promise<void>;
+}) {
+  return (
+    <div className="flex items-start gap-1.5">
+      <span className="w-12 shrink-0 text-muted-foreground">{label}</span>
+      <code className="min-w-0 flex-1 break-all rounded bg-muted px-1">{waarde}</code>
+      <button
+        type="button"
+        aria-label={`${label} kopiëren`}
+        title="Kopiëren"
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+        onClick={() => void onKopieer(waarde)}
+      >
+        <Copy className="size-3.5" />
+      </button>
+    </div>
   );
 }
 

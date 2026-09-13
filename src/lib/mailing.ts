@@ -76,6 +76,12 @@ export interface Controle {
   inbox: {
     /** Het subdomein waar antwoorden op binnenkomen; leeg is niet ingesteld. */
     domein: string;
+    /** Staat het subdomein bij Brevo als domein? */
+    brevoKentDomein: boolean;
+    /** En heeft Brevo het goedgekeurd? Zonder dat neemt Brevo geen post aan. */
+    brevoKeurtGoed: boolean;
+    /** De regels die er bij de domeinbeheerder nog bij moeten. */
+    dnsNodig: { naam: string; type: string; waarde: string; goed: boolean }[];
     /** Wijzen de MX-records van dat domein naar Brevo? */
     dnsGoed: boolean;
     /** Waar ze nu naartoe wijzen, om te zien wat er anders moet. */

@@ -443,6 +443,113 @@ async function assistentWerkt(): Promise<boolean> {
 }
 
 /**
+ * De domeinen die Brevo van dit account kent, en of ze goedgekeurd zijn.
+ * Brevo neemt alleen post aan op een domein dat hier geverifieerd staat —
+ * een geverifieerd hoofddomein telt niet vanzelf voor een subdomein.
+ */
+async function brevoDomeinen(
+  brevo: string,
+): Promise<{ naam: string; geverifieerd: boolean; geauthenticeerd: boolean }[]> {
+  try {
+    const res = await fetch("https://api.brevo.com/v3/senders/domains", {
+      headers: { "api-key": brevo.trim(), Accept: "application/json" },
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as {
+      domains?: { domain_name?: string; verified?: boolean; authenticated?: boolean }[];
+    };
+    return (json.domains ?? []).map((d) => ({
+      naam: d.domain_name ?? "",
+      geverifieerd: d.verified === true,
+      geauthenticeerd: d.authenticated === true,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Eén DNS-regel zoals je hem bij je domeinbeheerder intypt. */
+interface DnsRegel {
+  /** Wat er in het veld "Naam" komt: het deel vóór het hoofddomein. */
+  naam: string;
+  type: string;
+  waarde: string;
+  /** Ziet Brevo hem al staan? */
+  goed: boolean;
+}
+
+/**
+ * Het domein zoals het bij de domeinbeheerder staat. Voor het subdomein
+ * antwoord.deramensopperij.nl is dat deramensopperij.nl — en daar hoort het
+ * veld "Naam" bij: "antwoord", niet de hele naam.
+ */
+function hoofdDomein(subdomein: string, bekend: { naam: string }[]): string {
+  const sub = subdomein.toLowerCase();
+  const ouder = bekend
+    .map((d) => d.naam.toLowerCase())
+    .filter((n) => n !== sub && sub.endsWith(`.${n}`))
+    .sort((a, b) => b.length - a.length)[0];
+  return ouder ?? sub.split(".").slice(-2).join(".");
+}
+
+/**
+ * Brevo's DNS-regels omgezet naar wat je bij je domeinbeheerder invult.
+ *
+ * Brevo is niet eenduidig over de hostnaam: soms de volledige naam, soms "@"
+ * voor het domein zelf, soms alleen het voorste stuk. Alle drie komen hier
+ * uit op dezelfde vorm: het deel vóór het hoofddomein.
+ */
+function dnsRegelsUit(records: unknown, subdomein: string, hoofd: string): DnsRegel[] {
+  if (!records || typeof records !== "object") return [];
+  const lijst = Array.isArray(records) ? records : Object.values(records as Record<string, unknown>);
+  const h = hoofd.toLowerCase();
+  const sub = subdomein.toLowerCase();
+  return lijst.flatMap((r) => {
+    if (!r || typeof r !== "object") return [];
+    const x = r as Record<string, unknown>;
+    const type = String(x["type"] ?? "").trim().toUpperCase();
+    const waarde = String(x["value"] ?? "").trim();
+    if (!type || !waarde) return [];
+    // Het subdomein zoals het in het veld "Naam" staat: "antwoord".
+    const subNaam = sub === h ? "@" : sub.slice(0, -(h.length + 1));
+    const host = String(x["host_name"] ?? "").trim().replace(/\.$/, "").toLowerCase();
+    let naam: string;
+    if (!host || host === "@") {
+      naam = subNaam;
+    } else if (host === h || host.endsWith(`.${h}`)) {
+      // Volledige naam: het hoofddomein eraf.
+      naam = host === h ? "@" : host.slice(0, -(h.length + 1));
+    } else if (subNaam !== "@" && (host === subNaam || host.endsWith(`.${subNaam}`))) {
+      // Al ten opzichte van het hoofddomein ("_dmarc.antwoord"): zo laten.
+      naam = host;
+    } else {
+      // Ten opzichte van het subdomein ("brevo1._domainkey"): subdomein erachter.
+      naam = subNaam === "@" ? host : `${host}.${subNaam}`;
+    }
+    return [{ naam, type, waarde, goed: x["status"] === true }];
+  });
+}
+
+/** De regels die Brevo voor een domein nog wil zien. */
+async function brevoDomeinRegels(
+  brevo: string,
+  subdomein: string,
+  hoofd: string,
+): Promise<DnsRegel[]> {
+  try {
+    const res = await fetch(
+      `https://api.brevo.com/v3/senders/domains/${encodeURIComponent(subdomein)}`,
+      { headers: { "api-key": brevo.trim(), Accept: "application/json" } },
+    );
+    if (!res.ok) return [];
+    const json = (await res.json()) as { dns_records?: unknown };
+    return dnsRegelsUit(json.dns_records, subdomein, hoofd);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Hoe het postvak ervoor staat, stap voor stap. Elk onderdeel apart, zodat de
  * pagina kan zeggen wélke stap nog ontbreekt in plaats van alleen "werkt niet".
  * Het adres van de koppeling gaat nooit mee naar buiten: daar zit de sleutel
@@ -455,8 +562,17 @@ async function inboxStatus(
 ) {
   const servers = inboxDomein ? await mailserversVan(inboxDomein) : [];
   const koppelingen = brevo && inboxDomein ? (await inboundKoppelingen(brevo)).lijst : null;
+  const domeinen = brevo ? await brevoDomeinen(brevo) : [];
+  const bekend = domeinen.find((d) => d.naam.toLowerCase() === inboxDomein.toLowerCase());
+  const dnsNodig =
+    brevo && inboxDomein && bekend && !bekend.geauthenticeerd
+      ? await brevoDomeinRegels(brevo, inboxDomein, hoofdDomein(inboxDomein, domeinen))
+      : [];
   return {
     domein: inboxDomein,
+    brevoKentDomein: !!bekend,
+    brevoKeurtGoed: bekend?.geauthenticeerd === true,
+    dnsNodig,
     dnsGoed: servers.some((m) => BREVO_INBOUND.includes(m)),
     dnsGevonden: servers,
     gekoppeld: (koppelingen ?? []).some(
@@ -504,6 +620,56 @@ async function koppelInbox(
     );
   }
 
+  const kop = {
+    "api-key": brevo.trim(),
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+
+  // Brevo neemt alleen post aan op een domein dat het zelf heeft goedgekeurd,
+  // en een goedgekeurd hoofddomein telt niet voor een subdomein. Kent Brevo
+  // het nog niet, dan voegen we het toe; Brevo geeft dan de regels die er bij
+  // de domeinbeheerder bij moeten, en die toont de controle op de pagina.
+  const domeinen = await brevoDomeinen(brevo);
+  const bekend = domeinen.find((d) => d.naam.toLowerCase() === inboxDomein.toLowerCase());
+  if (!bekend) {
+    const res = await fetch("https://api.brevo.com/v3/senders/domains", {
+      method: "POST",
+      headers: kop,
+      body: JSON.stringify({ name: inboxDomein }),
+    });
+    if (!res.ok) {
+      return antwoord(
+        { fout: `Brevo wilde ${inboxDomein} niet toevoegen: ${(await res.text()).slice(0, 300)}` },
+        502,
+      );
+    }
+    return antwoord(
+      {
+        fout:
+          `${inboxDomein} staat nu bij Brevo, maar moet nog goedgekeurd worden. ` +
+          "Klik op Controleer verbinding: daar staan de regels die er bij je domeinbeheerder bij moeten.",
+      },
+      409,
+    );
+  }
+  if (!bekend.geauthenticeerd) {
+    const res = await fetch(
+      `https://api.brevo.com/v3/senders/domains/${encodeURIComponent(inboxDomein)}/authenticate`,
+      { method: "PUT", headers: kop },
+    );
+    if (!res.ok) {
+      return antwoord(
+        {
+          fout:
+            `Brevo keurt ${inboxDomein} nog niet goed. Staan de regels uit de controle al bij je ` +
+            `domeinbeheerder? Het kan een uur duren. (${(await res.text()).slice(0, 200)})`,
+        },
+        409,
+      );
+    }
+  }
+
   const webhookUrl = `${supabaseUrl}/functions/v1/mail-inbox?sleutel=${sleutel}`;
   const opgevraagd = await inboundKoppelingen(brevo);
   if (opgevraagd.lijst === null) {
@@ -516,12 +682,6 @@ async function koppelInbox(
   const zelfde = bestaand.find(
     (w) => (w.domain ?? "").toLowerCase() === inboxDomein.toLowerCase(),
   );
-
-  const kop = {
-    "api-key": brevo.trim(),
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
 
   if (!zelfde) {
     const res = await fetch("https://api.brevo.com/v3/webhooks", {
