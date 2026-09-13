@@ -24,6 +24,7 @@ import {
   CircleSlash,
   Mail,
   MailCheck,
+  Minus,
   Send,
   ShieldCheck,
   Sparkles,
@@ -484,7 +485,7 @@ function Verbindingscontrole() {
           <Regel
             goed={!!uitslag.antwoordadres}
             goedTekst="Antwoorden komen binnen in het postvak"
-            foutTekst="Antwoorden komen nog niet binnen (dat is optioneel)"
+            foutTekst="Antwoorden lezen staat nog uit — versturen kan gewoon"
             zacht
           />
           {uitslag.sleutel &&
@@ -500,7 +501,12 @@ function Verbindingscontrole() {
   );
 }
 
-/** Eén regel van de controle. `zacht` is voor wat niet per se hoeft. */
+/**
+ * Eén regel van de controle. `zacht` is voor wat niet per se hoeft: dat krijgt
+ * een streepje en geen kruis. Een kruis leest als "er is iets stuk", en het
+ * postvak niet aanhebben is een keuze, geen storing — je kunt prima versturen
+ * zonder.
+ */
 function Regel({
   goed,
   goedTekst,
@@ -516,10 +522,10 @@ function Regel({
     <li className="flex items-start gap-1.5">
       {goed ? (
         <Check className="mt-0.5 size-3.5 shrink-0 text-tint-groen-ink" />
+      ) : zacht ? (
+        <Minus className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
       ) : (
-        <X
-          className={`mt-0.5 size-3.5 shrink-0 ${zacht ? "text-muted-foreground" : "text-tint-oranje-ink"}`}
-        />
+        <X className="mt-0.5 size-3.5 shrink-0 text-tint-oranje-ink" />
       )}
       <span className={goed ? "" : "text-muted-foreground"}>{goed ? goedTekst : foutTekst}</span>
     </li>
