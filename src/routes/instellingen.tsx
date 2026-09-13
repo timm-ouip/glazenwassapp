@@ -147,13 +147,16 @@ function Instellingen() {
             <NotitiesTab />
             <KleurenTab />
             {/* Hoe de assistent antwoorden laat klinken: stel je één keer in,
-                daarna leert hij verder van wat je zelf verstuurt. */}
-            <Kaart
-              titel="Schrijfstijl van de assistent"
-              uitleg="Voor de antwoorden die hij klaarzet in het postvak van Mailing."
-            >
-              <SchrijfstijlInstellingen isEigenaar={isEigenaar} />
-            </Kaart>
+                daarna leert hij verder van wat je zelf verstuurt. Even smal
+                als de kaarten erboven. */}
+            <div className="max-w-lg">
+              <Kaart
+                titel="Schrijfstijl van de assistent"
+                uitleg="Voor de antwoorden die hij klaarzet in het postvak van Mailing."
+              >
+                <SchrijfstijlInstellingen isEigenaar={isEigenaar} />
+              </Kaart>
+            </div>
           </TabsContent>
         </div>
       </Tabs>
