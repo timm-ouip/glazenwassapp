@@ -87,7 +87,9 @@ export type Database = {
           kvk: string
           mail_afzender_email: string
           mail_afzender_naam: string
+          mail_auto_doorvoeren: boolean
           mail_inbox_actief: boolean
+          mail_schrijfstijl: string
           mail_token: string
           name: string
           plaats: string
@@ -106,7 +108,9 @@ export type Database = {
           kvk?: string
           mail_afzender_email?: string
           mail_afzender_naam?: string
+          mail_auto_doorvoeren?: boolean
           mail_inbox_actief?: boolean
+          mail_schrijfstijl?: string
           mail_token?: string
           name: string
           plaats?: string
@@ -125,7 +129,9 @@ export type Database = {
           kvk?: string
           mail_afzender_email?: string
           mail_afzender_naam?: string
+          mail_auto_doorvoeren?: boolean
           mail_inbox_actief?: boolean
+          mail_schrijfstijl?: string
           mail_token?: string
           name?: string
           plaats?: string
@@ -435,6 +441,7 @@ export type Database = {
           company_id: string
           concept: string
           deleted_at: string | null
+          doorgevoerd_automatisch: boolean
           doorgevoerd_op: string | null
           id: string
           klant_id: string | null
@@ -458,6 +465,7 @@ export type Database = {
           company_id: string
           concept?: string
           deleted_at?: string | null
+          doorgevoerd_automatisch?: boolean
           doorgevoerd_op?: string | null
           id?: string
           klant_id?: string | null
@@ -481,6 +489,7 @@ export type Database = {
           company_id?: string
           concept?: string
           deleted_at?: string | null
+          doorgevoerd_automatisch?: boolean
           doorgevoerd_op?: string | null
           id?: string
           klant_id?: string | null
@@ -577,6 +586,91 @@ export type Database = {
             columns: ["mailing_id"]
             isOneToOne: false
             referencedRelation: "mailingen"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mail_wijzigingen: {
+        Row: {
+          adres: string
+          antwoord_id: string | null
+          automatisch: boolean
+          company_id: string
+          created_at: string
+          customer_id: string | null
+          door: string | null
+          id: string
+          klant: string
+          maanden: string[]
+          na_overslaan: string[]
+          na_start_maand: string
+          soort: string
+          teruggedraaid_door: string | null
+          teruggedraaid_op: string | null
+          voor_overslaan: string[]
+          voor_start_maand: string
+          zekerheid: number | null
+        }
+        Insert: {
+          adres?: string
+          antwoord_id?: string | null
+          automatisch?: boolean
+          company_id: string
+          created_at?: string
+          customer_id?: string | null
+          door?: string | null
+          id?: string
+          klant?: string
+          maanden?: string[]
+          na_overslaan?: string[]
+          na_start_maand?: string
+          soort?: string
+          teruggedraaid_door?: string | null
+          teruggedraaid_op?: string | null
+          voor_overslaan?: string[]
+          voor_start_maand?: string
+          zekerheid?: number | null
+        }
+        Update: {
+          adres?: string
+          antwoord_id?: string | null
+          automatisch?: boolean
+          company_id?: string
+          created_at?: string
+          customer_id?: string | null
+          door?: string | null
+          id?: string
+          klant?: string
+          maanden?: string[]
+          na_overslaan?: string[]
+          na_start_maand?: string
+          soort?: string
+          teruggedraaid_door?: string | null
+          teruggedraaid_op?: string | null
+          voor_overslaan?: string[]
+          voor_start_maand?: string
+          zekerheid?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mail_wijzigingen_antwoord_id_fkey"
+            columns: ["antwoord_id"]
+            isOneToOne: false
+            referencedRelation: "mail_antwoorden"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mail_wijzigingen_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mail_wijzigingen_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
             referencedColumns: ["id"]
           },
         ]

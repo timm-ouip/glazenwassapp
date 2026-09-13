@@ -17,6 +17,8 @@ export interface Telling {
   aantal: number;
   /** Hoeveel adressen van die dag we niet kunnen mailen. */
   zonderEmail: number;
+  /** Hoeveel adressen deze maand overslaan — die krijgen ook geen mail. */
+  overgeslagen: number;
   /** De eerste paar, om te zien dat het de goede mensen zijn. */
   voorbeeld: { naam: string; email: string; adressen: string[] }[];
 }
@@ -108,6 +110,20 @@ export function koppelPostvak(): Promise<{ ok: true; adres: string }> {
   return roep<{ ok: true; adres: string }>({ actie: "inbox-koppelen" });
 }
 
+/**
+ * Een voorstel van de assistent doorvoeren. Langs de server en niet in de
+ * browser: dan komt het in hetzelfde rapport als automatisch doorvoeren, en
+ * draai je het op dezelfde manier terug.
+ */
+export function voerVoorstelDoor(antwoord_id: string): Promise<{ ok: true; aangepast: number }> {
+  return roep<{ ok: true; aangepast: number }>({ actie: "doorvoeren", antwoord_id });
+}
+
+/** Haalt één aanpassing uit het rapport weer weg. */
+export function draaiWijzigingTerug(wijziging_id: string): Promise<{ ok: true }> {
+  return roep<{ ok: true }>({ actie: "terugdraaien", wijziging_id });
+}
+
 /** Hoeveel mensen krijgen de mail van deze dag? Verstuurt niets. */
 export function telOntvangers(datum: string): Promise<Telling> {
   return roep<Telling>({ actie: "tellen", datum });
@@ -192,6 +208,8 @@ export interface MailAntwoord {
   ai_fout: string;
   status: AntwoordStatus;
   doorgevoerd_op: string | null;
+  /** Deed de assistent het doorvoeren zelf? */
+  doorgevoerd_automatisch: boolean;
   beantwoord_op: string | null;
 }
 
@@ -219,7 +237,7 @@ export const categorieTint: Record<Categorie, string> = {
 // Eén string en niet aan elkaar geplakt: de typen van Supabase worden uit de
 // letterlijke tekst afgeleid, en een optelsom leest hij niet.
 const ANTWOORD_VELDEN =
-  "id,ontvangen_op,van_naam,van_email,onderwerp,tekst,klant_id,categorie,samenvatting,voorstel_maanden,voorstel_adressen,concept,zekerheid,ai_fout,status,doorgevoerd_op,beantwoord_op";
+  "id,ontvangen_op,van_naam,van_email,onderwerp,tekst,klant_id,categorie,samenvatting,voorstel_maanden,voorstel_adressen,concept,zekerheid,ai_fout,status,doorgevoerd_op,doorgevoerd_automatisch,beantwoord_op";
 
 export async function fetchMailAntwoorden(): Promise<MailAntwoord[]> {
   const { data, error } = await supabase
@@ -234,16 +252,6 @@ export async function fetchMailAntwoorden(): Promise<MailAntwoord[]> {
 
 export async function zetAntwoordStatus(id: string, status: AntwoordStatus) {
   const { error } = await supabase.from("mail_antwoorden").update({ status }).eq("id", id);
-  if (error) throw error;
-}
-
-/** Zet het stempel dat het voorstel is doorgevoerd. Het aanpassen van de
- *  adressen zelf loopt langs `slaSelectieOver`, net als overal elders. */
-export async function stempelDoorgevoerd(id: string) {
-  const { error } = await supabase
-    .from("mail_antwoorden")
-    .update({ doorgevoerd_op: new Date().toISOString(), status: "klaar" })
-    .eq("id", id);
   if (error) throw error;
 }
 
@@ -289,4 +297,83 @@ export async function bewaarAfzender(companyId: string, afzender: Afzender) {
     })
     .eq("id", companyId);
   if (error) throw error;
+}
+
+// ---------------------------------------------------------------------
+// Het rapport: alles wat de assistent (of iemand) heeft aangepast
+// ---------------------------------------------------------------------
+
+export interface Wijziging {
+  id: string;
+  created_at: string;
+  antwoord_id: string | null;
+  /** Adres en klant zoals ze heetten op het moment van aanpassen. */
+  adres: string;
+  klant: string;
+  maanden: string[];
+  automatisch: boolean;
+  zekerheid: number | null;
+  teruggedraaid_op: string | null;
+}
+
+export async function fetchWijzigingen(): Promise<Wijziging[]> {
+  const { data, error } = await supabase
+    .from("mail_wijzigingen")
+    .select("id,created_at,antwoord_id,adres,klant,maanden,automatisch,zekerheid,teruggedraaid_op")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  return (data ?? []) as Wijziging[];
+}
+
+// ---------------------------------------------------------------------
+// Instellingen van de assistent
+// ---------------------------------------------------------------------
+
+export interface AssistentInstellingen {
+  /** Mag hij bij zekerheid zelf doorvoeren? */
+  automatisch: boolean;
+  /** Hoe antwoorden moeten klinken, in je eigen woorden. */
+  schrijfstijl: string;
+}
+
+export async function fetchAssistentInstellingen(): Promise<AssistentInstellingen> {
+  const { data, error } = await supabase
+    .from("companies")
+    .select("mail_auto_doorvoeren,mail_schrijfstijl")
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    automatisch: data?.["mail_auto_doorvoeren"] === true,
+    schrijfstijl: data?.["mail_schrijfstijl"] ?? "",
+  };
+}
+
+export async function bewaarAssistentInstellingen(
+  companyId: string,
+  instellingen: AssistentInstellingen,
+) {
+  const { error } = await supabase
+    .from("companies")
+    .update({
+      mail_auto_doorvoeren: instellingen.automatisch,
+      mail_schrijfstijl: instellingen.schrijfstijl.trim(),
+    })
+    .eq("id", companyId);
+  if (error) throw error;
+}
+
+/**
+ * Hoeveel antwoorden er al met de hand zijn verstuurd — daar leert de
+ * assistent de stijl van. Alleen tellen, niet ophalen.
+ */
+export async function aantalVerstuurdeAntwoorden(): Promise<number> {
+  const { count, error } = await supabase
+    .from("mail_antwoorden")
+    .select("id", { count: "exact", head: true })
+    .not("beantwoord_op", "is", null)
+    .is("deleted_at", null);
+  if (error) throw error;
+  return count ?? 0;
 }

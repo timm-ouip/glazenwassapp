@@ -26,6 +26,12 @@ import {
   vulIn,
 } from "../_gedeeld/mail.ts";
 import { leesBericht } from "../_gedeeld/assistent.ts";
+import {
+  draaiTerug,
+  veiligVoorAutomatisch,
+  voerOverslaanDoor,
+  ZEKER_AUTOMATISCH,
+} from "../_gedeeld/doorvoeren.ts";
 
 interface Verzoek {
   /**
@@ -33,9 +39,19 @@ interface Verzoek {
    * `reactie` stuurt één antwoord terug op een binnengekomen bericht,
    * `controle` kijkt alleen of de verbinding met Brevo klopt, en
    * `inbox-koppelen` zet het postvak open zodra de DNS goed staat, en
-   * `opnieuw-lezen` laat de assistent een binnengekomen bericht nog eens lezen.
+   * `opnieuw-lezen` laat de assistent een binnengekomen bericht nog eens lezen,
+   * `doorvoeren` zet een voorstel door, en `terugdraaien` haalt een
+   * aanpassing uit het rapport weer weg.
    */
-  actie: "tellen" | "versturen" | "reactie" | "controle" | "inbox-koppelen" | "opnieuw-lezen";
+  actie:
+    | "tellen"
+    | "versturen"
+    | "reactie"
+    | "controle"
+    | "inbox-koppelen"
+    | "opnieuw-lezen"
+    | "doorvoeren"
+    | "terugdraaien";
   /** De wasdag waarvan de adressen komen, als 'jjjj-mm-dd'. */
   datum: string;
   onderwerp: string;
@@ -44,6 +60,8 @@ interface Verzoek {
   test?: boolean;
   /** Bij `reactie` en `opnieuw-lezen`: om welk binnengekomen bericht het gaat. */
   antwoord_id?: string;
+  /** Bij `terugdraaien`: welke regel uit het rapport. */
+  wijziging_id?: string;
 }
 
 /** Eén ontvanger: een mens, met alle adressen die hij die dag heeft. */
@@ -96,7 +114,9 @@ Deno.serve(async (req) => {
 
   const { data: bedrijf } = await beheerder
     .from("companies")
-    .select("id,name,mail_afzender_naam,mail_afzender_email,mail_token,mail_inbox_actief")
+    .select(
+      "id,name,mail_afzender_naam,mail_afzender_email,mail_token,mail_inbox_actief,mail_auto_doorvoeren",
+    )
     .eq("id", medewerker.company_id)
     .maybeSingle();
   if (!bedrijf) return antwoord({ fout: "Geen bedrijf gevonden." }, 403);
@@ -130,7 +150,7 @@ Deno.serve(async (req) => {
     const id = String(verzoek.antwoord_id ?? "");
     const { data: rij } = await beheerder
       .from("mail_antwoorden")
-      .select("id,van_email,van_naam,onderwerp,tekst,mailing_id")
+      .select("id,van_email,van_naam,onderwerp,tekst,mailing_id,doorgevoerd_op")
       .eq("company_id", bedrijf.id)
       .eq("id", id)
       .maybeSingle();
@@ -146,7 +166,64 @@ Deno.serve(async (req) => {
       mailingId: rij.mailing_id,
     });
     await beheerder.from("mail_antwoorden").update(gelezen).eq("id", id);
+
+    // Dezelfde regel als bij binnenkomst: was het nog niet doorgevoerd en weet
+    // hij het nu zeker, dan alsnog zelf.
+    if (
+      !rij.doorgevoerd_op &&
+      bedrijf.mail_auto_doorvoeren === true &&
+      gelezen.categorie === "overslaan" &&
+      gelezen.zekerheid >= ZEKER_AUTOMATISCH &&
+      gelezen.voorstel_adressen.length > 0 &&
+      veiligVoorAutomatisch(gelezen.voorstel_maanden)
+    ) {
+      await voerOverslaanDoor(beheerder, {
+        companyId: bedrijf.id,
+        antwoordId: id,
+        customerIds: gelezen.voorstel_adressen,
+        maanden: gelezen.voorstel_maanden,
+        automatisch: true,
+        zekerheid: gelezen.zekerheid,
+        door: null,
+      });
+    }
     return antwoord({ ok: gelezen.ai_fout === "", ai_fout: gelezen.ai_fout });
+  }
+
+  // Een voorstel met de hand doorvoeren. Langs dezelfde weg als automatisch,
+  // zodat het in hetzelfde rapport komt en op dezelfde manier terugdraait.
+  if (verzoek.actie === "doorvoeren") {
+    const id = String(verzoek.antwoord_id ?? "");
+    const { data: rij } = await beheerder
+      .from("mail_antwoorden")
+      .select("id,voorstel_adressen,voorstel_maanden,zekerheid")
+      .eq("company_id", bedrijf.id)
+      .eq("id", id)
+      .maybeSingle();
+    if (!rij) return antwoord({ fout: "Dat bericht bestaat niet." }, 404);
+    if ((rij.voorstel_adressen ?? []).length === 0 || (rij.voorstel_maanden ?? []).length === 0) {
+      return antwoord({ fout: "Bij dit bericht staat geen voorstel." }, 400);
+    }
+    const uit = await voerOverslaanDoor(beheerder, {
+      companyId: bedrijf.id,
+      antwoordId: id,
+      customerIds: rij.voorstel_adressen,
+      maanden: rij.voorstel_maanden,
+      automatisch: false,
+      zekerheid: rij.zekerheid ?? null,
+      door: medewerker.id,
+    });
+    return antwoord({ ok: true, aangepast: uit.aangepast });
+  }
+
+  if (verzoek.actie === "terugdraaien") {
+    const uit = await draaiTerug(
+      beheerder,
+      bedrijf.id,
+      String(verzoek.wijziging_id ?? ""),
+      medewerker.id,
+    );
+    return uit.ok ? antwoord({ ok: true }) : antwoord({ fout: uit.fout }, 400);
   }
 
   // Een reactie op een binnengekomen bericht gaat langs dezelfde Brevo-sleutel
@@ -173,9 +250,11 @@ Deno.serve(async (req) => {
   const ontvangers = await lijstVoorDag(beheerder, bedrijf.id, datum);
 
   if (!versturen) {
+    const dekking = await telDekking(beheerder, bedrijf.id, datum);
     return antwoord({
       aantal: ontvangers.length,
-      zonderEmail: await telZonderEmail(beheerder, bedrijf.id, datum),
+      zonderEmail: dekking.zonderEmail,
+      overgeslagen: dekking.overgeslagen,
       voorbeeld: ontvangers.slice(0, 5).map((o) => ({
         naam: o.naam,
         email: o.email,
@@ -815,6 +894,9 @@ async function lijstVoorDag(
   companyId: string,
   datum: string,
 ): Promise<Ontvanger[]> {
+  // Wie deze maand overslaat staat nog wel op de dag, maar komt niet: die
+  // hoort ook geen aankondiging te krijgen.
+  const maand = datum.slice(0, 7);
   const { data: regels } = await db
     .from("wasdag_regels")
     .select("customer_id")
@@ -835,11 +917,12 @@ async function lijstVoorDag(
   for (const stuk of inStukjes(ids)) {
     const { data } = await db
       .from("customers")
-      .select("id,klant_id,house_number,addition,street_id")
+      .select("id,klant_id,house_number,addition,street_id,overslaan")
       .eq("company_id", companyId)
       .is("deleted_at", null)
       .in("id", stuk);
     for (const c of data ?? []) {
+      if (((c["overslaan"] as string[] | null) ?? []).includes(maand)) continue;
       adressen.push({
         klant_id: c["klant_id"] as string | null,
         huis: c["house_number"] as number,
@@ -909,15 +992,17 @@ async function lijstVoorDag(
 }
 
 /**
- * Hoeveel adressen van die dag we níet kunnen mailen. Dat getal hoort naast
- * het aantal ontvangers te staan: "42 mensen, 18 adressen zonder e-mailadres"
- * vertelt je meteen of de aankondiging genoeg dekking heeft.
+ * Hoe goed de aankondiging deze dag dekt: hoeveel adressen we niet kunnen
+ * mailen, en hoeveel deze maand overslaan en dus ook geen mail krijgen. Die
+ * getallen horen naast het aantal ontvangers: "42 mensen, 18 zonder
+ * e-mailadres, 3 slaan over" vertelt je meteen waar de rest is gebleven.
  */
-async function telZonderEmail(
+async function telDekking(
   db: ReturnType<typeof createClient>,
   companyId: string,
   datum: string,
-): Promise<number> {
+): Promise<{ zonderEmail: number; overgeslagen: number }> {
+  const maand = datum.slice(0, 7);
   const { data: regels } = await db
     .from("wasdag_regels")
     .select("customer_id")
@@ -926,20 +1011,27 @@ async function telZonderEmail(
   const ids = (regels ?? [])
     .map((r) => r["customer_id"] as string | null)
     .filter((id): id is string => !!id);
-  if (ids.length === 0) return 0;
+  if (ids.length === 0) return { zonderEmail: 0, overgeslagen: 0 };
 
-  let zonder = 0;
-  const metEmail = new Set<string>();
+  let overgeslagen = 0;
   const klantVan: (string | null)[] = [];
   for (const stuk of inStukjes(ids)) {
     const { data } = await db
       .from("customers")
-      .select("klant_id")
+      .select("klant_id,overslaan")
       .eq("company_id", companyId)
       .is("deleted_at", null)
       .in("id", stuk);
-    for (const c of data ?? []) klantVan.push(c["klant_id"] as string | null);
+    for (const c of data ?? []) {
+      if (((c["overslaan"] as string[] | null) ?? []).includes(maand)) {
+        overgeslagen += 1;
+        continue;
+      }
+      klantVan.push(c["klant_id"] as string | null);
+    }
   }
+
+  const metEmail = new Set<string>();
   const klantIds = [...new Set(klantVan.filter((x): x is string => !!x))];
   for (const stuk of inStukjes(klantIds)) {
     const { data } = await db
@@ -949,11 +1041,9 @@ async function telZonderEmail(
       .is("deleted_at", null)
       .in("id", stuk);
     for (const k of data ?? []) {
-      if ((((k["email"] as string) ?? "").trim())) metEmail.add(k["id"] as string);
+      if (((k["email"] as string) ?? "").trim()) metEmail.add(k["id"] as string);
     }
   }
-  for (const id of klantVan) {
-    if (!id || !metEmail.has(id)) zonder += 1;
-  }
-  return zonder;
+  const zonderEmail = klantVan.filter((id) => !id || !metEmail.has(id)).length;
+  return { zonderEmail, overgeslagen };
 }

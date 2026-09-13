@@ -28,6 +28,7 @@ import {
   Minus,
   Send,
   ShieldCheck,
+  Undo2,
   Sparkles,
   Users,
   X,
@@ -39,10 +40,10 @@ import { AppLayout } from "@/components/AppLayout";
 import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fetchCustomers, toonMaand, type Customer } from "@/lib/klanten";
-import { slaSelectieOver } from "@/lib/overslaan-keuze";
 import { datumSleutel, fetchWasdagen, toonDatum, vandaag } from "@/lib/wasdag";
 import {
   aantalOpenMailAntwoorden,
@@ -53,9 +54,15 @@ import {
   fetchAfzender,
   koppelPostvak,
   leesOpnieuw,
+  voerVoorstelDoor,
+  draaiWijzigingTerug,
+  fetchWijzigingen,
+  fetchAssistentInstellingen,
+  bewaarAssistentInstellingen,
+  aantalVerstuurdeAntwoorden,
+  type Wijziging,
   fetchMailAntwoorden,
   fetchMailingen,
-  stempelDoorgevoerd,
   telOntvangers,
   verstuurAankondiging,
   verstuurReactie,
@@ -102,7 +109,9 @@ De Ramensopperij`;
 function Mailing() {
   useRequireAuth();
   const { dag } = Route.useSearch();
-  const [blad, setBlad] = useState<"opstellen" | "antwoorden" | "verstuurd">("opstellen");
+  const [blad, setBlad] = useState<"opstellen" | "antwoorden" | "verstuurd" | "rapport">(
+    "opstellen",
+  );
 
   return (
     <AppLayout
@@ -118,16 +127,23 @@ function Mailing() {
             <OpenTelletje />
           </TabsTrigger>
           <TabsTrigger value="verstuurd">Verstuurd</TabsTrigger>
+          <TabsTrigger value="rapport">Rapport</TabsTrigger>
         </TabsList>
 
         <TabsContent value="opstellen">
           <Opstellen beginDag={dag} />
         </TabsContent>
         <TabsContent value="antwoorden">
-          <Antwoorden />
+          <div className="space-y-4">
+            <AssistentKaart />
+            <Antwoorden />
+          </div>
         </TabsContent>
         <TabsContent value="verstuurd">
           <Verstuurd />
+        </TabsContent>
+        <TabsContent value="rapport">
+          <Rapport />
         </TabsContent>
       </Tabs>
     </AppLayout>
@@ -785,23 +801,31 @@ function AntwoordKaart({
       return;
     }
     const maanden = bericht.voorstel_maanden;
+    const wat = maanden.map(toonMaand).join(" en ");
     const ja = await bevestig({
       titel: "Overslaan doorvoeren?",
       tekst:
         `${gekozen.length} ${gekozen.length === 1 ? "adres" : "adressen"} van ` +
-        `${bericht.van_naam || bericht.van_email} slaan ` +
-        `${maanden.map(toonMaand).join(" en ")} over.`,
+        `${bericht.van_naam || bericht.van_email} slaan ${wat} over. ` +
+        "Het komt in het rapport, en daar kun je het terugdraaien.",
       bevestigLabel: "Doorvoeren",
     });
     if (!ja) return;
     setBezig(true);
     try {
-      // Langs dezelfde weg als de wijkenpagina en de dagpagina: zelfde
-      // melding, zelfde undo. Een voorstel van de assistent hoort niet stiekem
-      // een ander soort wijziging te zijn dan wat je zelf doet.
-      await slaSelectieOver(gekozen, maanden, qc);
-      await stempelDoorgevoerd(bericht.id);
+      // Langs de server, net als automatisch doorvoeren: dan komt het in
+      // hetzelfde rapport en draait het op dezelfde manier terug.
+      const uit = await voerVoorstelDoor(bericht.id);
+      toast.success(
+        uit.aangepast === 0
+          ? "Stond al overgeslagen."
+          : `${uit.aangepast} ${uit.aangepast === 1 ? "adres slaat" : "adressen slaan"} ${wat} over.`,
+      );
+      await qc.invalidateQueries({ queryKey: ["customers"] });
+      await qc.invalidateQueries({ queryKey: ["mail-wijzigingen"] });
       await onVeranderd();
+    } catch (e) {
+      toast.error("Doorvoeren mislukte: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setBezig(false);
     }
@@ -873,7 +897,8 @@ function AntwoordKaart({
         </span>
         {bericht.doorgevoerd_op && (
           <span className="ml-auto flex items-center gap-1 text-[12px] text-tint-groen-ink">
-            <Check className="size-3.5" /> doorgevoerd
+            <Check className="size-3.5" />{" "}
+            {bericht.doorgevoerd_automatisch ? "automatisch doorgevoerd" : "doorgevoerd"}
           </span>
         )}
       </div>
@@ -960,6 +985,208 @@ function AntwoordKaart({
         </div>
       )}
     </article>
+  );
+}
+
+/**
+ * Wat de assistent zelf mag, en hoe hij schrijft. Staat boven het postvak:
+ * daar zie je wat hij doet, en daar wil je het ook kunnen bijsturen.
+ */
+function AssistentKaart() {
+  const { company, employee } = useAuth();
+  const qc = useQueryClient();
+  const instellingen = useQuery({
+    queryKey: ["assistent-instellingen"],
+    queryFn: fetchAssistentInstellingen,
+  });
+  const verstuurd = useQuery({
+    queryKey: ["aantal-verstuurde-antwoorden"],
+    queryFn: aantalVerstuurdeAntwoorden,
+  });
+  const [stijl, setStijl] = useState("");
+  const [bezig, setBezig] = useState(false);
+  const eigenaar = employee?.rol === "eigenaar";
+
+  useEffect(() => {
+    if (instellingen.data) setStijl(instellingen.data.schrijfstijl);
+  }, [instellingen.data]);
+
+  async function bewaar(automatisch: boolean, schrijfstijl: string, melding: string) {
+    if (!company?.id) return;
+    setBezig(true);
+    try {
+      await bewaarAssistentInstellingen(company.id, { automatisch, schrijfstijl });
+      await qc.invalidateQueries({ queryKey: ["assistent-instellingen"] });
+      toast.success(melding);
+    } catch (e) {
+      toast.error("Opslaan mislukte: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  const automatisch = instellingen.data?.automatisch ?? false;
+  const aantal = verstuurd.data ?? 0;
+  const stijlVeranderd = stijl.trim() !== (instellingen.data?.schrijfstijl ?? "").trim();
+
+  return (
+    <Kaart titel="Assistent">
+      <div className="flex items-start gap-3">
+        <Switch
+          checked={automatisch}
+          disabled={!eigenaar || bezig || instellingen.isLoading}
+          onCheckedChange={(aan) =>
+            void bewaar(
+              aan,
+              instellingen.data?.schrijfstijl ?? "",
+              aan
+                ? "Hij voert voortaan zelf door als hij het zeker weet."
+                : "Hij stelt weer alleen voor.",
+            )
+          }
+          aria-label="Zelf doorvoeren"
+        />
+        <div className="text-[13px]">
+          <p className="font-medium">Zelf doorvoeren als hij het zeker weet</p>
+          <p className="text-muted-foreground">
+            Schrijft een klant dat hij een keer overslaat en is de assistent minstens 90% zeker, dan
+            gaat het adres meteen van de planning — voor hooguit drie maanden. Twijfelt hij, dan
+            krijg je een voorstel met een knop. Alles komt in het tabblad Rapport, en daar draai je
+            het terug.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 border-t border-border pt-4">
+        <label className="block text-[13px] font-medium">Schrijfstijl</label>
+        <p className="text-[12.5px] text-muted-foreground">
+          Hoe moeten klaargezette antwoorden klinken? Bijvoorbeeld: &ldquo;u-vorm, kort, afsluiten
+          met Groet, Timmie&rdquo;.
+        </p>
+        <Textarea
+          value={stijl}
+          onChange={(e) => setStijl(e.target.value)}
+          rows={3}
+          maxLength={1000}
+          disabled={!eigenaar}
+          className="mt-2 text-[13.5px]"
+          placeholder="Laat leeg voor een gewone, vriendelijke je-vorm."
+        />
+        {eigenaar && stijlVeranderd && (
+          <Button
+            size="sm"
+            className="mt-2 rounded-full"
+            disabled={bezig}
+            onClick={() => void bewaar(automatisch, stijl, "Schrijfstijl opgeslagen.")}
+          >
+            Opslaan
+          </Button>
+        )}
+        <p className="mt-2 flex items-start gap-1.5 text-[12.5px] text-muted-foreground">
+          <Sparkles className="mt-0.5 size-3.5 shrink-0" />
+          {aantal === 0
+            ? "Pas je een klaargezet antwoord aan en verstuur je het, dan kijkt hij daar de volgende keer naar. Hoe meer je zelf verstuurt, hoe meer het op jou lijkt."
+            : `Hij kijkt ook naar je laatste ${Math.min(aantal, 5)} verstuurde ${Math.min(aantal, 5) === 1 ? "antwoord" : "antwoorden"}, en schrijft zoals jij daar schreef.`}
+        </p>
+        {!eigenaar && (
+          <p className="mt-2 text-[12px] text-muted-foreground">
+            Alleen de eigenaar kan dit aanpassen.
+          </p>
+        )}
+      </div>
+    </Kaart>
+  );
+}
+
+/**
+ * Alles wat er op grond van een mail is aangepast, automatisch of met de hand.
+ * Elke regel is terug te draaien, en een teruggedraaide regel blijft staan:
+ * een rapport waar dingen uit verdwijnen is geen rapport.
+ */
+function Rapport() {
+  const qc = useQueryClient();
+  const bevestig = useBevestig();
+  const lijst = useQuery({ queryKey: ["mail-wijzigingen"], queryFn: fetchWijzigingen });
+  const [bezig, setBezig] = useState<string | null>(null);
+
+  async function terug(w: Wijziging) {
+    const ja = await bevestig({
+      titel: "Terugdraaien?",
+      tekst: `${w.adres} slaat ${w.maanden.map(toonMaand).join(" en ")} dan niet meer over, en staat weer op de planning.`,
+      bevestigLabel: "Terugdraaien",
+    });
+    if (!ja) return;
+    setBezig(w.id);
+    try {
+      await draaiWijzigingTerug(w.id);
+      toast.success("Teruggedraaid.");
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["mail-wijzigingen"] }),
+        qc.invalidateQueries({ queryKey: ["customers"] }),
+        qc.invalidateQueries({ queryKey: ["mail-antwoorden"] }),
+      ]);
+    } catch (e) {
+      toast.error("Terugdraaien mislukte: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBezig(null);
+    }
+  }
+
+  if (lijst.isLoading) return <Leeg tekst="Bezig met ophalen…" />;
+  const rijen = lijst.data ?? [];
+  if (rijen.length === 0) {
+    return (
+      <Leeg tekst="Nog niets aangepast. Zodra de assistent of jij een voorstel doorvoert, staat het hier." />
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {rijen.map((w) => (
+        <article
+          key={w.id}
+          className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[16px] border border-border bg-card px-4 py-3 shadow-card ${
+            w.teruggedraaid_op ? "opacity-60" : ""
+          }`}
+        >
+          <span className="text-[13.5px] font-semibold">{w.adres || "Adres"}</span>
+          {w.klant && <span className="text-[12.5px] text-muted-foreground">{w.klant}</span>}
+          <span className="text-[13px]">slaat {w.maanden.map(toonMaand).join(" en ")} over</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+              w.automatisch ? "bg-tint-blauw text-tint-blauw-ink" : "bg-muted text-muted-foreground"
+            }`}
+          >
+            {w.automatisch
+              ? `automatisch${w.zekerheid != null ? ` · ${Math.round(w.zekerheid * 100)}% zeker` : ""}`
+              : "met de hand"}
+          </span>
+          <span className="ml-auto">
+            {w.teruggedraaid_op ? (
+              <span className="text-[12px] text-muted-foreground">teruggedraaid</span>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="rounded-full"
+                disabled={bezig === w.id}
+                onClick={() => void terug(w)}
+              >
+                <Undo2 className="size-4" /> Terugdraaien
+              </Button>
+            )}
+          </span>
+          <span className="w-full text-[12px] text-muted-foreground">
+            {new Date(w.created_at).toLocaleDateString("nl-NL", {
+              day: "numeric",
+              month: "long",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+        </article>
+      ))}
+    </div>
   );
 }
 

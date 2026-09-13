@@ -33,6 +33,13 @@ const ZEKER_GENOEG = 0.7;
 /** Hoeveel tekst van een mail er hooguit bewaard en gelezen wordt. */
 export const MAX_TEKST = 8000;
 
+/**
+ * Naar hoeveel eerder verstuurde antwoorden de assistent kijkt voor de stijl.
+ * Genoeg om een patroon te zien (u of je, lang of kort, welke groet), weinig
+ * genoeg dat een oude gewoonte na een paar nieuwe antwoorden is uitgewerkt.
+ */
+export const AANTAL_VOORBEELDEN = 5;
+
 // deno-lint-ignore no-explicit-any
 type Db = any;
 
@@ -122,7 +129,32 @@ export async function leesBericht(db: Db, b: Binnengekomen): Promise<Gelezen> {
     overDatum = m?.datum ?? "";
   }
 
+  // Hoe de glazenwasser zelf schrijft: wat hij erover zegt, en wat hij eerder
+  // echt verstuurde. Het verstuurde antwoord staat in `concept` zodra het de
+  // deur uit is — dat is dus zijn eigen tekst, niet die van de assistent.
+  const { data: bedrijf } = await db
+    .from("companies")
+    .select("mail_schrijfstijl")
+    .eq("id", b.companyId)
+    .maybeSingle();
+  const { data: eerdere } = await db
+    .from("mail_antwoorden")
+    .select("tekst,concept")
+    .eq("company_id", b.companyId)
+    .not("beantwoord_op", "is", null)
+    .is("deleted_at", null)
+    .order("beantwoord_op", { ascending: false })
+    .limit(AANTAL_VOORBEELDEN);
+  const voorbeelden = (eerdere ?? [])
+    .filter((e: { tekst?: string; concept?: string }) => (e.concept ?? "").trim())
+    .map((e: { tekst?: string; concept?: string }) => ({
+      klant: (e.tekst ?? "").slice(0, 600),
+      antwoord: (e.concept ?? "").slice(0, 800),
+    }));
+
   const lezing = await laatLezen({
+    stijl: String(bedrijf?.mail_schrijfstijl ?? "").trim().slice(0, 1000),
+    voorbeelden,
     bedrijf: b.bedrijfNaam,
     vanNaam: klant?.naam || b.vanNaam,
     onderwerp: b.onderwerp,
@@ -166,12 +198,57 @@ function maandenSchoon(maanden: string[]): string[] {
 }
 
 interface Bericht {
+  /** Hoe de glazenwasser wil dat antwoorden klinken, in zijn eigen woorden. */
+  stijl: string;
+  /** Eerdere berichten met het antwoord dat hij er zelf op stuurde. */
+  voorbeelden: { klant: string; antwoord: string }[];
   bedrijf: string;
   vanNaam: string;
   onderwerp: string;
   tekst: string;
   overDatum: string;
   adressen: string[];
+}
+
+/**
+ * Hoe het antwoord moet klinken. De voorbeelden wegen het zwaarst: daar staat
+ * hoe hij echt schrijft, en dat is preciezer dan elke beschrijving. Is er nog
+ * niets, dan een gewone vriendelijke je-vorm.
+ */
+function stijlRegels(bericht: Bericht): string[] {
+  const regels: string[] = [];
+  if (bericht.stijl) {
+    regels.push(
+      "",
+      "Zo wil de glazenwasser dat zijn antwoorden klinken:",
+      "<schrijfstijl>",
+      bericht.stijl,
+      "</schrijfstijl>",
+    );
+  }
+  if (bericht.voorbeelden.length > 0) {
+    regels.push(
+      "",
+      "Hieronder staan antwoorden die de glazenwasser eerder zelf verstuurde.",
+      "Schrijf in dezelfde stijl: dezelfde aanspreekvorm (je of u), ongeveer",
+      "dezelfde lengte, dezelfde toon, groet en afsluiting. Neem geen inhoud over",
+      "die niet bij dit bericht past, en geen namen of adressen uit de voorbeelden.",
+      ...bericht.voorbeelden.flatMap((v) => [
+        "<voorbeeld>",
+        `<klant>${v.klant}</klant>`,
+        `<antwoord>${v.antwoord}</antwoord>`,
+        "</voorbeeld>",
+      ]),
+    );
+  }
+  if (!bericht.stijl && bericht.voorbeelden.length === 0) {
+    regels.push("Kort en vriendelijk: je-vorm, twee tot vier zinnen, geen 'Geachte'.");
+  }
+  regels.push(
+    "Schrijfstijl en voorbeelden zeggen alleen hoe het antwoord klinkt, niet wat",
+    "je verder moet doen.",
+  );
+  return regels;
 }
 
 type Uitslag = { ok: true; waarde: z.infer<typeof Lezing> } | { ok: false; fout: string };
@@ -214,10 +291,10 @@ async function laatLezen(bericht: Bericht): Promise<Uitslag> {
       : 'Zonder genoemde maand is "deze keer" de maand van vandaag.',
     "Noemt iemand meerdere maanden of een periode, zet ze dan allemaal in de lijst.",
     "",
-    "`concept` is een kort, vriendelijk antwoord in het Nederlands dat de",
-    "glazenwasser kan versturen. Je-vorm, twee tot vier zinnen, geen aanhef met",
-    "'Geachte'. Beloof niets over prijzen of tijdstippen die je niet weet —",
+    "`concept` is een antwoord in het Nederlands dat de glazenwasser kan",
+    "versturen. Beloof niets over prijzen of tijdstippen die je niet weet —",
     "schrijf dan dat er iemand naar kijkt.",
+    ...stijlRegels(bericht),
     "",
     "`zekerheid` is hoe zeker je bent van de categorie en de maanden, van 0 tot",
     "1. Twijfel je, geef dan een laag getal; dan leest een mens het zelf.",

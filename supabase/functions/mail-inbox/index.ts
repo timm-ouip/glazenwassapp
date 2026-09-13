@@ -20,6 +20,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { leesBericht, MAX_TEKST } from "../_gedeeld/assistent.ts";
+import {
+  veiligVoorAutomatisch,
+  voerOverslaanDoor,
+  ZEKER_AUTOMATISCH,
+} from "../_gedeeld/doorvoeren.ts";
 import { antwoord, CORS } from "../_gedeeld/mail.ts";
 
 Deno.serve(async (req) => {
@@ -71,7 +76,7 @@ async function verwerkBericht(db: Db, ruw: unknown): Promise<boolean> {
 
   const { data: bedrijf } = await db
     .from("companies")
-    .select("id,name,mail_afzender_naam")
+    .select("id,name,mail_afzender_naam,mail_auto_doorvoeren")
     .eq("mail_token", token)
     .maybeSingle();
   if (!bedrijf) return false;
@@ -107,15 +112,41 @@ async function verwerkBericht(db: Db, ruw: unknown): Promise<boolean> {
     tekst,
   });
 
-  await db.from("mail_antwoorden").insert({
-    company_id: bedrijf.id,
-    van_naam: vanNaam,
-    van_email: vanEmail,
-    onderwerp,
-    tekst,
-    bericht_id: berichtId,
-    ...gelezen,
-  });
+  const { data: nieuw } = await db
+    .from("mail_antwoorden")
+    .insert({
+      company_id: bedrijf.id,
+      van_naam: vanNaam,
+      van_email: vanEmail,
+      onderwerp,
+      tekst,
+      bericht_id: berichtId,
+      ...gelezen,
+    })
+    .select("id")
+    .single();
+
+  // Zelf doorvoeren, als het bedrijf dat wil én de assistent het zeker weet.
+  // Anders blijft het een voorstel met een knop, zoals altijd. Het komt hoe
+  // dan ook in het rapport, en daar is het terug te draaien.
+  if (
+    nieuw &&
+    bedrijf.mail_auto_doorvoeren === true &&
+    gelezen.categorie === "overslaan" &&
+    gelezen.zekerheid >= ZEKER_AUTOMATISCH &&
+    gelezen.voorstel_adressen.length > 0 &&
+    veiligVoorAutomatisch(gelezen.voorstel_maanden)
+  ) {
+    await voerOverslaanDoor(db, {
+      companyId: bedrijf.id,
+      antwoordId: nieuw.id,
+      customerIds: gelezen.voorstel_adressen,
+      maanden: gelezen.voorstel_maanden,
+      automatisch: true,
+      zekerheid: gelezen.zekerheid,
+      door: null,
+    });
+  }
 
   return true;
 }
