@@ -393,17 +393,33 @@ interface BrevoWebhook {
   type?: string;
 }
 
-/** De koppelingen voor binnenkomende post die Brevo al kent. */
-async function inboundKoppelingen(brevo: string): Promise<BrevoWebhook[] | null> {
+/**
+ * De koppelingen voor binnenkomende post die Brevo al kent.
+ *
+ * Lukt het opvragen niet, dan komt Brevo's eigen uitleg mee in `fout`. Zonder
+ * die tekst blijft er alleen "werkt niet" over, en daar kan niemand iets mee.
+ */
+async function inboundKoppelingen(
+  brevo: string,
+): Promise<{ lijst: BrevoWebhook[]; fout: "" } | { lijst: null; fout: string }> {
   try {
     const res = await fetch("https://api.brevo.com/v3/webhooks?type=inbound", {
       headers: { "api-key": brevo.trim(), Accept: "application/json" },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const tekst = await res.text();
+      // Heeft het account nog geen enkele koppeling, dan geeft Brevo geen lege
+      // lijst maar een fout: "document_not_found". Dat is geen storing, dat is
+      // precies het geval waarin we er een moeten aanmaken.
+      if (res.status === 400 && tekst.includes("document_not_found")) {
+        return { lijst: [], fout: "" };
+      }
+      return { lijst: null, fout: `${res.status} ${tekst.slice(0, 300)}`.trim() };
+    }
     const json = (await res.json()) as { webhooks?: BrevoWebhook[] };
-    return json.webhooks ?? [];
-  } catch {
-    return null;
+    return { lijst: json.webhooks ?? [], fout: "" };
+  } catch (e) {
+    return { lijst: null, fout: e instanceof Error ? e.message : "onbekende fout" };
   }
 }
 
@@ -438,7 +454,7 @@ async function inboxStatus(
   inboxDomein: string,
 ) {
   const servers = inboxDomein ? await mailserversVan(inboxDomein) : [];
-  const koppelingen = brevo && inboxDomein ? await inboundKoppelingen(brevo) : null;
+  const koppelingen = brevo && inboxDomein ? (await inboundKoppelingen(brevo)).lijst : null;
   return {
     domein: inboxDomein,
     dnsGoed: servers.some((m) => BREVO_INBOUND.includes(m)),
@@ -489,10 +505,14 @@ async function koppelInbox(
   }
 
   const webhookUrl = `${supabaseUrl}/functions/v1/mail-inbox?sleutel=${sleutel}`;
-  const bestaand = await inboundKoppelingen(brevo);
-  if (bestaand === null) {
-    return antwoord({ fout: "Brevo gaf de lijst met koppelingen niet." }, 502);
+  const opgevraagd = await inboundKoppelingen(brevo);
+  if (opgevraagd.lijst === null) {
+    return antwoord(
+      { fout: `Brevo gaf de lijst met koppelingen niet: ${opgevraagd.fout}` },
+      502,
+    );
   }
+  const bestaand = opgevraagd.lijst;
   const zelfde = bestaand.find(
     (w) => (w.domain ?? "").toLowerCase() === inboxDomein.toLowerCase(),
   );
