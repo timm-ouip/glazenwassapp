@@ -142,21 +142,25 @@ function Instellingen() {
           <TabsContent value="aanmelden">
             <AanmeldenTab isEigenaar={isEigenaar} />
           </TabsContent>
-          {/* En hier alles wat je zelf inricht en daarna laat staan. */}
-          <TabsContent value="voorkeuren" className="space-y-4">
+          {/* En hier alles wat je zelf inricht en daarna laat staan. Naast
+              elkaar zodra er ruimte is: onder elkaar werd het een lange
+              smalle strook met een leeg halfscherm ernaast. items-start,
+              want de kaarten verschillen flink in hoogte en uitgerekt
+              krijg je lege vlakken onderin. */}
+          <TabsContent
+            value="voorkeuren"
+            className="grid max-w-6xl items-start gap-4 lg:grid-cols-2 xl:grid-cols-3"
+          >
             <NotitiesTab />
             <KleurenTab />
             {/* Hoe de assistent antwoorden laat klinken: stel je één keer in,
-                daarna leert hij verder van wat je zelf verstuurt. Even smal
-                als de kaarten erboven. */}
-            <div className="max-w-lg">
-              <Kaart
-                titel="Schrijfstijl van de assistent"
-                uitleg="Voor de antwoorden die hij klaarzet in het postvak van Mailing."
-              >
-                <SchrijfstijlInstellingen isEigenaar={isEigenaar} />
-              </Kaart>
-            </div>
+                daarna leert hij verder van wat je zelf verstuurt. */}
+            <Kaart
+              titel="Schrijfstijl van de assistent"
+              uitleg="Voor de antwoorden die hij klaarzet in het postvak van Mailing."
+            >
+              <SchrijfstijlInstellingen isEigenaar={isEigenaar} />
+            </Kaart>
           </TabsContent>
         </div>
       </Tabs>
@@ -967,7 +971,7 @@ function KleurenTab() {
   if (isLoading) return <p className="text-sm text-muted-foreground">Laden…</p>;
 
   return (
-    <div className="max-w-lg">
+    <div>
       <Kaart
         titel="Kleuren op de printlijst"
         uitleg="Wat je hier maakt staat onder de rechtermuisknop op een adres, en kleurt de regel in de lijst én op papier."
@@ -1102,7 +1106,7 @@ function NotitiesTab() {
   if (laden) return <p className="text-sm text-muted-foreground">Laden…</p>;
 
   return (
-    <div className="max-w-lg">
+    <div>
       <Kaart
         titel="Snelkeuzes voor notities"
         uitleg="De knopjes onder het notitieveld, zoals H, T of HD. Nieuwe maak je ook daar aan; weggooien kan alleen hier."
