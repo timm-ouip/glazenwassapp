@@ -18,6 +18,7 @@ import { cronSleutelKlopt } from "../_gedeeld/cron.ts";
 import { categorieenVan, leesMail, richtprijzen, type TeLezen } from "../_gedeeld/paaltje.ts";
 import { voerActiesUit, type MailStand, type Voorstel } from "../_gedeeld/acties.ts";
 import { stuurAntwoord } from "../_gedeeld/verzenden.ts";
+import { stelAfsprakenVoor } from "../_gedeeld/afspraken.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
@@ -126,6 +127,16 @@ async function leesRonde(db: Db) {
       await db.from("berichten").update({ paaltje_status: "fout", ai_fout: fout }).eq("id", id);
     }
   }
+  // Tijd over? Dan kijken of Paaltje iets kan leren van antwoorden die je
+  // flink aanpaste. Alleen in een rustige ronde: nieuwe mail gaat voor.
+  if (Date.now() - begin < TIJD_MS / 2) {
+    try {
+      const n = await stelAfsprakenVoor(db);
+      if (n > 0) console.log(`paaltje-lezen: ${n} afspraken voorgesteld`);
+    } catch (e) {
+      console.error("afspraken voorstellen:", e instanceof Error ? e.message : e);
+    }
+  }
   console.log(`paaltje-lezen: ${gelezen} gelezen`);
 }
 
@@ -208,10 +219,14 @@ async function leesEen(
     paaltje_pogingen: 0,
     gelezen_door_paaltje_op: new Date().toISOString(),
     klant_gok_id: mail.klant_id ? null : uit.klant_gok_id,
-    concept_paaltje: concept,
   };
-  // Een al beantwoorde mail houdt zijn verstuurde tekst.
-  if (!mail.beantwoord_op) bijwerken.concept = concept;
+  // Een al beantwoorde mail houdt zijn verstuurde tekst, en ook het concept
+  // van Paaltje waar dat antwoord op aansloot: een nieuw concept achteraf zou
+  // bij "afspraken voorstellen" vergeleken worden met iets dat nooit iemand zag.
+  if (!mail.beantwoord_op) {
+    bijwerken.concept = concept;
+    bijwerken.concept_paaltje = concept;
+  }
   // Een klant die een mens al koppelde blijft staan.
   if (!mail.klant_id && uit.klant_id) bijwerken.klant_id = uit.klant_id;
   // Geen klantmail: niets te doen, meteen afgehandeld — en onthouden dat
