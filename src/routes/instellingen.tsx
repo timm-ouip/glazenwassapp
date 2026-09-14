@@ -53,6 +53,7 @@ import {
   updateMyProfile,
 } from "@/lib/team.functions";
 import { AanmeldInstellingen } from "@/components/AanmeldInstellingen";
+import { MailboxInstellingen } from "@/components/MailboxInstellingen";
 import { SchrijfstijlInstellingen } from "@/components/SchrijfstijlInstellingen";
 import { AppLayout } from "@/components/AppLayout";
 import { useBevestig } from "@/components/Bevestig";
@@ -61,7 +62,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const TABBLADEN = ["account", "team", "wijken", "aanmelden", "voorkeuren"] as const;
+const TABBLADEN = ["account", "team", "wijken", "aanmelden", "mail", "voorkeuren"] as const;
 type Tab = (typeof TABBLADEN)[number];
 
 /** De tabbladen van vroeger, die nu bij een ander horen. Een opgeslagen link
@@ -141,6 +142,14 @@ function Instellingen() {
           </TabsContent>
           <TabsContent value="aanmelden">
             <AanmeldenTab isEigenaar={isEigenaar} />
+          </TabsContent>
+          <TabsContent value="mail" className="max-w-2xl">
+            <Kaart
+              titel="Mailbox"
+              uitleg="Je gewone mail in Wooshy: alles wat binnenkomt, niet alleen antwoorden op aankondigingen."
+            >
+              <MailboxInstellingen isEigenaar={isEigenaar} />
+            </Kaart>
           </TabsContent>
           {/* En hier alles wat je zelf inricht en daarna laat staan. Naast
               elkaar zodra er ruimte is: onder elkaar werd het een lange

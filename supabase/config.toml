@@ -10,3 +10,13 @@ verify_jwt = false
 # daarbij hoort.
 [functions.mail-versturen]
 verify_jwt = true
+
+# De mailbox koppelen, nu ophalen of ontkoppelen: alleen ingelogd, en de
+# functie kijkt zelf of je eigenaar bent.
+[functions.mailbox]
+verify_jwt = true
+
+# Elke twee minuten aangeroepen door pg_cron, zonder gebruiker. Het slot is de
+# kop x-cron-sleutel (MAIL_CRON_SLEUTEL), zie supabase/functions/mail-ophalen.
+[functions.mail-ophalen]
+verify_jwt = false

@@ -959,12 +959,213 @@ export type Database = {
           },
         ]
       }
+      mailboxen: {
+        Row: {
+          adres: string
+          bezig_tot: string | null
+          company_id: string
+          created_at: string
+          fout: string
+          gekoppeld_door: string | null
+          id: string
+          imap_host: string
+          imap_poort: number
+          import_vanaf: string
+          laatste_poging: string | null
+          laatste_sync: string | null
+          paaltje_vanaf: string
+          smtp_host: string
+          smtp_poort: number
+          status: string
+        }
+        Insert: {
+          adres: string
+          bezig_tot?: string | null
+          company_id?: string
+          created_at?: string
+          fout?: string
+          gekoppeld_door?: string | null
+          id?: string
+          imap_host?: string
+          imap_poort?: number
+          import_vanaf?: string
+          laatste_poging?: string | null
+          laatste_sync?: string | null
+          paaltje_vanaf?: string
+          smtp_host?: string
+          smtp_poort?: number
+          status?: string
+        }
+        Update: {
+          adres?: string
+          bezig_tot?: string | null
+          company_id?: string
+          created_at?: string
+          fout?: string
+          gekoppeld_door?: string | null
+          id?: string
+          imap_host?: string
+          imap_poort?: number
+          import_vanaf?: string
+          laatste_poging?: string | null
+          laatste_sync?: string | null
+          paaltje_vanaf?: string
+          smtp_host?: string
+          smtp_poort?: number
+          status?: string
+        }
+        Relationships: []
+      }
+      mail_mappen: {
+        Row: {
+          aantal: number
+          bijgewerkt_op: string | null
+          company_id: string
+          id: string
+          mailbox_id: string
+          ongelezen: number
+          pad: string
+          rol: string
+          uidvalidity: number | null
+        }
+        Insert: {
+          aantal?: number
+          bijgewerkt_op?: string | null
+          company_id: string
+          id?: string
+          mailbox_id: string
+          ongelezen?: number
+          pad: string
+          rol?: string
+          uidvalidity?: number | null
+        }
+        Update: {
+          aantal?: number
+          bijgewerkt_op?: string | null
+          company_id?: string
+          id?: string
+          mailbox_id?: string
+          ongelezen?: number
+          pad?: string
+          rol?: string
+          uidvalidity?: number | null
+        }
+        Relationships: []
+      }
+      berichten: {
+        Row: {
+          aan: Json
+          afgekapt: boolean
+          antwoord_naar: string
+          bijlagen: Json
+          cc: Json
+          company_id: string
+          created_at: string
+          deleted_at: string | null
+          fragment: string
+          gelezen: boolean
+          gemarkeerd: boolean
+          grootte: number
+          html: string
+          id: string
+          in_reply_to: string
+          klant_id: string | null
+          mailbox_id: string
+          map_id: string
+          message_id: string
+          onderwerp: string
+          ontvangen_op: string
+          op_server: boolean
+          paaltje_status: string
+          referenties: string[]
+          richting: string
+          tekst: string
+          uid: number
+          uidvalidity: number
+          van_email: string
+          van_naam: string
+          weg_sinds: string | null
+        }
+        Insert: {
+          aan?: Json
+          afgekapt?: boolean
+          antwoord_naar?: string
+          bijlagen?: Json
+          cc?: Json
+          company_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          fragment?: string
+          gelezen?: boolean
+          gemarkeerd?: boolean
+          grootte?: number
+          html?: string
+          id?: string
+          in_reply_to?: string
+          klant_id?: string | null
+          mailbox_id: string
+          map_id: string
+          message_id?: string
+          onderwerp?: string
+          ontvangen_op: string
+          op_server?: boolean
+          paaltje_status?: string
+          referenties?: string[]
+          richting?: string
+          tekst?: string
+          uid: number
+          uidvalidity: number
+          van_email?: string
+          van_naam?: string
+          weg_sinds?: string | null
+        }
+        Update: {
+          aan?: Json
+          afgekapt?: boolean
+          antwoord_naar?: string
+          bijlagen?: Json
+          cc?: Json
+          company_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          fragment?: string
+          gelezen?: boolean
+          gemarkeerd?: boolean
+          grootte?: number
+          html?: string
+          id?: string
+          in_reply_to?: string
+          klant_id?: string | null
+          mailbox_id?: string
+          map_id?: string
+          message_id?: string
+          onderwerp?: string
+          ontvangen_op?: string
+          op_server?: boolean
+          paaltje_status?: string
+          referenties?: string[]
+          richting?: string
+          tekst?: string
+          uid?: number
+          uidvalidity?: number
+          van_email?: string
+          van_naam?: string
+          weg_sinds?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      mail_tellingen: {
+        Args: never
+        Returns: {
+          aantal: number
+          map_id: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
