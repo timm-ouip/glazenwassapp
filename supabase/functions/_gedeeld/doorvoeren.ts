@@ -81,8 +81,10 @@ function metOverslaan(
 
 export interface Doorvoering {
   companyId: string;
-  /** Het bericht waar dit uit voortkwam; leeg als het nergens uit voortkwam. */
+  /** Het oude antwoord (mail_antwoorden) waar dit uit voortkwam, of leeg. */
   antwoordId: string | null;
+  /** De mail uit de mailbox (berichten) waar dit uit voortkwam, of leeg. */
+  berichtId?: string | null;
   customerIds: string[];
   maanden: string[];
   automatisch: boolean;
@@ -96,10 +98,13 @@ export interface Doorvoering {
  * in het rapport. Een adres dat die maanden al oversloeg wordt overgeslagen:
  * er verandert niets, dus er valt ook niets te melden.
  */
-export async function voerOverslaanDoor(db: Db, o: Doorvoering): Promise<{ aangepast: number }> {
-  if (o.customerIds.length === 0 || o.maanden.length === 0) return { aangepast: 0 };
+export async function voerOverslaanDoor(
+  db: Db,
+  o: Doorvoering,
+): Promise<{ aangepast: number; mislukt: number }> {
+  if (o.customerIds.length === 0 || o.maanden.length === 0) return { aangepast: 0, mislukt: 0 };
 
-  const { data: rijen } = await db
+  const { data: rijen, error: leesFout } = await db
     .from("customers")
     .select(
       "id,overslaan,start_maand,created_at,house_number,addition,streets(name,volledige_naam),klanten(naam)",
@@ -107,8 +112,11 @@ export async function voerOverslaanDoor(db: Db, o: Doorvoering): Promise<{ aange
     .eq("company_id", o.companyId)
     .is("deleted_at", null)
     .in("id", o.customerIds);
+  // Niet kunnen lezen is niet "niets te doen": dan telt alles als mislukt.
+  if (leesFout) return { aangepast: 0, mislukt: o.customerIds.length };
 
   let aangepast = 0;
+  let mislukt = 0;
   for (const c of rijen ?? []) {
     const voorOverslaan: string[] = c.overslaan ?? [];
     const voorStart: string = c.start_maand ?? "";
@@ -126,12 +134,16 @@ export async function voerOverslaanDoor(db: Db, o: Doorvoering): Promise<{ aange
       .update({ overslaan: na.overslaan, start_maand: na.start_maand })
       .eq("company_id", o.companyId)
       .eq("id", c.id);
-    if (error) continue;
+    if (error) {
+      mislukt += 1;
+      continue;
+    }
 
     const straat = c.streets ? c.streets.volledige_naam || c.streets.name || "" : "";
     await db.from("mail_wijzigingen").insert({
       company_id: o.companyId,
       antwoord_id: o.antwoordId,
+      bericht_id: o.berichtId ?? null,
       customer_id: c.id,
       adres: `${straat} ${c.house_number}${c.addition ?? ""}`.trim(),
       klant: c.klanten?.naam ?? "",
@@ -160,8 +172,18 @@ export async function voerOverslaanDoor(db: Db, o: Doorvoering): Promise<{ aange
       .eq("company_id", o.companyId)
       .eq("id", o.antwoordId);
   }
+  if (o.berichtId && aangepast > 0) {
+    await db
+      .from("berichten")
+      .update({
+        doorgevoerd_op: new Date().toISOString(),
+        doorgevoerd_automatisch: o.automatisch,
+      })
+      .eq("company_id", o.companyId)
+      .eq("id", o.berichtId);
+  }
 
-  return { aangepast };
+  return { aangepast, mislukt };
 }
 
 /**
@@ -185,6 +207,19 @@ export async function draaiTerug(
     .maybeSingle();
   if (!w) return { ok: false, fout: "Die aanpassing bestaat niet." };
   if (w.teruggedraaid_op) return { ok: false, fout: "Die is al teruggedraaid." };
+  // Leest Paaltje de mail net, dan zou hij na afloop zijn oude voorstel
+  // terugschrijven en jouw terugdraaien stil ongedaan maken.
+  if (w.bericht_id) {
+    const { data: bericht } = await db
+      .from("berichten")
+      .select("paaltje_status")
+      .eq("company_id", companyId)
+      .eq("id", w.bericht_id)
+      .maybeSingle();
+    if (bericht?.paaltje_status === "bezig") {
+      return { ok: false, fout: "Paaltje leest deze mail net. Probeer het zo nog eens." };
+    }
+  }
   if (!w.customer_id) return { ok: false, fout: "Het adres bestaat niet meer." };
 
   const { data: c } = await db
@@ -219,6 +254,39 @@ export async function draaiTerug(
 
   // Is er van dit bericht niets meer doorgevoerd, dan gaat ook het stempel eraf
   // — en staat het voorstel weer klaar om opnieuw te kiezen.
+  if (w.bericht_id) {
+    const { count } = await db
+      .from("mail_wijzigingen")
+      .select("id", { count: "exact", head: true })
+      .eq("bericht_id", w.bericht_id)
+      .is("teruggedraaid_op", null);
+    if ((count ?? 0) === 0) {
+      // Het voorstel staat daarna weer klaar, met de knop Doorvoeren.
+      const { data: bericht, error: leesFout } = await db
+        .from("berichten")
+        .select("voorstel")
+        .eq("company_id", companyId)
+        .eq("id", w.bericht_id)
+        .maybeSingle();
+      const bijwerken: Record<string, unknown> = { doorgevoerd_op: null, doorgevoerd_automatisch: false };
+      // Alleen het voorstel aanraken als het lezen lukte: anders zou een lege
+      // waarde alles wegschrijven, ook de aanmelding en de prijzen.
+      if (!leesFout && bericht) {
+        const voorstel = (bericht.voorstel ?? {}) as { overslaan?: Record<string, unknown> };
+        if (voorstel.overslaan) {
+          // "teruggedraaid": de knop komt terug, maar Paaltje voert dit nooit
+          // meer zelf door — jij besloot er net anders over.
+          voorstel.overslaan = { ...voorstel.overslaan, doorgevoerd: false, teruggedraaid: true };
+          bijwerken.voorstel = voorstel;
+        }
+      }
+      await db
+        .from("berichten")
+        .update(bijwerken)
+        .eq("company_id", companyId)
+        .eq("id", w.bericht_id);
+    }
+  }
   if (w.antwoord_id) {
     const { count } = await db
       .from("mail_wijzigingen")

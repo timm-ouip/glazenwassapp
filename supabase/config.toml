@@ -21,6 +21,10 @@ verify_jwt = true
 [functions.mail-acties]
 verify_jwt = true
 
+# Paaltje leest wachtende mail; ook door pg_cron, met dezelfde sleutel.
+[functions.paaltje-lezen]
+verify_jwt = false
+
 # Elke twee minuten aangeroepen door pg_cron, zonder gebruiker. Het slot is de
 # kop x-cron-sleutel (MAIL_CRON_SLEUTEL), zie supabase/functions/mail-ophalen.
 [functions.mail-ophalen]

@@ -592,6 +592,8 @@ export type Database = {
       }
       mail_wijzigingen: {
         Row: {
+          bericht_id: string | null
+          details: Json
           adres: string
           antwoord_id: string | null
           automatisch: boolean
@@ -612,6 +614,8 @@ export type Database = {
           zekerheid: number | null
         }
         Insert: {
+          bericht_id?: string | null
+          details?: Json
           adres?: string
           antwoord_id?: string | null
           automatisch?: boolean
@@ -632,6 +636,8 @@ export type Database = {
           zekerheid?: number | null
         }
         Update: {
+          bericht_id?: string | null
+          details?: Json
           adres?: string
           antwoord_id?: string | null
           automatisch?: boolean
@@ -1054,6 +1060,21 @@ export type Database = {
       }
       berichten: {
         Row: {
+          afgehandeld_door_paaltje: boolean
+          afgehandeld_op: string | null
+          indeling_door_mens: boolean
+          ai_fout: string
+          beantwoord_op: string | null
+          concept: string
+          concept_paaltje: string
+          doorgevoerd_automatisch: boolean
+          doorgevoerd_op: string | null
+          gelezen_door_paaltje_op: string | null
+          is_klantmail: boolean | null
+          klant_gok_id: string | null
+          samenvatting: string
+          voorstel: Json
+          zekerheid: number | null
           aan: Json
           afgekapt: boolean
           antwoord_naar: string
@@ -1076,6 +1097,7 @@ export type Database = {
           onderwerp: string
           ontvangen_op: string
           op_server: boolean
+          paaltje_pogingen: number
           paaltje_status: string
           referenties: string[]
           richting: string
@@ -1088,6 +1110,21 @@ export type Database = {
           weg_sinds: string | null
         }
         Insert: {
+          afgehandeld_door_paaltje?: boolean
+          afgehandeld_op?: string | null
+          indeling_door_mens?: boolean
+          ai_fout?: string
+          beantwoord_op?: string | null
+          concept?: string
+          concept_paaltje?: string
+          doorgevoerd_automatisch?: boolean
+          doorgevoerd_op?: string | null
+          gelezen_door_paaltje_op?: string | null
+          is_klantmail?: boolean | null
+          klant_gok_id?: string | null
+          samenvatting?: string
+          voorstel?: Json
+          zekerheid?: number | null
           aan?: Json
           afgekapt?: boolean
           antwoord_naar?: string
@@ -1110,6 +1147,7 @@ export type Database = {
           onderwerp?: string
           ontvangen_op: string
           op_server?: boolean
+          paaltje_pogingen?: number
           paaltje_status?: string
           referenties?: string[]
           richting?: string
@@ -1122,6 +1160,21 @@ export type Database = {
           weg_sinds?: string | null
         }
         Update: {
+          afgehandeld_door_paaltje?: boolean
+          afgehandeld_op?: string | null
+          indeling_door_mens?: boolean
+          ai_fout?: string
+          beantwoord_op?: string | null
+          concept?: string
+          concept_paaltje?: string
+          doorgevoerd_automatisch?: boolean
+          doorgevoerd_op?: string | null
+          gelezen_door_paaltje_op?: string | null
+          is_klantmail?: boolean | null
+          klant_gok_id?: string | null
+          samenvatting?: string
+          voorstel?: Json
+          zekerheid?: number | null
           aan?: Json
           afgekapt?: boolean
           antwoord_naar?: string
@@ -1144,6 +1197,7 @@ export type Database = {
           onderwerp?: string
           ontvangen_op?: string
           op_server?: boolean
+          paaltje_pogingen?: number
           paaltje_status?: string
           referenties?: string[]
           richting?: string
@@ -1157,11 +1211,146 @@ export type Database = {
         }
         Relationships: []
       }
+      mail_categorieen: {
+        Row: {
+          company_id: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          naam: string
+          omschrijving: string
+          sleutel: string | null
+          volgorde: number
+          zelfstandigheid: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          naam: string
+          omschrijving?: string
+          sleutel?: string | null
+          volgorde?: number
+          zelfstandigheid?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          naam?: string
+          omschrijving?: string
+          sleutel?: string | null
+          volgorde?: number
+          zelfstandigheid?: string
+        }
+        Relationships: []
+      }
+      bericht_categorieen: {
+        Row: {
+          bericht_id: string
+          categorie_id: string
+          company_id: string
+          created_at: string
+          door: string
+          zekerheid: number | null
+        }
+        Insert: {
+          bericht_id: string
+          categorie_id: string
+          company_id?: string
+          created_at?: string
+          door?: string
+          zekerheid?: number | null
+        }
+        Update: {
+          bericht_id?: string
+          categorie_id?: string
+          company_id?: string
+          created_at?: string
+          door?: string
+          zekerheid?: number | null
+        }
+        Relationships: []
+      }
+      klant_emails: {
+        Row: {
+          bron: string
+          company_id: string
+          created_at: string
+          email: string
+          id: string
+          klant_id: string
+        }
+        Insert: {
+          bron?: string
+          company_id?: string
+          created_at?: string
+          email: string
+          id?: string
+          klant_id: string
+        }
+        Update: {
+          bron?: string
+          company_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          klant_id?: string
+        }
+        Relationships: []
+      }
+      paaltje_afspraken: {
+        Row: {
+          bron_bericht_id: string | null
+          categorie_id: string | null
+          company_id: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          status: string
+          tekst: string
+        }
+        Insert: {
+          bron_bericht_id?: string | null
+          categorie_id?: string | null
+          company_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          status?: string
+          tekst: string
+        }
+        Update: {
+          bron_bericht_id?: string | null
+          categorie_id?: string | null
+          company_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          status?: string
+          tekst?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      zet_bericht_categorieen: {
+        Args: { bericht: string; categorieen: string[] }
+        Returns: undefined
+      }
+      richtprijs: {
+        Args: { straat: string }
+        Returns: {
+          aantal: number
+          bereik: string
+          prijs: number
+        }[]
+      }
       mail_tellingen: {
         Args: never
         Returns: {

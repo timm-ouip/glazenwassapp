@@ -169,7 +169,10 @@ Deno.serve(async (req) => {
 
     // Dezelfde regel als bij binnenkomst: was het nog niet doorgevoerd en weet
     // hij het nu zeker, dan alsnog zelf.
+    // Automatisch doorvoeren komt in het rapport van de eigenaar; een
+    // medewerker die opnieuw laat lezen start dat niet.
     if (
+      medewerker.rol === "eigenaar" &&
       !rij.doorgevoerd_op &&
       bedrijf.mail_auto_doorvoeren === true &&
       gelezen.categorie === "overslaan" &&
@@ -192,6 +195,12 @@ Deno.serve(async (req) => {
 
   // Een voorstel met de hand doorvoeren. Langs dezelfde weg als automatisch,
   // zodat het in hetzelfde rapport komt en op dezelfde manier terugdraait.
+  // Doorvoeren en terugdraaien veranderen de planning en komen in het rapport,
+  // en dat rapport ziet alleen de eigenaar. Dan mag ook alleen de eigenaar dit.
+  if ((verzoek.actie === "doorvoeren" || verzoek.actie === "terugdraaien") && medewerker.rol !== "eigenaar") {
+    return antwoord({ fout: "Alleen de eigenaar kan dit doorvoeren of terugdraaien." }, 403);
+  }
+
   if (verzoek.actie === "doorvoeren") {
     const id = String(verzoek.antwoord_id ?? "");
     const { data: rij } = await beheerder

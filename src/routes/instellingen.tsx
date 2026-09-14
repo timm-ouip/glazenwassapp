@@ -54,6 +54,7 @@ import {
 } from "@/lib/team.functions";
 import { AanmeldInstellingen } from "@/components/AanmeldInstellingen";
 import { MailboxInstellingen } from "@/components/MailboxInstellingen";
+import { PaaltjeAfspraken, PaaltjeCategorieen } from "@/components/PaaltjeInstellingen";
 import { SchrijfstijlInstellingen } from "@/components/SchrijfstijlInstellingen";
 import { AppLayout } from "@/components/AppLayout";
 import { useBevestig } from "@/components/Bevestig";
@@ -150,6 +151,19 @@ function Instellingen() {
             >
               <MailboxInstellingen isEigenaar={isEigenaar} />
             </Kaart>
+            <div className="mt-4">
+              <Kaart
+                titel="Paaltje: categorieën"
+                uitleg="Waarin Paaltje binnenkomende mail indeelt, en hoeveel hij per soort zelf mag."
+              >
+                <PaaltjeCategorieen isEigenaar={isEigenaar} />
+              </Kaart>
+            </div>
+            <div className="mt-4">
+              <Kaart titel="Paaltje: vaste afspraken" uitleg="Waar Paaltje zich altijd aan houdt als hij een antwoord schrijft.">
+                <PaaltjeAfspraken isEigenaar={isEigenaar} />
+              </Kaart>
+            </div>
           </TabsContent>
           {/* En hier alles wat je zelf inricht en daarna laat staan. Naast
               elkaar zodra er ruimte is: onder elkaar werd het een lange
@@ -165,7 +179,7 @@ function Instellingen() {
             {/* Hoe de assistent antwoorden laat klinken: stel je één keer in,
                 daarna leert hij verder van wat je zelf verstuurt. */}
             <Kaart
-              titel="Schrijfstijl van de assistent"
+              titel="Schrijfstijl van Paaltje"
               uitleg="Voor de antwoorden die hij klaarzet in het postvak van Mailing."
             >
               <SchrijfstijlInstellingen isEigenaar={isEigenaar} />

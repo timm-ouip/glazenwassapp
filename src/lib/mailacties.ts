@@ -55,6 +55,26 @@ export function zetTerug(berichtId: string): Promise<{ ok: true; verplaatst: boo
   return roep({ actie: "terugzetten", bericht_id: berichtId });
 }
 
+/** Klaar met deze mail, of toch weer open. */
+export function handelAf(berichtId: string, klaar: boolean): Promise<{ ok: true }> {
+  return roep({ actie: "afhandelen", bericht_id: berichtId, klaar });
+}
+
+/** Paaltje leest de mail bij de volgende ronde opnieuw. */
+export function laatOpnieuwLezen(berichtId: string): Promise<{ ok: true }> {
+  return roep({ actie: "opnieuw-lezen", bericht_id: berichtId });
+}
+
+/** Het afzenderadres hoort bij deze klant: koppelen, op de mail zetten, opnieuw laten lezen. */
+export function koppelKlant(berichtId: string, klantId: string): Promise<{ ok: true }> {
+  return roep({ actie: "klant-koppelen", bericht_id: berichtId, klant_id: klantId });
+}
+
+/** Het overslaan-voorstel van Paaltje doorvoeren. */
+export function overslaanDoorvoeren(berichtId: string): Promise<{ ok: true; aangepast: number }> {
+  return roep({ actie: "overslaan-doorvoeren", bericht_id: berichtId });
+}
+
 export interface NieuweMail {
   aan: { email: string; naam?: string }[];
   cc?: { email: string; naam?: string }[];

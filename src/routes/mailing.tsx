@@ -121,7 +121,7 @@ function Mailing() {
   // De rol is er soms pas na het eerste renderen; dan alsnog goed zetten.
   useEffect(() => {
     if (!employee) return;
-    if (!toonPostvak && blad === "postvak") setBlad("opstellen");
+    if (!toonPostvak && (blad === "postvak" || blad === "rapport")) setBlad("opstellen");
   }, [employee, toonPostvak, blad]);
 
   return (
@@ -139,7 +139,9 @@ function Mailing() {
             <OpenTelletje />
           </TabsTrigger>
           <TabsTrigger value="verstuurd">Verstuurd</TabsTrigger>
-          <TabsTrigger value="rapport">Rapport</TabsTrigger>
+          {/* Het rapport ziet alleen de eigenaar (RLS); een medewerker zou hier
+              een altijd lege lijst zien. */}
+          {toonPostvak && <TabsTrigger value="rapport">Rapport</TabsTrigger>}
         </TabsList>
 
         {toonPostvak && (
@@ -159,9 +161,11 @@ function Mailing() {
         <TabsContent value="verstuurd">
           <Verstuurd />
         </TabsContent>
-        <TabsContent value="rapport">
-          <Rapport />
-        </TabsContent>
+        {toonPostvak && (
+          <TabsContent value="rapport">
+            <Rapport />
+          </TabsContent>
+        )}
       </Tabs>
     </AppLayout>
   );
@@ -799,6 +803,10 @@ function AntwoordKaart({
 }) {
   const qc = useQueryClient();
   const bevestig = useBevestig();
+  // Doorvoeren verandert de planning en komt in het rapport van de eigenaar;
+  // alleen die krijgt de knop.
+  const { employee } = useAuth();
+  const isEigenaar = employee?.rol === "eigenaar";
   const [concept, setConcept] = useState(bericht.concept);
   // Na opnieuw lezen komt er een nieuw klaargezet antwoord binnen; zonder dit
   // bleef het oude (lege) vak staan.
@@ -950,7 +958,7 @@ function AntwoordKaart({
         </p>
       </details>
 
-      {voorstel && (
+      {voorstel && isEigenaar && (
         <div className="mt-3 rounded-[14px] border border-border bg-surface p-3">
           <p className="text-[13px]">
             Voorstel: {bericht.voorstel_adressen.length}{" "}

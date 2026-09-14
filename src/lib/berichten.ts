@@ -34,6 +34,20 @@ export interface BerichtRegel {
   gelezen: boolean;
   gemarkeerd: boolean;
   heeft_bijlagen: boolean;
+  /** De categorieën van Paaltje (of die je zelf koos). */
+  categorie_ids: string[];
+  /** Staat er een antwoord of voorstel klaar dat nog op jou wacht? */
+  wacht: boolean;
+}
+
+export interface Voorstel {
+  overslaan?: { maanden: string[]; adressen: string[]; doorgevoerd?: boolean; teruggedraaid?: boolean };
+  stoppen?: { adressen: string[] };
+  aanmelding_id?: string;
+  prijs?: {
+    eigen?: { adres: string; prijs: number }[];
+    richtprijzen?: { wijk: string; prijs: number }[];
+  };
 }
 
 export interface Bericht extends BerichtRegel {
@@ -45,12 +59,43 @@ export interface Bericht extends BerichtRegel {
   afgekapt: boolean;
   message_id: string;
   klant_id: string | null;
+  // Wat Paaltje ervan maakte:
+  paaltje_status: "overslaan" | "wacht" | "bezig" | "klaar" | "fout";
+  is_klantmail: boolean | null;
+  samenvatting: string;
+  concept: string;
+  zekerheid: number | null;
+  voorstel: Voorstel;
+  ai_fout: string;
+  klant_gok_id: string | null;
+  doorgevoerd_op: string | null;
+  doorgevoerd_automatisch: boolean;
+  beantwoord_op: string | null;
+  afgehandeld_op: string | null;
+}
+
+/** Waar een lijst uit bestaat: een echte map, of een van de mappen van Paaltje. */
+export type Bron =
+  | { soort: "map"; mapId: string }
+  | { soort: "wacht"; postvakId: string }
+  | { soort: "overige"; postvakId: string }
+  | { soort: "categorie"; postvakId: string; categorieId: string };
+
+export function bronSleutel(bron: Bron): string {
+  switch (bron.soort) {
+    case "map":
+      return `map:${bron.mapId}`;
+    case "categorie":
+      return `cat:${bron.categorieId}`;
+    default:
+      return bron.soort;
+  }
 }
 
 type Rij = Tables<"berichten">;
 
 const REGEL_KOLOMMEN =
-  "id,map_id,richting,van_naam,van_email,aan,onderwerp,fragment,ontvangen_op,gelezen,gemarkeerd,bijlagen";
+  "id,map_id,richting,van_naam,van_email,aan,onderwerp,fragment,ontvangen_op,gelezen,gemarkeerd,bijlagen,is_klantmail,afgehandeld_op,concept,voorstel,bericht_categorieen(categorie_id)";
 
 /** Zoveel mails per keer in de lijst; verder scrollen haalt de volgende op. */
 export const PER_PAGINA = 50;
@@ -69,7 +114,15 @@ type RegelRij = Pick<
   | "gelezen"
   | "gemarkeerd"
   | "bijlagen"
->;
+  | "is_klantmail"
+  | "afgehandeld_op"
+  | "concept"
+  | "voorstel"
+> & { bericht_categorieen: { categorie_id: string }[] | null };
+
+function heeftIets(voorstel: unknown): boolean {
+  return !!voorstel && typeof voorstel === "object" && Object.keys(voorstel).length > 0;
+}
 
 function alsRegel(r: RegelRij): BerichtRegel {
   return {
@@ -85,31 +138,61 @@ function alsRegel(r: RegelRij): BerichtRegel {
     gelezen: r.gelezen,
     gemarkeerd: r.gemarkeerd,
     heeft_bijlagen: Array.isArray(r.bijlagen) && r.bijlagen.length > 0,
+    categorie_ids: (r.bericht_categorieen ?? []).map((c) => c.categorie_id),
+    wacht:
+      r.is_klantmail === true && !r.afgehandeld_op && (r.concept !== "" || heeftIets(r.voorstel)),
   };
 }
 
 /**
- * Eén pagina van een map, nieuwste eerst. De volgende pagina begint bij "ouder
- * dan de laatste die je al hebt", niet bij een paginanummer: komt er intussen
- * nieuwe mail binnen, dan schuift er anders een mail door naar de volgende
- * pagina en staat hij twee keer in de lijst.
+ * Eén pagina van een lijst, nieuwste eerst. De volgende pagina begint bij
+ * "ouder dan de laatste die je al hebt", niet bij een paginanummer: komt er
+ * intussen nieuwe mail binnen, dan schuift er anders een mail door naar de
+ * volgende pagina en staat hij twee keer in de lijst.
+ *
+ * De mappen van Paaltje ("Wacht op jou", "Overige post", een categorie) kijken
+ * alleen in het postvak: wat je weggooide of verstuurde hoort daar niet in.
  *
  * `zoek` kijkt in afzender en onderwerp; genoeg om een klant terug te vinden
  * zonder zoekindex.
  */
 export async function fetchBerichten(
-  mapId: string,
+  bron: Bron,
   ouderDan: string | null,
   zoek = "",
 ): Promise<BerichtRegel[]> {
+  const kolommen =
+    bron.soort === "categorie"
+      ? REGEL_KOLOMMEN.replace("bericht_categorieen(categorie_id)", "bericht_categorieen!inner(categorie_id)")
+      : REGEL_KOLOMMEN;
+
   let query = supabase
     .from("berichten")
-    .select(REGEL_KOLOMMEN)
-    .eq("map_id", mapId)
+    .select(kolommen)
     .eq("op_server", true)
     .is("deleted_at", null)
     .order("ontvangen_op", { ascending: false })
     .limit(PER_PAGINA);
+
+  switch (bron.soort) {
+    case "map":
+      query = query.eq("map_id", bron.mapId);
+      break;
+    case "wacht":
+      query = query
+        .eq("map_id", bron.postvakId)
+        .eq("is_klantmail", true)
+        .is("afgehandeld_op", null)
+        .or(WACHT_FILTER);
+      break;
+    case "overige":
+      query = query.eq("map_id", bron.postvakId).eq("is_klantmail", false);
+      break;
+    case "categorie":
+      query = query.eq("map_id", bron.postvakId).eq("bericht_categorieen.categorie_id", bron.categorieId);
+      break;
+  }
+
   // lte en niet lt: twee mails op precies dezelfde tijd vallen anders net
   // tussen twee pagina's weg. Dubbele haalt de lijst er zelf uit.
   if (ouderDan) query = query.lte("ontvangen_op", ouderDan);
@@ -124,22 +207,65 @@ export async function fetchBerichten(
 
   const { data, error } = await query;
   if (error) throw error;
-  return ((data ?? []) as RegelRij[]).map(alsRegel);
+  // In een categorie-lijst geeft de !inner-koppeling alleen die ene categorie
+  // terug, dus daar staat in de lijst één label; de mail zelf toont ze allemaal.
+  return ((data ?? []) as unknown as RegelRij[]).map(alsRegel);
 }
+
+/**
+ * "Er staat iets klaar": een concept of een voorstel. In de database gefilterd,
+ * niet in de browser: anders telt een pagina minder dan 50 en stopt het laden
+ * van oudere mail te vroeg.
+ */
+const WACHT_FILTER = 'concept.neq."",voorstel.neq.{}';
+
+/** Hoeveel mails er op je wachten (voor het telletje bij "Wacht op jou"). */
+export async function telWachtend(postvakId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("berichten")
+    .select("id", { count: "exact", head: true })
+    .eq("map_id", postvakId)
+    .eq("op_server", true)
+    .is("deleted_at", null)
+    .eq("is_klantmail", true)
+    .is("afgehandeld_op", null)
+    .or(WACHT_FILTER);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+const BERICHT_KOLOMMEN = `${REGEL_KOLOMMEN},cc,antwoord_naar,tekst,html,afgekapt,message_id,klant_id,paaltje_status,samenvatting,zekerheid,ai_fout,klant_gok_id,doorgevoerd_op,doorgevoerd_automatisch,beantwoord_op`;
 
 /** Eén mail, zolang hij nog op de server staat en niet weggelegd is. */
 export async function fetchBericht(id: string): Promise<Bericht | null> {
   const { data, error } = await supabase
     .from("berichten")
-    .select(`${REGEL_KOLOMMEN},cc,antwoord_naar,tekst,html,afgekapt,message_id,klant_id`)
+    .select(BERICHT_KOLOMMEN)
     .eq("id", id)
     .eq("op_server", true)
     .is("deleted_at", null)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  const r = data as RegelRij &
-    Pick<Rij, "cc" | "antwoord_naar" | "tekst" | "html" | "afgekapt" | "message_id" | "klant_id">;
+  const r = data as unknown as RegelRij &
+    Pick<
+      Rij,
+      | "cc"
+      | "antwoord_naar"
+      | "tekst"
+      | "html"
+      | "afgekapt"
+      | "message_id"
+      | "klant_id"
+      | "paaltje_status"
+      | "samenvatting"
+      | "zekerheid"
+      | "ai_fout"
+      | "klant_gok_id"
+      | "doorgevoerd_op"
+      | "doorgevoerd_automatisch"
+      | "beantwoord_op"
+    >;
   return {
     ...alsRegel(r),
     cc: (r.cc as unknown as Adres[] | null) ?? [],
@@ -150,6 +276,18 @@ export async function fetchBericht(id: string): Promise<Bericht | null> {
     afgekapt: r.afgekapt,
     message_id: r.message_id,
     klant_id: r.klant_id,
+    paaltje_status: r.paaltje_status as Bericht["paaltje_status"],
+    is_klantmail: r.is_klantmail,
+    samenvatting: r.samenvatting,
+    concept: r.concept,
+    zekerheid: r.zekerheid,
+    voorstel: (r.voorstel as unknown as Voorstel | null) ?? {},
+    ai_fout: r.ai_fout,
+    klant_gok_id: r.klant_gok_id,
+    doorgevoerd_op: r.doorgevoerd_op,
+    doorgevoerd_automatisch: r.doorgevoerd_automatisch,
+    beantwoord_op: r.beantwoord_op,
+    afgehandeld_op: r.afgehandeld_op,
   };
 }
 
@@ -168,25 +306,36 @@ export interface KlantBijMail {
 }
 
 /**
- * De klant(en) achter een mailadres. Meestal één; een stel of een beheerder
- * met hetzelfde adres kan er meer opleveren, en dan tonen we ze allemaal in
- * plaats van er stil één te kiezen.
+ * De klant(en) achter een mailadres: via de gekoppelde mailadressen van
+ * klanten (klant_emails), alleen klanten die niet weggelegd zijn. Meestal één;
+ * een stel of een beheerder met hetzelfde adres kan er meer opleveren, en dan
+ * tonen we ze allemaal in plaats van er stil één te kiezen.
  *
  * Elke fout gaat door naar de kaart: "geen klant" of "niet ingepland" tonen
  * terwijl het opzoeken gewoon mislukte, zet de glazenwasser op het verkeerde
  * been.
  */
 export async function fetchKlantBijEmail(email: string, vandaag: string): Promise<KlantBijMail[]> {
-  const schoon = email.trim();
+  const schoon = email.trim().toLowerCase();
   if (!schoon) return [];
-  // ilike zonder jokertekens: een % of _ in een adres mag geen patroon worden.
-  const patroon = schoon.replace(/[\\%_]/g, (t) => `\\${t}`);
+  const { data: koppelingen, error: koppelFout } = await supabase
+    .from("klant_emails")
+    .select("klant_id")
+    .eq("email", schoon)
+    .limit(5);
+  if (koppelFout) throw koppelFout;
+  const ids = [...new Set((koppelingen ?? []).map((k) => k.klant_id))];
+  return await klantenMetAdressen(ids, vandaag);
+}
+
+/** Klanten op id, met adressen en eerstvolgende wasdag (voor de kaart en de gok). */
+export async function klantenMetAdressen(ids: string[], vandaag: string): Promise<KlantBijMail[]> {
+  if (ids.length === 0) return [];
   const { data: klanten, error } = await supabase
     .from("klanten")
     .select("id,naam,telefoon,straat,huisnummer,postcode,plaats")
-    .ilike("email", patroon)
-    .is("deleted_at", null)
-    .limit(3);
+    .in("id", ids)
+    .is("deleted_at", null);
   if (error) throw error;
 
   return await Promise.all(
@@ -198,13 +347,13 @@ export async function fetchKlantBijEmail(email: string, vandaag: string): Promis
         .is("deleted_at", null);
       if (adresFout) throw adresFout;
 
-      const ids = (adressen ?? []).map((a) => a.id);
+      const adresIds = (adressen ?? []).map((a) => a.id);
       let volgendeWasdag: string | null = null;
-      if (ids.length > 0) {
+      if (adresIds.length > 0) {
         const { data: dag, error: dagFout } = await supabase
           .from("wasdag_regels")
           .select("datum")
-          .in("customer_id", ids)
+          .in("customer_id", adresIds)
           .gte("datum", vandaag)
           .order("datum", { ascending: true })
           .limit(1);

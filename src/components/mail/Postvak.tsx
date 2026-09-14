@@ -5,6 +5,10 @@
  * leest met de klant ernaast. Op een telefoon is daar geen ruimte voor; dan
  * zie je er één tegelijk en ga je met een terugknop een stap terug.
  *
+ * Naast de mappen van de mailserver staan de mappen van Paaltje: wat op jou
+ * wacht, zijn categorieën, en de post die geen klantmail is. Die bestaan
+ * alleen in Wooshy; op je telefoon staat alles gewoon in het postvak.
+ *
  * Wat je hier met een mail doet (lezen, weggooien, beantwoorden) gebeurt ook
  * op de mailserver, zodat je telefoon hetzelfde laat zien.
  */
@@ -17,17 +21,21 @@ import {
   FileText,
   Flag,
   Folder,
+  Hand,
   Inbox,
   Mail,
   MailOpen,
   Megaphone,
+  Newspaper,
   Paperclip,
   Phone,
   Reply,
   Search,
   Send,
   ShieldAlert,
+  Sparkles,
   SquarePen,
+  Tag,
   Trash2,
   Undo2,
   UserRound,
@@ -37,20 +45,25 @@ import { toast } from "sonner";
 
 import {
   afzenderNaam,
+  bronSleutel,
   fetchBericht,
   fetchBerichten,
   fetchKlantBijEmail,
   lijstDatum,
   PER_PAGINA,
+  telWachtend,
   veiligeMailHtml,
   type Bericht,
   type BerichtRegel,
+  type Bron,
 } from "@/lib/berichten";
 import { gooiWeg, zetGelezen, zetTerug } from "@/lib/mailacties";
 import { fetchMailbox, fetchMappen, mapNaam, type MailMap, type MapRol } from "@/lib/mailbox";
+import { categorieTint, fetchCategorieen, type MailCategorie } from "@/lib/paaltje";
 import { klantAdres, ritmeLabel } from "@/lib/klanten";
 import { toonDatum, vandaag } from "@/lib/wasdag";
 import { MailOpstellen, type Opzet } from "@/components/mail/MailOpstellen";
+import { PaaltjeKaart } from "@/components/mail/PaaltjeKaart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -74,6 +87,10 @@ type Scherm = "mappen" | "lijst" | "lezen";
 
 const PANEEL = "min-h-0 flex-col overflow-hidden rounded-[18px] border border-border bg-card shadow-card";
 
+function zelfdeBron(a: Bron | null, b: Bron | null) {
+  return !!a && !!b && bronSleutel(a) === bronSleutel(b);
+}
+
 export function Postvak({ onAankondigen }: { onAankondigen: () => void }) {
   const mailbox = useQuery({ queryKey: ["mailbox"], queryFn: fetchMailbox });
   const gekoppeld = !!mailbox.data && mailbox.data.status !== "uit";
@@ -83,8 +100,20 @@ export function Postvak({ onAankondigen }: { onAankondigen: () => void }) {
     enabled: gekoppeld,
     refetchInterval: VERVERS_MS,
   });
+  const categorieen = useQuery({
+    queryKey: ["mail-categorieen"],
+    queryFn: fetchCategorieen,
+    enabled: gekoppeld,
+  });
+  const postvak = mappen.data?.find((m) => m.rol === "postvak") ?? null;
+  const wacht = useQuery({
+    queryKey: ["mail-wacht", postvak?.id],
+    queryFn: () => telWachtend(postvak!.id),
+    enabled: !!postvak,
+    refetchInterval: VERVERS_MS,
+  });
 
-  const [mapId, setMapId] = useState<string | null>(null);
+  const [bron, setBron] = useState<Bron | null>(null);
   const [berichtId, setBerichtId] = useState<string | null>(null);
   const [scherm, setScherm] = useState<Scherm>("lijst");
   const [opzet, setOpzet] = useState<Opzet | null>(null);
@@ -94,10 +123,10 @@ export function Postvak({ onAankondigen }: { onAankondigen: () => void }) {
 
   // Standaard het postvak, zodra de mappen er zijn.
   useEffect(() => {
-    if (mapId || !mappen.data) return;
+    if (bron || !mappen.data) return;
     const eerste = mappen.data.find((m) => m.rol === "postvak") ?? mappen.data[0];
-    if (eerste) setMapId(eerste.id);
-  }, [mapId, mappen.data]);
+    if (eerste) setBron({ soort: "map", mapId: eerste.id });
+  }, [bron, mappen.data]);
 
   if (mailbox.isLoading) {
     return <p className="text-[13px] text-muted-foreground">Even kijken…</p>;
@@ -135,8 +164,8 @@ export function Postvak({ onAankondigen }: { onAankondigen: () => void }) {
     );
   }
 
-  const huidigeMap = mappen.data?.find((m) => m.id === mapId);
   const kanSchrijven = mailbox.data?.status === "actief";
+  const titel = bronTitel(bron, mappen.data ?? [], categorieen.data ?? []);
 
   return (
     <>
@@ -149,16 +178,19 @@ export function Postvak({ onAankondigen }: { onAankondigen: () => void }) {
           .
         </p>
       )}
-      <div className="grid h-[calc(100dvh-var(--plakrand)-5.5rem)] min-h-[520px] gap-3 lg:grid-cols-[200px_minmax(280px,360px)_minmax(0,1fr)]">
+      <div className="grid h-[calc(100dvh-var(--plakrand)-5.5rem)] min-h-[520px] gap-3 lg:grid-cols-[210px_minmax(280px,360px)_minmax(0,1fr)]">
         <div className={cn(PANEEL, scherm === "mappen" ? "flex" : "hidden", "lg:flex")}>
           <MapKolom
             mappen={mappen.data ?? []}
+            categorieen={categorieen.data ?? []}
+            postvakId={postvak?.id ?? null}
+            wachtAantal={wacht.data ?? 0}
             fout={mappen.isError}
-            actief={mapId}
+            actief={bron}
             laatsteSync={mailbox.data?.laatste_sync ?? null}
             kanSchrijven={kanSchrijven}
-            onKies={(id) => {
-              setMapId(id);
+            onKies={(nieuw) => {
+              setBron(nieuw);
               setBerichtId(null);
               setScherm("lijst");
             }}
@@ -168,13 +200,14 @@ export function Postvak({ onAankondigen }: { onAankondigen: () => void }) {
         </div>
 
         <div className={cn(PANEEL, scherm === "lijst" ? "flex" : "hidden", "lg:flex")}>
-          {mapId ? (
-            // Een eigen sleutel per map: dan begint het zoekveld leeg als je
+          {bron ? (
+            // Een eigen sleutel per lijst: dan begint het zoekveld leeg als je
             // van map wisselt, zonder dat het hele postvak dat hoeft te weten.
             <BerichtLijst
-              key={mapId}
-              mapId={mapId}
-              titel={huidigeMap ? mapNaam(huidigeMap) : ""}
+              key={bronSleutel(bron)}
+              bron={bron}
+              titel={titel}
+              categorieen={categorieen.data ?? []}
               actief={berichtId}
               onOpen={(id) => {
                 setBerichtId(id);
@@ -195,7 +228,7 @@ export function Postvak({ onAankondigen }: { onAankondigen: () => void }) {
         <div className={cn(PANEEL, scherm === "lezen" ? "flex" : "hidden", "lg:flex")}>
           <Leesvenster
             berichtId={berichtId}
-            mapRol={huidigeMap?.rol ?? null}
+            mappen={mappen.data ?? []}
             kanSchrijven={kanSchrijven}
             onTerug={() => setScherm("lijst")}
             onWeg={(id) => {
@@ -204,7 +237,7 @@ export function Postvak({ onAankondigen }: { onAankondigen: () => void }) {
               setBerichtId(null);
               setScherm("lijst");
             }}
-            onBeantwoord={(b) => setOpzet(antwoordOpzet(b))}
+            onBeantwoord={(b, begin) => setOpzet(antwoordOpzet(b, begin))}
           />
         </div>
       </div>
@@ -214,8 +247,24 @@ export function Postvak({ onAankondigen }: { onAankondigen: () => void }) {
   );
 }
 
+function bronTitel(bron: Bron | null, mappen: MailMap[], categorieen: MailCategorie[]): string {
+  if (!bron) return "";
+  switch (bron.soort) {
+    case "map": {
+      const m = mappen.find((x) => x.id === bron.mapId);
+      return m ? mapNaam(m) : "";
+    }
+    case "wacht":
+      return "Wacht op jou";
+    case "overige":
+      return "Overige post";
+    case "categorie":
+      return categorieen.find((c) => c.id === bron.categorieId)?.naam ?? "";
+  }
+}
+
 /** Een antwoord klaarzetten: "Re:", naar de afzender, de oude mail eronder. */
-function antwoordOpzet(b: Bericht): Opzet {
+function antwoordOpzet(b: Bericht, begin = ""): Opzet {
   const onderwerp = /^re:/i.test(b.onderwerp) ? b.onderwerp : `Re: ${b.onderwerp}`;
   const naar = b.antwoord_naar || b.van_email;
   const wie = b.van_naam || b.van_email;
@@ -236,7 +285,7 @@ function antwoordOpzet(b: Bericht): Opzet {
     // Tussen aanhalingstekens: een naam als "Jansen, Piet" bevat een komma.
     aan: b.van_naam && naar === b.van_email ? `"${b.van_naam.replace(/"/g, "")}" <${naar}>` : naar,
     onderwerp,
-    tekst: `\n\n\nOp ${wanneer} schreef ${wie}:\n${geciteerd}`,
+    tekst: `${begin}\n\n\nOp ${wanneer} schreef ${wie}:\n${geciteerd}`,
     antwoordOp: b.id,
   };
 }
@@ -261,6 +310,9 @@ function KopMetTerug({ onTerug, children }: { onTerug: () => void; children?: Re
 
 function MapKolom({
   mappen,
+  categorieen,
+  postvakId,
+  wachtAantal,
   fout,
   actief,
   laatsteSync,
@@ -270,14 +322,20 @@ function MapKolom({
   onAankondigen,
 }: {
   mappen: MailMap[];
+  categorieen: MailCategorie[];
+  postvakId: string | null;
+  wachtAantal: number;
   fout: boolean;
-  actief: string | null;
+  actief: Bron | null;
   laatsteSync: string | null;
   kanSchrijven: boolean;
-  onKies: (id: string) => void;
+  onKies: (bron: Bron) => void;
   onNieuweMail: () => void;
   onAankondigen: () => void;
 }) {
+  const postvak = mappen.find((m) => m.id === postvakId);
+  const overigeMappen = mappen.filter((m) => m.id !== postvakId);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
       <div className="flex flex-col gap-1.5">
@@ -291,32 +349,63 @@ function MapKolom({
 
       <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1">
         {fout && <p className="px-2.5 text-[12.5px] text-tint-rood-ink">Mappen laden lukte niet.</p>}
-        {mappen.map((m) => {
-          const Icoon = MAP_ICOON[m.rol];
-          const isActief = m.id === actief;
-          // Ongelezen in Verzonden of de prullenbak zegt niets; alleen tellen
-          // waar het iets betekent.
-          const telt = m.ongelezen > 0 && (m.rol === "postvak" || m.rol === "overig" || m.rol === "spam");
-          return (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => onKies(m.id)}
-              className={cn(
-                "flex h-9 items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[13.5px] transition-colors",
-                isActief ? "bg-accent font-semibold text-foreground" : "text-foreground/80 hover:bg-muted/60",
-              )}
-            >
-              <Icoon className={cn("size-4 shrink-0", isActief ? "text-tint-oranje-ink" : "text-muted-foreground")} />
-              <span className="truncate">{mapNaam(m)}</span>
-              {telt && (
-                <span className="ml-auto rounded-full bg-tint-blauw px-1.5 text-[11px] font-semibold tabular-nums text-tint-blauw-ink">
-                  {m.ongelezen}
-                </span>
-              )}
-            </button>
-          );
-        })}
+
+        {postvak && (
+          <MapKnop
+            icoon={Inbox}
+            naam={mapNaam(postvak)}
+            telletje={postvak.ongelezen}
+            actief={zelfdeBron(actief, { soort: "map", mapId: postvak.id })}
+            onClick={() => onKies({ soort: "map", mapId: postvak.id })}
+          />
+        )}
+
+        {postvakId && (
+          <>
+            <MapKnop
+              icoon={Hand}
+              naam="Wacht op jou"
+              telletje={wachtAantal}
+              tint="amber"
+              actief={zelfdeBron(actief, { soort: "wacht", postvakId })}
+              onClick={() => onKies({ soort: "wacht", postvakId })}
+            />
+            <p className="mt-2 flex items-center gap-1 px-2.5 pb-1 text-[10.5px] font-medium tracking-[0.06em] text-muted-foreground/80">
+              <Sparkles className="size-3" /> paaltje
+            </p>
+            {categorieen.map((c, i) => (
+              <MapKnop
+                key={c.id}
+                icoon={Tag}
+                naam={c.naam}
+                stip={categorieTint(c, i)}
+                actief={zelfdeBron(actief, { soort: "categorie", postvakId, categorieId: c.id })}
+                onClick={() => onKies({ soort: "categorie", postvakId, categorieId: c.id })}
+              />
+            ))}
+            <MapKnop
+              icoon={Newspaper}
+              naam="Overige post"
+              actief={zelfdeBron(actief, { soort: "overige", postvakId })}
+              onClick={() => onKies({ soort: "overige", postvakId })}
+            />
+            <p className="mt-2 px-2.5 pb-1 text-[10.5px] font-medium tracking-[0.06em] text-muted-foreground/80">
+              mappen
+            </p>
+          </>
+        )}
+
+        {overigeMappen.map((m) => (
+          <MapKnop
+            key={m.id}
+            icoon={MAP_ICOON[m.rol]}
+            naam={mapNaam(m)}
+            // Ongelezen in Verzonden of de prullenbak zegt niets.
+            telletje={m.rol === "overig" || m.rol === "spam" ? m.ongelezen : 0}
+            actief={zelfdeBron(actief, { soort: "map", mapId: m.id })}
+            onClick={() => onKies({ soort: "map", mapId: m.id })}
+          />
+        ))}
       </nav>
 
       <p className="px-1 text-[11.5px] leading-snug text-muted-foreground">
@@ -328,17 +417,66 @@ function MapKolom({
   );
 }
 
+function MapKnop({
+  icoon: Icoon,
+  naam,
+  telletje = 0,
+  tint = "blauw",
+  stip,
+  actief,
+  onClick,
+}: {
+  icoon: LucideIcon;
+  naam: string;
+  telletje?: number;
+  tint?: "blauw" | "amber";
+  /** Tintklassen van een categorie: dan een gekleurd stipje in plaats van het icoon. */
+  stip?: string;
+  actief: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex h-9 shrink-0 items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[13.5px] transition-colors",
+        actief ? "bg-accent font-semibold text-foreground" : "text-foreground/80 hover:bg-muted/60",
+      )}
+    >
+      {stip ? (
+        <span className={cn("ml-1 mr-0.5 size-2.5 shrink-0 rounded-full", stip)} />
+      ) : (
+        <Icoon className={cn("size-4 shrink-0", actief ? "text-tint-oranje-ink" : "text-muted-foreground")} />
+      )}
+      <span className="truncate">{naam}</span>
+      {telletje > 0 && (
+        <span
+          className={cn(
+            "ml-auto rounded-full px-1.5 text-[11px] font-semibold tabular-nums",
+            tint === "amber" ? "bg-tint-amber text-tint-amber-ink" : "bg-tint-blauw text-tint-blauw-ink",
+          )}
+        >
+          {telletje}
+        </span>
+      )}
+    </button>
+  );
+}
+
 // --- Lijst ---------------------------------------------------------------------
 
 function BerichtLijst({
-  mapId,
+  bron,
   titel,
+  categorieen,
   actief,
   onOpen,
   onTerug,
 }: {
-  mapId: string;
+  bron: Bron;
   titel: string;
+  categorieen: MailCategorie[];
   actief: string | null;
   onOpen: (id: string) => void;
   onTerug: () => void;
@@ -353,8 +491,8 @@ function BerichtLijst({
   }, [zoek]);
 
   const lijst = useInfiniteQuery({
-    queryKey: ["berichten", mapId, zoekTerm],
-    queryFn: ({ pageParam }) => fetchBerichten(mapId, pageParam, zoekTerm),
+    queryKey: ["berichten", bronSleutel(bron), zoekTerm],
+    queryFn: ({ pageParam }) => fetchBerichten(bron, pageParam, zoekTerm),
     initialPageParam: null as string | null,
     getNextPageParam: (laatste) =>
       laatste.length === PER_PAGINA ? laatste.at(-1)?.ontvangen_op : undefined,
@@ -371,6 +509,15 @@ function BerichtLijst({
       return true;
     });
   }, [lijst.data]);
+
+  const leeg =
+    bron.soort === "wacht"
+      ? "Er wacht niets op je."
+      : bron.soort === "overige"
+        ? "Geen overige post."
+        : bron.soort === "categorie"
+          ? "Nog geen mail in deze categorie."
+          : "Geen mail in deze map.";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -392,13 +539,17 @@ function BerichtLijst({
         ) : lijst.isError ? (
           <p className="p-4 text-[13px] text-tint-rood-ink">De mail kon niet geladen worden.</p>
         ) : berichten.length === 0 ? (
-          <p className="p-6 text-center text-[13px] text-muted-foreground">
-            {zoekTerm ? "Niets gevonden." : "Geen mail in deze map."}
-          </p>
+          <p className="p-6 text-center text-[13px] text-muted-foreground">{zoekTerm ? "Niets gevonden." : leeg}</p>
         ) : (
           <>
             {berichten.map((b) => (
-              <BerichtRij key={b.id} b={b} actief={b.id === actief} onOpen={() => onOpen(b.id)} />
+              <BerichtRij
+                key={b.id}
+                b={b}
+                categorieen={categorieen}
+                actief={b.id === actief}
+                onOpen={() => onOpen(b.id)}
+              />
             ))}
             {lijst.hasNextPage && (
               <div className="p-3 text-center">
@@ -420,7 +571,24 @@ function BerichtLijst({
   );
 }
 
-function BerichtRij({ b, actief, onOpen }: { b: BerichtRegel; actief: boolean; onOpen: () => void }) {
+function BerichtRij({
+  b,
+  categorieen,
+  actief,
+  onOpen,
+}: {
+  b: BerichtRegel;
+  categorieen: MailCategorie[];
+  actief: boolean;
+  onOpen: () => void;
+}) {
+  const labels = b.categorie_ids
+    .map((id) => {
+      const i = categorieen.findIndex((c) => c.id === id);
+      return i >= 0 ? { c: categorieen[i]!, i } : null;
+    })
+    .filter((x): x is { c: MailCategorie; i: number } => !!x);
+
   return (
     <button
       type="button"
@@ -445,6 +613,20 @@ function BerichtRij({ b, actief, onOpen }: { b: BerichtRegel; actief: boolean; o
         {b.gemarkeerd && <Flag className="size-3 shrink-0 text-tint-rood-ink" />}
       </div>
       <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">{b.fragment}</p>
+      {(labels.length > 0 || b.wacht) && (
+        <div className="mt-1 flex flex-wrap items-center gap-1">
+          {b.wacht && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-tint-paars px-1.5 py-px text-[10.5px] font-medium text-tint-paars-ink">
+              <Sparkles className="size-2.5" /> klaar voor jou
+            </span>
+          )}
+          {labels.map(({ c, i }) => (
+            <span key={c.id} className={cn("rounded-full px-1.5 py-px text-[10.5px] font-medium", categorieTint(c, i))}>
+              {c.naam}
+            </span>
+          ))}
+        </div>
+      )}
     </button>
   );
 }
@@ -453,31 +635,58 @@ function BerichtRij({ b, actief, onOpen }: { b: BerichtRegel; actief: boolean; o
 
 function Leesvenster({
   berichtId,
-  mapRol,
+  mappen,
   kanSchrijven,
   onTerug,
   onWeg,
   onBeantwoord,
 }: {
   berichtId: string | null;
-  mapRol: MapRol | null;
+  mappen: MailMap[];
   kanSchrijven: boolean;
   onTerug: () => void;
   onWeg: (id: string) => void;
-  onBeantwoord: (b: Bericht) => void;
+  onBeantwoord: (b: Bericht, begin?: string) => void;
 }) {
   const qc = useQueryClient();
   const bericht = useQuery({
     queryKey: ["bericht", berichtId],
     queryFn: () => fetchBericht(berichtId!),
     enabled: !!berichtId,
+    // Paaltje leest mail op de achtergrond; zo verschijnt zijn uitkomst vanzelf.
+    refetchInterval: (q) => {
+      const s = q.state.data?.paaltje_status;
+      return s === "wacht" || s === "bezig" ? 30_000 : false;
+    },
   });
   const [bezigMet, setBezigMet] = useState<string | null>(null);
 
   const ververs = () => {
     void qc.invalidateQueries({ queryKey: ["berichten"] });
     void qc.invalidateQueries({ queryKey: ["mail-mappen"] });
+    void qc.invalidateQueries({ queryKey: ["mail-wacht"] });
   };
+
+  /**
+   * Gelezen of niet: alleen het bolletje in de lijsten en het telletje bij de
+   * map aanpassen. Alle lijsten opnieuw laden, met alle doorgebladerde
+   * pagina's, voor één bolletje is zonde.
+   */
+  function markeerInCache(m: Bericht, gelezen: boolean) {
+    qc.setQueryData<Bericht | null>(["bericht", m.id], (oud) => (oud ? { ...oud, gelezen } : oud));
+    qc.setQueriesData<InfiniteData<BerichtRegel[]>>({ queryKey: ["berichten"] }, (oud) =>
+      oud
+        ? { ...oud, pages: oud.pages.map((p) => p.map((r) => (r.id === m.id ? { ...r, gelezen } : r))) }
+        : oud,
+    );
+    if (m.richting === "in") {
+      qc.setQueryData<MailMap[]>(["mail-mappen"], (oud) =>
+        oud?.map((map) =>
+          map.id === m.map_id ? { ...map, ongelezen: Math.max(0, map.ongelezen + (gelezen ? -1 : 1)) } : map,
+        ),
+      );
+    }
+  }
 
   // Openen is lezen, net als in een mailprogramma. Eén keer per mail: ook als
   // het op de server even niet lukt, niet blijven proberen bij elke render.
@@ -508,27 +717,6 @@ function Leesvenster({
     }
   }
 
-  /**
-   * Gelezen of niet: alleen het bolletje in de lijst en het telletje bij de
-   * map aanpassen. De hele lijst opnieuw laden, met alle doorgebladerde
-   * pagina's, voor één bolletje is zonde.
-   */
-  function markeerInCache(m: Bericht, gelezen: boolean) {
-    qc.setQueryData<Bericht | null>(["bericht", m.id], (oud) => (oud ? { ...oud, gelezen } : oud));
-    qc.setQueriesData<InfiniteData<BerichtRegel[]>>({ queryKey: ["berichten", m.map_id] }, (oud) =>
-      oud
-        ? { ...oud, pages: oud.pages.map((p) => p.map((r) => (r.id === m.id ? { ...r, gelezen } : r))) }
-        : oud,
-    );
-    if (m.richting === "in") {
-      qc.setQueryData<MailMap[]>(["mail-mappen"], (oud) =>
-        oud?.map((map) =>
-          map.id === m.map_id ? { ...map, ongelezen: Math.max(0, map.ongelezen + (gelezen ? -1 : 1)) } : map,
-        ),
-      );
-    }
-  }
-
   if (!berichtId) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
@@ -544,11 +732,18 @@ function Leesvenster({
   const b = bericht.data;
   if (!b) return <p className="p-5 text-[13px] text-muted-foreground">Deze mail is er niet meer.</p>;
 
-  const inPrullenbak = mapRol === "prullenbak";
+  // De map van de mail zelf, niet van de lijst: in "Wacht op jou" staat een
+  // mail die in het postvak zit.
+  const inPrullenbak = mappen.find((m) => m.id === b.map_id)?.rol === "prullenbak";
   const acties = (
     <div className="flex flex-wrap items-center gap-1.5">
       {b.richting === "in" && (
-        <Button size="sm" className="rounded-full" disabled={!kanSchrijven || bezigMet === b.id} onClick={() => onBeantwoord(b)}>
+        <Button
+          size="sm"
+          className="rounded-full"
+          disabled={!kanSchrijven || bezigMet === b.id}
+          onClick={() => onBeantwoord(b)}
+        >
           <Reply className="size-3.5" /> Beantwoorden
         </Button>
       )}
@@ -579,10 +774,12 @@ function Leesvenster({
           variant="outline"
           className="rounded-full"
           disabled={!kanSchrijven || bezigMet === b.id}
-          onClick={() => void doe(b.id, () => zetTerug(b.id), () => {
-            toast.success("Teruggezet.");
-            onWeg(b.id);
-          })}
+          onClick={() =>
+            void doe(b.id, () => zetTerug(b.id), () => {
+              toast.success("Teruggezet.");
+              onWeg(b.id);
+            })
+          }
         >
           <Undo2 className="size-3.5" /> Terugzetten
         </Button>
@@ -619,16 +816,25 @@ function Leesvenster({
     </div>
   );
 
-  return <Mailweergave b={b} acties={acties} onTerug={onTerug} />;
+  return (
+    <Mailweergave
+      b={b}
+      acties={acties}
+      paaltje={<PaaltjeKaart b={b} kanSchrijven={kanSchrijven} onBeantwoord={(begin) => onBeantwoord(b, begin)} />}
+      onTerug={onTerug}
+    />
+  );
 }
 
 function Mailweergave({
   b,
   acties,
+  paaltje,
   onTerug,
 }: {
   b: Bericht;
   acties: React.ReactNode;
+  paaltje: React.ReactNode;
   onTerug: () => void;
 }) {
   const datum = new Date(b.ontvangen_op).toLocaleString("nl-NL", {
@@ -690,6 +896,7 @@ function Mailweergave({
 
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] xl:grid-cols-[minmax(0,1fr)_250px] xl:grid-rows-1">
         <div className="flex min-h-0 flex-col">
+          <div className="max-h-[45%] shrink-0 overflow-y-auto pb-1">{paaltje}</div>
           {b.afgekapt && (
             <p className="mx-5 mt-3 rounded-[10px] bg-tint-geel px-3 py-1.5 text-[12px] text-tint-geel-ink">
               Deze mail is groot; Wooshy toont alleen het begin. De hele mail staat in je mailbox.

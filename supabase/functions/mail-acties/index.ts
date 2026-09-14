@@ -15,6 +15,8 @@ import { ontsleutel } from "../_gedeeld/geheim.ts";
 import { maakOp } from "../_gedeeld/opmaken.ts";
 import { knip, maakImap, uitlegFout, type MapRol } from "../_gedeeld/ophalen.ts";
 import { MogelijkVerstuurd, verstuurBericht } from "../_gedeeld/smtp.ts";
+import { voerOverslaanDoor } from "../_gedeeld/doorvoeren.ts";
+import { eigenTekst } from "../_gedeeld/paaltje.ts";
 
 interface Adres {
   email: string;
@@ -22,7 +24,19 @@ interface Adres {
 }
 
 interface Verzoek {
-  actie: "gelezen" | "weggooien" | "terugzetten" | "versturen";
+  actie:
+    | "gelezen"
+    | "weggooien"
+    | "terugzetten"
+    | "versturen"
+    | "afhandelen"
+    | "opnieuw-lezen"
+    | "overslaan-doorvoeren"
+    | "klant-koppelen";
+  /** Bij klant-koppelen: welke klant. */
+  klant_id?: string;
+  /** Bij afhandelen: klaar (true) of toch weer open (false). */
+  klaar?: boolean;
   bericht_id?: string;
   gelezen?: boolean;
   aan?: Adres[];
@@ -130,6 +144,14 @@ Deno.serve(async (req) => {
         return await verplaats(db, box, wachtwoord, String(verzoek.bericht_id ?? ""), "terug");
       case "versturen":
         return await verstuur(db, box, wachtwoord, verzoek);
+      case "afhandelen":
+        return await handelAf(db, box, String(verzoek.bericht_id ?? ""), verzoek.klaar !== false);
+      case "opnieuw-lezen":
+        return await leesOpnieuw(db, box, String(verzoek.bericht_id ?? ""));
+      case "overslaan-doorvoeren":
+        return await overslaanDoorvoeren(db, box, String(verzoek.bericht_id ?? ""), medewerker.id);
+      case "klant-koppelen":
+        return await koppelKlant(db, box, String(verzoek.bericht_id ?? ""), String(verzoek.klant_id ?? ""));
       default:
         return antwoord({ fout: "Onbekende actie." }, 400);
     }
@@ -347,6 +369,173 @@ async function verplaats(
   return antwoord({ ok: true, verplaatst: false });
 }
 
+/**
+ * Klaar met een mail (of toch niet). Alleen in Wooshy: op de mailserver
+ * bestaat "afgehandeld" niet.
+ */
+async function handelAf(db: Db, box: Box, id: string, klaar: boolean): Promise<Response> {
+  if (!UUID.test(id)) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
+  const { data, error } = await db
+    .from("berichten")
+    // Wat jij afhandelt is van jou: opnieuw laten lezen neemt het niet terug.
+    .update({ afgehandeld_op: klaar ? new Date().toISOString() : null, afgehandeld_door_paaltje: false })
+    .eq("id", id)
+    .eq("mailbox_id", box.id)
+    .select("id");
+  if (error) throw new Error(`Afhandelen: ${error.message}`);
+  if (!data?.length) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
+  return antwoord({ ok: true });
+}
+
+/**
+ * Paaltje leest de mail nog een keer, bij de volgende ronde. Niet terwijl hij
+ * er al mee bezig is. Wat hij al deed (een doorgevoerde overslaan, een
+ * aanmelding) staat in `voorstel` en gebeurt niet nog eens.
+ */
+async function leesOpnieuw(db: Db, box: Box, id: string): Promise<Response> {
+  if (!UUID.test(id)) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
+  const { data, error } = await db
+    .from("berichten")
+    .update({ paaltje_status: "wacht", ai_fout: "", paaltje_pogingen: 0 })
+    .eq("id", id)
+    .eq("mailbox_id", box.id)
+    .eq("richting", "in")
+    .neq("paaltje_status", "bezig")
+    .select("id");
+  if (error) throw new Error(`Opnieuw lezen: ${error.message}`);
+  if (!data?.length) return antwoord({ fout: "Paaltje is hier al mee bezig." }, 409);
+  // Zette Paaltje hem zelf op afgehandeld (geen klantmail), dan gaat dat eraf:
+  // misschien leest hij hem nu wel als klantmail.
+  const { error: afFout } = await db
+    .from("berichten")
+    .update({ afgehandeld_op: null, afgehandeld_door_paaltje: false })
+    .eq("id", id)
+    .eq("afgehandeld_door_paaltje", true);
+  if (afFout) console.error("afgehandeld terugzetten:", afFout.message);
+  return antwoord({ ok: true });
+}
+
+/**
+ * Het overslaan-voorstel van Paaltje met de hand doorvoeren. Langs dezelfde
+ * weg als automatisch, zodat het in hetzelfde rapport komt en op dezelfde
+ * manier terug te draaien is.
+ */
+async function overslaanDoorvoeren(db: Db, box: Box, id: string, door: string): Promise<Response> {
+  if (!UUID.test(id)) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
+  const { data: rij, error } = await db
+    .from("berichten")
+    .select("id,company_id,voorstel")
+    .eq("id", id)
+    .eq("mailbox_id", box.id)
+    .maybeSingle();
+  if (error) throw new Error(`Mail opzoeken: ${error.message}`);
+  if (!rij) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
+  const voorstel = (rij.voorstel ?? {}) as { overslaan?: { maanden?: string[]; adressen?: string[]; doorgevoerd?: boolean } };
+  const o = voorstel.overslaan;
+  if (!o?.maanden?.length || !o.adressen?.length) {
+    return antwoord({ fout: "Bij deze mail staat geen voorstel om over te slaan." }, 400);
+  }
+  if (o.doorgevoerd) return antwoord({ ok: true, aangepast: 0 });
+
+  // Pakken: alleen als het nog niet doorgevoerd is en Paaltje er niet net mee
+  // bezig is. Twee tabbladen tegelijk voeren het zo niet twee keer door.
+  const { data: gepakt, error: pakFout } = await db
+    .from("berichten")
+    .update({ doorgevoerd_op: new Date().toISOString(), doorgevoerd_automatisch: false })
+    .eq("id", rij.id)
+    .is("doorgevoerd_op", null)
+    .neq("paaltje_status", "bezig")
+    .select("id");
+  if (pakFout) throw new Error(`Doorvoeren: ${pakFout.message}`);
+  if (!gepakt?.length) {
+    return antwoord({ fout: "Dit is al doorgevoerd, of Paaltje leest de mail net opnieuw." }, 409);
+  }
+
+  const uit = await voerOverslaanDoor(db, {
+    companyId: box.company_id,
+    antwoordId: null,
+    berichtId: rij.id,
+    customerIds: o.adressen,
+    maanden: o.maanden,
+    automatisch: false,
+    zekerheid: null,
+    door,
+  });
+  if (uit.mislukt > 0) {
+    // Niet (helemaal) gelukt: slot eraf, zodat het opnieuw kan. Nog een keer
+    // doorvoeren slaat de adressen die al klopten vanzelf over.
+    await db.from("berichten").update({ doorgevoerd_op: null }).eq("id", rij.id);
+    return antwoord({ fout: "Niet alle adressen konden aangepast worden. Probeer het opnieuw." }, 500);
+  }
+  const { error: bewaarFout } = await db
+    .from("berichten")
+    .update({ voorstel: { ...voorstel, overslaan: { ...o, doorgevoerd: true } } })
+    .eq("id", rij.id);
+  if (bewaarFout) console.error("voorstel bijwerken:", bewaarFout.message);
+  return antwoord({ ok: true, aangepast: uit.aangepast });
+}
+
+/**
+ * Dit mailadres hoort bij deze klant. Het adres komt bij de klant, de klant
+ * komt op de mail, en Paaltje leest de mail opnieuw met die klant erbij.
+ */
+async function koppelKlant(db: Db, box: Box, id: string, klantId: string): Promise<Response> {
+  if (!UUID.test(id) || !UUID.test(klantId)) return antwoord({ fout: "Die mail of klant bestaat niet." }, 404);
+  const { data: mail, error } = await db
+    .from("berichten")
+    .select("id,van_email,beantwoord_op")
+    .eq("id", id)
+    .eq("mailbox_id", box.id)
+    .maybeSingle();
+  if (error) throw new Error(`Mail opzoeken: ${error.message}`);
+  const { data: klant, error: klantFout } = await db
+    .from("klanten")
+    .select("id")
+    .eq("id", klantId)
+    .eq("company_id", box.company_id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (klantFout) throw new Error(`Klant opzoeken: ${klantFout.message}`);
+  if (!mail || !klant) return antwoord({ fout: "Die mail of klant bestaat niet." }, 404);
+
+  const email = String(mail.van_email ?? "").trim().toLowerCase();
+  if (email) {
+    const { error: koppelFout } = await db
+      .from("klant_emails")
+      .insert({ company_id: box.company_id, klant_id: klant.id, email, bron: "mens" });
+    if (koppelFout && koppelFout.code !== "23505") throw new Error(`Koppelen: ${koppelFout.message}`);
+  }
+
+  const { data: gezet, error: mailFout } = await db
+    .from("berichten")
+    .update({
+      klant_id: klant.id,
+      klant_gok_id: null,
+      paaltje_status: "wacht",
+      paaltje_pogingen: 0,
+      ai_fout: "",
+    })
+    .eq("id", mail.id)
+    .neq("paaltje_status", "bezig")
+    .select("id");
+  if (mailFout) throw new Error(`Klant op de mail zetten: ${mailFout.message}`);
+  if (!gezet?.length) {
+    return antwoord(
+      { fout: "Het mailadres is gekoppeld, maar Paaltje leest deze mail net. Probeer het zo nog eens." },
+      409,
+    );
+  }
+  // Zette Paaltje hem zelf op afgehandeld (hij dacht: geen klantmail), dan gaat
+  // dat eraf: met deze klant erbij leest hij hem opnieuw.
+  const { error: afFout } = await db
+    .from("berichten")
+    .update({ afgehandeld_op: null, afgehandeld_door_paaltje: false })
+    .eq("id", mail.id)
+    .eq("afgehandeld_door_paaltje", true);
+  if (afFout) console.error("afgehandeld terugzetten:", afFout.message);
+  return antwoord({ ok: true });
+}
+
 function adressenUit(lijst: unknown): Adres[] | null {
   if (lijst === undefined) return [];
   if (!Array.isArray(lijst)) return null;
@@ -496,6 +685,19 @@ async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Verzoek):
   } catch (e) {
     kopieFout = "De mail is verstuurd, maar de kopie in Verzonden lukte niet.";
     console.error("kopie in Verzonden:", e instanceof Error ? e.message : e);
+  }
+
+  // 3. Was het een antwoord, dan is die mail nu beantwoord en afgehandeld. Wat
+  //    er echt wegging komt in `concept`: daar leert Paaltje van (naast wat hij
+  //    zelf schreef, in `concept_paaltje`).
+  if (verzoek.antwoord_op && UUID.test(String(verzoek.antwoord_op))) {
+    const nu = new Date().toISOString();
+    const { error } = await db
+      .from("berichten")
+      .update({ beantwoord_op: nu, afgehandeld_op: nu, concept: knip(eigenTekst(tekst), 20_000) })
+      .eq("id", String(verzoek.antwoord_op))
+      .eq("mailbox_id", box.id);
+    if (error) console.error("antwoord markeren:", error.message);
   }
 
   return antwoord({ ok: true, kopieFout });
