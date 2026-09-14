@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
 import { Postvak } from "@/components/mail/Postvak";
+import { Dagrapporten } from "@/components/mail/Dagrapporten";
 import { useBevestig } from "@/components/Bevestig";
 import { PopupInfo } from "@/components/Popup";
 import { Button } from "@/components/ui/button";
@@ -114,14 +115,14 @@ function Mailing() {
   // niet te zien. Kom je vanaf de planning met een dag, dan wil je aankondigen.
   const { employee } = useAuth();
   const toonPostvak = employee?.rol === "eigenaar";
-  const [blad, setBlad] = useState<"postvak" | "opstellen" | "antwoorden" | "verstuurd" | "rapport">(
+  const [blad, setBlad] = useState<"postvak" | "opstellen" | "antwoorden" | "verstuurd" | "rapport" | "dagrapport">(
     dag || !toonPostvak ? "opstellen" : "postvak",
   );
 
   // De rol is er soms pas na het eerste renderen; dan alsnog goed zetten.
   useEffect(() => {
     if (!employee) return;
-    if (!toonPostvak && (blad === "postvak" || blad === "rapport")) setBlad("opstellen");
+    if (!toonPostvak && (blad === "postvak" || blad === "rapport" || blad === "dagrapport")) setBlad("opstellen");
   }, [employee, toonPostvak, blad]);
 
   return (
@@ -142,6 +143,7 @@ function Mailing() {
           {/* Het rapport ziet alleen de eigenaar (RLS); een medewerker zou hier
               een altijd lege lijst zien. */}
           {toonPostvak && <TabsTrigger value="rapport">Rapport</TabsTrigger>}
+          {toonPostvak && <TabsTrigger value="dagrapport">Dagrapport</TabsTrigger>}
         </TabsList>
 
         {toonPostvak && (
@@ -161,6 +163,11 @@ function Mailing() {
         <TabsContent value="verstuurd">
           <Verstuurd />
         </TabsContent>
+        {toonPostvak && (
+          <TabsContent value="dagrapport">
+            <Dagrapporten />
+          </TabsContent>
+        )}
         {toonPostvak && (
           <TabsContent value="rapport">
             <Rapport />

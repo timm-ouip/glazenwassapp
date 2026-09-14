@@ -65,19 +65,30 @@ export const inviteEmployee = createServerFn({ method: "POST" })
     const request = getRequest();
     const origin = new URL(request.url).origin;
 
-    const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      data: { company_id: me.company_id },
+    const { data: uitnodiging, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${origin}/uitnodiging`,
     });
-    if (error) throw new Error(error.message);
+    if (error || !uitnodiging?.user) throw new Error(error?.message ?? "Uitnodigen mislukte");
+
+    // Het bedrijf staat in app_metadata en niet in user_metadata: die laatste
+    // kan een ingelogde gebruiker zelf aanpassen, en dan zou iedereen met een
+    // bedrijfs-id zich bij dat bedrijf kunnen aansluiten. app_metadata kan
+    // alleen de server wijzigen.
+    const { error: metaFout } = await supabaseAdmin.auth.admin.updateUserById(uitnodiging.user.id, {
+      app_metadata: { uitgenodigd_voor: me.company_id },
+    });
+    if (metaFout) throw new Error(metaFout.message);
 
     return { ok: true };
   });
 
 /**
  * Wordt aangeroepen zodra een uitgenodigde medewerker zijn wachtwoord heeft
- * ingesteld: zet de employees-rij neer met het bedrijf uit de
- * uitnodigingsmetadata.
+ * ingesteld: zet de employees-rij neer bij het bedrijf van de uitnodiging.
+ *
+ * Het bedrijf komt uit app_metadata, vers opgehaald bij Supabase en niet uit
+ * het token: alleen de server zet het daar (zie inviteEmployee). En wie al
+ * bij een bedrijf hoort, wordt nooit verplaatst.
  */
 export const completeInvite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -85,19 +96,37 @@ export const completeInvite = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const companyId = (context.claims.user_metadata as Record<string, unknown> | undefined)?.[
-      "company_id"
-    ] as string | undefined;
-    if (!companyId) throw new Error("Geen bedrijf gevonden bij deze uitnodiging");
+    const { data: bestaand } = await supabaseAdmin
+      .from("employees")
+      .select("company_id")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (bestaand) return { companyId: bestaand.company_id as string };
 
-    const { error } = await supabaseAdmin.from("employees").upsert({
+    const { data: gebruiker, error: gebruikerFout } = await supabaseAdmin.auth.admin.getUserById(
+      context.userId,
+    );
+    if (gebruikerFout || !gebruiker?.user) throw new Error("Deze uitnodiging kon niet gecontroleerd worden");
+    const companyId = (gebruiker.user.app_metadata as Record<string, unknown> | undefined)?.[
+      "uitgenodigd_voor"
+    ];
+    if (typeof companyId !== "string" || !companyId) {
+      throw new Error("Geen geldige uitnodiging gevonden. Vraag de eigenaar om je opnieuw uit te nodigen.");
+    }
+
+    const { error } = await supabaseAdmin.from("employees").insert({
       id: context.userId,
       company_id: companyId,
       naam: data.naam.trim(),
-      email: (context.claims.email as string | undefined) ?? "",
+      email: gebruiker.user.email ?? "",
       rol: "medewerker",
     });
     if (error) throw new Error(error.message);
+
+    // De uitnodiging is gebruikt.
+    await supabaseAdmin.auth.admin.updateUserById(context.userId, {
+      app_metadata: { uitgenodigd_voor: null },
+    });
 
     return { companyId };
   });

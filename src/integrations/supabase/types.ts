@@ -1334,6 +1334,42 @@ export type Database = {
         }
         Relationships: []
       }
+      dagrapporten: {
+        Row: {
+          company_id: string
+          created_at: string
+          datum: string
+          gemaild_op: string | null
+          id: string
+          inhoud: Json
+          mail_fout: string
+          tot: string
+          vanaf: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          datum: string
+          gemaild_op?: string | null
+          id?: string
+          inhoud?: Json
+          mail_fout?: string
+          tot: string
+          vanaf: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          datum?: string
+          gemaild_op?: string | null
+          id?: string
+          inhoud?: Json
+          mail_fout?: string
+          tot?: string
+          vanaf?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
