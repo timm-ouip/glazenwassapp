@@ -18,6 +18,7 @@ const MAANDEN = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11
 
 /** Terwijl je typt is een bedrag gewoon tekst: "18," moet ook even mogen. */
 interface Regel {
+  id?: string;
   maanden: string[];
   notitie: string;
   extra: string;
@@ -25,6 +26,7 @@ interface Regel {
 
 function naarRegels(werk: Maandwerk[] | undefined): Regel[] {
   return (werk ?? []).map((w) => ({
+    ...(w.id ? { id: w.id } : {}),
     maanden: w.maanden,
     notitie: w.notitie,
     extra: w.extra === null ? "" : String(w.extra).replace(".", ","),
@@ -39,6 +41,7 @@ function naarMaandwerk(regels: Regel[]): Maandwerk[] {
       .map((r) => {
         const getal = Number(r.extra.replace(",", ".").replace(/[^\d.]/g, ""));
         return {
+          ...(r.id ? { id: r.id } : {}),
           maanden: r.maanden,
           notitie: r.notitie.trim(),
           extra: r.extra.trim() === "" || Number.isNaN(getal) ? null : getal,

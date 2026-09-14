@@ -335,6 +335,87 @@ export type Database = {
           },
         ]
       }
+      adres_prijzen: {
+        Row: {
+          company_id: string
+          customer_id: string
+          prijs: number
+          maandwerk_extra: Json
+        }
+        Insert: {
+          company_id?: string
+          customer_id: string
+          prijs?: number
+          maandwerk_extra?: Json
+        }
+        Update: {
+          company_id?: string
+          customer_id?: string
+          prijs?: number
+          maandwerk_extra?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "adres_prijzen_customer_id_company_id_fkey"
+            columns: ["customer_id", "company_id"]
+            isOneToOne: true
+            referencedRelation: "customers"
+            referencedColumns: ["id", "company_id"]
+          },
+        ]
+      }
+      klus_prijzen: {
+        Row: {
+          company_id: string
+          klus_id: string
+          prijs: number
+        }
+        Insert: {
+          company_id?: string
+          klus_id: string
+          prijs?: number
+        }
+        Update: {
+          company_id?: string
+          klus_id?: string
+          prijs?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "klus_prijzen_klus_id_company_id_fkey"
+            columns: ["klus_id", "company_id"]
+            isOneToOne: true
+            referencedRelation: "klussen"
+            referencedColumns: ["id", "company_id"]
+          },
+        ]
+      }
+      wasdag_prijzen: {
+        Row: {
+          company_id: string
+          regel_id: string
+          prijs: number
+        }
+        Insert: {
+          company_id?: string
+          regel_id: string
+          prijs?: number
+        }
+        Update: {
+          company_id?: string
+          regel_id?: string
+          prijs?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wasdag_prijzen_regel_id_company_id_fkey"
+            columns: ["regel_id", "company_id"]
+            isOneToOne: true
+            referencedRelation: "wasdag_regels"
+            referencedColumns: ["id", "company_id"]
+          },
+        ]
+      }
       rollen: {
         Row: {
           company_id: string

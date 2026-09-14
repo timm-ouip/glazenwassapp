@@ -205,6 +205,8 @@ export interface QuickNote {
  * september komt de serre erbij, en dan is het € 25".
  */
 export interface Maandwerk {
+  /** Vast kenmerk, uitgedeeld door de database. De meerprijs hangt eraan. */
+  id?: string;
   maanden: string[];
   notitie: string;
   /** Wat dit werk kost bovenop de vaste prijs van het adres. Apart van de
@@ -227,6 +229,9 @@ export function leesMaandwerk(waarde: unknown): Maandwerk[] {
     if (maanden.length === 0) return [];
     return [
       {
+        // Het id altijd weer meesturen: zonder id deelt de database een nieuw
+        // uit, en dan raakt de meerprijs zijn stuk werk kwijt.
+        ...(typeof r["id"] === "string" && r["id"] ? { id: r["id"] } : {}),
         maanden,
         notitie: typeof r["notitie"] === "string" ? r["notitie"] : "",
         extra: typeof r["extra"] === "number" ? r["extra"] : null,
