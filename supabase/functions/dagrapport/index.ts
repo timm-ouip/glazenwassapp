@@ -207,7 +207,7 @@ async function mail(db: Db, bedrijf: Bedrijf, datum: string, tekst: string): Pro
   if (boxFout) return `Mailbox opzoeken lukte niet: ${boxFout.message}`;
   // Werkt de eigen mailbox niet (juist dan staat dat in het rapport), dan via
   // Brevo, waarmee ook de aankondigingen gaan.
-  if (!box || box.status !== "actief") return await viaBrevo(db, bedrijf, aan, onderwerp, tekst);
+  if (!box || box.status !== "actief") return await viaBrevo(db, bedrijf, box?.adres ?? "", aan, onderwerp, tekst);
   const { data: geheim, error: geheimFout } = await db
     .from("mailbox_geheimen")
     .select("versleuteld,iv")
@@ -239,11 +239,14 @@ async function mail(db: Db, bedrijf: Bedrijf, datum: string, tekst: string): Pro
 async function viaBrevo(
   db: Db,
   bedrijf: Bedrijf,
+  /** Adres van de (niet werkende) mailbox; leeg als er nooit een gekoppeld was. */
+  mailboxAdres: string,
   aan: { email: string }[],
   onderwerp: string,
   tekst: string,
 ): Promise<string> {
   const sleutel = Deno.env.get("BREVO_API_KEY") ?? "";
+  const domeinVan = (a: string) => (a.lastIndexOf("@") < 0 ? "" : a.slice(a.lastIndexOf("@") + 1).trim().toLowerCase());
   const { data: instellingen, error } = await db
     .from("companies")
     .select("name,mail_afzender_naam,mail_afzender_email")
@@ -253,6 +256,12 @@ async function viaBrevo(
   const afzenderEmail = String(instellingen?.mail_afzender_email ?? "").trim();
   if (!sleutel || !afzenderEmail) {
     return "De mailbox werkt niet en er is geen andere manier ingesteld om het rapport te mailen.";
+  }
+  // Het Brevo-account is van heel Wooshy: alleen versturen vanaf het domein
+  // van een mailbox die dit bedrijf ooit met het echte wachtwoord koppelde.
+  const domein = domeinVan(mailboxAdres);
+  if (!domein || domeinVan(afzenderEmail) !== domein) {
+    return "De mailbox werkt niet, en de afzender staat niet op het domein van die mailbox; het rapport staat wel in Wooshy.";
   }
   const afzender = { naam: String(instellingen?.mail_afzender_naam || instellingen?.name || "Wooshy"), email: afzenderEmail };
   for (const ontvanger of aan) {

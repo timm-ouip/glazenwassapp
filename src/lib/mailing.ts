@@ -69,6 +69,10 @@ export interface Controle {
   afzenderBekend: boolean;
   /** En is het daar ook goedgekeurd? */
   afzenderActief: boolean;
+  /** Staat de afzender op het domein van de gekoppelde mailbox? Anders mag versturen niet. */
+  afzenderPastBijMailbox: boolean;
+  /** Domein van de gekoppelde mailbox; leeg zonder mailbox. */
+  mailboxDomein: string;
   /** De adressen die Brevo wél kent — meestal zie je zo de typefout. */
   bekendeAfzenders?: string[];
   /** Leeg als antwoorden nog niet binnenkomen bij de app. */

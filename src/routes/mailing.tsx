@@ -529,6 +529,15 @@ function Verbindingscontrole() {
                   : `${uitslag.afzenderIngevuld} staat niet bij Brevo als afzender`
             }
           />
+          <Regel
+            goed={uitslag.afzenderPastBijMailbox}
+            goedTekst={`${uitslag.afzenderIngevuld} hoort bij je gekoppelde mailbox`}
+            foutTekst={
+              uitslag.mailboxDomein
+                ? `De afzender moet eindigen op @${uitslag.mailboxDomein}, het domein van je gekoppelde mailbox`
+                : "Koppel eerst je mailbox bij Instellingen → mail; pas dan mag je versturen"
+            }
+          />
           <Postvakstappen uitslag={uitslag} onVeranderd={kijk} />
           {uitslag.sleutel &&
             !uitslag.afzenderBekend &&

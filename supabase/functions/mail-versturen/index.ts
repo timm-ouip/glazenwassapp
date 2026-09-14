@@ -255,6 +255,13 @@ Deno.serve(async (req) => {
     return antwoord({ fout: "Vul een onderwerp en een tekst in." }, 400);
   }
 
+  // Mag dit bedrijf vanaf zijn afzender versturen? Eerst dat, dan pas de lijst
+  // opbouwen: wie niet mag, hoeft daar niet op te wachten.
+  if (versturen) {
+    const vooraf = await afzenderFout(beheerder, bedrijf.id, brevo, String(bedrijf.mail_afzender_email ?? ""));
+    if (vooraf) return antwoord({ fout: vooraf }, 400);
+  }
+
   // 3. De ontvangerslijst, uit de dag zelf.
   const ontvangers = await lijstVoorDag(beheerder, bedrijf.id, datum);
 
@@ -291,7 +298,8 @@ Deno.serve(async (req) => {
     email: afzenderEmail,
   };
 
-  const antwoordNaar = antwoordAdres(bedrijf, inboxDomein, await mailboxAdresVan(beheerder, bedrijf.id));
+  const mailboxAdres = await mailboxAdresVan(beheerder, bedrijf.id);
+  const antwoordNaar = antwoordAdres(bedrijf, inboxDomein, mailboxAdres);
 
   // Een proef gaat naar jezelf, maar met de gegevens van de eerste echte
   // ontvanger erin: zo zie je wat er in de plaatshouders terechtkomt.
@@ -390,6 +398,8 @@ async function controleer(
     afzenderIngevuld: afzender,
     afzenderBekend: false,
     afzenderActief: false,
+    afzenderPastBijMailbox: afzenderPastBij(afzender, mailboxAdres),
+    mailboxDomein: domeinVan(mailboxAdres),
     antwoordadres: antwoordAdres(bedrijf, inboxDomein, mailboxAdres) ?? "",
     melding: "",
     inbox: await inboxStatus(bedrijf, brevo, inboxDomein),
@@ -449,12 +459,21 @@ async function controleer(
       const gevonden = (senders.senders ?? []).find(
         (s) => (s.email ?? "").trim().toLowerCase() === afzender,
       );
-      uit["afzenderBekend"] = !!gevonden;
-      uit["afzenderActief"] = gevonden?.active === true;
-      uit["bekendeAfzenders"] = (senders.senders ?? [])
-        .map((s) => s.email ?? "")
-        .filter(Boolean)
-        .slice(0, 10);
+      // Alleen bij het eigen domein: anders kun je via deze knop raden welke
+      // adressen van andere bedrijven Brevo kent.
+      const eigen = afzenderPastBij(afzender, mailboxAdres);
+      uit["afzenderBekend"] = eigen && !!gevonden;
+      uit["afzenderActief"] = eigen && gevonden?.active === true;
+      // Alleen adressen op het domein van de eigen mailbox: het Brevo-account
+      // is van heel Wooshy, en de afzenders van andere bedrijven gaan niemand
+      // anders iets aan.
+      const eigenDomein = domeinVan(mailboxAdres);
+      uit["bekendeAfzenders"] = eigenDomein
+        ? (senders.senders ?? [])
+            .map((s) => (s.email ?? "").trim())
+            .filter((e) => e && domeinVan(e) === eigenDomein)
+            .slice(0, 10)
+        : [];
     }
   } catch (e) {
     uit["melding"] = e instanceof Error ? e.message : "Onbekende fout.";
@@ -474,6 +493,62 @@ async function mailboxAdresVan(db: any, companyId: string): Promise<string> {
     .eq("company_id", companyId)
     .maybeSingle();
   return data?.status === "actief" ? String(data.adres ?? "") : "";
+}
+
+function domeinVan(adres: string): string {
+  const at = adres.lastIndexOf("@");
+  return at < 0 ? "" : adres.slice(at + 1).trim().toLowerCase();
+}
+
+/** Staat de afzender op hetzelfde domein als de gekoppelde mailbox? */
+function afzenderPastBij(afzender: string, mailboxAdres: string): boolean {
+  const domein = domeinVan(mailboxAdres);
+  return !!domein && domeinVan(afzender) === domein;
+}
+
+/**
+ * Mag dit bedrijf vanaf dit adres versturen? Leeg als het mag, anders de reden.
+ *
+ * Het Brevo-account is van heel Wooshy. Zonder deze controle kan een bedrijf
+ * elk adres invullen dat Brevo kent, ook dat van een ander bedrijf, en dan
+ * zien zijn klanten die naam. Een mailbox koppelen lukt alleen met het echte
+ * wachtwoord, dus het domein daarvan is het bewijs dat het adres van jou is.
+ */
+// deno-lint-ignore no-explicit-any
+async function afzenderFout(db: any, companyId: string, brevo: string, afzender: string): Promise<string> {
+  const adres = afzender.trim().toLowerCase();
+  if (!brevo) return "De Brevo-sleutel ontbreekt op de server.";
+  if (!adres) return "Stel eerst een afzender in bij Instellingen.";
+  const { data: box, error } = await db
+    .from("mailboxen")
+    .select("adres,status")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (error) return "Je mailbox kon even niet opgezocht worden. Probeer het zo nog eens.";
+  if (!box) {
+    return "Koppel eerst je eigen mailbox bij Instellingen → mail. Pas dan kan Wooshy zien dat het afzenderadres echt van jou is.";
+  }
+  if (box.status !== "actief") {
+    return "Je mailbox moet opnieuw gekoppeld worden (Instellingen → mail). Tot dan kan Wooshy niet zien dat het afzenderadres van jou is.";
+  }
+  const mailboxAdres = String(box.adres ?? "");
+  if (!afzenderPastBij(adres, mailboxAdres)) {
+    return `Het afzenderadres moet eindigen op @${domeinVan(mailboxAdres)}, het domein van je gekoppelde mailbox.`;
+  }
+  try {
+    const res = await fetch("https://api.brevo.com/v3/senders", {
+      headers: { "api-key": brevo.trim(), Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return `Brevo kon de afzender niet controleren (${res.status}). Probeer het zo nog eens.`;
+    const lijst = (await res.json()) as { senders?: { email?: string; active?: boolean }[] };
+    const gevonden = (lijst.senders ?? []).find((s) => (s.email ?? "").trim().toLowerCase() === adres);
+    if (!gevonden) return `${adres} staat nog niet bij Brevo als afzender. Laat hem daar eerst toevoegen.`;
+    if (gevonden.active !== true) return `${adres} is bij Brevo nog niet goedgekeurd. Bevestig hem eerst via de mail van Brevo.`;
+  } catch {
+    return "Brevo is even niet bereikbaar. Probeer het zo nog eens.";
+  }
+  return "";
 }
 
 /**
@@ -874,6 +949,9 @@ async function stuurReactie(
 
   const afzenderEmail = String(bedrijf["mail_afzender_email"] ?? "").trim();
   if (!afzenderEmail) return antwoord({ fout: "Stel eerst een afzender in." }, 400);
+  const mailboxAdres = await mailboxAdresVan(db, bedrijf["id"] as string);
+  const afzenderNiet = await afzenderFout(db, bedrijf["id"] as string, brevo, afzenderEmail);
+  if (afzenderNiet) return antwoord({ fout: afzenderNiet }, 400);
 
   const { data: bericht } = await db
     .from("mail_antwoorden")
@@ -899,7 +977,7 @@ async function stuurReactie(
       },
       onderwerp: onderwerp.slice(0, MAX_ONDERWERP),
       tekst,
-      antwoordNaar: antwoordAdres(bedrijf, inboxDomein, await mailboxAdresVan(db, bedrijf["id"] as string)),
+      antwoordNaar: antwoordAdres(bedrijf, inboxDomein, mailboxAdres),
     },
   );
   if (!res.ok) return antwoord({ fout: res.fout }, 502);
