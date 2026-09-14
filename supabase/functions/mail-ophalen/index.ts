@@ -55,11 +55,24 @@ Deno.serve(async (req) => {
   // póging en niet de laatste geslaagde ronde: een mailbox die steeds misgaat
   // mag niet elke keer vooraan staan. Een geweigerde login ('fout') wacht tot
   // iemand opnieuw koppelt of zelf op ophalen klikt.
-  const { data: boxen, error } = await db
-    .from("mailboxen")
-    .select(MAILBOX_KOLOMMEN)
-    .eq("status", "actief")
-    .order("laatste_poging", { ascending: true, nullsFirst: true });
+  const leesMailboxen = () =>
+    db
+      .from("mailboxen")
+      .select(MAILBOX_KOLOMMEN)
+      .eq("status", "actief")
+      .order("laatste_poging", { ascending: true, nullsFirst: true })
+      // Twee pogingen plus de pauze moeten binnen de 30 s blijven die pg_net
+      // wacht; anders staat er een time-out in het logboek in plaats van de
+      // echte uitkomst.
+      .abortSignal(AbortSignal.timeout(12_000));
+  let { data: boxen, error } = await leesMailboxen();
+  if (error) {
+    // Supabase geeft af en toe een "Gateway Timeout" terwijl er niets mis is;
+    // de volgende ronde lukt dan gewoon. Eén keer kort opnieuw proberen scheelt
+    // die ronde.
+    await new Promise((klaar) => setTimeout(klaar, 1000));
+    ({ data: boxen, error } = await leesMailboxen());
+  }
   if (error) {
     console.error("mailboxen lezen:", error.message);
     return antwoord({ ok: false, fase: "mailboxen lezen", fout: error.message.slice(0, 200) }, 500);
