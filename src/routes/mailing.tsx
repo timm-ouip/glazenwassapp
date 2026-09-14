@@ -37,6 +37,7 @@ import { toast } from "sonner";
 
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
+import { Postvak } from "@/components/mail/Postvak";
 import { useBevestig } from "@/components/Bevestig";
 import { PopupInfo } from "@/components/Popup";
 import { Button } from "@/components/ui/button";
@@ -109,18 +110,29 @@ De Ramensopperij`;
 function Mailing() {
   useRequireAuth();
   const { dag } = Route.useSearch();
-  const [blad, setBlad] = useState<"opstellen" | "antwoorden" | "verstuurd" | "rapport">(
-    "opstellen",
+  // De mailbox is alleen voor de eigenaar; een medewerker krijgt het tabblad
+  // niet te zien. Kom je vanaf de planning met een dag, dan wil je aankondigen.
+  const { employee } = useAuth();
+  const toonPostvak = employee?.rol === "eigenaar";
+  const [blad, setBlad] = useState<"postvak" | "opstellen" | "antwoorden" | "verstuurd" | "rapport">(
+    dag || !toonPostvak ? "opstellen" : "postvak",
   );
+
+  // De rol is er soms pas na het eerste renderen; dan alsnog goed zetten.
+  useEffect(() => {
+    if (!employee) return;
+    if (!toonPostvak && blad === "postvak") setBlad("opstellen");
+  }, [employee, toonPostvak, blad]);
 
   return (
     <AppLayout
       titel="Mailing"
       kruimel="Overzicht / Mailing"
-      onderschrift="Een aankondiging naar de klanten van een ingeplande dag, en wat er terugkomt."
+      onderschrift="Je mail, de aankondigingen per wasdag, en wat er terugkomt."
     >
       <Tabs value={blad} onValueChange={(v) => setBlad(v as typeof blad)}>
         <TabsList className="mb-4">
+          {toonPostvak && <TabsTrigger value="postvak">Postvak</TabsTrigger>}
           <TabsTrigger value="opstellen">Opstellen</TabsTrigger>
           <TabsTrigger value="antwoorden">
             Antwoorden
@@ -130,6 +142,11 @@ function Mailing() {
           <TabsTrigger value="rapport">Rapport</TabsTrigger>
         </TabsList>
 
+        {toonPostvak && (
+          <TabsContent value="postvak">
+            <Postvak onAankondigen={() => setBlad("opstellen")} />
+          </TabsContent>
+        )}
         <TabsContent value="opstellen">
           <Opstellen beginDag={dag} />
         </TabsContent>

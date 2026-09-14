@@ -20,6 +20,17 @@ export interface SmtpGegevens {
 
 const WACHT_MS = 20_000;
 
+/**
+ * De mail is al over de lijn gegaan, maar het "ontvangen" van de server kwam
+ * niet (op tijd) terug. Hij kan dus best verstuurd zijn. Wie dit krijgt, moet
+ * niet zomaar opnieuw versturen: dan krijgt de klant hem twee keer.
+ */
+export class MogelijkVerstuurd extends Error {
+  constructor() {
+    super("De mail is misschien toch verstuurd: kijk in Verzonden voor je het opnieuw probeert.");
+  }
+}
+
 class SmtpFout extends Error {
   constructor(
     message: string,
@@ -182,8 +193,15 @@ export async function verstuurBericht(
       .replace(/\r\n|\r|\n/g, "\r\n")
       .split("\r\n")
       .map((r) => (r.startsWith(".") ? "." + r : r));
-    await v.schrijf(lijnen.join("\r\n") + "\r\n.\r\n");
-    await v.antwoord([250]);
+    try {
+      await v.schrijf(lijnen.join("\r\n") + "\r\n.\r\n");
+      await v.antwoord([250]);
+    } catch (e) {
+      // Een duidelijke weigering van de server: niet verstuurd. Alles anders
+      // (klok, verbinding weg) na het doorsturen van de inhoud: onbekend.
+      if (e instanceof SmtpFout) throw e;
+      throw new MogelijkVerstuurd();
+    }
     await v.commando("QUIT", [221]).catch(() => {});
   } finally {
     v.sluit();

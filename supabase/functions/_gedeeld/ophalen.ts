@@ -154,14 +154,19 @@ async function verlengSlot(db: Db, mailboxId: string, slot: Slot) {
 async function geefSlotVrij(db: Db, mailboxId: string, slot: Slot) {
   const nu = new Date().toISOString();
   try {
-    await db
+    const { error: vrijFout } = await db
       .from("mailboxen")
       .update({ bezig_tot: null, laatste_poging: nu })
       .eq("id", mailboxId)
       .eq("bezig_tot", slot.tot);
+    if (vrijFout) console.error("Slot vrijgeven:", vrijFout.message);
     // Was het slot al van een ander, dan toch de poging noteren: anders staat
     // deze mailbox bij de klok eeuwig vooraan.
-    await db.from("mailboxen").update({ laatste_poging: nu }).eq("id", mailboxId);
+    const { error: pogingFout } = await db
+      .from("mailboxen")
+      .update({ laatste_poging: nu })
+      .eq("id", mailboxId);
+    if (pogingFout) console.error("Poging noteren:", pogingFout.message);
   } catch (e) {
     console.error("Slot vrijgeven:", e instanceof Error ? e.message : e);
   }

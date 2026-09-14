@@ -42,9 +42,11 @@ Deno.serve(async (req) => {
     return antwoord({ ok: false }, 401);
   }
 
+  // Vanaf hier weet de aanroeper de sleutel; dan mag het antwoord zeggen wat
+  // er misging. Dat komt in het logboek van pg_net, en daar kijken we in.
   const url = Deno.env.get("SUPABASE_URL") ?? "";
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (!url || !service) return antwoord({ ok: false }, 500);
+  if (!url || !service) return antwoord({ ok: false, fase: "instellingen" }, 500);
   const db = createClient(url, service, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -60,7 +62,7 @@ Deno.serve(async (req) => {
     .order("laatste_poging", { ascending: true, nullsFirst: true });
   if (error) {
     console.error("mailboxen lezen:", error.message);
-    return antwoord({ ok: false }, 500);
+    return antwoord({ ok: false, fase: "mailboxen lezen", fout: error.message.slice(0, 200) }, 500);
   }
 
   const begin = Date.now();

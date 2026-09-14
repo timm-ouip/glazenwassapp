@@ -16,6 +16,11 @@ verify_jwt = true
 [functions.mailbox]
 verify_jwt = true
 
+# Iets doen met een mail (gelezen, weggooien, versturen): alleen ingelogd, en
+# de functie kijkt zelf of je eigenaar bent.
+[functions.mail-acties]
+verify_jwt = true
+
 # Elke twee minuten aangeroepen door pg_cron, zonder gebruiker. Het slot is de
 # kop x-cron-sleutel (MAIL_CRON_SLEUTEL), zie supabase/functions/mail-ophalen.
 [functions.mail-ophalen]

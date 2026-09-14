@@ -1084,6 +1084,7 @@ export type Database = {
           uidvalidity: number
           van_email: string
           van_naam: string
+          vorige_map_id: string | null
           weg_sinds: string | null
         }
         Insert: {
@@ -1117,6 +1118,7 @@ export type Database = {
           uidvalidity: number
           van_email?: string
           van_naam?: string
+          vorige_map_id?: string | null
           weg_sinds?: string | null
         }
         Update: {
@@ -1150,6 +1152,7 @@ export type Database = {
           uidvalidity?: number
           van_email?: string
           van_naam?: string
+          vorige_map_id?: string | null
           weg_sinds?: string | null
         }
         Relationships: []
