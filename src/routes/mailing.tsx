@@ -202,6 +202,17 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
   const [onderwerp, setOnderwerp] = useState("Morgen wassen wij uw ramen");
   const [tekst, setTekst] = useState(VOORBEELDTEKST);
   const [bezig, setBezig] = useState(false);
+  const { employee: ik } = useAuth();
+  // Naar welk adres een proef gaat. Onthouden in deze browser: wie een keer
+  // zijn Hotmail invult, wil daar de volgende keer weer naartoe.
+  const [proefNaar, setProefNaar] = useState("");
+  useEffect(() => {
+    try {
+      setProefNaar(localStorage.getItem("proef-naar") ?? "");
+    } catch {
+      // Geen opslag: dan gaat de proef gewoon naar jezelf.
+    }
+  }, []);
 
   // De ingeplande dagen van de komende weken, om uit te kiezen. Achteruit
   // kijken heeft hier geen zin: een aankondiging voor gisteren bestaat niet.
@@ -250,9 +261,12 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
     }
     setBezig(true);
     try {
-      const uit = await verstuurAankondiging({ datum, onderwerp, tekst, test });
-      if (test) {
-        toast.success("Proefmail verstuurd naar jezelf.");
+      const naar = proefNaar.trim();
+      const uit = await verstuurAankondiging({ datum, onderwerp, tekst, test, ...(test && naar ? { proefNaar: naar } : {}) });
+      if (test && uit.mislukt > 0) {
+        toast.error(`Proefmail naar ${naar || "jezelf"} lukte niet. ${uit.eersteFout}`.trim());
+      } else if (test) {
+        toast.success(`Proefmail verstuurd naar ${naar || "jezelf"}.`);
       } else if (uit.mislukt > 0) {
         toast.warning(
           `${uit.verstuurd} verstuurd, ${uit.mislukt} mislukt. ${uit.eersteFout}`.trim(),
@@ -365,13 +379,33 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
         </Kaart>
 
         <div className="space-y-2">
+          <label className="block text-[12px] font-medium text-muted-foreground" htmlFor="proef-naar">
+            Proef naar
+          </label>
+          <Input
+            id="proef-naar"
+            type="email"
+            inputMode="email"
+            value={proefNaar}
+            onChange={(e) => {
+              setProefNaar(e.target.value);
+              // Meteen onthouden: ook als je even een ander tabblad opent.
+              try {
+                localStorage.setItem("proef-naar", e.target.value.trim());
+              } catch {
+                // Niet kunnen onthouden is geen probleem.
+              }
+            }}
+            placeholder={ik?.email ?? "jouw mailadres"}
+            maxLength={254}
+          />
           <Button
             variant="outline"
             className="w-full rounded-full"
             disabled={bezig || !klaar}
             onClick={() => void verstuur(true)}
           >
-            <MailCheck className="size-4" /> Proef naar mezelf
+            <MailCheck className="size-4" /> Proef versturen
           </Button>
           <Button
             className="w-full rounded-full"
@@ -382,7 +416,7 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
             {aantal === 0 ? "Niemand om te mailen" : `Versturen naar ${aantal}`}
           </Button>
           <p className="text-center text-[11.5px] text-muted-foreground">
-            Stuur eerst een proef. Die gaat alleen naar jou.
+            Stuur eerst een proef. Die gaat alleen naar het adres hierboven, of leeg naar jezelf.
           </p>
         </div>
       </div>

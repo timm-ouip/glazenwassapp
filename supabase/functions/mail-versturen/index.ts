@@ -34,6 +34,8 @@ import {
 } from "../_gedeeld/doorvoeren.ts";
 
 interface Verzoek {
+  /** Proefmail naar dit adres in plaats van naar jezelf. */
+  proef_naar?: string;
   /**
    * `tellen` bouwt de lijst zonder te versturen, `versturen` doet allebei,
    * `reactie` stuurt één antwoord terug op een binnengekomen bericht,
@@ -304,11 +306,29 @@ Deno.serve(async (req) => {
   // Een proef gaat naar jezelf, maar met de gegevens van de eerste echte
   // ontvanger erin: zo zie je wat er in de plaatshouders terechtkomt.
   const echt = ontvangers;
+
+  // Een proef mag ook naar een ander adres, bijvoorbeeld een Hotmail-adres om
+  // te zien wat klanten zien. Eén adres, en hooguit 10 proeven per uur per
+  // bedrijf (zie proefmail_vastleggen hieronder): anders is dit een manier om
+  // los mail te versturen.
+  let proefAdres = String(medewerker.email ?? "");
+  if (test) {
+    const gekozen = String(verzoek.proef_naar ?? "").trim().toLowerCase();
+    if (gekozen) {
+      if (gekozen.length > 254 || !/^[^@\s,;<>"]+@[^@\s,;<>"]+\.[^@\s,;<>"]+$/.test(gekozen)) {
+        return antwoord({ fout: "Dat proefadres klopt niet." }, 400);
+      }
+      proefAdres = gekozen;
+    }
+  }
+
   const teVersturen: Ontvanger[] = test
     ? [
         {
-          email: medewerker.email,
-          naam: medewerker.naam || medewerker.email,
+          email: proefAdres,
+          // De naam van de eerste echte ontvanger, zodat {{naam}} er in de
+          // proef uitziet zoals bij een klant.
+          naam: echt[0]?.naam || medewerker.naam || proefAdres,
           klant_id: null,
           adressen: echt[0]?.adressen ?? ["Voorbeeldstraat 1"],
         },
@@ -319,20 +339,39 @@ Deno.serve(async (req) => {
     return antwoord({ fout: "Er staat niemand met een e-mailadres op deze dag." }, 400);
   }
 
-  const { data: mailing, error: mailingFout } = await beheerder
-    .from("mailingen")
-    .insert({
-      company_id: bedrijf.id,
-      datum,
+  let mailing: { id: string };
+  if (test) {
+    // Tellen en vastleggen in één stap, met een slot per bedrijf: tien
+    // verzoeken tegelijk komen zo niet allemaal langs de telling.
+    const { data: plek, error: plekFout } = await beheerder.rpc("proefmail_vastleggen", {
+      bedrijf: bedrijf.id,
+      dag: datum,
       onderwerp,
       tekst,
-      test,
-      verzonden_door: medewerker.id,
-    })
-    .select("id")
-    .single();
-  if (mailingFout || !mailing) {
-    return antwoord({ fout: "Kon de verzending niet vastleggen." }, 500);
+      door: medewerker.id,
+    });
+    if (plekFout) return antwoord({ fout: "Kon de proef niet vastleggen." }, 500);
+    if (!plek) {
+      return antwoord({ fout: "Je hebt het afgelopen uur al 10 proefmails verstuurd. Probeer het straks nog eens." }, 429);
+    }
+    mailing = { id: String(plek) };
+  } else {
+    const { data, error: mailingFout } = await beheerder
+      .from("mailingen")
+      .insert({
+        company_id: bedrijf.id,
+        datum,
+        onderwerp,
+        tekst,
+        test,
+        verzonden_door: medewerker.id,
+      })
+      .select("id")
+      .single();
+    if (mailingFout || !data) {
+      return antwoord({ fout: "Kon de verzending niet vastleggen." }, 500);
+    }
+    mailing = data;
   }
 
   const uitslag = await perGroepje(teVersturen, 6, async (o) => {

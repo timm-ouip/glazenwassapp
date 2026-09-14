@@ -133,14 +133,19 @@ export function telOntvangers(datum: string): Promise<Telling> {
   return roep<Telling>({ actie: "tellen", datum });
 }
 
-/** Versturen. `test` stuurt één proefmail naar jezelf en verder niemand. */
+/**
+ * Versturen. `test` stuurt één proefmail en verder niemand: naar `proefNaar`
+ * als dat is ingevuld, anders naar jezelf.
+ */
 export function verstuurAankondiging(opdracht: {
   datum: string;
   onderwerp: string;
   tekst: string;
   test: boolean;
+  proefNaar?: string;
 }): Promise<Verzending> {
-  return roep<Verzending>({ actie: "versturen", ...opdracht });
+  const { proefNaar, ...rest } = opdracht;
+  return roep<Verzending>({ actie: "versturen", ...rest, ...(proefNaar ? { proef_naar: proefNaar } : {}) });
 }
 
 /**
