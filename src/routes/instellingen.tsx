@@ -46,6 +46,7 @@ import { fetchWasdagen } from "@/lib/wasdag";
 import { AANNAME_BEDRAG_PER_DAG, meetTempo, MINIMUM_DAGEN, tempoVan } from "@/lib/wijkritme";
 import { bewaarThema, leesThema, themaLabels, type Thema } from "@/lib/thema";
 import {
+  assignRol,
   fetchTeam,
   inviteEmployee,
   removeEmployee,
@@ -53,6 +54,8 @@ import {
   updateMyProfile,
 } from "@/lib/team.functions";
 import { AanmeldInstellingen } from "@/components/AanmeldInstellingen";
+import { RollenBeheer } from "@/components/RollenBeheer";
+import { fetchRollen } from "@/lib/rechten";
 import { MailboxInstellingen } from "@/components/MailboxInstellingen";
 import { PaaltjeAfspraken, PaaltjeCategorieen } from "@/components/PaaltjeInstellingen";
 import { SchrijfstijlInstellingen } from "@/components/SchrijfstijlInstellingen";
@@ -567,7 +570,7 @@ function AccountTab() {
 
 // --- Team -----------------------------------------------------------------
 
-type Collega = { id: string; naam: string; email: string; rol: string; created_at: string };
+type Collega = { id: string; naam: string; email: string; rol: string; rol_id: string | null; created_at: string };
 
 function TeamTab() {
   const { employee } = useAuth();
@@ -596,6 +599,22 @@ function TeamTab() {
 
   const isEigenaar = rol === "eigenaar";
   const aantalEigenaren = collegas.filter((c) => c.rol === "eigenaar").length;
+  const rollen = useQuery({ queryKey: ["rollen"], queryFn: fetchRollen });
+  const gebruikt = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of collegas) if (c.rol_id) m.set(c.rol_id, (m.get(c.rol_id) ?? 0) + 1);
+    return m;
+  }, [collegas]);
+
+  async function kiesRol(c: Collega, rolId: string | null) {
+    try {
+      await assignRol({ data: { employeeId: c.id, rolId } });
+      toast.success(`Rechten van ${c.naam || c.email} bijgewerkt`);
+      void herlaad();
+    } catch (err) {
+      toast.error("Rol kiezen mislukt: " + (err instanceof Error ? err.message : String(err)));
+    }
+  }
 
   async function nodigUit() {
     if (!nieuweEmail.trim()) {
@@ -650,6 +669,7 @@ function TeamTab() {
               <th className="px-3 py-2 font-medium">Naam</th>
               <th className="px-3 py-2 font-medium">E-mail</th>
               <th className="px-3 py-2 font-medium">Rol</th>
+              <th className="px-3 py-2 font-medium">Rechten</th>
               {isEigenaar && <th className="px-3 py-2" />}
             </tr>
           </thead>
@@ -685,6 +705,31 @@ function TeamTab() {
                       <span className="capitalize">{c.rol}</span>
                     )}
                   </td>
+                  <td className="px-3 py-2">
+                    {c.rol === "eigenaar" ? (
+                      <span className="text-[13px] text-muted-foreground">Alles</span>
+                    ) : isEigenaar ? (
+                      <select
+                        className="rounded-[10px] border border-border bg-card px-2.5 py-1 text-[13px]"
+                        value={c.rol_id ?? ""}
+                        aria-label={`Rechten van ${c.naam || c.email}`}
+                        onChange={(e) => void kiesRol(c, e.target.value || null)}
+                      >
+                        <option value="">{rollen.isError ? "Rollen niet geladen" : "Geen rechten"}</option>
+                        {(rollen.data ?? []).map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.naam}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-[13px]">
+                        {rollen.isError
+                          ? "Onbekend"
+                          : (rollen.data?.find((r) => r.id === c.rol_id)?.naam ?? (c.rol_id ? "…" : "Geen rechten"))}
+                      </span>
+                    )}
+                  </td>
                   {isEigenaar && (
                     <td className="px-3 py-2 text-right">
                       {!zelf && c.rol !== "eigenaar" && (
@@ -704,6 +749,8 @@ function TeamTab() {
           </tbody>
         </table>
       </div>
+
+      {isEigenaar && <RollenBeheer gebruikt={gebruikt} onGewijzigd={() => void herlaad()} />}
 
       {isEigenaar ? (
         <Kaart

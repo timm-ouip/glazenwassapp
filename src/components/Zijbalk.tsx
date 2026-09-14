@@ -19,6 +19,7 @@ import {
 
 import { useAuth, signOut } from "@/lib/auth";
 import { aantalOpenAanmeldingen } from "@/lib/aanmeldingen";
+import { heeftRecht, rolLabel, type Recht } from "@/lib/rechten";
 
 const OPSLAG = "zijbalk-ingeklapt";
 
@@ -26,25 +27,25 @@ type Pagina = {
   label: string;
   to: string;
   icon: LucideIcon;
-  /** Alleen voor de eigenaar zichtbaar. */
-  eigenaar?: boolean;
+  /** Zichtbaar voor wie minstens één van deze rechten heeft (de eigenaar altijd). */
+  recht?: Recht[];
 };
 
 const WERK: Pagina[] = [
-  { label: "Wijken", to: "/", icon: Map },
+  { label: "Wijken", to: "/", icon: Map, recht: ["planning"] },
   // Printen staat bewust niet in dit menu: die knop hoort bij de wijk waar je
   // op dat moment naar kijkt, en zit daarom op de wijkenpagina zelf.
-  { label: "Planning", to: "/planning", icon: CalendarDays },
-  { label: "Klanten", to: "/klanten", icon: Users },
-  { label: "Aanmeldingen", to: "/aanmeldingen", icon: Inbox },
-  { label: "Mailing", to: "/mailing", icon: Mail },
-  { label: "Importeren", to: "/importeren", icon: Upload },
+  { label: "Planning", to: "/planning", icon: CalendarDays, recht: ["planning"] },
+  { label: "Klanten", to: "/klanten", icon: Users, recht: ["klanten_bekijken"] },
+  { label: "Aanmeldingen", to: "/aanmeldingen", icon: Inbox, recht: ["klanten_bewerken"] },
+  { label: "Mailing", to: "/mailing", icon: Mail, recht: ["mail_lezen", "mail_versturen"] },
+  { label: "Importeren", to: "/importeren", icon: Upload, recht: ["klanten_bewerken"] },
 ];
 
 const BEHEER: Pagina[] = [
-  // Zonder `eigenaar`: ook een medewerker moet bij zijn eigen account kunnen.
+  // Zonder recht: ook een medewerker moet bij zijn eigen account kunnen.
   { label: "Instellingen", to: "/instellingen", icon: Settings },
-  { label: "Geschiedenis", to: "/prullenbak", icon: History },
+  { label: "Geschiedenis", to: "/prullenbak", icon: History, recht: ["klanten_bewerken"] },
 ];
 
 export function Zijbalk() {
@@ -57,7 +58,7 @@ export function Zijbalk() {
   const { data: teDoen } = useQuery({
     queryKey: ["aanmeldingen-open"],
     queryFn: aantalOpenAanmeldingen,
-    enabled: !!employee,
+    enabled: heeftRecht(employee, "klanten_bewerken"),
   });
 
   // Begint uitgeklapt; de keuze van de gebruiker wordt na het eerste
@@ -123,7 +124,9 @@ export function Zijbalk() {
     );
   }
 
-  const beheer = BEHEER.filter((p) => !p.eigenaar || employee?.rol === "eigenaar");
+  const magZien = (p: Pagina) => !p.recht || p.recht.some((r) => heeftRecht(employee, r));
+  const werk = WERK.filter(magZien);
+  const beheer = BEHEER.filter(magZien);
 
   return (
     <aside
@@ -159,16 +162,18 @@ export function Zijbalk() {
         </button>
       </div>
 
-      <nav className="flex flex-col gap-0.5">
-        {!ingeklapt && (
-          <span className="px-2.5 pb-2 text-[10.5px] font-medium tracking-[0.09em] text-muted-foreground/80">
-            werk
-          </span>
-        )}
-        {WERK.map((p) => (
-          <Item key={p.to} p={p} />
-        ))}
-      </nav>
+      {werk.length > 0 && (
+        <nav className="flex flex-col gap-0.5">
+          {!ingeklapt && (
+            <span className="px-2.5 pb-2 text-[10.5px] font-medium tracking-[0.09em] text-muted-foreground/80">
+              werk
+            </span>
+          )}
+          {werk.map((p) => (
+            <Item key={p.to} p={p} />
+          ))}
+        </nav>
+      )}
 
       {beheer.length > 0 && (
         <nav className="flex flex-col gap-0.5">
@@ -194,7 +199,7 @@ export function Zijbalk() {
                 {employee.naam || employee.email}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                {employee.rol === "eigenaar" ? "Eigenaar" : "Medewerker"}
+                {rolLabel(employee)}
               </p>
             </div>
           </div>

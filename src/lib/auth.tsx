@@ -11,7 +11,24 @@ export type Employee = {
   naam: string;
   email: string;
   rol: Rol;
+  rol_id: string | null;
+  /** Naam van de rol met rechten; leeg voor de eigenaar of zonder rol. */
+  rolnaam: string;
+  /** De rechten uit die rol. De eigenaar mag altijd alles (zie lib/rechten). */
+  rechten: string[];
 };
+
+const MEDEWERKER_VELDEN = "id,company_id,naam,email,rol,rol_id,rollen(naam,rechten)";
+
+type MedewerkerRij = Omit<Employee, "rolnaam" | "rechten"> & {
+  rollen: { naam: string; rechten: string[] } | null;
+};
+
+function alsMedewerker(rij: unknown): Employee | null {
+  if (!rij) return null;
+  const { rollen, ...rest } = rij as MedewerkerRij;
+  return { ...rest, rolnaam: rollen?.naam ?? "", rechten: rollen?.rechten ?? [] };
+}
 
 /** Alleen wat de app buiten de instellingenpagina nodig heeft: de naam die
  *  linksboven in de zijbalk staat. */
@@ -100,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       geladenVoor = session.user.id;
       const { data, error } = await supabase
         .from("employees")
-        .select("id,company_id,naam,email,rol")
+        .select(MEDEWERKER_VELDEN)
         .eq("id", session.user.id)
         .maybeSingle();
       if (!actief) return;
@@ -110,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (geladenVoor === session.user.id) geladenVoor = null;
         return;
       }
-      const employee = (data as Employee) ?? null;
+      const employee = alsMedewerker(data);
       const company = await laadBedrijf(employee);
       if (!actief) return;
       setState((vorig) =>
@@ -141,10 +158,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!data.session) return;
     const { data: emp } = await supabase
       .from("employees")
-      .select("id,company_id,naam,email,rol")
+      .select(MEDEWERKER_VELDEN)
       .eq("id", data.session.user.id)
       .maybeSingle();
-    const employee = (emp as Employee) ?? null;
+    const employee = alsMedewerker(emp);
     setState({
       session: data.session,
       employee,

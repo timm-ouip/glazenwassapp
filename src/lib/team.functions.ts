@@ -146,7 +146,7 @@ export const fetchTeam = createServerFn({ method: "GET" })
 
     const { data: collegas, error } = await supabaseAdmin
       .from("employees")
-      .select("id,naam,email,rol,created_at")
+      .select("id,naam,email,rol,rol_id,created_at")
       .eq("company_id", me.company_id)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
@@ -205,6 +205,61 @@ export const updateMyProfile = createServerFn({ method: "POST" })
   });
 
 /**
+ * Eigenaar geeft een medewerker een rol met rechten (of haalt die weg). Via de
+ * server, want employees heeft geen update-policy: anders zou iemand zijn
+ * eigen rol kunnen kiezen.
+ */
+export const assignRol = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { employeeId: string; rolId: string | null }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: me } = await supabaseAdmin
+      .from("employees")
+      .select("company_id,rol")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (!me || me.rol !== "eigenaar") {
+      throw new Error("Alleen de eigenaar kan rollen toekennen");
+    }
+
+    const { data: doel } = await supabaseAdmin
+      .from("employees")
+      .select("rol")
+      .eq("id", data.employeeId)
+      .eq("company_id", me.company_id)
+      .maybeSingle();
+    if (!doel) throw new Error("Die medewerker hoort niet bij jouw bedrijf");
+    // Een eigenaar mag altijd alles; een rol erbij zou pas gaan tellen als hij
+    // ooit medewerker wordt, en dat moet dan een bewuste keuze zijn.
+    if (doel.rol === "eigenaar" && data.rolId !== null) {
+      throw new Error("Een eigenaar mag al alles en krijgt geen rol");
+    }
+
+    if (data.rolId !== null) {
+      const { data: rol } = await supabaseAdmin
+        .from("rollen")
+        .select("id")
+        .eq("id", data.rolId)
+        .eq("company_id", me.company_id)
+        .maybeSingle();
+      if (!rol) throw new Error("Die rol bestaat niet (meer)");
+    }
+
+    const { data: bijgewerkt, error } = await supabaseAdmin
+      .from("employees")
+      .update({ rol_id: data.rolId })
+      .eq("id", data.employeeId)
+      .eq("company_id", me.company_id)
+      .select("id");
+    if (error) throw new Error(error.message);
+    if (!bijgewerkt?.length) throw new Error("Die medewerker hoort niet bij jouw bedrijf");
+
+    return { ok: true };
+  });
+
+/**
  * Eigenaar wijzigt de rol van een collega. Drie dingen die niet mogen, en
  * alle drie om dezelfde reden: je moet het bedrijf erna nog kunnen beheren.
  */
@@ -243,7 +298,9 @@ export const updateEmployeeRole = createServerFn({ method: "POST" })
 
     const { error } = await supabaseAdmin
       .from("employees")
-      .update({ rol: data.rol })
+      // De rol met rechten vervalt bij elke wissel: wie weer medewerker wordt,
+      // krijgt niet ongemerkt de rechten van vroeger terug.
+      .update({ rol: data.rol, rol_id: null })
       .eq("id", data.employeeId)
       .eq("company_id", me.company_id);
     if (error) throw new Error(error.message);

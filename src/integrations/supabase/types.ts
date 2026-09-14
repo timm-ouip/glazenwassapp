@@ -298,6 +298,7 @@ export type Database = {
           id: string
           naam: string
           rol: string
+          rol_id: string | null
         }
         Insert: {
           company_id: string
@@ -306,6 +307,7 @@ export type Database = {
           id: string
           naam?: string
           rol?: string
+          rol_id?: string | null
         }
         Update: {
           company_id?: string
@@ -314,10 +316,50 @@ export type Database = {
           id?: string
           naam?: string
           rol?: string
+          rol_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "employees_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employees_rol_fkey"
+            columns: ["rol_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "rollen"
+            referencedColumns: ["id", "company_id"]
+          },
+        ]
+      }
+      rollen: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          naam: string
+          rechten: string[]
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          naam: string
+          rechten?: string[]
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          naam?: string
+          rechten?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rollen_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
