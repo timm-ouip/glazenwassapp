@@ -42,7 +42,9 @@ export interface BerichtRegel {
 
 export interface Voorstel {
   overslaan?: { maanden: string[]; adressen: string[]; doorgevoerd?: boolean; teruggedraaid?: boolean };
-  stoppen?: { adressen: string[] };
+  stoppen?: { adressen: string[]; doorgevoerd?: boolean };
+  /** Waarom Paaltje de bevestiging niet (zeker) kon versturen. */
+  bevestiging_fout?: string;
   aanmelding_id?: string;
   prijs?: {
     eigen?: { adres: string; prijs: number }[];
@@ -329,6 +331,28 @@ export async function fetchKlantBijEmail(email: string, vandaag: string): Promis
 }
 
 /** Klanten op id, met adressen en eerstvolgende wasdag (voor de kaart en de gok). */
+/** "Dorpsstraat 12a (Jansen)" per adres, voor een bevestigingsvraag. */
+export async function adresNamen(ids: string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from("customers")
+    .select("house_number,addition,streets(name,volledige_naam),klanten(naam)")
+    .in("id", ids)
+    .is("deleted_at", null);
+  if (error) throw error;
+  const rijen = (data ?? []) as unknown as {
+    house_number: number;
+    addition: string | null;
+    streets: { name: string; volledige_naam: string | null } | null;
+    klanten: { naam: string } | null;
+  }[];
+  return rijen.map((c) => {
+    const straat = c.streets ? c.streets.volledige_naam || c.streets.name : "";
+    const adres = `${straat} ${c.house_number}${c.addition ?? ""}`.trim();
+    return c.klanten?.naam ? `${adres} (${c.klanten.naam})` : adres;
+  });
+}
+
 export async function klantenMetAdressen(ids: string[], vandaag: string): Promise<KlantBijMail[]> {
   if (ids.length === 0) return [];
   const { data: klanten, error } = await supabase
