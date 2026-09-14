@@ -186,6 +186,80 @@ export async function voerOverslaanDoor(
   return { aangepast, mislukt };
 }
 
+export interface Stopzetting {
+  companyId: string;
+  berichtId: string;
+  customerIds: string[];
+  /** De medewerker die klikte. Stoppen gebeurt nooit automatisch. */
+  door: string;
+}
+
+/**
+ * Een klant laten stoppen: zijn adressen gaan naar de prullenbak (wegleggen,
+ * niet wissen), elk met een regel in het rapport. Daar is het terug te draaien:
+ * het adres komt dan gewoon terug, met alles erop en eraan.
+ */
+export async function voerStoppenDoor(
+  db: Db,
+  o: Stopzetting,
+): Promise<{ aangepast: number; mislukt: number; mislukteIds: string[] }> {
+  if (o.customerIds.length === 0) return { aangepast: 0, mislukt: 0, mislukteIds: [] };
+  const { data: rijen, error: leesFout } = await db
+    .from("customers")
+    .select("id,house_number,addition,streets(name,volledige_naam),klanten(naam)")
+    .eq("company_id", o.companyId)
+    .is("deleted_at", null)
+    .in("id", o.customerIds);
+  if (leesFout) return { aangepast: 0, mislukt: o.customerIds.length, mislukteIds: o.customerIds };
+
+  let aangepast = 0;
+  const mislukteIds: string[] = [];
+  for (const c of rijen ?? []) {
+    const nu = new Date().toISOString();
+    const { data: weg, error } = await db
+      .from("customers")
+      .update({ deleted_at: nu })
+      .eq("company_id", o.companyId)
+      .eq("id", c.id)
+      .is("deleted_at", null)
+      .select("id");
+    if (error) {
+      mislukteIds.push(c.id);
+      continue;
+    }
+    if (!weg?.length) continue; // intussen al weggelegd
+    const straat = c.streets ? c.streets.volledige_naam || c.streets.name || "" : "";
+    const { error: rapportFout } = await db.from("mail_wijzigingen").insert({
+      company_id: o.companyId,
+      bericht_id: o.berichtId,
+      customer_id: c.id,
+      adres: `${straat} ${c.house_number}${c.addition ?? ""}`.trim(),
+      klant: c.klanten?.naam ?? "",
+      soort: "stoppen",
+      automatisch: false,
+      door: o.door,
+      details: { deleted_at: nu },
+    });
+    if (rapportFout) {
+      // Zonder regel in het rapport is het niet terug te draaien: dan het
+      // adres meteen terugzetten en het als mislukt tellen.
+      console.error("rapport stoppen:", rapportFout.message);
+      await db
+        .from("customers")
+        .update({ deleted_at: null })
+        .eq("company_id", o.companyId)
+        .eq("id", c.id)
+        .eq("deleted_at", nu);
+      mislukteIds.push(c.id);
+      continue;
+    }
+    aangepast += 1;
+  }
+  // Bewust geen doorgevoerd_op op de mail: dat stempel hoort bij overslaan, en
+  // zou die knop anders blokkeren. Stoppen houdt het bij in voorstel.stoppen.
+  return { aangepast, mislukt: mislukteIds.length, mislukteIds };
+}
+
 /**
  * Draait één aanpassing uit het rapport terug.
  *
@@ -220,8 +294,32 @@ export async function draaiTerug(
       return { ok: false, fout: "Paaltje leest deze mail net. Probeer het zo nog eens." };
     }
   }
+  if (w.soort !== "overslaan" && w.soort !== "stoppen") {
+    return { ok: false, fout: "Dit soort aanpassing kun je niet vanuit het rapport terugdraaien." };
+  }
   if (!w.customer_id) return { ok: false, fout: "Het adres bestaat niet meer." };
 
+  if (w.soort === "stoppen") {
+    // Terug uit de prullenbak, maar alleen als het adres nog weggelegd is op
+    // het moment van deze aanpassing: is het intussen met de hand teruggezet
+    // of opnieuw weggelegd, dan blijft dat staan.
+    const weggelegdOp = (w.details as { deleted_at?: string } | null)?.deleted_at ?? null;
+    const { data: adres } = await db
+      .from("customers")
+      .select("id,deleted_at")
+      .eq("company_id", companyId)
+      .eq("id", w.customer_id)
+      .maybeSingle();
+    if (!adres) return { ok: false, fout: "Het adres bestaat niet meer." };
+    if (adres.deleted_at && weggelegdOp && new Date(adres.deleted_at).getTime() === new Date(weggelegdOp).getTime()) {
+      const { error: terugFout } = await db
+        .from("customers")
+        .update({ deleted_at: null })
+        .eq("company_id", companyId)
+        .eq("id", adres.id);
+      if (terugFout) return { ok: false, fout: "Het adres terugzetten lukte niet." };
+    }
+  } else {
   const { data: c } = await db
     .from("customers")
     .select("id,overslaan,start_maand")
@@ -246,6 +344,7 @@ export async function draaiTerug(
     .eq("company_id", companyId)
     .eq("id", c.id);
   if (error) return { ok: false, fout: "Het adres aanpassen lukte niet." };
+  }
 
   await db
     .from("mail_wijzigingen")
@@ -272,8 +371,16 @@ export async function draaiTerug(
       // Alleen het voorstel aanraken als het lezen lukte: anders zou een lege
       // waarde alles wegschrijven, ook de aanmelding en de prijzen.
       if (!leesFout && bericht) {
-        const voorstel = (bericht.voorstel ?? {}) as { overslaan?: Record<string, unknown> };
-        if (voorstel.overslaan) {
+        const voorstel = (bericht.voorstel ?? {}) as {
+          overslaan?: Record<string, unknown>;
+          stoppen?: Record<string, unknown>;
+        };
+        if (w.soort === "stoppen" && voorstel.stoppen) {
+          // "doorgevoerd" helemaal weg (niet false): dan werkt de knop weer.
+          const { doorgevoerd: _weg, ...open } = voorstel.stoppen;
+          voorstel.stoppen = open;
+          bijwerken.voorstel = voorstel;
+        } else if (w.soort === "overslaan" && voorstel.overslaan) {
           // "teruggedraaid": de knop komt terug, maar Paaltje voert dit nooit
           // meer zelf door — jij besloot er net anders over.
           voorstel.overslaan = { ...voorstel.overslaan, doorgevoerd: false, teruggedraaid: true };

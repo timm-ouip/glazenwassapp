@@ -35,7 +35,9 @@ const NIVEAU: Record<Zelfstandigheid, number> = {
 
 export interface Voorstel {
   overslaan?: { maanden: string[]; adressen: string[]; doorgevoerd?: boolean; teruggedraaid?: boolean };
-  stoppen?: { adressen: string[] };
+  stoppen?: { adressen: string[]; doorgevoerd?: boolean };
+  /** Waarom Paaltje de bevestiging niet (zeker) kon versturen. */
+  bevestiging_fout?: string;
   aanmelding_id?: string;
   prijs?: { eigen?: { adres: string; prijs: number }[]; richtprijzen?: { wijk: string; prijs: number }[] };
 }
@@ -105,6 +107,8 @@ export async function voerActiesUit(
     : [];
   const adresIds = adressen.map((a) => a.id);
   const voorstel: Voorstel = { ...eerder };
+  // Een oude melding over de bevestiging hoort niet bij deze nieuwe lezing.
+  delete voorstel.bevestiging_fout;
   let doorgevoerd = false;
 
   // Overslaan
@@ -141,7 +145,8 @@ export async function voerActiesUit(
 
   // Afzeggingen: alleen klaarzetten.
   if (niveauVoor("afzeggingen") >= NIVEAU.concept_voorstel && adresIds.length > 0) {
-    voorstel.stoppen = { adressen: adresIds };
+    // Al doorgevoerd: dan blijft het zoals het was (met de adressen van toen).
+    voorstel.stoppen = eerder.stoppen?.doorgevoerd ? eerder.stoppen : { adressen: adresIds };
   }
 
   // Nieuwe klanten: één aanmelding per mail, ook als hij opnieuw gelezen wordt.

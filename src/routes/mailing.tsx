@@ -1096,7 +1096,10 @@ function Rapport() {
   async function terug(w: Wijziging) {
     const ja = await bevestig({
       titel: "Terugdraaien?",
-      tekst: `${w.adres} slaat ${w.maanden.map(toonMaand).join(" en ")} dan niet meer over, en staat weer op de planning.`,
+      tekst:
+        w.soort === "stoppen"
+          ? `${w.adres} komt terug uit de prullenbak en staat weer op de planning.`
+          : `${w.adres} slaat ${w.maanden.map(toonMaand).join(" en ")} dan niet meer over, en staat weer op de planning.`,
       bevestigLabel: "Terugdraaien",
     });
     if (!ja) return;
@@ -1108,6 +1111,9 @@ function Rapport() {
         qc.invalidateQueries({ queryKey: ["mail-wijzigingen"] }),
         qc.invalidateQueries({ queryKey: ["customers"] }),
         qc.invalidateQueries({ queryKey: ["mail-antwoorden"] }),
+        qc.invalidateQueries({ queryKey: ["bericht"] }),
+        qc.invalidateQueries({ queryKey: ["berichten"] }),
+        qc.invalidateQueries({ queryKey: ["prullenbak"] }),
       ]);
     } catch (e) {
       toast.error("Terugdraaien mislukte: " + (e instanceof Error ? e.message : String(e)));
@@ -1135,7 +1141,15 @@ function Rapport() {
         >
           <span className="text-[13.5px] font-semibold">{w.adres || "Adres"}</span>
           {w.klant && <span className="text-[12.5px] text-muted-foreground">{w.klant}</span>}
-          <span className="text-[13px]">slaat {w.maanden.map(toonMaand).join(" en ")} over</span>
+          <span className="text-[13px]">
+            {w.soort === "stoppen"
+              ? "gestopt als klant"
+              : w.soort === "aanmelding"
+                ? "aanmelding klaargezet"
+                : w.soort === "klant_email"
+                  ? "mailadres gekoppeld"
+                  : `slaat ${w.maanden.map(toonMaand).join(" en ")} over`}
+          </span>
           <span
             className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
               w.automatisch ? "bg-tint-blauw text-tint-blauw-ink" : "bg-muted text-muted-foreground"
@@ -1148,7 +1162,7 @@ function Rapport() {
           <span className="ml-auto">
             {w.teruggedraaid_op ? (
               <span className="text-[12px] text-muted-foreground">teruggedraaid</span>
-            ) : (
+            ) : w.soort !== "overslaan" && w.soort !== "stoppen" ? null : (
               <Button
                 size="sm"
                 variant="ghost"

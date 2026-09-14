@@ -15,7 +15,7 @@ import { ontsleutel } from "../_gedeeld/geheim.ts";
 import { maakOp } from "../_gedeeld/opmaken.ts";
 import { knip, maakImap, uitlegFout, type MapRol } from "../_gedeeld/ophalen.ts";
 import { MogelijkVerstuurd, verstuurBericht } from "../_gedeeld/smtp.ts";
-import { voerOverslaanDoor } from "../_gedeeld/doorvoeren.ts";
+import { voerOverslaanDoor, voerStoppenDoor } from "../_gedeeld/doorvoeren.ts";
 import { eigenTekst } from "../_gedeeld/paaltje.ts";
 
 interface Adres {
@@ -32,7 +32,8 @@ interface Verzoek {
     | "afhandelen"
     | "opnieuw-lezen"
     | "overslaan-doorvoeren"
-    | "klant-koppelen";
+    | "klant-koppelen"
+    | "stoppen-doorvoeren";
   /** Bij klant-koppelen: welke klant. */
   klant_id?: string;
   /** Bij afhandelen: klaar (true) of toch weer open (false). */
@@ -150,6 +151,8 @@ Deno.serve(async (req) => {
         return await leesOpnieuw(db, box, String(verzoek.bericht_id ?? ""));
       case "overslaan-doorvoeren":
         return await overslaanDoorvoeren(db, box, String(verzoek.bericht_id ?? ""), medewerker.id);
+      case "stoppen-doorvoeren":
+        return await stoppenDoorvoeren(db, box, String(verzoek.bericht_id ?? ""), medewerker.id);
       case "klant-koppelen":
         return await koppelKlant(db, box, String(verzoek.bericht_id ?? ""), String(verzoek.klant_id ?? ""));
       default:
@@ -534,6 +537,66 @@ async function koppelKlant(db: Db, box: Box, id: string, klantId: string): Promi
     .eq("afgehandeld_door_paaltje", true);
   if (afFout) console.error("afgehandeld terugzetten:", afFout.message);
   return antwoord({ ok: true });
+}
+
+/**
+ * Het stopvoorstel van Paaltje uitvoeren: de adressen van de klant gaan naar de
+ * prullenbak, met een regel in het rapport (daar terug te draaien).
+ */
+async function stoppenDoorvoeren(db: Db, box: Box, id: string, door: string): Promise<Response> {
+  if (!UUID.test(id)) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
+  const { data: rij, error } = await db
+    .from("berichten")
+    .select("id,voorstel,paaltje_status")
+    .eq("id", id)
+    .eq("mailbox_id", box.id)
+    .maybeSingle();
+  if (error) throw new Error(`Mail opzoeken: ${error.message}`);
+  if (!rij) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
+  const voorstel = (rij.voorstel ?? {}) as { stoppen?: { adressen?: string[]; doorgevoerd?: boolean } };
+  const s = voorstel.stoppen;
+  if (!s?.adressen?.length) return antwoord({ fout: "Bij deze mail staat geen stopvoorstel." }, 400);
+  if (s.doorgevoerd) return antwoord({ ok: true, aangepast: 0 });
+
+  // Pakken: het voorstel alleen op "doorgevoerd" zetten als het dat nog niet
+  // was en Paaltje de mail niet net leest. Twee klikken voeren het zo niet
+  // twee keer uit.
+  const { data: gepakt, error: pakFout } = await db
+    .from("berichten")
+    .update({ voorstel: { ...voorstel, stoppen: { ...s, doorgevoerd: true } } })
+    .eq("id", rij.id)
+    .neq("paaltje_status", "bezig")
+    .is("voorstel->stoppen->>doorgevoerd", null)
+    .select("id");
+  if (pakFout) throw new Error(`Stoppen: ${pakFout.message}`);
+  if (!gepakt?.length) {
+    return antwoord({ fout: "Dit is al doorgevoerd, of Paaltje leest de mail net opnieuw." }, 409);
+  }
+
+  const uit = await voerStoppenDoor(db, {
+    companyId: box.company_id,
+    berichtId: rij.id,
+    customerIds: s.adressen,
+    door,
+  });
+  if (uit.aangepast === 0 && uit.mislukt === 0) {
+    // Niets te doen: dan het voorstel weer open zetten.
+    await db.from("berichten").update({ voorstel }).eq("id", rij.id);
+    return antwoord({ fout: "Deze adressen staan al in de prullenbak of bestaan niet meer." }, 409);
+  }
+  if (uit.mislukt > 0) {
+    // Wat lukte staat in Rapport; de rest blijft als voorstel staan, zodat de
+    // knop het nog eens kan proberen.
+    await db
+      .from("berichten")
+      .update({ voorstel: { ...voorstel, stoppen: { adressen: uit.mislukteIds } } })
+      .eq("id", rij.id);
+    return antwoord(
+      { fout: `${uit.mislukt} ${uit.mislukt === 1 ? "adres kon" : "adressen konden"} niet weggelegd worden. Probeer het nog eens.` },
+      500,
+    );
+  }
+  return antwoord({ ok: true, aangepast: uit.aangepast });
 }
 
 function adressenUit(lijst: unknown): Adres[] | null {

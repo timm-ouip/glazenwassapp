@@ -10,6 +10,7 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   Check,
   CircleCheck,
   Loader2,
@@ -21,11 +22,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { klantenMetAdressen, type Bericht } from "@/lib/berichten";
-import { handelAf, koppelKlant, laatOpnieuwLezen, overslaanDoorvoeren } from "@/lib/mailacties";
+import { adresNamen, klantenMetAdressen, type Bericht } from "@/lib/berichten";
+import { handelAf, koppelKlant, laatOpnieuwLezen, overslaanDoorvoeren, stoppenDoorvoeren } from "@/lib/mailacties";
 import { categorieTint, fetchCategorieen, zetCategorieen, type MailCategorie } from "@/lib/paaltje";
 import { toonMaand } from "@/lib/klanten";
 import { vandaag } from "@/lib/wasdag";
+import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -41,6 +43,7 @@ export function PaaltjeKaart({
   onBeantwoord: (begin: string) => void;
 }) {
   const qc = useQueryClient();
+  const bevestig = useBevestig();
   const categorieen = useQuery({ queryKey: ["mail-categorieen"], queryFn: fetchCategorieen });
   const [bezig, setBezig] = useState<string | null>(null);
 
@@ -197,16 +200,64 @@ export function PaaltjeKaart({
         </Regel>
       )}
 
+      {b.voorstel.bevestiging_fout && !b.afgehandeld_op && (
+        <Regel>
+          <AlertTriangle className="size-3.5 text-tint-amber-ink" />
+          <span>Bevestiging niet zelf verstuurd: {b.voorstel.bevestiging_fout}</span>
+        </Regel>
+      )}
       {b.voorstel.stoppen && (
         <Regel>
-          <Wand2 className="size-3.5 text-tint-oranje-ink" />
-          <span>
-            Wil stoppen ({b.voorstel.stoppen.adressen.length}{" "}
-            {b.voorstel.stoppen.adressen.length === 1 ? "adres" : "adressen"}). Stoppen doe je zelf bij de klant.
-          </span>
-          <Link to="/klanten" className="text-[12px] underline-offset-2 hover:underline">
-            Naar klanten
-          </Link>
+          {b.voorstel.stoppen.doorgevoerd ? (
+            <>
+              <CircleCheck className="size-3.5 text-tint-groen-ink" />
+              <span>
+                Gestopt: {b.voorstel.stoppen.adressen.length}{" "}
+                {b.voorstel.stoppen.adressen.length === 1 ? "adres staat" : "adressen staan"} in de prullenbak.
+              </span>
+              <span className="text-[12px]">Terugdraaien kan in Rapport</span>
+            </>
+          ) : (
+            <>
+              <Wand2 className="size-3.5 text-tint-oranje-ink" />
+              <span>
+                Wil stoppen ({b.voorstel.stoppen.adressen.length}{" "}
+                {b.voorstel.stoppen.adressen.length === 1 ? "adres" : "adressen"}).
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 rounded-full"
+                disabled={!kanSchrijven || bezig !== null}
+                onClick={async () => {
+                  const ids = b.voorstel.stoppen?.adressen ?? [];
+                  const namen = await adresNamen(ids).catch(() => [] as string[]);
+                  const aantal = namen.length || ids.length;
+                  const wat = namen.length ? namen.join(", ") : `${aantal} ${aantal === 1 ? "adres" : "adressen"}`;
+                  const ja = await bevestig({
+                    titel: "Klant laten stoppen?",
+                    tekst: `${wat} ${aantal === 1 ? "gaat" : "gaan"} naar de prullenbak en ${aantal === 1 ? "komt" : "komen"} niet meer op de planning. Klopt de klant? In Rapport kun je het terugdraaien.`,
+                    bevestigLabel: "Laten stoppen",
+                    gevaarlijk: true,
+                  });
+                  if (ja)
+                    void doe(
+                      "stoppen",
+                      async () => {
+                        await stoppenDoorvoeren(b.id);
+                        void qc.invalidateQueries({ queryKey: ["customers"] });
+                        void qc.invalidateQueries({ queryKey: ["klanten"] });
+                        void qc.invalidateQueries({ queryKey: ["prullenbak"] });
+                      },
+                      "De klant is gestopt.",
+                    );
+                }}
+              >
+                {bezig === "stoppen" ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                Klant laten stoppen
+              </Button>
+            </>
+          )}
         </Regel>
       )}
 

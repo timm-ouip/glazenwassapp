@@ -20,6 +20,8 @@ export interface Opmaak {
   tekst: string;
   /** Het bericht waarop dit een antwoord is, zodat het in dezelfde draad valt. */
   antwoordOp?: { messageId: string; referenties: string[] };
+  /** Door Paaltje zelf verstuurd: dan antwoorden afwezigheidsmelders er niet op. */
+  automatisch?: boolean;
 }
 
 export interface Opgemaakt {
@@ -52,6 +54,7 @@ export async function maakOp(m: Opmaak): Promise<Opgemaakt> {
     ...(m.antwoordOp?.messageId
       ? { inReplyTo: m.antwoordOp.messageId, references: referenties }
       : {}),
+    ...(m.automatisch ? { headers: { "Auto-Submitted": "auto-replied" } } : {}),
   });
 
   const buffer = await new Promise<Uint8Array>((ok, nee) =>

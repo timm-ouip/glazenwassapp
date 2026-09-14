@@ -70,6 +70,11 @@ export function koppelKlant(berichtId: string, klantId: string): Promise<{ ok: t
   return roep({ actie: "klant-koppelen", bericht_id: berichtId, klant_id: klantId });
 }
 
+/** Het stopvoorstel van Paaltje doorvoeren: de adressen gaan naar de prullenbak. */
+export function stoppenDoorvoeren(berichtId: string): Promise<{ ok: true; aangepast: number }> {
+  return roep({ actie: "stoppen-doorvoeren", bericht_id: berichtId });
+}
+
 /** Het overslaan-voorstel van Paaltje doorvoeren. */
 export function overslaanDoorvoeren(berichtId: string): Promise<{ ok: true; aangepast: number }> {
   return roep({ actie: "overslaan-doorvoeren", bericht_id: berichtId });

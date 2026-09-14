@@ -307,6 +307,8 @@ export interface Wijziging {
   id: string;
   created_at: string;
   antwoord_id: string | null;
+  /** overslaan, stoppen, aanmelding of klant_email. */
+  soort: string;
   /** Adres en klant zoals ze heetten op het moment van aanpassen. */
   adres: string;
   klant: string;
@@ -319,7 +321,7 @@ export interface Wijziging {
 export async function fetchWijzigingen(): Promise<Wijziging[]> {
   const { data, error } = await supabase
     .from("mail_wijzigingen")
-    .select("id,created_at,antwoord_id,adres,klant,maanden,automatisch,zekerheid,teruggedraaid_op")
+    .select("id,created_at,antwoord_id,soort,adres,klant,maanden,automatisch,zekerheid,teruggedraaid_op")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw error;

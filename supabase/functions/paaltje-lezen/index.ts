@@ -17,6 +17,7 @@ import { antwoord } from "../_gedeeld/mail.ts";
 import { cronSleutelKlopt } from "../_gedeeld/cron.ts";
 import { categorieenVan, leesMail, richtprijzen, type TeLezen } from "../_gedeeld/paaltje.ts";
 import { voerActiesUit, type MailStand, type Voorstel } from "../_gedeeld/acties.ts";
+import { stuurAntwoord } from "../_gedeeld/verzenden.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
@@ -47,7 +48,14 @@ Deno.serve(async (req) => {
   return antwoord({ ok: true });
 });
 
-type Gepakt = TeLezen & MailStand & { paaltje_pogingen: number; indeling_door_mens: boolean };
+type Gepakt = TeLezen &
+  MailStand & {
+    paaltje_pogingen: number;
+    indeling_door_mens: boolean;
+    message_id: string;
+    referenties: string[];
+    antwoord_naar: string;
+  };
 
 async function leesRonde(db: Db) {
   const begin = Date.now();
@@ -97,7 +105,7 @@ async function leesRonde(db: Db) {
       .eq("id", id)
       .eq("paaltje_status", "wacht")
       .select(
-        "id,company_id,mailbox_id,van_naam,van_email,onderwerp,tekst,ontvangen_op,in_reply_to,voorstel,klant_id,beantwoord_op,afgehandeld_op,paaltje_pogingen,indeling_door_mens",
+        "id,company_id,mailbox_id,van_naam,van_email,onderwerp,tekst,ontvangen_op,in_reply_to,voorstel,klant_id,beantwoord_op,afgehandeld_op,paaltje_pogingen,indeling_door_mens,message_id,referenties,antwoord_naar",
       );
     if (pakFout) {
       console.error(`bericht ${id} pakken:`, pakFout.message);
@@ -247,4 +255,29 @@ async function leesEen(
   // tussendoor de indeling wijzigen.
   const { error } = await db.from("berichten").update(bijwerken).eq("id", mail.id);
   if (error) throw new Error(`Uitkomst bewaren: ${error.message}`);
+
+  // Voerde Paaltje overslaan zelf door (alleen bij "zelf doorvoeren"), dan
+  // stuurt hij ook zelf de bevestiging: dat hoort bij dezelfde keuze. Lukt het
+  // versturen niet, dan blijft het concept op jou wachten en staat de reden
+  // bij de mail. Een fout hier maakt de al gelezen mail nooit weer "fout".
+  if (acties.doorgevoerd && concept && !mail.beantwoord_op) {
+    let reden: string;
+    try {
+      reden = await stuurAntwoord(db, mail, concept);
+    } catch (e) {
+      reden = e instanceof Error ? e.message : String(e);
+    }
+    if (reden) {
+      console.error(`bevestiging ${mail.id} niet verstuurd:`, reden);
+      try {
+        const { data: nu } = await db.from("berichten").select("voorstel").eq("id", mail.id).maybeSingle();
+        await db
+          .from("berichten")
+          .update({ voorstel: { ...(nu?.voorstel ?? {}), bevestiging_fout: reden.slice(0, 300) } })
+          .eq("id", mail.id);
+      } catch (e) {
+        console.error("reden bewaren:", e instanceof Error ? e.message : e);
+      }
+    }
+  }
 }

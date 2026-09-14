@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
 
   // Alleen kijken of alles klaarstaat. Verstuurt niets en verandert niets.
   if (verzoek.actie === "controle") {
-    return await controleer(bedrijf, brevo, inboxDomein);
+    return await controleer(bedrijf, brevo, inboxDomein, await mailboxAdresVan(beheerder, bedrijf.id));
   }
 
   // Het postvak openzetten is een instelling van het hele bedrijf, en het
@@ -291,7 +291,7 @@ Deno.serve(async (req) => {
     email: afzenderEmail,
   };
 
-  const antwoordNaar = antwoordAdres(bedrijf, inboxDomein);
+  const antwoordNaar = antwoordAdres(bedrijf, inboxDomein, await mailboxAdresVan(beheerder, bedrijf.id));
 
   // Een proef gaat naar jezelf, maar met de gegevens van de eerste echte
   // ontvanger erin: zo zie je wat er in de plaatshouders terechtkomt.
@@ -380,6 +380,7 @@ async function controleer(
   bedrijf: Record<string, unknown>,
   brevo: string,
   inboxDomein: string,
+  mailboxAdres: string,
 ): Promise<Response> {
   const afzender = String(bedrijf["mail_afzender_email"] ?? "").trim().toLowerCase();
 
@@ -389,7 +390,7 @@ async function controleer(
     afzenderIngevuld: afzender,
     afzenderBekend: false,
     afzenderActief: false,
-    antwoordadres: antwoordAdres(bedrijf, inboxDomein) ?? "",
+    antwoordadres: antwoordAdres(bedrijf, inboxDomein, mailboxAdres) ?? "",
     melding: "",
     inbox: await inboxStatus(bedrijf, brevo, inboxDomein),
   };
@@ -463,16 +464,36 @@ async function controleer(
 }
 
 /**
+ * Het adres van de gekoppelde mailbox, als die werkt. Leeg als er geen is.
+ */
+// deno-lint-ignore no-explicit-any
+async function mailboxAdresVan(db: any, companyId: string): Promise<string> {
+  const { data } = await db
+    .from("mailboxen")
+    .select("adres,status")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  return data?.status === "actief" ? String(data.adres ?? "") : "";
+}
+
+/**
  * Het antwoordadres van een aankondiging — of niets.
  *
- * Alleen als het postvak werkelijk openstaat. Zolang dat niet zo is, zou een
- * klant die op "beantwoorden" drukt zijn mail zien terugkaatsen; dan liever
- * gewoon naar de afzender, zoals bij elke andere mail.
+ * Is de eigen mailbox gekoppeld, dan antwoorden klanten gewoon daarheen: dan
+ * staat alles in één mailbox, ook op de telefoon, en leest Paaltje het mee.
+ * Het aparte Brevo-antwoordadres blijft alleen nog voor bedrijven zonder
+ * gekoppelde mailbox. (Antwoorden op oudere aankondigingen naar dat adres
+ * komen via mail-inbox nog steeds binnen.)
+ *
+ * Staat geen van beide open, dan niets: een klant die op "beantwoorden" drukt
+ * zou zijn mail anders zien terugkaatsen; dan liever gewoon naar de afzender.
  */
 function antwoordAdres(
   bedrijf: Record<string, unknown>,
   inboxDomein: string,
+  mailboxAdres: string,
 ): string | undefined {
+  if (mailboxAdres) return mailboxAdres;
   if (!inboxDomein || bedrijf["mail_inbox_actief"] !== true) return undefined;
   return `antwoord+${String(bedrijf["mail_token"] ?? "")}@${inboxDomein}`;
 }
@@ -878,7 +899,7 @@ async function stuurReactie(
       },
       onderwerp: onderwerp.slice(0, MAX_ONDERWERP),
       tekst,
-      antwoordNaar: antwoordAdres(bedrijf, inboxDomein),
+      antwoordNaar: antwoordAdres(bedrijf, inboxDomein, await mailboxAdresVan(db, bedrijf["id"] as string)),
     },
   );
   if (!res.ok) return antwoord({ fout: res.fout }, 502);
