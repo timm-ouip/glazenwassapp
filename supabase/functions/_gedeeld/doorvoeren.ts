@@ -81,8 +81,6 @@ function metOverslaan(
 
 export interface Doorvoering {
   companyId: string;
-  /** Het oude antwoord (mail_antwoorden) waar dit uit voortkwam, of leeg. */
-  antwoordId: string | null;
   /** De mail uit de mailbox (berichten) waar dit uit voortkwam, of leeg. */
   berichtId?: string | null;
   customerIds: string[];
@@ -144,7 +142,6 @@ export async function voerOverslaanDoor(
     const straat = c.streets ? c.streets.volledige_naam || c.streets.name || "" : "";
     await db.from("mail_wijzigingen").insert({
       company_id: o.companyId,
-      antwoord_id: o.antwoordId,
       bericht_id: o.berichtId ?? null,
       customer_id: c.id,
       adres: `${straat} ${c.house_number}${c.addition ?? ""}`.trim(),
@@ -164,16 +161,6 @@ export async function voerOverslaanDoor(
   // Het stempel op het bericht. De status blijft staan: er moet vaak nog een
   // antwoord terug, en dat vak hoort niet te verdwijnen omdat de planning al
   // klopt.
-  if (o.antwoordId) {
-    await db
-      .from("mail_antwoorden")
-      .update({
-        doorgevoerd_op: new Date().toISOString(),
-        doorgevoerd_automatisch: o.automatisch,
-      })
-      .eq("company_id", o.companyId)
-      .eq("id", o.antwoordId);
-  }
   if (o.berichtId && aangepast > 0) {
     await db
       .from("berichten")
@@ -495,20 +482,6 @@ export async function draaiTerug(
         .update(bijwerken)
         .eq("company_id", companyId)
         .eq("id", w.bericht_id);
-    }
-  }
-  if (w.antwoord_id) {
-    const { count } = await db
-      .from("mail_wijzigingen")
-      .select("id", { count: "exact", head: true })
-      .eq("antwoord_id", w.antwoord_id)
-      .is("teruggedraaid_op", null);
-    if ((count ?? 0) === 0) {
-      await db
-        .from("mail_antwoorden")
-        .update({ doorgevoerd_op: null, doorgevoerd_automatisch: false })
-        .eq("company_id", companyId)
-        .eq("id", w.antwoord_id);
     }
   }
 

@@ -164,6 +164,7 @@ import {
 import { useRecht } from "@/lib/rechten";
 import { StopDialog } from "@/components/StopDialog";
 import { draaiStoppenTerug, geplandeDagen, zetInactief, type StopReden } from "@/lib/stoppen";
+import { haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
 
 interface IndexSearch {
   wijk?: string;
@@ -622,16 +623,36 @@ function Index() {
       return;
     }
 
+    // Wat eraf gaat bewaart de database, met het bedrag van die keer: zo zet
+    // ongedaan maken ook een aangepaste dagprijs terug.
+    let kenmerk: string | null = null;
     try {
-      await Promise.all([
-        voegToeAanWasdag(datum, toevoegen),
-        haalUitWasdag(
+      // Eerst weghalen (dat levert het kenmerk op), dan toevoegen: zo is er
+      // altijd iets om terug te zetten, ook als het toevoegen misgaat.
+      if (weghalen.length > 0) {
+        kenmerk = await haalUitWasdagBewaard(
           datum,
           weghalen.map((r) => r.customer_id),
-        ),
-      ]);
-    } catch {
-      toast.error("Inplannen mislukt.");
+        );
+      }
+      await voegToeAanWasdag(datum, toevoegen);
+    } catch (e) {
+      toast.error(
+        "Inplannen mislukt: " + (e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e)),
+      );
+      if (kenmerk) {
+        const teruggezet = kenmerk;
+        pushUndo({
+          label: `Uitvinken ${toonDatum(datum)}`,
+          undo: async () => {
+            await zetWasdagTerug(teruggezet);
+            qc.invalidateQueries({ queryKey: ["wasdag"] });
+            qc.invalidateQueries({ queryKey: ["wasdagen"] });
+          },
+        });
+      }
+      qc.invalidateQueries({ queryKey: ["wasdag"] });
+      qc.invalidateQueries({ queryKey: ["wasdagen"] });
       return;
     }
 
@@ -643,7 +664,7 @@ function Index() {
             datum,
             toevoegen.map((r) => r.customer_id),
           ),
-          voegToeAanWasdag(datum, weghalen),
+          zetWasdagTerug(kenmerk),
         ]);
         qc.invalidateQueries({ queryKey: ["wasdag"] });
         qc.invalidateQueries({ queryKey: ["wasdagen"] });

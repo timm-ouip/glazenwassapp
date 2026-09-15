@@ -56,6 +56,7 @@ import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
 import { redenLabel } from "@/lib/stoppen";
 import { verplaatsWasdag } from "@/lib/wasdag";
+import { zetWasdagTerug } from "@/lib/wasdag";
 
 interface DagSearch {
   datum?: string;
@@ -600,6 +601,7 @@ function DagPagina() {
 
     setBezig(true);
     let toevoegen = regelsMee;
+    let kenmerken: string[] = [];
     try {
       // Wat er al op de doeldag staat blijft staan zoals het staat; alleen de
       // rest zetten we erop. Zo weet "ongedaan maken" straks ook precies wat
@@ -610,7 +612,7 @@ function DagPagina() {
 
       // Dezelfde regels met een andere datum: het bedrag en de notitie van die
       // keer gaan mee, ook als wie verplaatst geen prijzen mag zien.
-      await verplaatsWasdag(datum, nieuw, ids);
+      kenmerken = await verplaatsWasdag(datum, nieuw, ids);
       for (const k of teVerzetten) await zetKlusOpDag(k.id, nieuw);
     } catch (e) {
       toast.error("Verplaatsen mislukt: " + (e as Error).message);
@@ -632,8 +634,7 @@ function DagPagina() {
           datum,
           terug.map((r) => r.customer_id),
         );
-        const nietVerplaatst = regelsMee.filter((r) => !terug.some((t) => t.customer_id === r.customer_id));
-        if (nietVerplaatst.length > 0) await voegToeAanWasdag(datum, nietVerplaatst);
+        for (const kenmerk of kenmerken) await zetWasdagTerug(kenmerk);
         for (const k of teVerzetten) await zetKlusOpDag(k.id, k.gepland_op);
         qc.invalidateQueries({ queryKey: ["wasdag"] });
         qc.invalidateQueries({ queryKey: ["wasdagen"] });

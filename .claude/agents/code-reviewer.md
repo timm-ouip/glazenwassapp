@@ -37,7 +37,7 @@ wat daardoor kan breken — geen opmerkingen over oude code die niet geraakt is.
 - `client.server.ts` en geheime sleutels mogen nooit in code terechtkomen die
   naar de browser gaat (routebestanden, `*.functions.ts` bovenaan het bestand,
   `VITE_`-variabelen).
-- **Publieke ingangen** (`/aanmelden`, de Edge Function `mail-inbox`): klopt de
+- **Publieke ingangen** (`/aanmelden`, de Edge Functions die zonder inlog draaien, zoals `mail-ophalen`, `paaltje-lezen` en `dagrapport`): klopt de
   token- of sleutelcontrole, is er een rem tegen misbruik, en lekt een
   foutmelding niets (een id, een aantal, "dit adres is klant")?
 - **Tekst van buiten naar de AI-assistent** gaat als gegeven, nooit als
@@ -46,7 +46,7 @@ wat daardoor kan breken — geen opmerkingen over oude code die niet geraakt is.
 
 ### De prullenbak
 Weggooien is `deleted_at` invullen. Elke lijst uit `districts`, `streets`,
-`customers`, `klanten`, `aanmeldingen` of `mail_antwoorden` hoort te filteren
+`customers`, `klanten`, `aanmeldingen` of `berichten` hoort te filteren
 op `deleted_at is null`, behalve de prullenbak zelf. Een vergeten filter laat
 weggegooide adressen weer opduiken.
 

@@ -203,6 +203,9 @@ export function KlantgegevensDialog({
   const [saving, setSaving] = useState(false);
   // Zonder dit recht geen prijsveld, en geen prijs meesturen bij opslaan.
   const prijzenZien = useRecht("prijzen_zien");
+  // Wie klanten alleen mag bekijken, ziet het dossier maar kan niets wijzigen:
+  // de database zou het opslaan toch weigeren.
+  const magBewerken = useRecht("klanten_bewerken");
   // Zodra de gebruiker zelf een postcode typt, houdt de opzoeking zijn mond.
   const [postcodeHandmatig, setPostcodeHandmatig] = useState(false);
   const [straatSuggesties, setStraatSuggesties] = useState<string[]>([]);
@@ -321,6 +324,7 @@ export function KlantgegevensDialog({
   );
 
   async function save() {
+    if (!magBewerken) return;
     // Een naam is niet verplicht: die ken je niet altijd, en een telefoon-
     // nummer of gekoppeld adres is op zichzelf al genoeg om te bewaren. Alleen
     // een dossier waar helemaal niets in staat heeft geen zin.
@@ -467,7 +471,7 @@ export function KlantgegevensDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <PopupKader className="sm:max-w-lg" onKeyDown={opslaanBijEnter(() => void save())}>
+      <PopupKader className="sm:max-w-lg" onKeyDown={magBewerken ? opslaanBijEnter(() => void save()) : undefined}>
         <PopupKop
           icoon={<House className="size-[22px]" />}
           titel={
@@ -514,6 +518,13 @@ export function KlantgegevensDialog({
         />
 
         <PopupBody className="max-h-[60vh]">
+          {!magBewerken && (
+            <p className="mb-3 rounded-[12px] bg-accent/50 px-3 py-2 text-[12.5px] text-muted-foreground">
+              Je kunt dit dossier bekijken, maar je rol mag het niet wijzigen.
+            </p>
+          )}
+          {/* Zonder bewerkrecht staat alles hierbinnen uit: velden, keuzes en knoppen. */}
+          <fieldset disabled={!magBewerken} className="contents">
           {tab === "klant" && (
             <>
               <PopupBlok label="De klant" terzijde={klantSinds}>
@@ -617,7 +628,7 @@ export function KlantgegevensDialog({
                 {nieuwAdres && (
                   <p className="flex items-center gap-1 text-xs text-muted-foreground">
                     Wordt aangemaakt in
-                    <Select value={wijkId} onValueChange={setWijkId}>
+                    <Select disabled={!magBewerken} value={wijkId} onValueChange={setWijkId}>
                       <SelectTrigger className="h-auto w-auto gap-1 border-0 px-1 py-0 text-xs font-medium text-foreground shadow-none focus:ring-0">
                         <SelectValue placeholder="een wijk" />
                       </SelectTrigger>
@@ -732,7 +743,7 @@ export function KlantgegevensDialog({
                     </PopupVeld>
                   )}
                   <PopupVeld icoon={<CalendarDays className="size-4" />}>
-                    <Select
+                    <Select disabled={!magBewerken}
                       value={String(pand.interval_maanden)}
                       onValueChange={(v) =>
                         setPand((p) => ({ ...p, interval_maanden: Number(v), ritme: 1 }))
@@ -834,7 +845,7 @@ export function KlantgegevensDialog({
 
               <PopupBlok label="Wassen vanaf">
                 <PopupVeld icoon={<Flag className="size-4" />}>
-                  <Select
+                  <Select disabled={!magBewerken}
                     value={pand.start_maand || METEEN}
                     onValueChange={(v) =>
                       setPand((p) => ({ ...p, start_maand: v === METEEN ? "" : v }))
@@ -963,15 +974,18 @@ export function KlantgegevensDialog({
               )}
             </PopupBlok>
           )}
+          </fieldset>
         </PopupBody>
 
         <PopupVoet>
           <Button variant="outline" className="rounded-full" onClick={() => onOpenChange(false)}>
-            Annuleren
+            {magBewerken ? "Annuleren" : "Sluiten"}
           </Button>
-          <Button className="rounded-full" onClick={() => void save()} disabled={saving}>
-            {saving ? "Bezig…" : "Opslaan"}
-          </Button>
+          {magBewerken && (
+            <Button className="rounded-full" onClick={() => void save()} disabled={saving}>
+              {saving ? "Bezig…" : "Opslaan"}
+            </Button>
+          )}
         </PopupVoet>
       </PopupKader>
       <KlusDialog

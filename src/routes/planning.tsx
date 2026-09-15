@@ -104,6 +104,7 @@ import {
   werkdagenVerder,
 } from "@/lib/wasdag";
 import { verplaatsWasdag } from "@/lib/wasdag";
+import { haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
 
 interface PlanningSearch {
   /** De dag die openstaat, bijvoorbeeld vanaf de wijkenpagina. */
@@ -801,6 +802,9 @@ function Planning() {
     }));
 
     type Stap = { oud: string; nieuw: string; regels: DagRegels };
+    // Wat van een dag moest omdat het adres al op de doeldag stond, bewaart
+    // de database; ongedaan maken zet het met zijn eigen prijs terug.
+    const bewaard: string[] = [];
     async function verplaats(lijst: Stap[], richting: "vooruit" | "terug", gedaan?: Stap[]) {
       // Vooruit van achter naar voren, terug van voren naar achteren: altijd
       // eerst de dag die ergens heen gaat waar niets meer hoeft te vertrekken.
@@ -809,11 +813,12 @@ function Planning() {
         richting === "vooruit" ? b.oud.localeCompare(a.oud) : a.oud.localeCompare(b.oud),
       );
       for (const stap of volgorde) {
-        await verplaatsWasdag(
+        const kenmerken = await verplaatsWasdag(
           stap.oud,
           stap.nieuw,
           stap.regels.map((r) => r.customer_id),
         );
+        if (richting === "vooruit") bewaard.push(...kenmerken);
         gedaan?.push(stap);
       }
     }
@@ -832,6 +837,7 @@ function Planning() {
               gelukt.map((x) => ({ oud: x.nieuw, nieuw: x.oud, regels: x.regels })),
               "terug",
             );
+            for (const kenmerk of bewaard) await zetWasdagTerug(kenmerk);
             qc.invalidateQueries({ queryKey: ["wasdagen"] });
             qc.invalidateQueries({ queryKey: ["wasdag"] });
           },
@@ -850,6 +856,7 @@ function Planning() {
           stappen.map((x) => ({ oud: x.nieuw, nieuw: x.oud, regels: x.regels })),
           "terug",
         );
+        for (const kenmerk of bewaard) await zetWasdagTerug(kenmerk);
         qc.invalidateQueries({ queryKey: ["wasdagen"] });
         qc.invalidateQueries({ queryKey: ["wasdag"] });
       },
@@ -956,19 +963,20 @@ function Planning() {
     });
     if (!ja) return;
 
-    const terug = dagRegels
-      .filter((r) => r.customer_id)
-      .map((r) => ({ customer_id: r.customer_id!, prijs: Number(r.prijs) }));
+    const terug = dagRegels.filter((r) => r.customer_id);
+    // De database bewaart wat er weggaat, met het bedrag: zo krijgt ongedaan
+    // maken ook een aangepaste dagprijs terug.
+    let kenmerk: string | null;
     try {
-      await maakWasdagLeeg(gekozenDag);
-    } catch {
-      toast.error("Leegmaken mislukt.");
+      kenmerk = await haalUitWasdagBewaard(gekozenDag);
+    } catch (e) {
+      toast.error("Leegmaken mislukt: " + (e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e)));
       return;
     }
     pushUndo({
       label: `Dag ${toonDatum(gekozenDag)}`,
       undo: async () => {
-        await voegToeAanWasdag(gekozenDag, terug);
+        await zetWasdagTerug(kenmerk);
         qc.invalidateQueries({ queryKey: ["wasdagen"] });
         qc.invalidateQueries({ queryKey: ["wasdag", gekozenDag] });
       },

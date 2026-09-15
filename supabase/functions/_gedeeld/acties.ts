@@ -134,7 +134,6 @@ export async function voerActiesUit(
     if (mag) {
       const r = await voerOverslaanDoor(db, {
         companyId: mail.company_id,
-        antwoordId: null,
         berichtId: mail.id,
         customerIds: adresIds,
         maanden: uit.maanden,

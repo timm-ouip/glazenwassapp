@@ -87,10 +87,7 @@ export type Database = {
           kvk: string
           mail_afzender_email: string
           mail_afzender_naam: string
-          mail_auto_doorvoeren: boolean
-          mail_inbox_actief: boolean
           mail_schrijfstijl: string
-          mail_token: string
           name: string
           plaats: string
           postcode: string
@@ -108,10 +105,7 @@ export type Database = {
           kvk?: string
           mail_afzender_email?: string
           mail_afzender_naam?: string
-          mail_auto_doorvoeren?: boolean
-          mail_inbox_actief?: boolean
           mail_schrijfstijl?: string
-          mail_token?: string
           name: string
           plaats?: string
           postcode?: string
@@ -129,10 +123,7 @@ export type Database = {
           kvk?: string
           mail_afzender_email?: string
           mail_afzender_naam?: string
-          mail_auto_doorvoeren?: boolean
-          mail_inbox_actief?: boolean
           mail_schrijfstijl?: string
-          mail_token?: string
           name?: string
           plaats?: string
           postcode?: string
@@ -555,103 +546,6 @@ export type Database = {
           },
         ]
       }
-      mail_antwoorden: {
-        Row: {
-          ai_fout: string
-          beantwoord_op: string | null
-          bericht_id: string
-          categorie: string
-          company_id: string
-          concept: string
-          deleted_at: string | null
-          doorgevoerd_automatisch: boolean
-          doorgevoerd_op: string | null
-          id: string
-          klant_id: string | null
-          mailing_id: string | null
-          onderwerp: string
-          ontvangen_op: string
-          samenvatting: string
-          status: string
-          tekst: string
-          van_email: string
-          van_naam: string
-          voorstel_adressen: string[]
-          voorstel_maanden: string[]
-          zekerheid: number
-        }
-        Insert: {
-          ai_fout?: string
-          beantwoord_op?: string | null
-          bericht_id?: string
-          categorie?: string
-          company_id: string
-          concept?: string
-          deleted_at?: string | null
-          doorgevoerd_automatisch?: boolean
-          doorgevoerd_op?: string | null
-          id?: string
-          klant_id?: string | null
-          mailing_id?: string | null
-          onderwerp?: string
-          ontvangen_op?: string
-          samenvatting?: string
-          status?: string
-          tekst?: string
-          van_email?: string
-          van_naam?: string
-          voorstel_adressen?: string[]
-          voorstel_maanden?: string[]
-          zekerheid?: number
-        }
-        Update: {
-          ai_fout?: string
-          beantwoord_op?: string | null
-          bericht_id?: string
-          categorie?: string
-          company_id?: string
-          concept?: string
-          deleted_at?: string | null
-          doorgevoerd_automatisch?: boolean
-          doorgevoerd_op?: string | null
-          id?: string
-          klant_id?: string | null
-          mailing_id?: string | null
-          onderwerp?: string
-          ontvangen_op?: string
-          samenvatting?: string
-          status?: string
-          tekst?: string
-          van_email?: string
-          van_naam?: string
-          voorstel_adressen?: string[]
-          voorstel_maanden?: string[]
-          zekerheid?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "mail_antwoorden_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "mail_antwoorden_klant_id_fkey"
-            columns: ["klant_id"]
-            isOneToOne: false
-            referencedRelation: "klanten"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "mail_antwoorden_mailing_id_fkey"
-            columns: ["mailing_id"]
-            isOneToOne: false
-            referencedRelation: "mailingen"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       mail_ontvangers: {
         Row: {
           adressen: string
@@ -781,13 +675,6 @@ export type Database = {
           zekerheid?: number | null
         }
         Relationships: [
-          {
-            foreignKeyName: "mail_wijzigingen_antwoord_id_fkey"
-            columns: ["antwoord_id"]
-            isOneToOne: false
-            referencedRelation: "mail_antwoorden"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "mail_wijzigingen_company_id_fkey"
             columns: ["company_id"]
@@ -1495,6 +1382,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      wasdag_weghalen: {
+        Args: { dag: string; adressen?: string[] }
+        Returns: string | null
+      }
+      wasdag_terugzetten: {
+        Args: { kenmerk: string }
+        Returns: number
+      }
       heeft_recht: {
         Args: { recht: string }
         Returns: boolean

@@ -177,8 +177,9 @@ export async function werkWasdagRegelBij(
  * Staat een adres op de nieuwe dag al, dan blijft die regel zoals hij is en
  * verdwijnt alleen de oude.
  */
-export async function verplaatsWasdag(van: string, naar: string, customerIds: string[]) {
-  if (van === naar || customerIds.length === 0) return;
+export async function verplaatsWasdag(van: string, naar: string, customerIds: string[]): Promise<string[]> {
+  const kenmerken: string[] = [];
+  if (van === naar || customerIds.length === 0) return kenmerken;
   const PER_KEER = 80;
   for (let i = 0; i < customerIds.length; i += PER_KEER) {
     const stuk = customerIds.slice(i, i + PER_KEER);
@@ -204,9 +205,42 @@ export async function verplaatsWasdag(van: string, naar: string, customerIds: st
         throw new Error("Je rol mag de planning niet verschuiven.");
       }
     }
+    // Stond het adres al op de doeldag, dan gaat alleen de oude regel weg. De
+    // database bewaart die (met zijn bedrag), zodat ongedaan maken hem kan
+    // terugzetten met zijn eigen prijs.
     const dubbel = stuk.filter((id) => bezet.has(id));
-    if (dubbel.length > 0) await haalUitWasdag(van, dubbel);
+    if (dubbel.length > 0) {
+      const kenmerk = await haalUitWasdagBewaard(van, dubbel);
+      if (kenmerk) kenmerken.push(kenmerk);
+    }
   }
+  return kenmerken;
+}
+
+/**
+ * Haalt adressen van een dag (of zonder lijst: de hele dag) en laat de
+ * database bewaren wat er wegging, mét het bedrag van die keer. Geeft het
+ * kenmerk om het terug te zetten, of null als er niets weg hoefde.
+ */
+export async function haalUitWasdagBewaard(datum: string, customerIds?: string[]): Promise<string | null> {
+  if (customerIds && customerIds.length === 0) return null;
+  const { data, error } = await supabase.rpc(
+    "wasdag_weghalen",
+    customerIds ? { dag: datum, adressen: customerIds } : { dag: datum },
+  );
+  if (error) throw error;
+  return data ?? null;
+}
+
+/**
+ * Zet wat haalUitWasdagBewaard weghaalde terug, met het eigen bedrag. Ook voor
+ * wie geen prijzen mag zien: het bedrag komt uit de database, niet uit de
+ * browser. Een adres dat intussen weer op die dag staat blijft zoals het is.
+ */
+export async function zetWasdagTerug(kenmerk: string | null): Promise<void> {
+  if (!kenmerk) return;
+  const { error } = await supabase.rpc("wasdag_terugzetten", { kenmerk });
+  if (error) throw error;
 }
 
 /** Veegt een hele dag leeg — op datum, dus zonder lijst met id's. */

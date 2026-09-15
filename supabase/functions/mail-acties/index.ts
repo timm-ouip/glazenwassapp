@@ -486,7 +486,6 @@ async function overslaanDoorvoeren(db: Db, box: Box, id: string, door: string): 
 
   const uit = await voerOverslaanDoor(db, {
     companyId: box.company_id,
-    antwoordId: null,
     berichtId: rij.id,
     customerIds: o.adressen,
     maanden: o.maanden,

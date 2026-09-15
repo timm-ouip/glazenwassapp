@@ -1,5 +1,5 @@
 /**
- * Hoe klaargezette antwoorden van de assistent klinken.
+ * Hoe klaargezette antwoorden van Paaltje klinken.
  *
  * Staat bij Instellingen en niet op de mailingpagina: je stelt het één keer in
  * en kijkt er daarna zelden meer naar. Wat wél vaak verandert — hoe hij
@@ -15,21 +15,21 @@ import { useAuth } from "@/lib/auth";
 import {
   aantalVerstuurdeAntwoorden,
   bewaarSchrijfstijl,
-  fetchAssistentInstellingen,
+  fetchSchrijfstijl,
 } from "@/lib/mailing";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
-/** Naar zoveel eigen antwoorden kijkt de assistent; zie `AANTAL_VOORBEELDEN`
- *  in supabase/functions/_gedeeld/assistent.ts. */
+/** Naar zoveel eigen antwoorden kijkt Paaltje; zie `MAX_VOORBEELDEN`
+ *  in supabase/functions/_gedeeld/paaltje.ts. */
 const VOORBEELDEN = 5;
 
 export function SchrijfstijlInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
   const { company } = useAuth();
   const qc = useQueryClient();
-  const instellingen = useQuery({
-    queryKey: ["assistent-instellingen"],
-    queryFn: fetchAssistentInstellingen,
+  const schrijfstijl = useQuery({
+    queryKey: ["schrijfstijl"],
+    queryFn: fetchSchrijfstijl,
   });
   const verstuurd = useQuery({
     queryKey: ["aantal-verstuurde-antwoorden"],
@@ -39,15 +39,15 @@ export function SchrijfstijlInstellingen({ isEigenaar }: { isEigenaar: boolean }
   const [bezig, setBezig] = useState(false);
 
   useEffect(() => {
-    if (instellingen.data) setStijl(instellingen.data.schrijfstijl);
-  }, [instellingen.data]);
+    if (schrijfstijl.data !== undefined) setStijl(schrijfstijl.data);
+  }, [schrijfstijl.data]);
 
   async function bewaar() {
     if (!company?.id) return;
     setBezig(true);
     try {
       await bewaarSchrijfstijl(company.id, stijl);
-      await qc.invalidateQueries({ queryKey: ["assistent-instellingen"] });
+      await qc.invalidateQueries({ queryKey: ["schrijfstijl"] });
       toast.success("Schrijfstijl opgeslagen.");
     } catch (e) {
       toast.error("Opslaan mislukte: " + (e instanceof Error ? e.message : String(e)));
@@ -57,12 +57,12 @@ export function SchrijfstijlInstellingen({ isEigenaar }: { isEigenaar: boolean }
   }
 
   const aantal = Math.min(verstuurd.data ?? 0, VOORBEELDEN);
-  const veranderd = stijl.trim() !== (instellingen.data?.schrijfstijl ?? "").trim();
+  const veranderd = stijl.trim() !== (schrijfstijl.data ?? "").trim();
 
   return (
     <div className="space-y-2">
       <p className="text-[12.5px] text-muted-foreground">
-        Hoe moeten de antwoorden klinken die de assistent voor je klaarzet? Bijvoorbeeld:
+        Hoe moeten de antwoorden klinken die Paaltje voor je klaarzet? Bijvoorbeeld:
         &ldquo;u-vorm, kort, afsluiten met Groet, Timmie&rdquo;.
       </p>
       <Textarea
@@ -70,7 +70,7 @@ export function SchrijfstijlInstellingen({ isEigenaar }: { isEigenaar: boolean }
         onChange={(e) => setStijl(e.target.value)}
         rows={3}
         maxLength={1000}
-        disabled={!isEigenaar || instellingen.isLoading}
+        disabled={!isEigenaar || schrijfstijl.isLoading}
         className="text-[13.5px]"
         placeholder="Laat leeg voor een gewone, vriendelijke je-vorm."
       />
