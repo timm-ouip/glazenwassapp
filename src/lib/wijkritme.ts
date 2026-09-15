@@ -206,10 +206,16 @@ export interface Voorstel {
  *
  * De wijken komen langs in de volgorde die je in de instellingen hebt gezet —
  * dat is de ronde die je rijdt. Wijken die deze maand al rond zijn slaan we
- * over, net als weekenddagen en dagen waar al werk op staat: die heb je zelf
- * al ingedeeld en daar hoort de app niet overheen te praten.
+ * over, net als dagen waarop je niet werkt (Instellingen → Wijken) en dagen
+ * waar al werk op staat: die heb je zelf al ingedeeld en daar hoort de app
+ * niet overheen te praten.
  */
-export function stelVoor(vanaf: string, werk: WijkWerk[], bezetteDagen: Set<string>): Voorstel[] {
+export function stelVoor(
+  vanaf: string,
+  werk: WijkWerk[],
+  bezetteDagen: Set<string>,
+  werkdagen: readonly number[],
+): Voorstel[] {
   const begin = new Date(`${vanaf}T12:00:00`);
   const maand = begin.getMonth();
   const uit: Voorstel[] = [];
@@ -225,8 +231,9 @@ export function stelVoor(vanaf: string, werk: WijkWerk[], bezetteDagen: Set<stri
   // Niet verder dan het einde van de maand: verder vooruit is raden.
   while (d.getMonth() === maand && i < rij.length) {
     const dag = sleutel(d);
-    const weekend = d.getDay() === 0 || d.getDay() === 6;
-    if (!weekend && !bezetteDagen.has(dag)) {
+    // getDay() begint op zondag = 0; de werkdagen op maandag = 1.
+    const vrij = werkdagen.length > 0 && !werkdagen.includes(d.getDay() === 0 ? 7 : d.getDay());
+    if (!vrij && !bezetteDagen.has(dag)) {
       const w = rij[i]!;
       gedaanVoorDezeWijk += 1;
       uit.push({

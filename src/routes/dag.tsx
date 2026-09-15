@@ -603,16 +603,15 @@ function DagPagina() {
     let toevoegen = regelsMee;
     let kenmerken: string[] = [];
     try {
-      // Wat er al op de doeldag staat blijft staan zoals het staat; alleen de
-      // rest zetten we erop. Zo weet "ongedaan maken" straks ook precies wat
-      // het daar mag weghalen.
-      const bestaand = await fetchWasdag(nieuw);
-      const alErop = new Set(bestaand.map((r) => r.customer_id).filter(Boolean) as string[]);
-      toevoegen = regelsMee.filter((r) => !alErop.has(r.customer_id));
-
       // Dezelfde regels met een andere datum: het bedrag en de notitie van die
-      // keer gaan mee, ook als wie verplaatst geen prijzen mag zien.
-      kenmerken = await verplaatsWasdag(datum, nieuw, ids);
+      // keer gaan mee, ook als wie verplaatst geen prijzen mag zien. Wat die
+      // maand al ingepland stond blijft staan (een adres gaat één keer per
+      // maand); alleen de rest verhuist. Zo weet "ongedaan maken" straks
+      // precies wat het daar mag weghalen.
+      const uitkomst = await verplaatsWasdag(datum, nieuw, ids);
+      kenmerken = uitkomst.kenmerken;
+      const verhuisd = new Set(uitkomst.verplaatst);
+      toevoegen = regelsMee.filter((r) => verhuisd.has(r.customer_id));
       for (const k of teVerzetten) await zetKlusOpDag(k.id, nieuw);
     } catch (e) {
       toast.error("Verplaatsen mislukt: " + (e as Error).message);

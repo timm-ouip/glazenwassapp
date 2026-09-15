@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { eenVan } from "@/lib/embed";
+import { isWerkdag, STANDAARD_WERKDAGEN } from "@/lib/werkdagen";
 
 /**
  * Een wasdag is niets meer dan een selectie adressen bij een datum. Wat er
@@ -102,6 +103,11 @@ export async function voegToeAanWasdag(
       { onConflict: "company_id,datum,customer_id" },
     )
     .select("id,customer_id");
+  // 23505: het vangnet in de database, een adres staat die maand al op een
+  // andere dag. De schermen filteren dat eruit, maar twee mensen tegelijk kan.
+  if (error?.code === "23505") {
+    throw new Error("Een van de adressen staat deze maand al op een andere dag.");
+  }
   if (error) throw error;
 
   // Het bedrag in zijn eigen tabel. Een nieuwe regel krijgt van de database al
@@ -174,22 +180,25 @@ export async function werkWasdagRegelBij(
  * notitie) gaat mee. Ook als wie verschuift geen prijzen mag zien: een
  * aangepaste prijs ("alleen de voorkant, € 15") blijft zo staan.
  *
- * Staat een adres op de nieuwe dag al, dan blijft die regel zoals hij is en
- * verdwijnt alleen de oude.
+ * Staat een adres in de maand van de nieuwe dag al ingepland (een adres gaat
+ * één keer per maand), dan blijft die regel zoals hij is en verdwijnt alleen
+ * de oude.
+ *
+ * Geeft terug welke adressen echt verhuisd zijn (alleen die horen bij
+ * ongedaan maken terug) en de kenmerken van wat alleen wegging.
  */
-export async function verplaatsWasdag(van: string, naar: string, customerIds: string[]): Promise<string[]> {
+export async function verplaatsWasdag(
+  van: string,
+  naar: string,
+  customerIds: string[],
+): Promise<{ verplaatst: string[]; kenmerken: string[] }> {
   const kenmerken: string[] = [];
-  if (van === naar || customerIds.length === 0) return kenmerken;
+  const verplaatst: string[] = [];
+  if (van === naar || customerIds.length === 0) return { verplaatst, kenmerken };
   const PER_KEER = 80;
   for (let i = 0; i < customerIds.length; i += PER_KEER) {
     const stuk = customerIds.slice(i, i + PER_KEER);
-    const { data: alDaar, error: leesFout } = await supabase
-      .from("wasdag_regels")
-      .select("customer_id")
-      .eq("datum", naar)
-      .in("customer_id", stuk);
-    if (leesFout) throw leesFout;
-    const bezet = new Set((alDaar ?? []).map((r) => r.customer_id));
+    const bezet = await alInMaand(naar, stuk, van);
     const vrij = stuk.filter((id) => !bezet.has(id));
     if (vrij.length > 0) {
       const { data: verzet, error } = await supabase
@@ -204,8 +213,9 @@ export async function verplaatsWasdag(van: string, naar: string, customerIds: st
       if ((verzet ?? []).length === 0) {
         throw new Error("Je rol mag de planning niet verschuiven.");
       }
+      for (const r of verzet ?? []) if (r.customer_id) verplaatst.push(r.customer_id);
     }
-    // Stond het adres al op de doeldag, dan gaat alleen de oude regel weg. De
+    // Stond het adres die maand al ingepland, dan gaat alleen de oude regel weg. De
     // database bewaart die (met zijn bedrag), zodat ongedaan maken hem kan
     // terugzetten met zijn eigen prijs.
     const dubbel = stuk.filter((id) => bezet.has(id));
@@ -214,7 +224,36 @@ export async function verplaatsWasdag(van: string, naar: string, customerIds: st
       if (kenmerk) kenmerken.push(kenmerk);
     }
   }
-  return kenmerken;
+  return { verplaatst, kenmerken };
+}
+
+/**
+ * Welke van deze adressen staan in de maand van `datum` al ingepland, op een
+ * andere dag dan `behalve`, en op welke dag. Een adres gaat hooguit één keer
+ * per maand; extra werk op een andere dag is een klus, geen tweede wasdag.
+ */
+export async function alInMaand(
+  datum: string,
+  customerIds: string[],
+  behalve?: string,
+): Promise<Map<string, string>> {
+  const uit = new Map<string, string>();
+  const { vanaf, tot } = maandGrenzen(datum);
+  // In stukjes, om dezelfde reden als bij haalUitWasdag: de id's gaan in de URL.
+  const PER_KEER = 80;
+  for (let i = 0; i < customerIds.length; i += PER_KEER) {
+    const { data, error } = await supabase
+      .from("wasdag_regels")
+      .select("customer_id,datum")
+      .gte("datum", vanaf)
+      .lte("datum", tot)
+      .in("customer_id", customerIds.slice(i, i + PER_KEER));
+    if (error) throw error;
+    for (const r of data ?? []) {
+      if (r.customer_id && r.datum !== behalve) uit.set(r.customer_id, r.datum);
+    }
+  }
+  return uit;
 }
 
 /**
@@ -250,17 +289,21 @@ export async function maakWasdagLeeg(datum: string) {
 }
 
 /**
- * `n` werkdagen verder. Zaterdag en zondag tellen niet mee, dus vrijdag plus
- * één is maandag — schuif je een dag op omdat het regent, dan hoort dat werk
- * niet in het weekend te belanden.
+ * `n` werkdagen verder. Dagen waarop je niet werkt (Instellingen → Wijken)
+ * tellen niet mee: werk je maandag t/m vrijdag, dan is vrijdag plus één
+ * maandag. Schuif je een dag op omdat het regent, dan hoort dat werk niet op
+ * een vrije dag te belanden.
  */
-export function werkdagenVerder(datum: string, n: number): string {
+export function werkdagenVerder(
+  datum: string,
+  n: number,
+  werkdagen: readonly number[] = STANDAARD_WERKDAGEN,
+): string {
   const d = new Date(`${datum}T12:00:00`);
   let over = n;
   while (over > 0) {
     d.setDate(d.getDate() + 1);
-    const dag = d.getDay();
-    if (dag !== 0 && dag !== 6) over -= 1;
+    if (isWerkdag(d, werkdagen)) over -= 1;
   }
   const maand = String(d.getMonth() + 1).padStart(2, "0");
   return `${d.getFullYear()}-${maand}-${String(d.getDate()).padStart(2, "0")}`;

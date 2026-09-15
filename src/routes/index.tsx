@@ -163,7 +163,8 @@ import {
 import { useRecht } from "@/lib/rechten";
 import { StopDialog } from "@/components/StopDialog";
 import { draaiStoppenTerug, geplandeDagen, zetInactief, type StopReden } from "@/lib/stoppen";
-import { haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
+import { alInMaand, haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
+import { isWerkdag, useWerkdagen } from "@/lib/werkdagen";
 
 interface IndexSearch {
   wijk?: string;
@@ -603,11 +604,29 @@ function Index() {
     const perId = new Map(customers.map((c) => [c.id, c]));
     const bestaand = datum === bewerktDag ? dagRegels : await fetchWasdag(datum);
     const alErop = new Set(bestaand.map((r) => r.customer_id).filter(Boolean) as string[]);
+    const nieuweIds = [...keuze].filter((id) => !alErop.has(id) && perId.has(id));
 
-    const toevoegen = [...keuze]
-      .filter((id) => !alErop.has(id))
-      .map((id) => ({ customer_id: id, prijs: prijsVoorMaand(perId.get(id)!, ronde) }))
-      .filter((r) => perId.has(r.customer_id));
+    // Een adres gaat één keer per maand. Staat het deze maand al op een andere
+    // dag, dan zetten we het er niet nóg eens bij; extra werk is een klus.
+    let elders: Map<string, string>;
+    try {
+      elders = await alInMaand(datum, nieuweIds, datum);
+    } catch {
+      toast.error("Kon niet ophalen wat er deze maand al ingepland staat.");
+      return;
+    }
+    if (elders.size > 0) {
+      toast(
+        `${elders.size} ${elders.size === 1 ? "adres staat" : "adressen staan"} deze maand al op een andere dag en ${
+          elders.size === 1 ? "is" : "zijn"
+        } overgeslagen.`,
+        { description: "Een adres gaat één keer per maand. Extra werk plan je als klus." },
+      );
+    }
+
+    const toevoegen = nieuweIds
+      .filter((id) => !elders.has(id))
+      .map((id) => ({ customer_id: id, prijs: prijsVoorMaand(perId.get(id)!, ronde) }));
 
     // Alleen bij het bewerken van een dag: wat je uitvinkte hoort eraf.
     const weghalen =
@@ -618,7 +637,7 @@ function Index() {
         : [];
 
     if (toevoegen.length === 0 && weghalen.length === 0) {
-      toast(`${toonDatum(datum)} stond al zo ingepland.`);
+      if (elders.size === 0) toast(`${toonDatum(datum)} stond al zo ingepland.`);
       return;
     }
 
@@ -2787,7 +2806,10 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
       {magKlanten ? (
         <button
           tabIndex={-1}
-          className="shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:!text-destructive"
+          // Boven het kliklaagje van de selecteerstand (z-10): de regel ligt
+          // dan op slot, maar het prullenbakje vraagt eerst wat je wilt, dus
+          // per ongeluk gaat er niets weg.
+          className="relative z-20 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:!text-destructive"
           onClick={() => onDelete(c)}
           aria-label="Stoppen of verwijderen"
           title="Stoppen of verwijderen"
@@ -2857,17 +2879,21 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
   );
 });
 
-/** De eerstvolgende dagen om uit te kiezen, met de weekdag erbij. Zondagen
- *  laten we staan — die werk je zelden, maar het is niet aan ons om dat te
- *  verbieden. */
-function komendeDagen(aantal = 14): string[] {
-  const uit: string[] = [];
+/** De eerstvolgende werkdagen om uit te kiezen (Instellingen → Wijken), met
+ *  vandaag en morgen bij hun naam. Ongeveer twee weken vooruit. */
+function komendeDagen(
+  werkdagen: readonly number[],
+  aantal = 10,
+): { datum: string; naam: "vandaag" | "morgen" | null }[] {
+  const uit: { datum: string; naam: "vandaag" | "morgen" | null }[] = [];
   const nu = new Date();
-  for (let i = 0; i < aantal; i++) {
+  for (let i = 0; uit.length < aantal && i < 60; i++) {
     const d = new Date(nu.getFullYear(), nu.getMonth(), nu.getDate() + i);
-    uit.push(
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
-    );
+    if (!isWerkdag(d, werkdagen)) continue;
+    uit.push({
+      datum: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+      naam: i === 0 ? "vandaag" : i === 1 ? "morgen" : null,
+    });
   }
   return uit;
 }
@@ -2892,7 +2918,8 @@ function InplannenKnop({
   bewerktDag: string | null;
   onKies: (datum: string) => void;
 }) {
-  const dagen = komendeDagen();
+  const werkdagen = useWerkdagen();
+  const dagen = komendeDagen(werkdagen);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -2911,17 +2938,15 @@ function InplannenKnop({
         <DropdownMenuLabel>
           {aantal} {aantal === 1 ? "adres" : "adressen"} inplannen op
         </DropdownMenuLabel>
-        {dagen.map((d, i) => (
+        {dagen.map(({ datum: d, naam }) => (
           <DropdownMenuItem key={d} onSelect={() => onKies(d)}>
             {/* Vandaag en morgen bij hun naam, met de datum erachter; verder
                 is de datum zelf het duidelijkst. */}
-            <span className="capitalize">
-              {i < 2 ? (i === 0 ? "vandaag" : "morgen") : toonKorteDag(d)}
-            </span>
-            {i < 2 && (
+            <span className="capitalize">{naam ?? toonKorteDag(d)}</span>
+            {naam && (
               <span className="ml-auto text-xs text-muted-foreground">{toonKorteDag(d)}</span>
             )}
-            {d === bewerktDag && <Check className={`size-4 ${i < 2 ? "ml-1" : "ml-auto"}`} />}
+            {d === bewerktDag && <Check className={`size-4 ${naam ? "ml-1" : "ml-auto"}`} />}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

@@ -44,6 +44,7 @@ import {
 } from "@/lib/klanten";
 import { aanmeldAdres, fetchAanmeldingen } from "@/lib/aanmeldingen";
 import { fetchWasdagen } from "@/lib/wasdag";
+import { bewaarWerkdagen, useWerkdagen, WEEKDAGEN } from "@/lib/werkdagen";
 import { AANNAME_BEDRAG_PER_DAG, meetTempo, MINIMUM_DAGEN, tempoVan } from "@/lib/wijkritme";
 import { bewaarThema, leesThema, themaLabels, type Thema } from "@/lib/thema";
 import {
@@ -809,6 +810,89 @@ function TeamTab() {
  * gemiddeld op een dag doet, en hoeveel dagen dat gemiddelde telt. Zolang dat
  * er weinig zijn is het een aanname, en dat hoort er gewoon te staan.
  */
+/**
+ * Op welke dagen van de week je wast. Opschuiven op de planning, het voorstel
+ * voor de volgende wijk en "Inplannen voor…" slaan de andere dagen over.
+ */
+function WerkdagenKaart() {
+  const { employee, company } = useAuth();
+  const isEigenaar = employee?.rol === "eigenaar";
+  const qc = useQueryClient();
+  const opgeslagen = useWerkdagen();
+  const [keuze, setKeuze] = useState<number[] | null>(null);
+  const [bezig, setBezig] = useState(false);
+  const dagen = keuze ?? opgeslagen;
+
+  function wissel(nr: number) {
+    setKeuze(dagen.includes(nr) ? dagen.filter((d) => d !== nr) : [...dagen, nr].sort((a, b) => a - b));
+  }
+
+  async function bewaar() {
+    if (!keuze || !company) return;
+    if (keuze.length === 0) {
+      toast.error("Kies minstens één werkdag.");
+      return;
+    }
+    setBezig(true);
+    try {
+      await bewaarWerkdagen(company.id, keuze);
+      await qc.invalidateQueries({ queryKey: ["werkdagen"] });
+      setKeuze(null);
+      toast.success("Werkdagen opgeslagen");
+    } catch (e) {
+      toast.error("Opslaan mislukt: " + (e as Error).message);
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  return (
+    <Kaart
+      titel="Werkdagen"
+      uitleg="Op welke dagen je wast. Opschuiven op de planning, het voorstel voor de volgende wijk en 'Inplannen voor…' slaan de andere dagen over."
+    >
+      <div className="flex flex-wrap gap-1.5">
+        {WEEKDAGEN.map((w) => {
+          const aan = dagen.includes(w.nr);
+          return (
+            <button
+              key={w.nr}
+              type="button"
+              title={w.lang}
+              aria-label={w.lang}
+              aria-pressed={aan}
+              disabled={!isEigenaar || bezig}
+              onClick={() => wissel(w.nr)}
+              className={`h-9 min-w-11 rounded-full border px-3 text-sm font-medium transition-colors disabled:cursor-default ${
+                aan
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border bg-card text-muted-foreground enabled:hover:text-foreground"
+              }`}
+            >
+              {w.kort}
+            </button>
+          );
+        })}
+      </div>
+      {!isEigenaar && (
+        <p className="mt-2 text-[12.5px] text-muted-foreground">
+          Alleen de eigenaar kan de werkdagen aanpassen.
+        </p>
+      )}
+      {keuze && (
+        <div className="mt-3 flex items-center gap-2">
+          <Button size="sm" onClick={() => void bewaar()} disabled={bezig}>
+            {bezig ? "Bezig…" : "Werkdagen opslaan"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setKeuze(null)} disabled={bezig}>
+            Annuleren
+          </Button>
+        </div>
+      )}
+    </Kaart>
+  );
+}
+
 function WijkenTab() {
   // Het tempo is in geld; zonder recht op prijzen tonen we alleen de dagen.
   const prijzenZien = useRecht("prijzen_zien");
@@ -884,6 +968,7 @@ function WijkenTab() {
 
   return (
     <div className="space-y-4">
+      <WerkdagenKaart />
       <Kaart
         titel="Volgorde van de wijken"
         uitleg="De ronde die je rijdt. Deze volgorde bepaalt de kleuren op de kalender en welke wijk de app voorstelt als eerstvolgende."

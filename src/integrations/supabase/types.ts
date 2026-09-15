@@ -92,6 +92,7 @@ export type Database = {
           plaats: string
           postcode: string
           telefoon: string
+          werkdagen: number[]
         }
         Insert: {
           aanmeld_aan?: boolean
@@ -110,6 +111,7 @@ export type Database = {
           plaats?: string
           postcode?: string
           telefoon?: string
+          werkdagen?: number[]
         }
         Update: {
           aanmeld_aan?: boolean
@@ -128,6 +130,7 @@ export type Database = {
           plaats?: string
           postcode?: string
           telefoon?: string
+          werkdagen?: number[]
         }
         Relationships: []
       }

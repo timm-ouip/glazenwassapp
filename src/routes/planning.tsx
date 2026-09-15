@@ -103,7 +103,8 @@ import {
   voegToeAanWasdag,
   werkdagenVerder,
 } from "@/lib/wasdag";
-import { verplaatsWasdag } from "@/lib/wasdag";
+import { alInMaand, verplaatsWasdag } from "@/lib/wasdag";
+import { useWerkdagen } from "@/lib/werkdagen";
 import { haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
 
 interface PlanningSearch {
@@ -359,6 +360,9 @@ function Planning() {
     queryFn: () => fetchWasdagen(halfJaar.vanaf, halfJaar.tot),
   });
 
+  /** Op welke dagen van de week je werkt (Instellingen → Wijken). */
+  const vasteWerkdagen = useWerkdagen();
+
   const voorstel = useMemo(() => {
     const districts = districtsQuery.data ?? [];
     const streets = streetsQuery.data ?? [];
@@ -387,7 +391,7 @@ function Planning() {
     );
     // Dagen waar al iets op staat laten we met rust: die heb je zelf ingedeeld.
     const bezet = new Set(regelsDezeMaand.map((r) => r.datum));
-    return new Map(stelVoor(beginDag, werk, bezet).map((v) => [v.datum, v]));
+    return new Map(stelVoor(beginDag, werk, bezet, vasteWerkdagen).map((v) => [v.datum, v]));
   }, [
     districtsQuery.data,
     streetsQuery.data,
@@ -396,6 +400,7 @@ function Planning() {
     regels,
     historieQuery.data,
     maand,
+    vasteWerkdagen,
   ]);
 
   const nu = vandaag();
@@ -763,7 +768,8 @@ function Planning() {
    * paar werkdagen op. Voor als het regent of een klus uitloopt: dan verzet je
    * niet één dag maar de hele rits die erachteraan komt.
    *
-   * Werkdagen, dus vrijdag plus één is maandag. Werk dat over de maandgrens
+   * Werkdagen uit de instellingen, dus met een vrij weekend is vrijdag plus
+   * één maandag. Werk dat over de maandgrens
    * heen schuift belandt gewoon in de volgende maand; dat is waar het hoort.
    */
   async function schuifOp(vanaf: string, dagen: number) {
@@ -797,12 +803,12 @@ function Planning() {
     }
     const stappen = [...perDagOud.entries()].map(([oud, regels]) => ({
       oud,
-      nieuw: werkdagenVerder(oud, dagen),
+      nieuw: werkdagenVerder(oud, dagen, vasteWerkdagen),
       regels,
     }));
 
     type Stap = { oud: string; nieuw: string; regels: DagRegels };
-    // Wat van een dag moest omdat het adres al op de doeldag stond, bewaart
+    // Wat van een dag moest omdat het adres die maand al ingepland stond, bewaart
     // de database; ongedaan maken zet het met zijn eigen prijs terug.
     const bewaard: string[] = [];
     async function verplaats(lijst: Stap[], richting: "vooruit" | "terug", gedaan?: Stap[]) {
@@ -813,13 +819,17 @@ function Planning() {
         richting === "vooruit" ? b.oud.localeCompare(a.oud) : a.oud.localeCompare(b.oud),
       );
       for (const stap of volgorde) {
-        const kenmerken = await verplaatsWasdag(
+        const uitkomst = await verplaatsWasdag(
           stap.oud,
           stap.nieuw,
           stap.regels.map((r) => r.customer_id),
         );
-        if (richting === "vooruit") bewaard.push(...kenmerken);
-        gedaan?.push(stap);
+        if (richting === "vooruit") bewaard.push(...uitkomst.kenmerken);
+        // Onthoud alleen wat echt verhuisde. Wat die maand al stond ging
+        // alleen weg en komt terug via het bewaarde kenmerk; dat nog eens
+        // "terugverplaatsen" raakt niets en zou het ongedaan maken stoppen.
+        const verhuisd = new Set(uitkomst.verplaatst);
+        gedaan?.push({ ...stap, regels: stap.regels.filter((r) => verhuisd.has(r.customer_id)) });
       }
     }
 
@@ -853,7 +863,7 @@ function Planning() {
       undo: async () => {
         // Terug is dezelfde beweging andersom, en dan van voren naar achteren.
         await verplaats(
-          stappen.map((x) => ({ oud: x.nieuw, nieuw: x.oud, regels: x.regels })),
+          gelukt.map((x) => ({ oud: x.nieuw, nieuw: x.oud, regels: x.regels })),
           "terug",
         );
         for (const kenmerk of bewaard) await zetWasdagTerug(kenmerk);
@@ -900,31 +910,41 @@ function Planning() {
     );
 
     let alErop: Set<string>;
+    let elders: Map<string, string>;
     try {
       const bestaand = await fetchWasdag(datum);
       alErop = new Set(bestaand.map((r) => r.customer_id).filter(Boolean) as string[]);
+      // Een adres gaat één keer per maand. Een grote wijk over twee dagen:
+      // wat gisteren al ingepland is, hoort er vandaag niet nóg eens bij.
+      elders = await alInMaand(
+        datum,
+        kandidaten.filter((c) => !alErop.has(c.id)).map((c) => c.id),
+        datum,
+      );
     } catch {
-      toast.error("Kon niet ophalen wat er al op die dag staat.");
+      toast.error("Kon niet ophalen wat er deze maand al ingepland staat.");
       return;
     }
 
     const erbij = kandidaten
-      .filter((c) => !alErop.has(c.id))
+      .filter((c) => !alErop.has(c.id) && !elders.has(c.id))
       .map((c) => ({ customer_id: c.id, prijs: prijsVoorMaand(c, maandVanDag) }));
 
     if (erbij.length === 0) {
       toast(
         kandidaten.length === 0
           ? `${wijk.name} is deze maand niet aan de beurt.`
-          : `${wijk.name} staat al helemaal op ${toonDatum(datum)}.`,
+          : elders.size > 0
+            ? `${wijk.name} staat deze maand al helemaal ingepland.`
+            : `${wijk.name} staat al helemaal op ${toonDatum(datum)}.`,
       );
       return;
     }
 
     try {
       await voegToeAanWasdag(datum, erbij);
-    } catch {
-      toast.error("Inplannen mislukt.");
+    } catch (e) {
+      toast.error("Inplannen mislukt: " + (e instanceof Error ? e.message : String(e)));
       return;
     }
 
@@ -942,7 +962,11 @@ function Planning() {
     qc.invalidateQueries({ queryKey: ["wasdagen"] });
     qc.invalidateQueries({ queryKey: ["wasdag"] });
 
-    toast.success(`${wijk.name}: ${erbij.length} adressen op ${toonDatum(datum)}`, {
+    const eldersTekst =
+      elders.size > 0
+        ? ` (${elders.size} ${elders.size === 1 ? "stond" : "stonden"} deze maand al op een andere dag)`
+        : "";
+    toast.success(`${wijk.name}: ${erbij.length} adressen op ${toonDatum(datum)}${eldersTekst}`, {
       duration: 10000,
       action: {
         label: "Ongedaan maken",
@@ -1275,8 +1299,8 @@ function Planning() {
                               ))}
                               <ContextMenuSeparator />
                               <ContextMenuLabel className="font-normal text-muted-foreground">
-                                Alles t/m het eind van de maand schuift mee. Weekenden slaan we
-                                over.
+                                Alles t/m het eind van de maand schuift mee. Dagen waarop je
+                                niet werkt slaan we over.
                               </ContextMenuLabel>
                             </ContextMenuSubContent>
                           </ContextMenuSub>
