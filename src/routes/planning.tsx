@@ -1140,6 +1140,10 @@ function Planning() {
                 return (
                   <DagDrop key={k} datum={k}>
                     {(setDropRef, erboven) => (
+                      // Het knopje naar inplannen ligt naast de dag en niet erin:
+                      // een knop in een knop kan niet, en zo vangt hij geen
+                      // klikken of dubbelklikken van de dag zelf af.
+                      <div className="group/dag relative">
                       <ContextMenu>
                         <ContextMenuTrigger asChild>
                           <button
@@ -1148,17 +1152,17 @@ function Planning() {
                             // voegt die twee samen.
                             ref={setDropRef}
                             onClick={() => kiesDag(d)}
-                            // Dubbelklikken slaat de tussenstap over en zet je meteen
-                            // in de wijken met die dag aan het aanvinken.
-                            onDoubleClick={() => void navigate({ to: "/", search: { dag: k } })}
-                            title="Klik om te bekijken, dubbelklik om aan te vinken in de wijken"
+                            // Dubbelklikken opent de dagplanning: de route van die dag.
+                            // Aanvinken in de wijken zit onder het knopje rechtsboven.
+                            onDoubleClick={() => void navigate({ to: "/dag", search: { datum: k } })}
+                            title="Klik om te bekijken, dubbelklik voor de dagplanning"
                             aria-current={isVandaag ? "date" : undefined}
                             aria-pressed={isGekozen}
                             // Het hele vakje krijgt de pastelkleur van de wijk die er
                             // die dag aan de beurt is; zo zie je een maand aan de
                             // kleuren, zonder namen te lezen.
                             style={vlak ? { background: vlak } : undefined}
-                            className={`relative flex min-h-[4.5rem] flex-col rounded-[12px] p-1.5 text-left transition-colors sm:min-h-[6.25rem] ${
+                            className={`relative flex h-full min-h-[4.5rem] w-full flex-col rounded-[12px] p-1.5 text-left transition-colors sm:min-h-[6.25rem] ${
                               buitenMaand
                                 ? "bg-transparent"
                                 : vlak
@@ -1324,6 +1328,26 @@ function Planning() {
                           </ContextMenuItem>
                         </ContextMenuContent>
                       </ContextMenu>
+                      {/* Rechtsboven: meteen naar de wijken om voor deze dag aan
+                          te vinken. Alleen met een muis, en pas zichtbaar als je
+                          over de dag beweegt. Op een telefoon of tablet zou een
+                          onzichtbaar knopje tikken op de dag afvangen en over het
+                          dagnummer vallen; daar staat "Werk inplannen" in het
+                          menu onder lang indrukken. Buiten de Tab-volgorde om
+                          dezelfde reden: het menu heeft het al. */}
+                      {!buitenMaand && (
+                        <Link
+                          to="/"
+                          search={{ dag: k }}
+                          tabIndex={-1}
+                          title="Inplannen voor deze dag"
+                          aria-label={`Inplannen voor ${format(d, "d MMMM", { locale: nl })}`}
+                          className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded-[8px] text-foreground/45 opacity-0 transition-[opacity,color,background-color] hover:bg-card hover:text-foreground hover:shadow-card group-hover/dag:opacity-100 [@media(hover:hover)]:flex"
+                        >
+                          <CalendarPlus className="size-3.5" />
+                        </Link>
+                      )}
+                      </div>
                     )}
                   </DagDrop>
                 );
