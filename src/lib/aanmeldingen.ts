@@ -6,6 +6,7 @@
  * hier is dat wel zo, dus hier kan de gewone client met RLS erop.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { haalAllePaginas } from "@/lib/pagineren";
 
 /**
  * Wat de server van een inzending maakte:
@@ -43,13 +44,18 @@ const VELDEN =
   "id,created_at,soort,status,naam,email,telefoon,postcode,straat,huisnummer,toevoeging,plaats,customer_id,klant_id";
 
 export async function fetchAanmeldingen(): Promise<Aanmelding[]> {
-  const { data, error } = await supabase
-    .from("aanmeldingen")
-    .select(VELDEN)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as Aanmelding[];
+  // In stukken: afgehandelde aanmeldingen blijven staan, dus de lijst groeit
+  // vanzelf voorbij de 1000 die Supabase per opvraging teruggeeft.
+  const data = await haalAllePaginas((van, tot) =>
+    supabase
+      .from("aanmeldingen")
+      .select(VELDEN)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(van, tot),
+  );
+  return data as Aanmelding[];
 }
 
 /** Het huisnummer zoals het op papier staat: "12" of "12a". */

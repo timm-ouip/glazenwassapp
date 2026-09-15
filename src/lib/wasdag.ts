@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { eenVan } from "@/lib/embed";
+import { haalAllePaginas } from "@/lib/pagineren";
 import { isWerkdag, STANDAARD_WERKDAGEN } from "@/lib/werkdagen";
 
 /**
@@ -69,13 +70,19 @@ export interface WasdagDagRegel extends WasdagRegel {
 
 /** Alle regels tussen twee datums (beide meegerekend), voor de kalender. */
 export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagDagRegel[]> {
-  const { data, error } = await supabase
-    .from("wasdag_regels")
-    .select("datum,customer_id,wasdag_prijzen(prijs)")
-    .gte("datum", vanaf)
-    .lte("datum", tot);
-  if (error) throw error;
-  return ((data ?? []) as unknown as { datum: string; customer_id: string | null; wasdag_prijzen: { prijs: number } | { prijs: number }[] | null }[]).map(
+  // In stukken: een paar maanden planning is al snel meer dan 1000 regels,
+  // en dan viel de rest stil weg.
+  const data = await haalAllePaginas((van, totRij) =>
+    supabase
+      .from("wasdag_regels")
+      .select("id,datum,customer_id,wasdag_prijzen(prijs)")
+      .gte("datum", vanaf)
+      .lte("datum", tot)
+      .order("datum", { ascending: true })
+      .order("id", { ascending: true })
+      .range(van, totRij),
+  );
+  return (data as unknown as { datum: string; customer_id: string | null; wasdag_prijzen: { prijs: number } | { prijs: number }[] | null }[]).map(
     (r) => ({ datum: r.datum, customer_id: r.customer_id, prijs: Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0) }),
   );
 }

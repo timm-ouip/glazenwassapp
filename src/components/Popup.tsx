@@ -88,7 +88,11 @@ export function PopupKop({
 }) {
   const kleuren = KOPKLEUREN[kleur];
   return (
-    <div className={cn("px-6 pt-5", kleuren.band)}>
+    // De hele kopstrook is het handvat om de popup te verslepen (zie DialogContent).
+    <div
+      data-sleepgreep=""
+      className={cn("cursor-grab touch-none px-6 pt-5 active:cursor-grabbing", kleuren.band)}
+    >
       <DialogHeader className="space-y-0 text-left">
         <div className="flex items-start gap-3.5 pr-8">
           <span

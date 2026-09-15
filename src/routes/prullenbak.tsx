@@ -10,6 +10,7 @@ import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { formatNumber, gooiEchtWeg, haalTerug, klantAdres, type Customer } from "@/lib/klanten";
 import { useRecht } from "@/lib/rechten";
+import { haalAllePaginas } from "@/lib/pagineren";
 
 export const Route = createFileRoute("/prullenbak")({
   beforeLoad: async () => {
@@ -30,25 +31,40 @@ type Weggelegd = {
 };
 
 async function haalPrullenbak(): Promise<Weggelegd[]> {
-  const [wijken, straten, adressen, personen] = await Promise.all([
+  // Adressen en klanten in stukken: gooi je een wijk met ruim 1000 adressen
+  // weg, dan gaf één opvraging er maar 1000 terug en kon je de rest niet
+  // terugzetten.
+  const [wijken, straten, adressenData, personenData] = await Promise.all([
     supabase.from("districts").select("id,name,deleted_at").not("deleted_at", "is", null),
     supabase.from("streets").select("id,name,deleted_at").not("deleted_at", "is", null),
-    supabase
-      .from("customers")
-      .select("id,house_number,addition,street_id,deleted_at")
-      .not("deleted_at", "is", null),
-    supabase
-      .from("klanten")
-      .select("id,naam,straat,huisnummer,postcode,plaats,deleted_at")
-      .not("deleted_at", "is", null),
+    haalAllePaginas((van, tot) =>
+      supabase
+        .from("customers")
+        .select("id,house_number,addition,street_id,deleted_at")
+        .not("deleted_at", "is", null)
+        .order("id", { ascending: true })
+        .range(van, tot),
+    ),
+    haalAllePaginas((van, tot) =>
+      supabase
+        .from("klanten")
+        .select("id,naam,straat,huisnummer,postcode,plaats,deleted_at")
+        .not("deleted_at", "is", null)
+        .order("id", { ascending: true })
+        .range(van, tot),
+    ),
   ]);
-  for (const r of [wijken, straten, adressen, personen]) if (r.error) throw r.error;
+  for (const r of [wijken, straten]) if (r.error) throw r.error;
+  const adressen = { data: adressenData };
+  const personen = { data: personenData };
 
   // Straatnamen erbij zoeken zodat een weggelegde klant niet als kaal
   // huisnummer in de lijst staat. Ook weggelegde straten tellen mee, want
   // een klant kan samen met zijn straat zijn verdwenen.
-  const alleStraten = await supabase.from("streets").select("id,name");
-  const straatNaam = new Map((alleStraten.data ?? []).map((s) => [s.id, s.name]));
+  const alleStraten = await haalAllePaginas((van, tot) =>
+    supabase.from("streets").select("id,name").order("id", { ascending: true }).range(van, tot),
+  );
+  const straatNaam = new Map(alleStraten.map((s) => [s.id, s.name]));
 
   const uit: Weggelegd[] = [
     ...(wijken.data ?? []).map((w) => ({

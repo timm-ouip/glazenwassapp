@@ -66,8 +66,10 @@ export function BevestigProvider({ children }: { children: ReactNode }) {
         }}
       >
         <AlertDialogContent className="gap-0 overflow-hidden border-0 bg-card p-0 shadow-[0_2px_6px_oklch(0.4_0.02_70/6%),0_24px_60px_oklch(0.35_0.02_70/14%)] sm:max-w-sm sm:rounded-[22px]">
+          {/* De hele gekleurde band is het handvat om het venster te verslepen. */}
           <div
-            className={`px-6 py-5 ${
+            data-sleepgreep=""
+            className={`cursor-grab touch-none px-6 py-5 active:cursor-grabbing ${
               gevaarlijk
                 ? "bg-tint-rood text-tint-rood-ink"
                 : "bg-accent text-accent-foreground"

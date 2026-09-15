@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { vandaag } from "@/lib/wasdag";
 import { eenVan } from "@/lib/embed";
+import { haalAllePaginas } from "@/lib/pagineren";
 
 export type StopReden = "verhuisd" | "gestopt";
 
@@ -116,14 +117,18 @@ export interface InactiefAdres {
 
 /** Alle inactieve adressen van het bedrijf, nieuwste eerst. */
 export async function fetchInactieveAdressen(): Promise<InactiefAdres[]> {
-  const { data, error } = await supabase
-    .from("customers")
-    .select("id,street_id,house_number,addition,klant_id,note,interval_maanden,ritme,inactief_op,inactief_reden,adres_prijzen(prijs)")
-    .is("deleted_at", null)
-    .not("inactief_op", "is", null)
-    .order("inactief_op", { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map((c) => ({
+  // In stukken van 1000, zoals alle lijsten die kunnen groeien.
+  const data = await haalAllePaginas((van, tot) =>
+    supabase
+      .from("customers")
+      .select("id,street_id,house_number,addition,klant_id,note,interval_maanden,ritme,inactief_op,inactief_reden,adres_prijzen(prijs)")
+      .is("deleted_at", null)
+      .not("inactief_op", "is", null)
+      .order("inactief_op", { ascending: false })
+      .order("id", { ascending: true })
+      .range(van, tot),
+  );
+  return data.map((c) => ({
     ...c,
     addition: c.addition ?? "",
     note: c.note ?? "",

@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { eenVan } from "@/lib/embed";
+import { haalAllePaginas } from "@/lib/pagineren";
 
 export type Frequency = "elke" | "even" | "oneven";
 
@@ -472,22 +473,27 @@ export function fetchCustomersMetInactief(): Promise<Customer[]> {
 }
 
 async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
-  let vraag = supabase
-    .from("customers")
-    // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
-    // met een samengestelde string lukt dat niet meer.
-    .select(
-      "id,street_id,house_number,addition,note,note_even,note_oneven,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op,inactief_op,inactief_reden,adres_prijzen(prijs,maandwerk_extra)",
-    )
-    .is("deleted_at", null);
-  // Inactief (gestopt of verhuisd) hoort niet op de wijklijst, de planning
-  // of in de omzet; die staan apart, zie lib/stoppen.
-  if (!metInactief) vraag = vraag.is("inactief_op", null);
-  const { data, error } = await vraag
-    .order("sort_order", { ascending: true })
-    .order("house_number", { ascending: true });
-  if (error) throw error;
-  return (data ?? []).map((c) => ({
+  // Een bedrijf heeft al snel meer dan 1000 adressen; in één opvraging vielen
+  // de laatste stil weg (na een import waren dat de hoge huisnummers).
+  const data = await haalAllePaginas((van, tot) => {
+    let vraag = supabase
+      .from("customers")
+      // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
+      // met een samengestelde string lukt dat niet meer.
+      .select(
+        "id,street_id,house_number,addition,note,note_even,note_oneven,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op,inactief_op,inactief_reden,adres_prijzen(prijs,maandwerk_extra)",
+      )
+      .is("deleted_at", null);
+    // Inactief (gestopt of verhuisd) hoort niet op de wijklijst, de planning
+    // of in de omzet; die staan apart, zie lib/stoppen.
+    if (!metInactief) vraag = vraag.is("inactief_op", null);
+    return vraag
+      .order("sort_order", { ascending: true })
+      .order("house_number", { ascending: true })
+      .order("id", { ascending: true })
+      .range(van, tot);
+  });
+  return data.map((c) => ({
     ...c,
     // Prijzen staan in hun eigen tabel (stap D). Zonder het recht "prijzen
     // zien" komt die leeg terug, en dan is het hier 0.
@@ -510,13 +516,17 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
 const KLANT_VELDEN = "id,naam,email,email2,telefoon,telefoon2,straat,huisnummer,postcode,plaats,notitie";
 
 export async function fetchKlanten(): Promise<Klant[]> {
-  const { data, error } = await supabase
-    .from("klanten")
-    .select(KLANT_VELDEN)
-    .is("deleted_at", null)
-    .order("naam", { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as Klant[];
+  // In stukken: met echte klanten zijn het er al snel meer dan 1000.
+  const data = await haalAllePaginas((van, tot) =>
+    supabase
+      .from("klanten")
+      .select(KLANT_VELDEN)
+      .is("deleted_at", null)
+      .order("naam", { ascending: true })
+      .order("id", { ascending: true })
+      .range(van, tot),
+  );
+  return data as Klant[];
 }
 
 /** Nieuwe klant bij `id === null`, anders bijwerken. Geeft de rij terug. */
