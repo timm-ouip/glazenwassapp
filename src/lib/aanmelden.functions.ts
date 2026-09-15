@@ -154,10 +154,14 @@ async function zoekAdresRegel(
   if (pc) {
     const { data } = await admin
       .from("customers")
-      .select("id,house_number,addition,postcode,klant_id,inactief_op,inactief_reden")
+      // Alleen adressen in een straat en wijk die er nog zijn: de adressen van
+      // een weggegooide wijk blijven zelf staan en telden anders nog mee.
+      .select("id,house_number,addition,postcode,klant_id,inactief_op,inactief_reden,streets!inner(deleted_at,districts!inner(deleted_at))")
       .eq("company_id", companyId)
       .eq("house_number", velden.nummer)
-      .is("deleted_at", null);
+      .is("deleted_at", null)
+      .is("streets.deleted_at", null)
+      .is("streets.districts.deleted_at", null);
     const treffers = (data ?? []).filter(
       (c) => postcodeSleutel(c.postcode ?? "") === pc && past(c),
     );

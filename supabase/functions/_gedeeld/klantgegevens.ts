@@ -61,6 +61,10 @@ export interface Herkend {
   via: "telefoon" | "adres";
   /** Het mailadres dat daarom aan de klant gekoppeld is (leeg als de mail er geen had). */
   email: string;
+  /** Het adres stond er zonder klant, en Wooshy maakte deze klant zelf aan. */
+  aangemaakt?: boolean;
+  /** Bij `aangemaakt`: het adres waar de nieuwe klant aan hangt. */
+  customer_id?: string;
 }
 
 /** Dezelfde vorm als `KlantGegevens` in src/lib/berichten.ts. */
@@ -158,10 +162,15 @@ async function zoekAdres(db: Db, companyId: string, g: Gevonden): Promise<AdresR
   if (pc) {
     const { data, error } = await db
       .from("customers")
-      .select("id,house_number,addition,postcode,klant_id,inactief_op")
+      // Alleen adressen in een straat en wijk die er nog zijn: gooi je een wijk
+      // weg (bijvoorbeeld na een dubbele import), dan blijven de adressen zelf
+      // staan, en die tellen anders nog mee.
+      .select("id,house_number,addition,postcode,klant_id,inactief_op,streets!inner(deleted_at,districts!inner(deleted_at))")
       .eq("company_id", companyId)
       .eq("house_number", nr.nummer)
-      .is("deleted_at", null);
+      .is("deleted_at", null)
+      .is("streets.deleted_at", null)
+      .is("streets.districts.deleted_at", null);
     if (error) throw new Error(`Adres op postcode zoeken: ${error.message}`);
     const treffers = (data ?? []).filter(
       (c: { postcode: string | null; house_number: number; addition: string | null }) =>
@@ -223,9 +232,11 @@ async function zoekAdres(db: Db, companyId: string, g: Gevonden): Promise<AdresR
  *
  *  - Telefoonnummer klopt bij precies één klant → herkend.
  *  - Adres klopt en de naam ook → herkend. Alleen het adres → een gok.
+ *  - Adres klopt maar er hangt nog geen klant aan → `leegAdres`: dan mag
+ *    Wooshy de klant zelf aanmaken (zie maakKlantBijAdres).
  *  - Wijzen telefoon en adres naar twee verschillende klanten → niets.
  *
- * Klanten in `afgewezen` (eerder teruggedraaid bij deze mail) tellen niet.
+ * Klanten en adressen in `afgewezen` (eerder teruggedraaid bij deze mail) tellen niet.
  */
 export async function herken(
   db: Db,
@@ -233,7 +244,12 @@ export async function herken(
   g: Gevonden,
   vanNaam: string,
   afgewezen: string[],
-): Promise<{ herkend: { klant_id: string; via: "telefoon" | "adres" } | null; gok: string | null }> {
+): Promise<{
+  herkend: { klant_id: string; via: "telefoon" | "adres" } | null;
+  gok: string | null;
+  /** Een adres dat klopt maar nog geen klant heeft. */
+  leegAdres: string | null;
+}> {
   const uit = new Set(afgewezen);
 
   let viaTelefoon: string | null = null;
@@ -272,7 +288,9 @@ export async function herken(
 
   let viaAdres: string | null = null;
   let gok: string | null = null;
+  let leegAdres: string | null = null;
   const adres = await zoekAdres(db, companyId, g);
+  if (adres && !adres.klant_id && !adres.inactief_op && !uit.has(adres.id)) leegAdres = adres.id;
   // Een inactief adres (gestopt, verhuisd) niet: daar woont misschien iemand anders.
   if (adres?.klant_id && !adres.inactief_op && !uit.has(adres.klant_id)) {
     const { data: klant, error } = await db
@@ -289,10 +307,11 @@ export async function herken(
     }
   }
 
-  if (viaTelefoon && viaAdres && viaTelefoon !== viaAdres) return { herkend: null, gok: null };
-  if (viaTelefoon) return { herkend: { klant_id: viaTelefoon, via: "telefoon" }, gok: null };
-  if (viaAdres) return { herkend: { klant_id: viaAdres, via: "adres" }, gok: null };
-  return { herkend: null, gok };
+  if (viaTelefoon && viaAdres && viaTelefoon !== viaAdres) return { herkend: null, gok: null, leegAdres: null };
+  // Een kloppend telefoonnummer gaat voor een adres zonder klant: dan is het een bekende.
+  if (viaTelefoon) return { herkend: { klant_id: viaTelefoon, via: "telefoon" }, gok: null, leegAdres: null };
+  if (viaAdres) return { herkend: { klant_id: viaAdres, via: "adres" }, gok: null, leegAdres: null };
+  return { herkend: null, gok, leegAdres };
 }
 
 /**
@@ -312,6 +331,109 @@ export async function zekerGekoppeld(db: Db, companyId: string, email: string, k
     .limit(1);
   if (error) throw new Error(`Koppeling nakijken: ${error.message}`);
   return (data ?? []).length > 0;
+}
+
+/**
+ * Een adres dat in Wooshy staat maar nog geen klant heeft: de klant aanmaken
+ * met naam, telefoon en adres uit de mail, en aan het adres hangen. Net zoals
+ * de aanmeldpagina een lege plek vult. Het mailadres komt niet op de klant
+ * zelf: dat kan iedereen typen. Dat koppelt paaltje-lezen apart, als koppeling
+ * van Wooshy, tot een mens op Klopt klikt.
+ *
+ * Geeft het id van de nieuwe klant, of null als het adres intussen al een
+ * klant kreeg (dan is de net gemaakte klant meteen weer weg).
+ */
+export async function maakKlantBijAdres(
+  db: Db,
+  companyId: string,
+  customerId: string,
+  g: Gevonden,
+  vanNaam: string,
+): Promise<string | null> {
+  // Zonder bruikbare naam geen klant: de afzendernaam is vaak "Info" of een
+  // bedrijfsnaam. Die telt alleen als hij uit minstens twee woorden bestaat.
+  const afzender = vanNaam.trim();
+  const naam = g.naam.trim() || (naamWoorden(afzender).size >= 2 ? afzender : "");
+  if (!naam) return null;
+  const pc = postcodeSleutel(g.postcode);
+  const { data: klant, error } = await db
+    .from("klanten")
+    .insert({
+      company_id: companyId,
+      naam: knip(naam, 120),
+      telefoon: telefoonSleutel(g.telefoon) ? knip(g.telefoon.trim(), 40) : "",
+      straat: knip(g.straat.trim(), 120),
+      huisnummer: knip(g.huisnummer.trim(), 20),
+      postcode: pc ? `${pc.slice(0, 4)} ${pc.slice(4)}` : "",
+      plaats: knip(g.plaats.trim(), 80),
+    })
+    .select("id")
+    .single();
+  if (error || !klant) throw new Error(`Klant aanmaken: ${error?.message ?? "onbekende fout"}`);
+
+  // Alleen als het adres nog steeds geen klant heeft.
+  const { data: gezet, error: hangFout } = await db
+    .from("customers")
+    .update({ klant_id: klant.id })
+    .eq("id", customerId)
+    .eq("company_id", companyId)
+    .is("klant_id", null)
+    .is("deleted_at", null)
+    .select("id");
+  if (hangFout || !gezet?.length) {
+    // De nieuwe klant mag niet los blijven slingeren.
+    const { error: wegFout } = await db.from("klanten").delete().eq("id", klant.id).eq("company_id", companyId);
+    if (wegFout) console.error(`losse klant ${klant.id} weghalen:`, wegFout.message);
+    if (hangFout) throw new Error(`Klant aan adres hangen: ${hangFout.message}`);
+    return null;
+  }
+  return klant.id;
+}
+
+/** Zoveel klanten mag Wooshy per bedrijf per uur zelf aanmaken: een rem tegen een reeks nagemaakte mails. */
+const MAX_AANGEMAAKT_PER_UUR = 5;
+
+/**
+ * Mag Wooshy bij dit adres zelf een klant aanmaken? Niet als iemand dat bij een
+ * eerdere mail (van wie dan ook) al terugdraaide, en niet als hij dit uur al
+ * een handvol klanten aanmaakte.
+ */
+export async function magKlantAanmaken(db: Db, companyId: string, customerId: string): Promise<boolean> {
+  const { data: eerder, error } = await db
+    .from("berichten")
+    .select("id")
+    .eq("company_id", companyId)
+    .contains("klantgegevens", { afgewezen: [customerId] })
+    .limit(1);
+  if (error) throw new Error(`Eerder teruggedraaid nakijken: ${error.message}`);
+  if ((eerder ?? []).length > 0) return false;
+
+  const sinds = new Date(Date.now() - 60 * 60_000).toISOString();
+  const { count, error: telFout } = await db
+    .from("berichten")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", companyId)
+    .eq("klantgegevens->herkend->>aangemaakt", "true")
+    .gte("gelezen_door_paaltje_op", sinds);
+  if (telFout) throw new Error(`Aangemaakte klanten tellen: ${telFout.message}`);
+  return (count ?? 0) < MAX_AANGEMAAKT_PER_UUR;
+}
+
+/**
+ * Een net aangemaakte klant weer weghalen, als het daarna misging: van het
+ * adres af (alleen als hij er nog aan hangt) en wissen. Hij bestond net, en er
+ * hangt verder niets aan.
+ */
+export async function draaiAanmakenTerug(db: Db, companyId: string, customerId: string, klantId: string) {
+  const { error: losFout } = await db
+    .from("customers")
+    .update({ klant_id: null })
+    .eq("id", customerId)
+    .eq("company_id", companyId)
+    .eq("klant_id", klantId);
+  if (losFout) console.error(`klant ${klantId} van adres ${customerId} halen:`, losFout.message);
+  const { error: wegFout } = await db.from("klanten").delete().eq("id", klantId).eq("company_id", companyId);
+  if (wegFout) console.error(`losse klant ${klantId} weghalen:`, wegFout.message);
 }
 
 function knip(tekst: string, max: number): string {

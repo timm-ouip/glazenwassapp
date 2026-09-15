@@ -637,7 +637,17 @@ async function klantgegevensTerugdraaien(db: Db, box: Box, id: string): Promise<
   const vorigHerkend = herkend ?? kg.teruggedraaid?.herkend;
   const nieuw: KlantGegevens = {
     ...kg,
-    afgewezen: herkend ? [...new Set([...(kg.afgewezen ?? []), herkend.klant_id])] : kg.afgewezen,
+    // De klant, en bij een zelf aangemaakte klant ook het adres: anders maakt
+    // Wooshy bij opnieuw lezen gewoon weer een klant aan op dat adres.
+    afgewezen: herkend
+      ? [
+          ...new Set([
+            ...(kg.afgewezen ?? []),
+            herkend.klant_id,
+            ...(herkend.aangemaakt && herkend.customer_id ? [herkend.customer_id] : []),
+          ]),
+        ]
+      : kg.afgewezen,
     teruggedraaid: {
       op: new Date().toISOString(),
       velden: { ...(kg.teruggedraaid?.velden ?? {}), ...(toegevoegd?.velden ?? {}) },
@@ -700,6 +710,49 @@ async function klantgegevensTerugdraaien(db: Db, box: Box, id: string): Promise<
       .eq("email", herkend.email)
       .eq("bron", "paaltje");
     if (wegFout) throw new Error(`Mailadres loskoppelen: ${wegFout.message}`);
+  }
+
+  // Maakte Wooshy de klant zelf aan bij een adres zonder klant, dan gaat die
+  // klant weer van het adres af. Naar de prullenbak (daar terug te halen) alleen
+  // als hij echt van dit adres af ging en aan geen ander adres meer hangt:
+  // hing iemand hem intussen ergens anders aan, dan blijft hij staan.
+  if (herkend?.aangemaakt && UUID.test(String(herkend.klant_id)) && UUID.test(String(herkend.customer_id ?? ""))) {
+    try {
+      const { data: los, error: losFout } = await db
+        .from("customers")
+        .update({ klant_id: null })
+        .eq("id", herkend.customer_id)
+        .eq("company_id", box.company_id)
+        .eq("klant_id", herkend.klant_id)
+        .select("id");
+      if (losFout) throw new Error(`Klant van het adres halen: ${losFout.message}`);
+      if ((los ?? []).length > 0) {
+        const { count, error: telFout } = await db
+          .from("customers")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", box.company_id)
+          .eq("klant_id", herkend.klant_id)
+          .is("deleted_at", null);
+        if (telFout) throw new Error(`Andere adressen van de klant tellen: ${telFout.message}`);
+        if ((count ?? 0) === 0) {
+          const { error: prullenbakFout } = await db
+            .from("klanten")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", herkend.klant_id)
+            .eq("company_id", box.company_id)
+            .is("deleted_at", null);
+          if (prullenbakFout) throw new Error(`Klant naar de prullenbak: ${prullenbakFout.message}`);
+        }
+      }
+    } catch (e) {
+      // De herkenning terug op de mail, zodat Ongedaan maken nog eens kan.
+      const { error: herstelFout } = await db
+        .from("berichten")
+        .update({ klantgegevens: kg, klant_id: rij.klant_id })
+        .eq("id", rij.id);
+      if (herstelFout) console.error("herkenning terugzetten:", herstelFout.message);
+      throw e;
+    }
   }
 
   // Wat bleef staan erbij zetten, voor het vakje "Teruggedraaid".

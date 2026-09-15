@@ -71,7 +71,7 @@ export interface KlantGegevens {
   /** Wat Paaltje in de mail vond over de afzender. */
   gevonden?: { naam: string; straat: string; huisnummer: string; postcode: string; plaats: string; telefoon: string };
   /** Herkend aan telefoon of adres; het mailadres is toen aan de klant gekoppeld. */
-  herkend?: { klant_id: string; via: "telefoon" | "adres"; email: string };
+  herkend?: { klant_id: string; via: "telefoon" | "adres"; email: string; aangemaakt?: boolean; customer_id?: string };
   /** Lege velden die Wooshy bij deze klant invulde. */
   toegevoegd?: { klant_id: string; velden: Partial<Record<KlantVeld, string>> };
   /** Wat in de mail anders is dan bij de klant, en niet meer in een leeg vak paste. */
@@ -81,7 +81,7 @@ export interface KlantGegevens {
   teruggedraaid?: {
     op: string;
     velden: Partial<Record<KlantVeld, string>>;
-    herkend?: { klant_id: string; via: "telefoon" | "adres"; email: string };
+    herkend?: { klant_id: string; via: "telefoon" | "adres"; email: string; aangemaakt?: boolean; customer_id?: string };
     /** Velden die intussen door iemand gewijzigd waren en dus bleven staan. */
     bleven: KlantVeld[];
   };

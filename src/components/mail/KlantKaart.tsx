@@ -271,8 +271,19 @@ function WooshyVakje({
       </p>
       {kg.herkend && (
         <p className="mt-1 break-words text-[12.5px] leading-snug">
-          Herkend als <strong>{naam}</strong> aan{" "}
-          {kg.herkend.via === "telefoon" ? "het telefoonnummer" : "het adres en de naam"} in de mail
+          {kg.herkend.aangemaakt ? (
+            <>
+              {kg.gevonden?.straat
+                ? `${kg.gevonden.straat} ${kg.gevonden.huisnummer}`.trim()
+                : "Het adres uit de mail"}{" "}
+              stond er nog zonder klant; Wooshy maakte <strong>{naam}</strong> aan
+            </>
+          ) : (
+            <>
+              Herkend als <strong>{naam}</strong> aan{" "}
+              {kg.herkend.via === "telefoon" ? "het telefoonnummer" : "het adres en de naam"} in de mail
+            </>
+          )}
           {kg.herkend.email ? `; ${kg.herkend.email} hoort nu bij deze klant` : ""}. Tot je dit bevestigt voert
           Paaltje voor deze klant niets zelf door.
         </p>

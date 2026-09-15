@@ -20,9 +20,12 @@ import { voerActiesUit, type MailStand, type Voorstel } from "../_gedeeld/acties
 import { stuurAntwoord } from "../_gedeeld/verzenden.ts";
 import { stelAfsprakenVoor } from "../_gedeeld/afspraken.ts";
 import {
+  draaiAanmakenTerug,
   GEEN_GEGEVENS,
   herken,
   leesKlantgegevens,
+  magKlantAanmaken,
+  maakKlantBijAdres,
   vulAan,
   zekerGekoppeld,
   type KlantGegevens,
@@ -211,38 +214,61 @@ async function leesEen(
   const eerderKg = leesKlantgegevens(mail.klantgegevens);
   let gokUitAdres: string | null = null;
   if (isKlantmail && uit.aanmelding && !mail.klant_id && !uit.klant_bekend) {
-    const { herkend, gok } = await herken(
+    const { herkend: opTelefoonOfAdres, gok, leegAdres } = await herken(
       db,
       mail.company_id,
       uit.aanmelding,
       mail.van_naam,
       eerderKg.afgewezen ?? [],
     );
+    let herkend: {
+      klant_id: string;
+      via: "telefoon" | "adres";
+      aangemaakt?: boolean;
+      customer_id?: string;
+    } | null = opTelefoonOfAdres;
+    // Het adres staat er wel, maar er hangt nog geen klant aan (bijvoorbeeld net
+    // geïmporteerd): dan maakt Wooshy de klant zelf aan. Een lege plek vullen
+    // mag, net als op de aanmeldpagina; het gele vakje heeft Ongedaan maken.
+    if (!herkend && leegAdres && (await magKlantAanmaken(db, mail.company_id, leegAdres))) {
+      const nieuw = await maakKlantBijAdres(db, mail.company_id, leegAdres, uit.aanmelding, mail.van_naam);
+      if (nieuw) herkend = { klant_id: nieuw, via: "adres", aangemaakt: true, customer_id: leegAdres };
+    }
     if (herkend) {
       const email = mail.van_email.trim().toLowerCase();
-      if (email) {
-        const { error: koppelFout } = await db
-          .from("klant_emails")
-          .insert({ company_id: mail.company_id, klant_id: herkend.klant_id, email, bron: "paaltje" });
-        if (koppelFout && koppelFout.code !== "23505") throw new Error(`Mailadres koppelen: ${koppelFout.message}`);
+      try {
+        if (email) {
+          const { error: koppelFout } = await db
+            .from("klant_emails")
+            .insert({ company_id: mail.company_id, klant_id: herkend.klant_id, email, bron: "paaltje" });
+          if (koppelFout && koppelFout.code !== "23505") throw new Error(`Mailadres koppelen: ${koppelFout.message}`);
+        }
+        const opnieuw: KlantGegevens = {
+          ...eerderKg,
+          gevonden: uit.aanmelding,
+          herkend: { ...herkend, email },
+        };
+        const { error: terugFout } = await db
+          .from("berichten")
+          .update({
+            klant_id: herkend.klant_id,
+            klant_gok_id: null,
+            klantgegevens: opnieuw,
+            paaltje_status: "wacht",
+            paaltje_pogingen: 0,
+            ai_fout: "",
+          })
+          .eq("id", mail.id);
+        if (terugFout) throw new Error(`Herkende klant bewaren: ${terugFout.message}`);
+      } catch (e) {
+        // Maakte Wooshy de klant net aan, dan die meteen weer weg: anders blijft
+        // er een klant op het adres staan zonder dat bewaard is dat Wooshy hem
+        // maakte, en kun je hem niet meer ongedaan maken.
+        if (herkend.aangemaakt && herkend.customer_id) {
+          await draaiAanmakenTerug(db, mail.company_id, herkend.customer_id, herkend.klant_id);
+        }
+        throw e;
       }
-      const opnieuw: KlantGegevens = {
-        ...eerderKg,
-        gevonden: uit.aanmelding,
-        herkend: { ...herkend, email },
-      };
-      const { error: terugFout } = await db
-        .from("berichten")
-        .update({
-          klant_id: herkend.klant_id,
-          klant_gok_id: null,
-          klantgegevens: opnieuw,
-          paaltje_status: "wacht",
-          paaltje_pogingen: 0,
-          ai_fout: "",
-        })
-        .eq("id", mail.id);
-      if (terugFout) throw new Error(`Herkende klant bewaren: ${terugFout.message}`);
       return;
     }
     gokUitAdres = gok;
