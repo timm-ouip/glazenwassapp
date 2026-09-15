@@ -912,12 +912,7 @@ function Index() {
     // Met de straat erbij: "Klant 8" zegt niet welke 8, en elke straat heeft er een.
     const straat = streets.find((s) => s.id === c.street_id)?.name;
     const adres = straat ? `${straat} ${formatNumber(c)}` : `Klant ${formatNumber(c)}`;
-    const ja = await bevestig({
-      titel: `${adres} verwijderen?`,
-      tekst: "Je kunt dit direct daarna nog ongedaan maken.",
-      gevaarlijk: true,
-    });
-    if (!ja) return;
+    // Geen aparte vraag meer: je koos "Verwijderen" in het stopschermpje.
     try {
       await legWeg("customers", [c.id]);
     } catch (e) {
@@ -1170,7 +1165,8 @@ function Index() {
   // hele wijk opnieuw; zie useStabiel.
   const opSelect = useStabiel(klikSelectie);
   const opPatch = useStabiel(patchKlant);
-  const opDelete = useStabiel(verwijderKlant);
+  // Het prullenbakje vraagt eerst waarom: verhuisd, gestopt, of echt weg.
+  const opDelete = useStabiel((c: Customer) => setStop({ open: true, customer: c }));
   const opDossier = useStabiel((c: Customer) => setDossier({ open: true, customer: c }));
   const opHoekadres = useStabiel((c: Customer) => setHoek({ open: true, customer: c }));
   const opKlus = useStabiel((c: Customer) => setKlus({ open: true, customer: c }));
@@ -1819,7 +1815,8 @@ function Index() {
       <StopDialog
         open={stop.open}
         onOpenChange={(open) => setStop((s) => ({ ...s, open }))}
-        titel="Klant stopt"
+        titel={stop.customer?.klant_id ? "Klant stopt" : "Adres weghalen"}
+        metKlant={Boolean(stop.customer?.klant_id)}
         omschrijving={
           stop.customer
             ? `${streets.find((s) => s.id === stop.customer?.street_id)?.name ?? ""} ${formatNumber(stop.customer)}`.trim()
@@ -1829,6 +1826,7 @@ function Index() {
         onBevestig={(reden, planningWeg) =>
           stop.customer ? stopKlant(stop.customer, reden, planningWeg) : Promise.resolve()
         }
+        onVerwijder={() => (stop.customer ? verwijderKlant(stop.customer) : Promise.resolve())}
       />
       <KlusDialog
         open={klus.open}
@@ -2705,7 +2703,8 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
         tabIndex={-1}
         className="shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:!text-destructive"
         onClick={() => onDelete(c)}
-        aria-label="Klant verwijderen"
+        aria-label="Stoppen of verwijderen"
+        title="Stoppen of verwijderen"
       >
         <Trash2 className="size-3" />
       </button>

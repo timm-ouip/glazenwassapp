@@ -6,7 +6,7 @@
  * het er overal hetzelfde uitziet en dezelfde vragen stelt.
  */
 import { useEffect, useState } from "react";
-import { AlertTriangle, CalendarDays, Loader2, UserMinus } from "lucide-react";
+import { AlertTriangle, CalendarDays, Loader2, Trash2, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 
 import { PopupBody, PopupKader, PopupKop, PopupVoet } from "@/components/Popup";
@@ -34,9 +34,25 @@ interface Props {
   telDagen: () => Promise<GeplandeDagen>;
   /** Uitvoeren. Gooit bij een fout; het schermpje meldt die dan. */
   onBevestig: (reden: StopReden, planningWeg: boolean) => Promise<void>;
+  /**
+   * Gewoon weggooien, zonder reden: voor een fout of een testadres. Alleen
+   * waar dat kan (het prullenbakje); dan staat er een knop "Verwijderen".
+   */
+  onVerwijder?: (() => Promise<void>) | undefined;
+  /** Hangt er een klant aan het adres? Anders gaat de vraag over het adres. */
+  metKlant?: boolean | undefined;
 }
 
-export function StopDialog({ open, onOpenChange, titel, omschrijving, telDagen, onBevestig }: Props) {
+export function StopDialog({
+  open,
+  onOpenChange,
+  titel,
+  omschrijving,
+  telDagen,
+  onBevestig,
+  onVerwijder,
+  metKlant = true,
+}: Props) {
   const [reden, setReden] = useState<StopReden | null>(null);
   const [planningWeg, setPlanningWeg] = useState<boolean | null>(null);
   const [telling, setTelling] = useState<GeplandeDagen | null>(null);
@@ -79,6 +95,19 @@ export function StopDialog({ open, onOpenChange, titel, omschrijving, telDagen, 
     }
   }
 
+  async function verwijder() {
+    if (!onVerwijder || bezig) return;
+    setBezig(true);
+    try {
+      await onVerwijder();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error("Verwijderen lukte niet: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setBezig(false);
+    }
+  }
+
   const getoond = telling?.dagen.slice(0, 4) ?? [];
   const rest = (telling?.aantal ?? 0) - getoond.length;
 
@@ -88,7 +117,9 @@ export function StopDialog({ open, onOpenChange, titel, omschrijving, telDagen, 
         <PopupKop kleur="amber" icoon={<UserMinus className="size-5" />} titel={titel} subtitel={omschrijving} />
         <PopupBody className="space-y-4">
           <div className="space-y-2">
-            <p className="text-[12.5px] font-medium text-muted-foreground">Waarom stopt deze klant?</p>
+            <p className="text-[12.5px] font-medium text-muted-foreground">
+              {metKlant ? "Waarom stopt deze klant?" : "Wat moet er met dit adres?"}
+            </p>
             {STOP_REDENEN.map((r) => (
               <Keuze
                 key={r.waarde}
@@ -134,8 +165,28 @@ export function StopDialog({ open, onOpenChange, titel, omschrijving, telDagen, 
           ) : (
             <p className="text-[12.5px] text-muted-foreground">Na vandaag staat er niets meer op de planning.</p>
           )}
+
+          {onVerwijder && (
+            <p className="border-t border-border/70 pt-3 text-[12px] text-muted-foreground">
+              Een fout gemaakt, of een testadres? Dan kun je het ook gewoon verwijderen: het gaat zonder reden naar
+              de prullenbak, en je kunt het daar terughalen.
+            </p>
+          )}
         </PopupBody>
-        <PopupVoet>
+        <PopupVoet
+          links={
+            onVerwijder ? (
+              <Button
+                variant="ghost"
+                className="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+                disabled={bezig}
+                onClick={() => void verwijder()}
+              >
+                <Trash2 className="size-4" /> Verwijderen
+              </Button>
+            ) : undefined
+          }
+        >
           <Button variant="ghost" className="rounded-full" disabled={bezig} onClick={() => onOpenChange(false)}>
             Annuleren
           </Button>

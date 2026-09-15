@@ -257,8 +257,8 @@ const KlantRegel = memo(function KlantRegel({
         <td className="px-2 py-1">
           <button
             className="flex size-7 items-center justify-center rounded-full text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:bg-destructive/10 hover:!text-destructive"
-            aria-label={`${adres} verwijderen`}
-            title="Adres verwijderen"
+            aria-label={`${adres}: stoppen of verwijderen`}
+            title="Stoppen of verwijderen"
             onClick={() => onVerwijder(r)}
           >
             <Trash2 className="size-4" />
@@ -571,8 +571,14 @@ function Klanten() {
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
 
-  async function verwijderRegel(customer: Customer | null, klant: Klant | null, adres: string) {
-    const ja = await bevestig({
+  async function verwijderRegel(
+    customer: Customer | null,
+    klant: Klant | null,
+    adres: string,
+    vraag = true,
+  ) {
+    // Vanuit het stopschermpje is "Verwijderen" al de keuze; dan niet nog eens vragen.
+    const ja = !vraag || await bevestig({
       titel: `${adres} verwijderen?`,
       tekst: customer
         ? "Het adres verdwijnt uit de wijklijst en uit de klantenlijst, met de klantgegevens erbij. Alles gaat naar de geschiedenis; je kunt het daar terughalen."
@@ -667,9 +673,8 @@ function Klanten() {
     qc.invalidateQueries({ queryKey: ["klussen"] });
     toast.success(`Opdracht genoteerd: ${omschrijving}`);
   }
-  const opVerwijder = useStabiel(
-    (r: Regel) => void verwijderRegel(r.customer, r.klant, adresTekst(r)),
-  );
+  // Het prullenbakje bij een adres vraagt eerst waarom: verhuisd, gestopt, of echt weg.
+  const opVerwijder = useStabiel((r: Regel) => setStop({ open: true, regel: r }));
   const opVeld = useStabiel(
     (r: Regel, veld: keyof KlantVelden, waarde: string) => void zetVeld(r, veld, waarde),
   );
@@ -912,11 +917,23 @@ function Klanten() {
       <StopDialog
         open={stop.open}
         onOpenChange={(open) => setStop((s) => ({ ...s, open }))}
-        titel={stop.regel?.klant?.naam ? `${stop.regel.klant.naam} stopt` : "Klant stopt"}
+        titel={
+          stop.regel?.klant?.naam
+            ? `${stop.regel.klant.naam} stopt`
+            : stop.regel?.klant
+              ? "Klant stopt"
+              : "Adres weghalen"
+        }
+        metKlant={Boolean(stop.regel?.klant)}
         omschrijving={stop.regel ? adresTekst(stop.regel) : ""}
         telDagen={() => geplandeDagen(stop.regel ? [stop.regel.customer.id] : [])}
         onBevestig={(reden, planningWeg) =>
           stop.regel ? stopRegel(stop.regel, reden, planningWeg) : Promise.resolve()
+        }
+        onVerwijder={() =>
+          stop.regel
+            ? verwijderRegel(stop.regel.customer, stop.regel.klant, adresTekst(stop.regel), false)
+            : Promise.resolve()
         }
       />
       <KlusDialog
