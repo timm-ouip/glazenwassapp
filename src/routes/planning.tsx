@@ -121,7 +121,7 @@ export const Route = createFileRoute("/planning")({
       : {},
   head: () => ({
     meta: [
-      { title: "Planning — Klantenlijst glazenwasser" },
+      { title: "Planning — Wooshy" },
       {
         name: "description",
         content: "Wat er per dag gewassen wordt, en wat een maand heeft opgeleverd.",

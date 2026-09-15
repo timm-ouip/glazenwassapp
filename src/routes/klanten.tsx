@@ -79,7 +79,7 @@ export const Route = createFileRoute("/klanten")({
   },
   head: () => ({
     meta: [
-      { title: "Klanten — namen, e-mail, telefoon en adres" },
+      { title: "Klanten — Wooshy" },
       {
         name: "description",
         content:

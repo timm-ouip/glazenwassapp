@@ -77,9 +77,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Klantenlijst glazenwasser" },
+      { title: "Wooshy" },
       { name: "description", content: "Klanten per straat, prijzen en printlijsten per maand." },
-      { property: "og:title", content: "Klantenlijst glazenwasser" },
+      // De naam onder het icoon als je Wooshy op je beginscherm zet. De
+      // balkkleur (theme-color) staat in RootShell.
+      { name: "apple-mobile-web-app-title", content: "Wooshy" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { property: "og:title", content: "Wooshy" },
       {
         property: "og:description",
         content: "Klanten per straat, prijzen en printlijsten per maand.",
@@ -98,7 +103,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Figtree:wght@400;500;600&display=swap",
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      // Voor browsers die geen SVG-icoon kennen.
+      { rel: "icon", href: "/favicon.ico", sizes: "32x32" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
     ],
   }),
   shellComponent: RootShell,
@@ -117,6 +126,11 @@ function RootShell({ children }: { children: ReactNode }) {
         {/* Vóór de stylesheet aan bod komt: anders flitst het lichte thema
             even op bij elke paginalading. */}
         <script dangerouslySetInnerHTML={{ __html: THEMA_SCRIPT }} />
+        {/* Kleur van de balk om de app heen op telefoons, licht en donker.
+            Hier en niet in head(): die houdt van twee tags met dezelfde
+            naam er maar één over. */}
+        <meta name="theme-color" content="#F8F5F0" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#141311" media="(prefers-color-scheme: dark)" />
         <HeadContent />
       </head>
       <body>

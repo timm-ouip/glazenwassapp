@@ -2,7 +2,6 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Droplets,
   LogOut,
   CalendarDays,
   Map,
@@ -17,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { Druppel } from "@/components/Merk";
 import { useAuth, signOut } from "@/lib/auth";
 import { aantalOpenAanmeldingen } from "@/lib/aanmeldingen";
 import { heeftRecht, rolLabel, type Recht } from "@/lib/rechten";
@@ -133,8 +133,8 @@ export function Zijbalk() {
       className={`${breed} sticky top-0 flex h-screen shrink-0 flex-col gap-5 border-r border-border bg-surface px-3.5 py-5 transition-[width] duration-200 print:hidden`}
     >
       <div className={`flex items-center ${ingeklapt ? "flex-col gap-3" : "gap-2.5"}`}>
-        <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[12px] bg-foreground text-background">
-          <Droplets className="size-[19px]" />
+        <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[12px] border border-border bg-card">
+          <Druppel className="size-[22px]" />
         </div>
         {/* Leeg tot het bedrijf geladen is: een placeholder die daarna
             verspringt leest slechter dan even niets. */}

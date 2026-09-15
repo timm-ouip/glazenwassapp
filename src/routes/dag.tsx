@@ -72,7 +72,7 @@ export const Route = createFileRoute("/dag")({
       : {},
   head: () => ({
     meta: [
-      { title: "De dag — Klantenlijst glazenwasser" },
+      { title: "De dag — Wooshy" },
       {
         name: "description",
         content: "Alle adressen die op één dag ingepland staan, per wijk en per straat.",

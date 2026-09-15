@@ -33,7 +33,6 @@ import {
   ArrowUpNarrowWide,
   ArrowDownNarrowWide,
   Undo2,
-  Droplets,
   Users,
   User,
   Euro,
@@ -184,13 +183,13 @@ export const Route = createFileRoute("/")({
   }),
   head: () => ({
     meta: [
-      { title: "Klantenlijst glazenwasser — straten, prijzen en maandplanning" },
+      { title: "Wooshy — straten, prijzen en maandplanning" },
       {
         name: "description",
         content:
           "Beheer je glazenwasklanten per straat in een compacte tabel, met prijzen, notities en een filter voor even of oneven maanden.",
       },
-      { property: "og:title", content: "Klantenlijst glazenwasser" },
+      { property: "og:title", content: "Wooshy" },
       {
         property: "og:description",
         content:

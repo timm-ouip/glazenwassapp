@@ -1,15 +1,15 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Droplets } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Woordmerk } from "@/components/Merk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({ meta: [{ title: "Inloggen — Klantenlijst glazenwasser" }] }),
+  head: () => ({ meta: [{ title: "Inloggen — Wooshy" }] }),
   component: LoginPagina,
 });
 
@@ -63,9 +63,7 @@ function LoginPagina() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm shadow-card">
         <CardHeader className="items-center text-center">
-          <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-brand text-brand-foreground shadow-card">
-            <Droplets className="size-5" />
-          </div>
+          <Woordmerk className="mb-3 h-9" />
           <CardTitle>Inloggen</CardTitle>
           <CardDescription>Log in met je medewerkersaccount</CardDescription>
         </CardHeader>

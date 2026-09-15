@@ -41,7 +41,7 @@ export const Route = createFileRoute("/aanmeldingen")({
   beforeLoad: async () => {
     await requireSession();
   },
-  head: () => ({ meta: [{ title: "Aanmeldingen — Klantenlijst glazenwasser" }] }),
+  head: () => ({ meta: [{ title: "Aanmeldingen — Wooshy" }] }),
   component: Aanmeldingen,
 });
 

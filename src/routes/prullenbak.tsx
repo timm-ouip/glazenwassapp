@@ -15,7 +15,7 @@ export const Route = createFileRoute("/prullenbak")({
   beforeLoad: async () => {
     await requireSession();
   },
-  head: () => ({ meta: [{ title: "Geschiedenis — Klantenlijst glazenwasser" }] }),
+  head: () => ({ meta: [{ title: "Geschiedenis — Wooshy" }] }),
   component: Prullenbak,
 });
 

@@ -92,7 +92,7 @@ export const Route = createFileRoute("/instellingen")({
     if ((TABBLADEN as readonly string[]).includes(tab)) return { tab: tab as Tab };
     return { tab: OUDE_TABS[tab] ?? "account" };
   },
-  head: () => ({ meta: [{ title: "Instellingen — Klantenlijst glazenwasser" }] }),
+  head: () => ({ meta: [{ title: "Instellingen — Wooshy" }] }),
   component: Instellingen,
 });
 

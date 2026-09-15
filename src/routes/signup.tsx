@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Droplets } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Woordmerk } from "@/components/Merk";
 import { useAuth } from "@/lib/auth";
 import { createCompanyAndOwner } from "@/lib/team.functions";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 export const Route = createFileRoute("/signup")({
-  head: () => ({ meta: [{ title: "Bedrijf aanmaken — Klantenlijst glazenwasser" }] }),
+  head: () => ({ meta: [{ title: "Bedrijf aanmaken — Wooshy" }] }),
   component: SignupPagina,
 });
 
@@ -65,9 +65,7 @@ function SignupPagina() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm shadow-card">
         <CardHeader className="items-center text-center">
-          <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-brand text-brand-foreground shadow-card">
-            <Droplets className="size-5" />
-          </div>
+          <Woordmerk className="mb-3 h-9" />
           <CardTitle>Bedrijf aanmaken</CardTitle>
           <CardDescription>Je eigen, afgeschermde dashboard voor je bedrijf</CardDescription>
         </CardHeader>

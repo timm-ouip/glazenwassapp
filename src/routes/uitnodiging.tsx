@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Droplets } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Woordmerk } from "@/components/Merk";
 import { useAuth } from "@/lib/auth";
 import { completeInvite } from "@/lib/team.functions";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 export const Route = createFileRoute("/uitnodiging")({
-  head: () => ({ meta: [{ title: "Uitnodiging accepteren — Klantenlijst glazenwasser" }] }),
+  head: () => ({ meta: [{ title: "Uitnodiging accepteren — Wooshy" }] }),
   component: UitnodigingPagina,
 });
 
@@ -64,9 +64,7 @@ function UitnodigingPagina() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm shadow-card">
         <CardHeader className="items-center text-center">
-          <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-brand text-brand-foreground shadow-card">
-            <Droplets className="size-5" />
-          </div>
+          <Woordmerk className="mb-3 h-9" />
           <CardTitle>Uitnodiging accepteren</CardTitle>
           <CardDescription>Stel je naam en wachtwoord in om te beginnen</CardDescription>
         </CardHeader>

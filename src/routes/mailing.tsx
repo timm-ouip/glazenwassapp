@@ -66,7 +66,7 @@ export const Route = createFileRoute("/mailing")({
       : {},
   head: () => ({
     meta: [
-      { title: "Mailing — Klantenlijst glazenwasser" },
+      { title: "Mailing — Wooshy" },
       {
         name: "description",
         content: "Een aankondiging sturen naar alle klanten van een ingeplande dag.",
