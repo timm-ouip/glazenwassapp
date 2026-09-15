@@ -851,38 +851,11 @@ function DagPagina() {
             </button>
           </div>
 
-          {selecteren && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                className="rounded-full"
-                onClick={wisselAlles}
-                title={allesGekozen ? "Alles uitvinken" : `Alle ${teKiezen} regels aanvinken`}
-              >
-                {allesGekozen ? <Square className="size-4" /> : <CheckSquare className="size-4" />}
-                {allesGekozen ? "Niets" : "Alles"}
-              </Button>
-              <VerplaatsNaarKnop
-                aantal={bezig ? 0 : gekozen}
-                huidigeDag={datum}
-                onKies={(d) => void verplaatsNaar(d)}
-              />
-              {/* Verplaatsen is voor deze week; overslaan is voor de maanden
-                  erna. Allebei dingen die je bedenkt terwijl je naar de dag
-                  kijkt, dus staan ze naast elkaar — net als op de wijkenpagina. */}
-              <OverslaanKnop
-                // Gestopte adressen slaan niet over; die tellen niet mee.
-                aantal={gekozenAdressen.length}
-                onOverslaan={(m) => void slaSelectieOver(gekozenAdressen, m, qc)}
-                onNietsOverslaan={() => void wisOverslaanVanSelectie(gekozenAdressen, qc)}
-              />
-            </>
-          )}
-
-          {/* Rechts alleen ronde knoppen en één donkere pil: printen is wat je
-              hier komt doen, de rest is er als je hem nodig hebt. */}
-          <span className="ml-auto flex items-center gap-2">
+          {/* Direct naast de datum, zodat alles wat bij deze dag hoort bij
+              elkaar staat: ronde knoppen en één donkere pil, want printen is
+              wat je hier komt doen. Wat de selecteerstand erbij zet, komt
+              erachter. */}
+          <span className="flex items-center gap-2">
             <RondeKnop
               actief={selecteren}
               label="Aanvinken wat er niet af gekomen is"
@@ -913,6 +886,35 @@ function DagPagina() {
               </Link>
             </Button>
           </span>
+
+          {selecteren && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                onClick={wisselAlles}
+                title={allesGekozen ? "Alles uitvinken" : `Alle ${teKiezen} regels aanvinken`}
+              >
+                {allesGekozen ? <Square className="size-4" /> : <CheckSquare className="size-4" />}
+                {allesGekozen ? "Niets" : "Alles"}
+              </Button>
+              <VerplaatsNaarKnop
+                aantal={bezig ? 0 : gekozen}
+                huidigeDag={datum}
+                onKies={(d) => void verplaatsNaar(d)}
+              />
+              {/* Verplaatsen is voor deze week; overslaan is voor de maanden
+                  erna. Allebei dingen die je bedenkt terwijl je naar de dag
+                  kijkt, dus staan ze naast elkaar — net als op de wijkenpagina. */}
+              <OverslaanKnop
+                // Gestopte adressen slaan niet over; die tellen niet mee.
+                aantal={gekozenAdressen.length}
+                onOverslaan={(m) => void slaSelectieOver(gekozenAdressen, m, qc)}
+                onNietsOverslaan={() => void wisOverslaanVanSelectie(gekozenAdressen, qc)}
+              />
+            </>
+          )}
         </>
       }
       kop={
