@@ -103,11 +103,6 @@ export async function voegToeAanWasdag(
       { onConflict: "company_id,datum,customer_id" },
     )
     .select("id,customer_id");
-  // 23505: het vangnet in de database, een adres staat die maand al op een
-  // andere dag. De schermen filteren dat eruit, maar twee mensen tegelijk kan.
-  if (error?.code === "23505") {
-    throw new Error("Een van de adressen staat deze maand al op een andere dag.");
-  }
   if (error) throw error;
 
   // Het bedrag in zijn eigen tabel. Een nieuwe regel krijgt van de database al
@@ -180,9 +175,8 @@ export async function werkWasdagRegelBij(
  * notitie) gaat mee. Ook als wie verschuift geen prijzen mag zien: een
  * aangepaste prijs ("alleen de voorkant, € 15") blijft zo staan.
  *
- * Staat een adres in de maand van de nieuwe dag al ingepland (een adres gaat
- * één keer per maand), dan blijft die regel zoals hij is en verdwijnt alleen
- * de oude.
+ * Staat een adres op de nieuwe dag al, dan blijft die regel zoals hij is en
+ * verdwijnt alleen de oude.
  *
  * Geeft terug welke adressen echt verhuisd zijn (alleen die horen bij
  * ongedaan maken terug) en de kenmerken van wat alleen wegging.
@@ -198,7 +192,13 @@ export async function verplaatsWasdag(
   const PER_KEER = 80;
   for (let i = 0; i < customerIds.length; i += PER_KEER) {
     const stuk = customerIds.slice(i, i + PER_KEER);
-    const bezet = await alInMaand(naar, stuk, van);
+    const { data: alDaar, error: leesFout } = await supabase
+      .from("wasdag_regels")
+      .select("customer_id")
+      .eq("datum", naar)
+      .in("customer_id", stuk);
+    if (leesFout) throw leesFout;
+    const bezet = new Set((alDaar ?? []).map((r) => r.customer_id));
     const vrij = stuk.filter((id) => !bezet.has(id));
     if (vrij.length > 0) {
       const { data: verzet, error } = await supabase
@@ -215,7 +215,7 @@ export async function verplaatsWasdag(
       }
       for (const r of verzet ?? []) if (r.customer_id) verplaatst.push(r.customer_id);
     }
-    // Stond het adres die maand al ingepland, dan gaat alleen de oude regel weg. De
+    // Stond het adres al op de doeldag, dan gaat alleen de oude regel weg. De
     // database bewaart die (met zijn bedrag), zodat ongedaan maken hem kan
     // terugzetten met zijn eigen prijs.
     const dubbel = stuk.filter((id) => bezet.has(id));
@@ -227,18 +227,28 @@ export async function verplaatsWasdag(
   return { verplaatst, kenmerken };
 }
 
+/** Binnen hoeveel dagen twee beurten van hetzelfde adres "dubbel" heten. */
+export const DUBBEL_BINNEN_DAGEN = 14;
+
 /**
- * Welke van deze adressen staan in de maand van `datum` al ingepland, op een
- * andere dag dan `behalve`, en op welke dag. Een adres gaat hooguit één keer
- * per maand; extra werk op een andere dag is een klus, geen tweede wasdag.
+ * Welke van deze adressen staan al ingepland binnen twee weken voor of na
+ * `datum` (niet op `behalve`), en op welke dag.
+ *
+ * Bewust niet per kalendermaand: twee keer in een maand kan kloppen. Loopt
+ * een ronde uit, dan komt een adres op 1 september én eind september; is een
+ * ronde vroeg klaar, dan begint november al op 30 oktober. Twee keer in
+ * dezelfde twee weken is daarentegen bijna altijd een vergissing, zoals een
+ * wijk die op twee dagen wordt ingepland.
  */
-export async function alInMaand(
+export async function alDichtbij(
   datum: string,
   customerIds: string[],
   behalve?: string,
 ): Promise<Map<string, string>> {
   const uit = new Map<string, string>();
-  const { vanaf, tot } = maandGrenzen(datum);
+  const d = new Date(`${datum}T12:00:00`);
+  const vanaf = datumSleutel(new Date(d.getFullYear(), d.getMonth(), d.getDate() - DUBBEL_BINNEN_DAGEN));
+  const tot = datumSleutel(new Date(d.getFullYear(), d.getMonth(), d.getDate() + DUBBEL_BINNEN_DAGEN));
   // In stukjes, om dezelfde reden als bij haalUitWasdag: de id's gaan in de URL.
   const PER_KEER = 80;
   for (let i = 0; i < customerIds.length; i += PER_KEER) {
@@ -254,6 +264,27 @@ export async function alInMaand(
     }
   }
   return uit;
+}
+
+/**
+ * De vraag die de schermen stellen als alDichtbij iets vond: toch inplannen,
+ * of die adressen overslaan. Overslaan is het veilige antwoord (ook Escape).
+ */
+export function dubbelVraag(dichtbij: Map<string, string>) {
+  const n = dichtbij.size;
+  const dagen = [...new Set(dichtbij.values())].sort().map(toonDatum);
+  const opDagen =
+    dagen.length <= 3
+      ? dagen.join(", ")
+      : `${dagen.slice(0, 3).join(", ")} en nog ${dagen.length - 3} ${dagen.length - 3 === 1 ? "dag" : "dagen"}`;
+  return {
+    titel: `${n} ${n === 1 ? "adres staat" : "adressen staan"} kort ervoor of erna al ingepland`,
+    tekst: `Op ${opDagen}. Twee beurten binnen twee weken is meestal dubbel. Wil je ${
+      n === 1 ? "dit adres" : "deze adressen"
+    } toch nog een keer inplannen?`,
+    bevestigLabel: "Toch inplannen",
+    annuleerLabel: "Overslaan",
+  };
 }
 
 /**

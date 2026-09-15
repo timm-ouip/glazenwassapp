@@ -604,10 +604,10 @@ function DagPagina() {
     let kenmerken: string[] = [];
     try {
       // Dezelfde regels met een andere datum: het bedrag en de notitie van die
-      // keer gaan mee, ook als wie verplaatst geen prijzen mag zien. Wat die
-      // maand al ingepland stond blijft staan (een adres gaat één keer per
-      // maand); alleen de rest verhuist. Zo weet "ongedaan maken" straks
-      // precies wat het daar mag weghalen.
+      // keer gaan mee, ook als wie verplaatst geen prijzen mag zien. Wat al op
+      // de doeldag stond blijft staan zoals het staat; alleen de rest
+      // verhuist. Zo weet "ongedaan maken" straks precies wat het daar mag
+      // weghalen.
       const uitkomst = await verplaatsWasdag(datum, nieuw, ids);
       kenmerken = uitkomst.kenmerken;
       const verhuisd = new Set(uitkomst.verplaatst);

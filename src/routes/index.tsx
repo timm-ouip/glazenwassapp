@@ -163,7 +163,7 @@ import {
 import { useRecht } from "@/lib/rechten";
 import { StopDialog } from "@/components/StopDialog";
 import { draaiStoppenTerug, geplandeDagen, zetInactief, type StopReden } from "@/lib/stoppen";
-import { alInMaand, haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
+import { alDichtbij, dubbelVraag, haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
 import { isWerkdag, useWerkdagen } from "@/lib/werkdagen";
 
 interface IndexSearch {
@@ -366,7 +366,11 @@ function Index() {
       const doel = e.target as HTMLElement | null;
       const tikt =
         doel && (doel.tagName === "INPUT" || doel.tagName === "TEXTAREA" || doel.isContentEditable);
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !tikt) {
+      // Staat er een vraag open (zoals "toch inplannen?"), dan wacht die op
+      // een antwoord over de dag zoals hij nú is; terugdraaien zou dat
+      // onder zijn voeten wegtrekken.
+      const vraagOpen = document.querySelector('[role="alertdialog"]');
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !tikt && !vraagOpen) {
         e.preventDefault();
         void doeUndo();
       }
@@ -606,26 +610,23 @@ function Index() {
     const alErop = new Set(bestaand.map((r) => r.customer_id).filter(Boolean) as string[]);
     const nieuweIds = [...keuze].filter((id) => !alErop.has(id) && perId.has(id));
 
-    // Een adres gaat één keer per maand. Staat het deze maand al op een andere
-    // dag, dan zetten we het er niet nóg eens bij; extra werk is een klus.
-    let elders: Map<string, string>;
+    // Staat een adres binnen twee weken al op een andere dag, dan is het
+    // meestal dubbel (een straat twee keer aangevinkt). Twee keer in een
+    // maand kan wel kloppen, dus we vragen het in plaats van te weigeren.
+    let dichtbij: Map<string, string>;
     try {
-      elders = await alInMaand(datum, nieuweIds, datum);
+      dichtbij = await alDichtbij(datum, nieuweIds, datum);
     } catch {
-      toast.error("Kon niet ophalen wat er deze maand al ingepland staat.");
+      toast.error("Kon niet ophalen wat er rond die dag al ingepland staat.");
       return;
     }
-    if (elders.size > 0) {
-      toast(
-        `${elders.size} ${elders.size === 1 ? "adres staat" : "adressen staan"} deze maand al op een andere dag en ${
-          elders.size === 1 ? "is" : "zijn"
-        } overgeslagen.`,
-        { description: "Een adres gaat één keer per maand. Extra werk plan je als klus." },
-      );
-    }
+    const overslaan = dichtbij.size > 0 && !(await bevestig(dubbelVraag(dichtbij)));
+    // Wat je overslaat niet aangevinkt laten staan: dan lijkt het alsof het
+    // toch op de dag staat.
+    if (overslaan) pasKeuzeAan([], [...dichtbij.keys()]);
 
     const toevoegen = nieuweIds
-      .filter((id) => !elders.has(id))
+      .filter((id) => !(overslaan && dichtbij.has(id)))
       .map((id) => ({ customer_id: id, prijs: prijsVoorMaand(perId.get(id)!, ronde) }));
 
     // Alleen bij het bewerken van een dag: wat je uitvinkte hoort eraf.
@@ -637,7 +638,7 @@ function Index() {
         : [];
 
     if (toevoegen.length === 0 && weghalen.length === 0) {
-      if (elders.size === 0) toast(`${toonDatum(datum)} stond al zo ingepland.`);
+      toast(overslaan ? "Niets ingepland." : `${toonDatum(datum)} stond al zo ingepland.`);
       return;
     }
 
@@ -700,7 +701,9 @@ function Index() {
     const eraf = weghalen.length;
     toast.success(
       eraf === 0
-        ? `${erbij} ${erbij === 1 ? "adres" : "adressen"} ingepland op ${toonDatum(datum)}`
+        ? `${erbij} ${erbij === 1 ? "adres" : "adressen"} ingepland op ${toonDatum(datum)}${
+            overslaan ? ` (${dichtbij.size} overgeslagen)` : ""
+          }`
         : `${toonDatum(datum)} bijgewerkt: ${erbij} erbij, ${eraf} eraf`,
       {
         duration: 10000,

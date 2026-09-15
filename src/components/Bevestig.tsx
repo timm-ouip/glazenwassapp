@@ -16,6 +16,8 @@ type Vraag = {
   titel: string;
   tekst?: string;
   bevestigLabel?: string;
+  /** Tekst op de andere knop, als "Annuleren" niet zegt wat er dan gebeurt. */
+  annuleerLabel?: string;
   /** Rode knop voor onomkeerbare acties zoals verwijderen. */
   gevaarlijk?: boolean;
 };
@@ -99,7 +101,7 @@ export function BevestigProvider({ children }: { children: ReactNode }) {
           </div>
           <AlertDialogFooter className="flex-row justify-end gap-2 border-t border-border/70 bg-card px-6 py-3.5 sm:space-x-0">
             <AlertDialogCancel className="mt-0 rounded-full" onClick={() => sluit(false)}>
-              Annuleren
+              {vraag?.annuleerLabel ?? "Annuleren"}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => sluit(true)}

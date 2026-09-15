@@ -103,7 +103,7 @@ import {
   voegToeAanWasdag,
   werkdagenVerder,
 } from "@/lib/wasdag";
-import { alInMaand, verplaatsWasdag } from "@/lib/wasdag";
+import { alDichtbij, dubbelVraag, verplaatsWasdag } from "@/lib/wasdag";
 import { useWerkdagen } from "@/lib/werkdagen";
 import { haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
 
@@ -808,7 +808,7 @@ function Planning() {
     }));
 
     type Stap = { oud: string; nieuw: string; regels: DagRegels };
-    // Wat van een dag moest omdat het adres die maand al ingepland stond, bewaart
+    // Wat van een dag moest omdat het adres al op de doeldag stond, bewaart
     // de database; ongedaan maken zet het met zijn eigen prijs terug.
     const bewaard: string[] = [];
     async function verplaats(lijst: Stap[], richting: "vooruit" | "terug", gedaan?: Stap[]) {
@@ -825,7 +825,7 @@ function Planning() {
           stap.regels.map((r) => r.customer_id),
         );
         if (richting === "vooruit") bewaard.push(...uitkomst.kenmerken);
-        // Onthoud alleen wat echt verhuisde. Wat die maand al stond ging
+        // Onthoud alleen wat echt verhuisde. Wat al op de doeldag stond ging
         // alleen weg en komt terug via het bewaarde kenmerk; dat nog eens
         // "terugverplaatsen" raakt niets en zou het ongedaan maken stoppen.
         const verhuisd = new Set(uitkomst.verplaatst);
@@ -910,32 +910,33 @@ function Planning() {
     );
 
     let alErop: Set<string>;
-    let elders: Map<string, string>;
+    let dichtbij: Map<string, string>;
     try {
       const bestaand = await fetchWasdag(datum);
       alErop = new Set(bestaand.map((r) => r.customer_id).filter(Boolean) as string[]);
-      // Een adres gaat één keer per maand. Een grote wijk over twee dagen:
-      // wat gisteren al ingepland is, hoort er vandaag niet nóg eens bij.
-      elders = await alInMaand(
+      // Een grote wijk over twee dagen: wat gisteren al ingepland is, hoort er
+      // vandaag meestal niet nóg eens bij. Meestal, dus we vragen het.
+      dichtbij = await alDichtbij(
         datum,
         kandidaten.filter((c) => !alErop.has(c.id)).map((c) => c.id),
         datum,
       );
     } catch {
-      toast.error("Kon niet ophalen wat er deze maand al ingepland staat.");
+      toast.error("Kon niet ophalen wat er rond die dag al ingepland staat.");
       return;
     }
+    const overslaan = dichtbij.size > 0 && !(await bevestig(dubbelVraag(dichtbij)));
 
     const erbij = kandidaten
-      .filter((c) => !alErop.has(c.id) && !elders.has(c.id))
+      .filter((c) => !alErop.has(c.id) && !(overslaan && dichtbij.has(c.id)))
       .map((c) => ({ customer_id: c.id, prijs: prijsVoorMaand(c, maandVanDag) }));
 
     if (erbij.length === 0) {
       toast(
         kandidaten.length === 0
           ? `${wijk.name} is deze maand niet aan de beurt.`
-          : elders.size > 0
-            ? `${wijk.name} staat deze maand al helemaal ingepland.`
+          : overslaan
+            ? `${wijk.name}: niets ingepland, alles stond er kort ervoor of erna al op.`
             : `${wijk.name} staat al helemaal op ${toonDatum(datum)}.`,
       );
       return;
@@ -962,10 +963,7 @@ function Planning() {
     qc.invalidateQueries({ queryKey: ["wasdagen"] });
     qc.invalidateQueries({ queryKey: ["wasdag"] });
 
-    const eldersTekst =
-      elders.size > 0
-        ? ` (${elders.size} ${elders.size === 1 ? "stond" : "stonden"} deze maand al op een andere dag)`
-        : "";
+    const eldersTekst = overslaan ? ` (${dichtbij.size} overgeslagen)` : "";
     toast.success(`${wijk.name}: ${erbij.length} adressen op ${toonDatum(datum)}${eldersTekst}`, {
       duration: 10000,
       action: {
