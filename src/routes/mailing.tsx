@@ -72,6 +72,7 @@ import {
   type Controle,
   type MailAntwoord,
 } from "@/lib/mailing";
+import { heeftRecht } from "@/lib/rechten";
 
 interface MailingSearch {
   /** De dag die al gekozen is, bijvoorbeeld vanaf de planningspagina. */
@@ -111,10 +112,12 @@ De Ramensopperij`;
 function Mailing() {
   useRequireAuth();
   const { dag } = Route.useSearch();
-  // De mailbox is alleen voor de eigenaar; een medewerker krijgt het tabblad
-  // niet te zien. Kom je vanaf de planning met een dag, dan wil je aankondigen.
+  // Het postvak is voor wie mail mag lezen; het rapport en het dagrapport
+  // blijven bij de eigenaar. Kom je vanaf de planning met een dag, dan wil je
+  // aankondigen.
   const { employee } = useAuth();
-  const toonPostvak = employee?.rol === "eigenaar";
+  const toonPostvak = heeftRecht(employee, "mail_lezen");
+  const toonRapport = employee?.rol === "eigenaar";
   const [blad, setBlad] = useState<"postvak" | "opstellen" | "antwoorden" | "verstuurd" | "rapport" | "dagrapport">(
     dag || !toonPostvak ? "opstellen" : "postvak",
   );
@@ -122,8 +125,10 @@ function Mailing() {
   // De rol is er soms pas na het eerste renderen; dan alsnog goed zetten.
   useEffect(() => {
     if (!employee) return;
-    if (!toonPostvak && (blad === "postvak" || blad === "rapport" || blad === "dagrapport")) setBlad("opstellen");
-  }, [employee, toonPostvak, blad]);
+    if ((!toonPostvak && blad === "postvak") || (!toonRapport && (blad === "rapport" || blad === "dagrapport"))) {
+      setBlad("opstellen");
+    }
+  }, [employee, toonPostvak, toonRapport, blad]);
 
   return (
     <AppLayout
@@ -142,8 +147,8 @@ function Mailing() {
           <TabsTrigger value="verstuurd">Verstuurd</TabsTrigger>
           {/* Het rapport ziet alleen de eigenaar (RLS); een medewerker zou hier
               een altijd lege lijst zien. */}
-          {toonPostvak && <TabsTrigger value="rapport">Rapport</TabsTrigger>}
-          {toonPostvak && <TabsTrigger value="dagrapport">Dagrapport</TabsTrigger>}
+          {toonRapport && <TabsTrigger value="rapport">Rapport</TabsTrigger>}
+          {toonRapport && <TabsTrigger value="dagrapport">Dagrapport</TabsTrigger>}
         </TabsList>
 
         {toonPostvak && (
@@ -163,12 +168,12 @@ function Mailing() {
         <TabsContent value="verstuurd">
           <Verstuurd />
         </TabsContent>
-        {toonPostvak && (
+        {toonRapport && (
           <TabsContent value="dagrapport">
             <Dagrapporten />
           </TabsContent>
         )}
-        {toonPostvak && (
+        {toonRapport && (
           <TabsContent value="rapport">
             <Rapport />
           </TabsContent>

@@ -17,6 +17,7 @@ import { knip, maakImap, uitlegFout, type MapRol } from "../_gedeeld/ophalen.ts"
 import { MogelijkVerstuurd, verstuurBericht } from "../_gedeeld/smtp.ts";
 import { type StopReden, voerOverslaanDoor, voerStoppenDoor } from "../_gedeeld/doorvoeren.ts";
 import { eigenTekst } from "../_gedeeld/paaltje.ts";
+import { heeftRecht } from "../_gedeeld/rechten.ts";
 
 interface Adres {
   email: string;
@@ -96,19 +97,29 @@ Deno.serve(async (req) => {
     .eq("id", gebruiker.user.id)
     .maybeSingle();
   if (!medewerker) return antwoord({ fout: "Geen bedrijf gevonden." }, 403);
-  if (medewerker.rol !== "eigenaar") {
-    return antwoord({ fout: "Alleen de eigenaar kan met de mail werken." }, 403);
-  }
-
   const db = createClient(url, service, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  if (!(await heeftRecht(db, medewerker, "mail_lezen"))) {
+    return antwoord({ fout: "Je hebt geen recht om met de mail te werken." }, 403);
+  }
 
   let verzoek: Verzoek;
   try {
     verzoek = (await req.json()) as Verzoek;
   } catch {
     return antwoord({ fout: "Onleesbaar verzoek." }, 400);
+  }
+
+  // Versturen vraagt een eigen recht. Wat de planning verandert (doorvoeren,
+  // stoppen, een klant koppelen) komt in het rapport van de eigenaar, en blijft
+  // daarom bij de eigenaar.
+  if (verzoek.actie === "versturen" && !(await heeftRecht(db, medewerker, "mail_versturen"))) {
+    return antwoord({ fout: "Je hebt geen recht om mail te versturen." }, 403);
+  }
+  const alleenEigenaar = ["overslaan-doorvoeren", "stoppen-doorvoeren", "stoppen-planning", "klant-koppelen"];
+  if (alleenEigenaar.includes(String(verzoek.actie)) && medewerker.rol !== "eigenaar") {
+    return antwoord({ fout: "Alleen de eigenaar kan dit doorvoeren." }, 403);
   }
 
   // De mailbox van dít bedrijf. Alles hieronder hangt daaraan, zodat een

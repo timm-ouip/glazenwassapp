@@ -30,6 +30,24 @@ export function useRecht(...rechten: Recht[]): boolean {
   return rechten.some((r) => heeftRecht(employee, r));
 }
 
+/**
+ * Welk recht een pagina vraagt (minstens één ervan). Leeg: iedereen die
+ * ingelogd is. Dezelfde indeling als het menu in de zijbalk; de database
+ * dwingt het af, dit zorgt dat je een nette melding krijgt in plaats van een
+ * lege pagina.
+ */
+export function rechtenVoorPad(pad: string): Recht[] | null {
+  if (pad === "/" || pad.startsWith("/planning") || pad.startsWith("/dag") || pad.startsWith("/printen")) {
+    return ["planning"];
+  }
+  if (pad.startsWith("/klanten")) return ["klanten_bekijken"];
+  if (pad.startsWith("/aanmeldingen") || pad.startsWith("/importeren") || pad.startsWith("/prullenbak")) {
+    return ["klanten_bewerken"];
+  }
+  if (pad.startsWith("/mailing")) return ["mail_lezen", "mail_versturen"];
+  return null;
+}
+
 /** "Eigenaar", de naam van de rol, of "Medewerker" als hij (nog) geen rol heeft. */
 export function rolLabel(employee: Pick<Employee, "rol" | "rolnaam">): string {
   if (employee.rol === "eigenaar") return "Eigenaar";

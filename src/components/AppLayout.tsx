@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
+import { useRouterState } from "@tanstack/react-router";
+import { Lock } from "lucide-react";
+
 import { Zijbalk } from "@/components/Zijbalk";
+import { useAuth } from "@/lib/auth";
+import { heeftRecht, rechtenVoorPad } from "@/lib/rechten";
 
 /** De koptekst van een pagina. Ook bruikbaar buiten AppLayout, zodat een
  *  klikbare titel — de wijkkiezer — er precies zo uitziet. */
@@ -35,6 +40,13 @@ export function AppLayout({
 }: Props) {
   // De knoppenbalk plakt onder de titelbalk vast. Hoe hoog die is hangt af
   // van kruimel en onderschrift, dus we meten hem in plaats van te gokken.
+  // Mag je deze pagina zien? Zolang je gegevens nog laden niet blokkeren: dan
+  // flitst er "geen toegang" bij de eigenaar.
+  const { employee } = useAuth();
+  const pad = useRouterState({ select: (st) => st.location.pathname });
+  const nodig = rechtenVoorPad(pad);
+  const mag = !employee || !nodig || nodig.some((r) => heeftRecht(employee, r));
+
   const kopRef = useRef<HTMLElement>(null);
   const balkRef = useRef<HTMLDivElement>(null);
   const [kopHoogte, setKopHoogte] = useState(0);
@@ -54,7 +66,7 @@ export function AppLayout({
 
   // De cijferkaarten scrollen gewoon weg — dat zijn getallen om even naar te
   // kijken. De besturing blijft staan, want die heb je onderweg nodig.
-  const balk = acties && (
+  const balk = mag && acties && (
     <div
       ref={balkRef}
       className="sticky z-10 flex flex-wrap items-center gap-2 bg-background/95 px-6 pb-2 pt-3.5 backdrop-blur print:hidden"
@@ -108,7 +120,19 @@ export function AppLayout({
           </div>
         )}
         {actiePositie === "onder" && balk}
-        <main className="min-w-0 flex-1 px-6 pb-4">{children}</main>
+        <main className="min-w-0 flex-1 px-6 pb-4">
+          {mag ? (
+            children
+          ) : (
+            <div className="mx-auto mt-10 max-w-md rounded-[18px] border border-dashed border-border bg-card/50 px-6 py-12 text-center">
+              <Lock className="mx-auto mb-3 size-6 text-muted-foreground" />
+              <p className="font-display text-lg font-semibold">Geen toegang</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Je rol geeft je geen toegang tot deze pagina. Vraag de eigenaar om je rechten aan te passen.
+              </p>
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );

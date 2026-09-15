@@ -66,16 +66,16 @@ export interface MailStand {
 async function adressenVanKlant(db: Db, companyId: string, klantId: string) {
   const { data, error } = await db
     .from("customers")
-    .select("id,house_number,addition,price,streets(name,volledige_naam)")
+    .select("id,house_number,addition,streets(name,volledige_naam),adres_prijzen(prijs)")
     .eq("company_id", companyId)
     .eq("klant_id", klantId)
     .is("deleted_at", null)
     .is("inactief_op", null);
   if (error) throw new Error(`Adressen van klant: ${error.message}`);
-  return (data ?? []).map((c: { id: string; house_number: number; addition: string | null; price: number; streets: { name: string; volledige_naam: string } | null }) => ({
+  return (data ?? []).map((c: { id: string; house_number: number; addition: string | null; adres_prijzen: { prijs: number } | null; streets: { name: string; volledige_naam: string } | null }) => ({
     id: c.id,
     omschrijving: `${c.streets?.volledige_naam || c.streets?.name || ""} ${c.house_number}${c.addition ?? ""}`.trim(),
-    prijs: Number(c.price) || 0,
+    prijs: Number(c.adres_prijzen?.prijs) || 0,
   }));
 }
 

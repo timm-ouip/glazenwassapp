@@ -174,7 +174,7 @@ async function adressenVan(db: Db, companyId: string, klantIds: string[]) {
   const { data, error } = await db
     .from("customers")
     .select(
-      "id,klant_id,house_number,addition,price,interval_maanden,ritme,inactief_op,inactief_reden,streets(name,volledige_naam)",
+      "id,klant_id,house_number,addition,interval_maanden,ritme,inactief_op,inactief_reden,streets(name,volledige_naam),adres_prijzen(prijs)",
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
@@ -187,7 +187,8 @@ async function adressenVan(db: Db, companyId: string, klantIds: string[]) {
     lijst.push({
       id: c.id,
       omschrijving: `${straat} ${c.house_number}${c.addition ?? ""}`.trim(),
-      prijs: Number(c.price) || 0,
+      // De prijs staat sinds stap D in adres_prijzen (de server mag die lezen).
+      prijs: Number(c.adres_prijzen?.prijs) || 0,
       frequentie: frequentieVan(c.interval_maanden, c.ritme),
       // Een stempel zonder (bekende) reden telt als gestopt: inactief is het hoe dan ook.
       inactief: c.inactief_op ? (c.inactief_reden === "verhuisd" ? "verhuisd" : "gestopt") : null,
@@ -267,23 +268,24 @@ async function zoekKlanten(
 export async function richtprijzen(db: Db, companyId: string): Promise<{ wijk: string; prijs: number }[]> {
   const perWijk = new Map<string, number[]>();
   for (let vanaf = 0; ; vanaf += 1000) {
+    // Vanuit de prijzen: die staan sinds stap D in hun eigen tabel.
     const { data, error } = await db
-      .from("customers")
-      .select("price,streets!inner(deleted_at,districts!inner(name,deleted_at))")
+      .from("adres_prijzen")
+      .select("customer_id,prijs,customers!inner(deleted_at,streets!inner(deleted_at,districts!inner(name,deleted_at)))")
       .eq("company_id", companyId)
-      .is("deleted_at", null)
-      .is("streets.deleted_at", null)
-      .is("streets.districts.deleted_at", null)
-      .gt("price", 0)
+      .gt("prijs", 0)
+      .is("customers.deleted_at", null)
+      .is("customers.streets.deleted_at", null)
+      .is("customers.streets.districts.deleted_at", null)
       // Vaste volgorde: zonder die kan bladeren rijen overslaan of dubbel tellen.
-      .order("id")
+      .order("customer_id")
       .range(vanaf, vanaf + 999);
     if (error) return [];
-    for (const c of data ?? []) {
-      const wijk = c.streets?.districts?.name;
+    for (const r of data ?? []) {
+      const wijk = r.customers?.streets?.districts?.name;
       if (!wijk) continue;
       const lijst = perWijk.get(wijk) ?? [];
-      lijst.push(Number(c.price));
+      lijst.push(Number(r.prijs));
       perWijk.set(wijk, lijst);
     }
     if ((data ?? []).length < 1000) break;

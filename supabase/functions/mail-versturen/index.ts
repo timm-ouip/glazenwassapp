@@ -32,6 +32,7 @@ import {
   voerOverslaanDoor,
   ZEKER_AUTOMATISCH,
 } from "../_gedeeld/doorvoeren.ts";
+import { heeftRecht } from "../_gedeeld/rechten.ts";
 
 interface Verzoek {
   /** Proefmail naar dit adres in plaats van naar jezelf. */
@@ -129,6 +130,19 @@ Deno.serve(async (req) => {
     verzoek = (await req.json()) as Verzoek;
   } catch {
     return antwoord({ fout: "Onleesbaar verzoek." }, 400);
+  }
+
+  // Tellen, versturen en de controle van de verbinding: het recht om mail te
+  // versturen. Een bericht opnieuw laten lezen: het recht om mail te lezen.
+  // Koppelen, doorvoeren en terugdraaien blijven hieronder bij de eigenaar.
+  if (
+    ["tellen", "versturen", "reactie", "controle"].includes(String(verzoek.actie)) &&
+    !(await heeftRecht(beheerder, medewerker, "mail_versturen"))
+  ) {
+    return antwoord({ fout: "Je hebt geen recht om mail te versturen." }, 403);
+  }
+  if (verzoek.actie === "opnieuw-lezen" && !(await heeftRecht(beheerder, medewerker, "mail_lezen"))) {
+    return antwoord({ fout: "Je hebt geen recht om met de mail te werken." }, 403);
   }
 
   // Alleen kijken of alles klaarstaat. Verstuurt niets en verandert niets.

@@ -66,6 +66,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { heeftRecht } from "@/lib/rechten";
 
 const TABBLADEN = ["account", "team", "wijken", "aanmelden", "mail", "voorkeuren"] as const;
 type Tab = (typeof TABBLADEN)[number];
@@ -101,6 +102,13 @@ function Instellingen() {
   const navigate = useNavigate();
   const { employee } = useAuth();
   const isEigenaar = employee?.rol === "eigenaar";
+  // Welke tabbladen je ziet hangt af van je rechten; je eigen account altijd.
+  const tabMag: Partial<Record<string, boolean>> = {
+    team: heeftRecht(employee, "instellingen_team"),
+    wijken: heeftRecht(employee, "planning"),
+    aanmelden: heeftRecht(employee, "klanten_bewerken"),
+    mail: heeftRecht(employee, "mail_lezen"),
+  };
 
   return (
     <AppLayout
@@ -121,7 +129,7 @@ function Instellingen() {
         className="flex flex-col gap-5 sm:flex-row sm:gap-6"
       >
         <TabsList className="h-auto w-full shrink-0 justify-start gap-0.5 overflow-x-auto bg-transparent p-0 sm:w-44 sm:flex-col sm:overflow-visible">
-          {TABBLADEN.map((t) => (
+          {TABBLADEN.filter((t) => tabMag[t] ?? true).map((t) => (
             <TabsTrigger
               key={t}
               value={t}
