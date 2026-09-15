@@ -188,7 +188,8 @@ async function adressenVan(db: Db, companyId: string, klantIds: string[]) {
       id: c.id,
       omschrijving: `${straat} ${c.house_number}${c.addition ?? ""}`.trim(),
       // De prijs staat sinds stap D in adres_prijzen (de server mag die lezen).
-      prijs: Number(c.adres_prijzen?.prijs) || 0,
+      // Los object of lijstje met één rij: allebei goed.
+      prijs: Number((Array.isArray(c.adres_prijzen) ? c.adres_prijzen[0] : c.adres_prijzen)?.prijs) || 0,
       frequentie: frequentieVan(c.interval_maanden, c.ritme),
       // Een stempel zonder (bekende) reden telt als gestopt: inactief is het hoe dan ook.
       inactief: c.inactief_op ? (c.inactief_reden === "verhuisd" ? "verhuisd" : "gestopt") : null,
@@ -280,7 +281,10 @@ export async function richtprijzen(db: Db, companyId: string): Promise<{ wijk: s
       // Vaste volgorde: zonder die kan bladeren rijen overslaan of dubbel tellen.
       .order("customer_id")
       .range(vanaf, vanaf + 999);
-    if (error) return [];
+    if (error) {
+      console.error("richtprijzen:", error.message);
+      return [];
+    }
     for (const r of data ?? []) {
       const wijk = r.customers?.streets?.districts?.name;
       if (!wijk) continue;

@@ -72,10 +72,10 @@ async function adressenVanKlant(db: Db, companyId: string, klantId: string) {
     .is("deleted_at", null)
     .is("inactief_op", null);
   if (error) throw new Error(`Adressen van klant: ${error.message}`);
-  return (data ?? []).map((c: { id: string; house_number: number; addition: string | null; adres_prijzen: { prijs: number } | null; streets: { name: string; volledige_naam: string } | null }) => ({
+  return (data ?? []).map((c: { id: string; house_number: number; addition: string | null; adres_prijzen: { prijs: number } | { prijs: number }[] | null; streets: { name: string; volledige_naam: string } | null }) => ({
     id: c.id,
     omschrijving: `${c.streets?.volledige_naam || c.streets?.name || ""} ${c.house_number}${c.addition ?? ""}`.trim(),
-    prijs: Number(c.adres_prijzen?.prijs) || 0,
+    prijs: Number((Array.isArray(c.adres_prijzen) ? c.adres_prijzen[0] : c.adres_prijzen)?.prijs) || 0,
   }));
 }
 
