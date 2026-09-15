@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import type { Database, Json } from "@/integrations/supabase/types";
+import { eenVan } from "@/lib/embed";
 
 export type Frequency = "elke" | "even" | "oneven";
 
@@ -220,8 +221,11 @@ export interface Maandwerk {
 
 /** Wat er uit de database komt is losse json; hier maken we er iets van
  *  waar de rest van de app op kan rekenen. */
-export function leesMaandwerk(waarde: unknown): Maandwerk[] {
+export function leesMaandwerk(waarde: unknown, extras?: unknown): Maandwerk[] {
   if (!Array.isArray(waarde)) return [];
+  // De meerprijzen staan apart, bij het id van het stuk werk (adres_prijzen).
+  const perId =
+    extras && typeof extras === "object" && !Array.isArray(extras) ? (extras as Record<string, unknown>) : {};
   return waarde.flatMap((rij) => {
     if (!rij || typeof rij !== "object") return [];
     const r = rij as Record<string, unknown>;
@@ -237,7 +241,12 @@ export function leesMaandwerk(waarde: unknown): Maandwerk[] {
         ...(typeof r["id"] === "string" && r["id"] ? { id: r["id"] } : {}),
         maanden,
         notitie: typeof r["notitie"] === "string" ? r["notitie"] : "",
-        extra: typeof r["extra"] === "number" ? r["extra"] : null,
+        extra:
+          typeof r["id"] === "string" && typeof perId[r["id"]] === "number"
+            ? (perId[r["id"]] as number)
+            : typeof r["extra"] === "number"
+              ? r["extra"]
+              : null,
       },
     ];
   });
@@ -464,7 +473,7 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
     // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
     // met een samengestelde string lukt dat niet meer.
     .select(
-      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op,inactief_op,inactief_reden",
+      "id,street_id,house_number,addition,note,note_even,note_oneven,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op,inactief_op,inactief_reden,adres_prijzen(prijs,maandwerk_extra)",
     )
     .is("deleted_at", null);
   // Inactief (gestopt of verhuisd) hoort niet op de wijklijst, de planning
@@ -476,7 +485,9 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
   if (error) throw error;
   return (data ?? []).map((c) => ({
     ...c,
-    price: Number(c.price),
+    // Prijzen staan in hun eigen tabel (stap D). Zonder het recht "prijzen
+    // zien" komt die leeg terug, en dan is het hier 0.
+    price: Number(eenVan(c.adres_prijzen)?.prijs ?? 0),
     postcode: c.postcode ?? "",
     note_even: c.note_even ?? "",
     note_oneven: c.note_oneven ?? "",
@@ -485,7 +496,7 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
     start_maand: c.start_maand ?? "",
     interval_maanden: c.interval_maanden ?? 1,
     ritme: c.ritme ?? 1,
-    maandwerk: leesMaandwerk(c.maandwerk),
+    maandwerk: leesMaandwerk(c.maandwerk, eenVan(c.adres_prijzen)?.maandwerk_extra),
     hoek_straat: c.hoek_straat ?? "",
     hoek_straat_volledig: c.hoek_straat_volledig ?? "",
     hoek_kant: (c.hoek_kant ?? "") as Kant | "",
@@ -543,8 +554,36 @@ export type PandVelden = Pick<Customer, "note" | "price" | "frequency">;
 
 /** Werkt prijs, frequentie of notitie van een adresregel bij. */
 export async function updateCustomer(id: string, patch: Partial<PandVelden>): Promise<void> {
-  const { error } = await supabase.from("customers").update(patch).eq("id", id);
+  await patchCustomer(id, patch);
+}
+
+/** Geeft elk stuk maandwerk een id, zodat de meerprijs eraan kan hangen. */
+function metIds(werk: Maandwerk[]): Maandwerk[] {
+  return werk.map((w) => (w.id ? w : { ...w, id: crypto.randomUUID() }));
+}
+
+/**
+ * De prijs en de meerprijzen van één adres, in hun eigen tabel. Dat mag alleen
+ * wie prijzen mag zien (en klanten bewerkt); anders weigert de database.
+ */
+export async function slaAdresPrijzenOp(
+  customerId: string,
+  prijzen: { price?: number; maandwerk?: Maandwerk[] },
+): Promise<void> {
+  const rij: { customer_id: string; prijs?: number; maandwerk_extra?: Json } = { customer_id: customerId };
+  if (prijzen.price !== undefined) rij.prijs = prijzen.price;
+  if (prijzen.maandwerk) {
+    rij.maandwerk_extra = Object.fromEntries(
+      prijzen.maandwerk.filter((w) => w.id && w.extra !== null).map((w) => [w.id!, w.extra]),
+    );
+  }
+  const { error } = await supabase.from("adres_prijzen").upsert(rij, { onConflict: "customer_id" });
   if (error) throw error;
+}
+
+/** Een geweigerde schrijfactie door de regels (RLS): het recht ontbreekt. */
+export function isGeenRecht(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: string }).code === "42501";
 }
 
 /** Splitst "12a" in het nummer en de toevoeging. Zonder cijfer: niets. */
@@ -627,7 +666,6 @@ export async function zorgVoorAdresRegel(
       house_number: nummer.house_number,
       addition: nummer.addition,
       note: "",
-      price: 0,
       frequency: "elke",
       sort_order: 100,
     })
@@ -652,13 +690,39 @@ export async function persistPostcodes(adressen: { id: string; postcode: string 
 export function alsRij(
   patch: Partial<Customer>,
 ): Database["public"]["Tables"]["customers"]["Update"] {
-  return patch as unknown as Database["public"]["Tables"]["customers"]["Update"];
+  // De prijs en de meerprijzen horen niet in deze tabel (zie slaAdresPrijzenOp).
+  const { price: _prijs, inactief_op: _i, inactief_reden: _r, ...rest } = patch;
+  const rij: Record<string, unknown> = { ...rest };
+  if (patch.maandwerk) rij["maandwerk"] = patch.maandwerk.map(({ extra: _extra, ...w }) => w);
+  return rij as unknown as Database["public"]["Tables"]["customers"]["Update"];
 }
 
-/** Losse velden van één adres bijwerken — kleur, overslaan, startmaand. */
+/**
+ * Losse velden van één adres bijwerken — kleur, overslaan, startmaand, en ook
+ * de prijs of het maandwerk: die gaan dan naar hun eigen tabel.
+ */
 export async function patchCustomer(id: string, patch: Partial<Customer>) {
-  const { error } = await supabase.from("customers").update(alsRij(patch)).eq("id", id);
-  if (error) throw error;
+  const p = patch.maandwerk ? { ...patch, maandwerk: metIds(patch.maandwerk) } : patch;
+  const { price, ...rest } = p;
+  if (Object.keys(rest).length > 0) {
+    const { error } = await supabase.from("customers").update(alsRij(rest)).eq("id", id);
+    if (error) throw error;
+  }
+  if (price !== undefined) {
+    // Een prijs die je zelf invulde: dan hoort een weigering gemeld te worden.
+    await slaAdresPrijzenOp(id, p.maandwerk ? { price, maandwerk: p.maandwerk } : { price });
+  } else if (p.maandwerk) {
+    // Alleen het maandwerk: wie geen prijzen mag zien, ziet ook de meerprijzen
+    // niet en past ze dus niet aan. Een weigering is dan geen fout. Mag je
+    // prijzen wél zien (maar niet bewerken), dan hoort de weigering gemeld.
+    try {
+      await slaAdresPrijzenOp(id, { maandwerk: p.maandwerk });
+    } catch (e) {
+      if (!isGeenRecht(e)) throw e;
+      const { data: magZien, error: rechtFout } = await supabase.rpc("heeft_recht", { recht: "prijzen_zien" });
+      if (rechtFout || magZien === true) throw e;
+    }
+  }
 }
 
 /**

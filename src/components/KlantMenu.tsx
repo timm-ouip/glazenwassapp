@@ -46,11 +46,14 @@ interface Props {
   onHoekadres: () => void;
   /** Extra opdracht bij dit adres: werk zonder maand, dat meerijdt als je
    *  toch in die wijk bent. */
-  onKlus: () => void;
+  onKlus?: (() => void) | undefined;
   /** Klant laat stoppen: gestopt of verhuisd. Laat weg waar dat niet kan. */
   onStoppen?: (() => void) | undefined;
   /** De kleuren die dit bedrijf zelf gemaakt heeft, uit Instellingen. */
   markeringen: MarkeringRij[];
+  /** Wie het adres niet mag bijwerken, ziet alleen het dossier (en wat er
+   *  verder expliciet meegegeven is). */
+  alleenLezen?: boolean;
   children: ReactNode;
 }
 
@@ -75,6 +78,7 @@ export function KlantMenu({
   onKlus,
   onStoppen,
   markeringen,
+  alleenLezen = false,
   children,
 }: Props) {
   // Alles loopt hierlangs, zodat een startmaand die je overslaat overal
@@ -138,6 +142,8 @@ export function KlantMenu({
         <ContextMenuItem onSelect={onDossier}>
           <FileText className="size-4" /> Dossier
         </ContextMenuItem>
+        {!alleenLezen && (
+          <>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => wisselMaand(komende)}>
           <CalendarOff className="size-4" />
@@ -225,17 +231,23 @@ export function KlantMenu({
             )}
           </ContextMenuSubContent>
         </ContextMenuSub>
+          </>
+        )}
 
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={onKlus}>
-          <Hammer className="size-4" /> Extra opdracht…
-        </ContextMenuItem>
+        {(onKlus || onStoppen) && <ContextMenuSeparator />}
+        {onKlus && (
+          <ContextMenuItem onSelect={onKlus}>
+            <Hammer className="size-4" /> Extra opdracht…
+          </ContextMenuItem>
+        )}
         {onStoppen && (
           <ContextMenuItem onSelect={onStoppen}>
             <UserMinus className="size-4" /> Klant stopt…
           </ContextMenuItem>
         )}
 
+        {!alleenLezen && (
+          <>
         <ContextMenuSeparator />
         <ContextMenuLabel>Kleur op printlijst</ContextMenuLabel>
         {markeringen.length === 0 && (
@@ -270,6 +282,8 @@ export function KlantMenu({
             <span className="ml-auto truncate text-xs text-muted-foreground">{c.hoek_straat}</span>
           )}
         </ContextMenuItem>
+          </>
+        )}
       </ContextMenuContent>
     </ContextMenu>
   );

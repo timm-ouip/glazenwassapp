@@ -39,6 +39,7 @@ import {
   wijkKleur,
   type Customer,
 } from "@/lib/klanten";
+import { useRecht } from "@/lib/rechten";
 import {
   datumSleutel,
   fetchWasdag,
@@ -54,6 +55,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
 import { redenLabel } from "@/lib/stoppen";
+import { verplaatsWasdag } from "@/lib/wasdag";
 
 interface DagSearch {
   datum?: string;
@@ -152,6 +154,8 @@ function DagPagina() {
   const navigate = useNavigate();
   const { datum: datumUitUrl } = Route.useSearch();
   const datum = datumUitUrl ?? vandaag();
+  // Zonder dit recht zijn alle bedragen 0; dan laten we ze helemaal weg.
+  const prijzenZien = useRecht("prijzen_zien");
 
   const wasdagQuery = useQuery({
     queryKey: ["wasdag", datum],
@@ -604,8 +608,9 @@ function DagPagina() {
       const alErop = new Set(bestaand.map((r) => r.customer_id).filter(Boolean) as string[]);
       toevoegen = regelsMee.filter((r) => !alErop.has(r.customer_id));
 
-      await voegToeAanWasdag(nieuw, toevoegen);
-      await haalUitWasdag(datum, ids);
+      // Dezelfde regels met een andere datum: het bedrag en de notitie van die
+      // keer gaan mee, ook als wie verplaatst geen prijzen mag zien.
+      await verplaatsWasdag(datum, nieuw, ids);
       for (const k of teVerzetten) await zetKlusOpDag(k.id, nieuw);
     } catch (e) {
       toast.error("Verplaatsen mislukt: " + (e as Error).message);
@@ -620,11 +625,15 @@ function DagPagina() {
     pushUndo({
       label: `Verplaatst naar ${toonDatum(nieuw)}`,
       undo: async () => {
-        await haalUitWasdag(
+        // Wat verplaatst werd gaat terug (met zijn eigen bedrag); wat al op de
+        // doeldag stond en hier alleen werd weggehaald, komt er weer bij.
+        await verplaatsWasdag(
           nieuw,
+          datum,
           terug.map((r) => r.customer_id),
         );
-        await voegToeAanWasdag(datum, regelsMee);
+        const nietVerplaatst = regelsMee.filter((r) => !terug.some((t) => t.customer_id === r.customer_id));
+        if (nietVerplaatst.length > 0) await voegToeAanWasdag(datum, nietVerplaatst);
         for (const k of teVerzetten) await zetKlusOpDag(k.id, k.gepland_op);
         qc.invalidateQueries({ queryKey: ["wasdag"] });
         qc.invalidateQueries({ queryKey: ["wasdagen"] });
@@ -762,9 +771,11 @@ function DagPagina() {
   async function bewaarDag(c: Customer, prijs: number, notitie: string | null) {
     const oud = perWijk.regelVan.get(c.id);
     if (!oud) return;
-    if (oud.prijs === prijs && (oud.notitie ?? null) === notitie) return;
+    // Zonder recht op prijzen kent hij het bedrag niet (hij kreeg 0 binnen);
+    // dan alleen de notitie, anders overschrijft of weigert het de dagprijs.
+    if ((!prijzenZien || oud.prijs === prijs) && (oud.notitie ?? null) === notitie) return;
     try {
-      await werkWasdagRegelBij(datum, c.id, { prijs, notitie });
+      await werkWasdagRegelBij(datum, c.id, prijzenZien ? { prijs, notitie } : { notitie });
     } catch (e) {
       toast.error("Opslaan mislukt: " + (e as Error).message);
       return;
@@ -772,7 +783,11 @@ function DagPagina() {
     pushUndo({
       label: `${formatNumber(c)} op ${toonDatum(datum)}`,
       undo: async () => {
-        await werkWasdagRegelBij(datum, c.id, { prijs: oud.prijs, notitie: oud.notitie });
+        await werkWasdagRegelBij(
+          datum,
+          c.id,
+          prijzenZien ? { prijs: oud.prijs, notitie: oud.notitie } : { notitie: oud.notitie },
+        );
         qc.invalidateQueries({ queryKey: ["wasdag"] });
         qc.invalidateQueries({ queryKey: ["wasdagen"] });
       },
@@ -926,6 +941,7 @@ function DagPagina() {
                 : "eerste keer in deze wijk",
               icon: Euro,
               kleur: "groen",
+              verberg: !prijzenZien,
             },
           ]}
         />
@@ -977,9 +993,11 @@ function DagPagina() {
                     <span className="rounded-full bg-surface px-2 py-[1px] text-[10.5px] tabular-nums text-muted-foreground">
                       {w.aantal} adressen
                     </span>
-                    <span className="text-[13px] font-semibold tabular-nums">
-                      {formatPrice(w.bedrag)}
-                    </span>
+                    {prijzenZien && (
+                      <span className="text-[13px] font-semibold tabular-nums">
+                        {formatPrice(w.bedrag)}
+                      </span>
+                    )}
                   </div>
 
                   {w.blokken.map((b) =>
@@ -1027,7 +1045,7 @@ function DagPagina() {
             {perWijk.kwijt > 0 && (
               <p className="text-[12.5px] text-muted-foreground">
                 {perWijk.kwijt} {perWijk.kwijt === 1 ? "adres is" : "adressen zijn"} intussen
-                verwijderd; ze tellen wel mee in het bedrag.
+                verwijderd{prijzenZien ? "; ze tellen wel mee in het bedrag." : "."}
               </p>
             )}
           </div>
@@ -1046,9 +1064,11 @@ function DagPagina() {
                   <h2 className="min-w-0 flex-1 truncate font-display text-[14.5px] font-semibold">
                     Extra opdrachten
                   </h2>
-                  <span className="text-[12.5px] font-semibold tabular-nums">
-                    {formatPrice(klussen.reduce((sum, k) => sum + k.prijs, 0))}
-                  </span>
+                  {prijzenZien && (
+                    <span className="text-[12.5px] font-semibold tabular-nums">
+                      {formatPrice(klussen.reduce((sum, k) => sum + k.prijs, 0))}
+                    </span>
+                  )}
                 </div>
                 <ul className="space-y-1.5">
                   {klussen.map((k) => {
@@ -1092,7 +1112,9 @@ function DagPagina() {
                             {k.omschrijving}
                           </span>
                         </span>
-                        <span className="shrink-0 tabular-nums">{formatPrice(k.prijs)}</span>
+                        {prijzenZien && (
+                          <span className="shrink-0 tabular-nums">{formatPrice(k.prijs)}</span>
+                        )}
                       </li>
                     );
                   })}
@@ -1103,7 +1125,7 @@ function DagPagina() {
             {/* Waar het geld van de dag zit. Twee straten kunnen evenveel
                 adressen hebben en toch het dubbele opleveren; dat zie je aan
                 een lijst met bedragen niet, en aan een balk wel. */}
-            {geldVerdeling.length > 1 && (
+            {prijzenZien && geldVerdeling.length > 1 && (
               <section className="rounded-[18px] border border-border bg-card p-3 shadow-card">
                 <h2 className="mb-2 font-display text-[14px] font-semibold">Waar het geld zit</h2>
                 <span className="flex h-1.5 overflow-hidden rounded-full bg-surface">
@@ -1267,6 +1289,7 @@ function StraatRij({
   /** Klikken buiten de selecteerstand opent het schermpje van dit adres. */
   onAdres: (keuze: { customer: Customer; straat: string }) => void;
 }) {
+  const prijzenZien = useRecht("prijzen_zien");
   const erop = straat.klantIds.filter((id) => keuze.has(id)).length;
   const { className: kopKnop, ...kopRest } = vakKnop(`s:${straat.id}`);
   return (
@@ -1290,7 +1313,9 @@ function StraatRij({
         <span className="text-[10.5px] tabular-nums text-muted-foreground">
           {straat.klanten.length}×
         </span>
-        <span className="text-[12px] font-semibold tabular-nums">{formatPrice(straat.bedrag)}</span>
+        {prijzenZien && (
+          <span className="text-[12px] font-semibold tabular-nums">{formatPrice(straat.bedrag)}</span>
+        )}
       </div>
       <ul className="mt-0.5">
         {straat.klanten.map((c) => {
@@ -1344,9 +1369,11 @@ function StraatRij({
               >
                 {anders || notitie}
               </span>
-              <span className={`shrink-0 tabular-nums ${aangepast ? "font-medium" : ""}`}>
-                {formatPrice(regel?.prijs ?? c.price)}
-              </span>
+              {prijzenZien && (
+                <span className={`shrink-0 tabular-nums ${aangepast ? "font-medium" : ""}`}>
+                  {formatPrice(regel?.prijs ?? c.price)}
+                </span>
+              )}
             </li>
           );
         })}

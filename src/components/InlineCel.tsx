@@ -7,6 +7,8 @@ interface Props {
   placeholder?: string;
   inputMode?: "text" | "numeric" | "decimal";
   className?: string;
+  /** Alleen tonen: wie dit niet mag bijwerken, krijgt gewone tekst. */
+  alleenLezen?: boolean;
 }
 
 /** Cel die je aanklikt en direct typt, zoals in Excel. */
@@ -17,6 +19,7 @@ export function InlineCel({
   placeholder,
   inputMode = "text",
   className,
+  alleenLezen = false,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -28,6 +31,14 @@ export function InlineCel({
   }, [editing]);
 
   const base = `w-full px-1 py-0.5 ${align === "right" ? "text-right tabular-nums" : "text-left"} ${className ?? ""}`;
+
+  if (alleenLezen) {
+    return (
+      <span className={`${base} block truncate`}>
+        {value || <span className="text-muted-foreground/50">{placeholder ?? "—"}</span>}
+      </span>
+    );
+  }
 
   if (!editing) {
     return (

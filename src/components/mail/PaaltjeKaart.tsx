@@ -35,6 +35,7 @@ import { StopDialog } from "@/components/StopDialog";
 import { categorieTint, fetchCategorieen, zetCategorieen, type MailCategorie } from "@/lib/paaltje";
 import { toonMaand } from "@/lib/klanten";
 import { vandaag } from "@/lib/wasdag";
+import { useRecht } from "@/lib/rechten";
 import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -55,6 +56,7 @@ export function PaaltjeKaart({
   const categorieen = useQuery({ queryKey: ["mail-categorieen"], queryFn: fetchCategorieen });
   const [bezig, setBezig] = useState<string | null>(null);
   const [stopOpen, setStopOpen] = useState(false);
+  const prijzenZien = useRecht("prijzen_zien");
   const stopNamen = useQuery({
     queryKey: ["adres-namen", b.voorstel.stoppen?.adressen ?? []],
     queryFn: () => adresNamen(b.voorstel.stoppen?.adressen ?? []),
@@ -284,7 +286,8 @@ export function PaaltjeKaart({
         </Regel>
       )}
 
-      {b.voorstel.prijs && (
+      {/* Paaltjes prijsvergelijking alleen voor wie prijzen mag zien. */}
+      {b.voorstel.prijs && prijzenZien && (
         <Regel>
           <span className="text-[12px]">
             {b.voorstel.prijs.eigen?.length

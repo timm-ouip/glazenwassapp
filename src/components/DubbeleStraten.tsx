@@ -13,6 +13,7 @@ import {
 } from "@/components/Popup";
 import { toast } from "sonner";
 import { pushUndo } from "@/lib/undo";
+import { useRecht } from "@/lib/rechten";
 import {
   formatNumber,
   sortCustomers,
@@ -35,6 +36,7 @@ interface Groep {
 export function DubbeleStraten({ streets, customers, onDone }: Props) {
   const [actief, setActief] = useState<Groep | null>(null);
   const [bezig, setBezig] = useState(false);
+  const prijzenZien = useRecht("prijzen_zien");
 
   const groepen = useMemo<Groep[]>(() => {
     const map = new Map<string, Street[]>();
@@ -208,7 +210,11 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
                           <span className="font-medium">nr {formatNumber(lijst[0]!)}</span> —{" "}
                           {lijst.length}× (
                           {lijst
-                            .map((c) => `€ ${c.price}${c.note ? ` · ${c.note}` : ""}`)
+                            .map((c) =>
+                              [prijzenZien ? `€ ${c.price}` : "", c.note ?? ""]
+                                .filter(Boolean)
+                                .join(" · ") || "zonder notitie",
+                            )
                             .join(" / ")}
                           )
                         </li>

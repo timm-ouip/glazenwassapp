@@ -25,6 +25,8 @@ interface Props {
    *  Zonder maand (de klantenpagina) is dat gewoon deze maand. */
   ronde?: string;
   onPatch: (patch: Partial<Customer>) => void;
+  /** Alleen het badge, zonder menu. */
+  alleenLezen?: boolean;
 }
 
 /**
@@ -35,12 +37,27 @@ interface Props {
  * Niets te melden zodra de startmaand achter ons ligt: dan doet hij gewoon
  * mee en zou het badge alleen ruimte kosten.
  */
-export function WassenVanaf({ customer: c, ronde, onPatch: ruwePatch }: Props) {
+export function WassenVanaf({ customer: c, ronde, onPatch: ruwePatch, alleenLezen = false }: Props) {
   const onPatch = (p: Partial<Customer>) => ruwePatch(schuifStartOp(c, p));
   const dezeMaand = maandSleutel(new Date());
   const start = eersteMaand(c);
   if (start < dezeMaand) return null;
   const nieuw = start === (ronde ?? dezeMaand);
+
+  if (alleenLezen) {
+    return (
+      <span
+        title={`Wassen vanaf ${toonMaand(start)}`}
+        className={`shrink-0 whitespace-nowrap rounded-full px-1.5 py-[2px] text-[10px] font-semibold ${
+          nieuw
+            ? "bg-tint-groen text-tint-groen-ink ring-1 ring-inset ring-tint-groen-ink/25"
+            : "bg-muted text-muted-foreground"
+        }`}
+      >
+        {nieuw ? "nieuw" : `vanaf ${toonMaandKort(start)}`}
+      </span>
+    );
+  }
 
   const maanden = komendeMaanden();
 

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { InlineCel } from "@/components/InlineCel";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
+import { useRecht } from "@/lib/rechten";
 import {
   extraVoorMaand,
   formatPrice,
@@ -19,6 +20,8 @@ interface Props {
   /** De maand die je bekijkt: die bepaalt welk bedrag er in de regel staat. */
   ronde: string;
   onPatch: (patch: Partial<Customer>) => void;
+  /** Wel het bedrag, maar niet te wijzigen. */
+  alleenLezen?: boolean;
 }
 
 function bedragVan(waarde: string): number {
@@ -38,7 +41,24 @@ function maandenVan(w: Maandwerk): string {
  * er twee in het spel zijn, is een val. Hier zie je waar het bedrag vandaan
  * komt en pas je aan wat je bedoelt.
  */
-export function PrijsCel({ customer: c, ronde, onPatch }: Props) {
+export function PrijsCel(props: Props) {
+  // Zonder recht op prijzen komt er overal 0 binnen; dat hoort hij niet als
+  // "€ 0" of rood "geen prijs" te zien. Het bedrag verdwijnt gewoon.
+  const prijzenZien = useRecht("prijzen_zien");
+  if (!prijzenZien) {
+    return <span className="block px-1 py-0.5 text-right text-muted-foreground/50">—</span>;
+  }
+  if (props.alleenLezen) {
+    return (
+      <span className="block truncate px-1 py-0.5 text-right tabular-nums">
+        {formatPrice(prijsVoorMaand(props.customer, props.ronde))}
+      </span>
+    );
+  }
+  return <PrijsCelMetRecht {...props} />;
+}
+
+function PrijsCelMetRecht({ customer: c, ronde, onPatch }: Props) {
   const [open, setOpen] = useState(false);
   const [vast, setVast] = useState(String(c.price).replace(".", ","));
   const [extras, setExtras] = useState<string[]>([]);

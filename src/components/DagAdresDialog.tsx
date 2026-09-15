@@ -25,6 +25,7 @@ import {
   type Customer,
 } from "@/lib/klanten";
 import { toonDatum } from "@/lib/wasdag";
+import { useRecht } from "@/lib/rechten";
 
 interface Props {
   open: boolean;
@@ -69,6 +70,7 @@ export function DagAdresDialog({
 }: Props) {
   const [bedrag, setBedrag] = useState("");
   const [tekst, setTekst] = useState("");
+  const prijzenZien = useRecht("prijzen_zien");
 
   // Overnemen wat er in de database staat, elke keer als het schermpje
   // opengaat. Niet bij elke hervalidatie van de lijst: dan zou wat je net
@@ -108,10 +110,12 @@ export function DagAdresDialog({
               de wijkenpagina, want daar geldt het voor elke ronde. */}
           <PopupBlok label="Vast bij dit adres">
             <dl className="divide-y divide-border/60 rounded-xl border border-input text-[13px]">
-              <div className="flex gap-2 px-3 py-2">
-                <dt className="w-24 shrink-0 text-muted-foreground">Vaste prijs</dt>
-                <dd className="tabular-nums">{formatPrice(standaard)}</dd>
-              </div>
+              {prijzenZien && (
+                <div className="flex gap-2 px-3 py-2">
+                  <dt className="w-24 shrink-0 text-muted-foreground">Vaste prijs</dt>
+                  <dd className="tabular-nums">{formatPrice(standaard)}</dd>
+                </div>
+              )}
               <div className="flex gap-2 px-3 py-2">
                 <dt className="w-24 shrink-0 text-muted-foreground">Frequentie</dt>
                 <dd>{ritmeLabel(c)}</dd>
@@ -125,17 +129,19 @@ export function DagAdresDialog({
             </dl>
           </PopupBlok>
 
-          <PopupBlok label="Prijs deze dag">
-            <PopupVeld icoon={<span className="text-sm">€</span>}>
-              <Input
-                id="dagprijs"
-                inputMode="decimal"
-                className={`${popupInvoer} tabular-nums`}
-                value={bedrag}
-                onChange={(e) => setBedrag(e.target.value)}
-              />
-            </PopupVeld>
-          </PopupBlok>
+          {prijzenZien && (
+            <PopupBlok label="Prijs deze dag">
+              <PopupVeld icoon={<span className="text-sm">€</span>}>
+                <Input
+                  id="dagprijs"
+                  inputMode="decimal"
+                  className={`${popupInvoer} tabular-nums`}
+                  value={bedrag}
+                  onChange={(e) => setBedrag(e.target.value)}
+                />
+              </PopupVeld>
+            </PopupBlok>
+          )}
 
           <PopupBlok label="Wat ging er anders?">
             <PopupVeld className="items-start py-2.5" icoon={<MessageSquare className="size-4" />}>

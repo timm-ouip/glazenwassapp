@@ -9,6 +9,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { formatNumber, gooiEchtWeg, haalTerug, klantAdres, type Customer } from "@/lib/klanten";
+import { useRecht } from "@/lib/rechten";
 
 export const Route = createFileRoute("/prullenbak")({
   beforeLoad: async () => {
@@ -106,8 +107,14 @@ function Prullenbak() {
   const qc = useQueryClient();
   const bevestig = useBevestig();
 
+  // Wijken en straten horen bij de planning; adressen en klantgegevens bij
+  // wie klanten bewerkt. Ieder ziet alleen wat hij ook terug mag zetten.
+  const magPlannen = useRecht("planning");
+  const magKlanten = useRecht("klanten_bewerken");
   const vraag = useQuery({ queryKey: ["prullenbak"], queryFn: haalPrullenbak });
-  const rijen = vraag.data ?? [];
+  const rijen = (vraag.data ?? []).filter((r) =>
+    r.soort === "districts" || r.soort === "streets" ? magPlannen : magKlanten,
+  );
 
   function herlaad() {
     qc.invalidateQueries({ queryKey: ["prullenbak"] });

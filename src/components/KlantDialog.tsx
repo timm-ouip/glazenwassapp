@@ -35,6 +35,8 @@ import {
   PopupVoet,
   popupInvoer,
 } from "@/components/Popup";
+import { slaAdresPrijzenOp } from "@/lib/klanten";
+import { useRecht } from "@/lib/rechten";
 
 function startMaandVoorNieuw(ritme: { interval_maanden: number; ritme: number }): {
   start_maand?: string;
@@ -82,6 +84,8 @@ export function KlantDialog({
   const [ritme, setRitme] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const prijsRef = useRef<HTMLInputElement>(null);
+  // Zonder dit recht zie en stuur je geen prijs: die kent hij toch niet.
+  const prijzenZien = useRecht("prijzen_zien");
 
   useEffect(() => {
     if (!open) return;
@@ -100,7 +104,7 @@ export function KlantDialog({
       return;
     }
     const prijs = Number(price.trim().replace(",", "."));
-    if (price.trim() === "" || Number.isNaN(prijs)) {
+    if (prijzenZien && (price.trim() === "" || Number.isNaN(prijs))) {
       toast.error("Vul een prijs in.");
       prijsRef.current?.focus();
       return;
@@ -120,7 +124,6 @@ export function KlantDialog({
       house_number: huisnummer,
       addition: addition.trim(),
       note: note.trim(),
-      price: prijs,
       interval_maanden: gekozen.interval_maanden,
       ritme: gekozen.ritme,
       ...(!customer && nieuweSortOrder !== undefined ? { sort_order: nieuweSortOrder } : {}),
@@ -129,14 +132,28 @@ export function KlantDialog({
       // nieuw. Valt deze maand al in de frequentie, dan hoeft er niets vast.
       ...(!customer ? startMaandVoorNieuw(gekozen) : {}),
     };
-    const { error } = customer
-      ? await supabase.from("customers").update(payload).eq("id", customer.id)
-      : await supabase.from("customers").insert(payload);
-    setSaving(false);
-    if (error) {
-      toast.error("Opslaan mislukt: " + error.message);
+    const { data: rij, error } = customer
+      ? await supabase.from("customers").update(payload).eq("id", customer.id).select("id").single()
+      : await supabase.from("customers").insert(payload).select("id").single();
+    if (error || !rij) {
+      setSaving(false);
+      toast.error("Opslaan mislukt: " + (error?.message ?? "onbekende fout"));
       return;
     }
+    // De prijs staat in zijn eigen tabel; dat mag alleen wie prijzen mag zien.
+    try {
+      if (prijzenZien) await slaAdresPrijzenOp(rij.id, { price: prijs });
+    } catch (e) {
+      setSaving(false);
+      toast.error(
+        "Het adres is opgeslagen, maar de prijs niet: " +
+          (e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e)),
+      );
+      onOpenChange(false);
+      onSaved();
+      return;
+    }
+    setSaving(false);
     toast.success(customer ? "Klant bijgewerkt" : "Klant toegevoegd");
     onOpenChange(false);
     onSaved();
@@ -150,7 +167,7 @@ export function KlantDialog({
         onKeyDown={opslaanBijEnter(save)}
         onOpenAutoFocus={(e) => {
           // Kwam je via "+ adres", dan staan straat en nummer er al: begin bij de prijs.
-          if (!customer && defaultNumber) {
+          if (!customer && defaultNumber && prijzenZien) {
             e.preventDefault();
             prijsRef.current?.focus();
           }
@@ -265,19 +282,21 @@ export function KlantDialog({
             </div>
           </PopupBlok>
 
-          <PopupBlok label="Prijs en frequentie">
+          <PopupBlok label={prijzenZien ? "Prijs en frequentie" : "Frequentie"}>
             <PopupPaar>
-              <PopupVeld icoon={<span className="text-sm">€</span>}>
-                <Input
-                  id="prijs"
-                  ref={prijsRef}
-                  inputMode="decimal"
-                  className={`${popupInvoer} tabular-nums`}
-                  placeholder="0,00"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                />
-              </PopupVeld>
+              {prijzenZien && (
+                <PopupVeld icoon={<span className="text-sm">€</span>}>
+                  <Input
+                    id="prijs"
+                    ref={prijsRef}
+                    inputMode="decimal"
+                    className={`${popupInvoer} tabular-nums`}
+                    placeholder="0,00"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                  />
+                </PopupVeld>
+              )}
               <PopupVeld icoon={<CalendarDays className="size-4" />}>
                 <Select value={ritme} onValueChange={setRitme}>
                   <SelectTrigger className="h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0">
@@ -295,8 +314,9 @@ export function KlantDialog({
               </PopupVeld>
             </PopupPaar>
             <PopupHint>
-              Allebei nodig: zonder prijs en frequentie weet de app niet wanneer dit adres aan de
-              beurt is of wat het opbrengt.
+              {prijzenZien
+                ? "Allebei nodig: zonder prijs en frequentie weet de app niet wanneer dit adres aan de beurt is of wat het opbrengt."
+                : "Nodig: zonder frequentie weet de app niet wanneer dit adres aan de beurt is."}
             </PopupHint>
           </PopupBlok>
         </PopupBody>

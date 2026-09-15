@@ -25,6 +25,7 @@ import {
   type Customer,
 } from "@/lib/klanten";
 import type { Klus } from "@/lib/klussen";
+import { useRecht } from "@/lib/rechten";
 
 interface Props {
   open: boolean;
@@ -54,6 +55,7 @@ export function KlusDialog({ open, onOpenChange, customer, klus, onOpslaan }: Pr
   const [prijs, setPrijs] = useState("");
   const [zoek, setZoek] = useState("");
   const [gekozen, setGekozen] = useState<Customer | null>(null);
+  const prijzenZien = useRecht("prijzen_zien");
 
   // Alleen nodig als er nog geen adres bij hoort. React Query deelt deze drie
   // met de rest van de app, dus dit kost meestal geen extra aanvraag.
@@ -192,22 +194,26 @@ export function KlusDialog({ open, onOpenChange, customer, klus, onOpslaan }: Pr
             </PopupVeld>
           </PopupBlok>
 
-          <PopupBlok label="Prijs">
-            <PopupVeld icoon={<span className="text-sm">€</span>}>
-              <Input
-                id="klus-prijs"
-                inputMode="decimal"
-                className={`${popupInvoer} tabular-nums`}
-                placeholder="0,00"
-                value={prijs}
-                onChange={(e) => setPrijs(e.target.value)}
-              />
-            </PopupVeld>
-            <PopupHint>
-              Komt bij de omzet van de dag waarop je hem doet. Er hoort geen maand bij: hij blijft
-              openstaan tot je hem afvinkt.
-            </PopupHint>
-          </PopupBlok>
+          {prijzenZien ? (
+            <PopupBlok label="Prijs">
+              <PopupVeld icoon={<span className="text-sm">€</span>}>
+                <Input
+                  id="klus-prijs"
+                  inputMode="decimal"
+                  className={`${popupInvoer} tabular-nums`}
+                  placeholder="0,00"
+                  value={prijs}
+                  onChange={(e) => setPrijs(e.target.value)}
+                />
+              </PopupVeld>
+              <PopupHint>
+                Komt bij de omzet van de dag waarop je hem doet. Er hoort geen maand bij: hij blijft
+                openstaan tot je hem afvinkt.
+              </PopupHint>
+            </PopupBlok>
+          ) : (
+            <PopupHint>Er hoort geen maand bij: hij blijft openstaan tot je hem afvinkt.</PopupHint>
+          )}
         </PopupBody>
         <PopupVoet>
           <Button variant="outline" className="rounded-full" onClick={() => onOpenChange(false)}>

@@ -65,6 +65,7 @@ import {
   type Customer,
   type District,
 } from "@/lib/klanten";
+import { useRecht } from "@/lib/rechten";
 import { meetTempo, stelVoor, werkPerWijk, type Voorstel } from "@/lib/wijkritme";
 import { laatsteWijk } from "@/lib/wijkgeheugen";
 import {
@@ -102,6 +103,7 @@ import {
   voegToeAanWasdag,
   werkdagenVerder,
 } from "@/lib/wasdag";
+import { verplaatsWasdag } from "@/lib/wasdag";
 
 interface PlanningSearch {
   /** De dag die openstaat, bijvoorbeeld vanaf de wijkenpagina. */
@@ -160,6 +162,7 @@ function KlusKaart({
   wijkNaam: string;
   sleepbaar: boolean;
 }) {
+  const prijzenZien = useRecht("prijzen_zien");
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `k:${klus.id}`,
     disabled: !sleepbaar,
@@ -196,7 +199,7 @@ function KlusKaart({
           bleef liggen op {toonDatum(klus.gepland_op!)}
         </span>
       )}
-      <span className="shrink-0 tabular-nums">{formatPrice(klus.prijs)}</span>
+      {prijzenZien && <span className="shrink-0 tabular-nums">{formatPrice(klus.prijs)}</span>}
     </div>
   );
 }
@@ -251,6 +254,9 @@ function Planning() {
     queryFn: () => fetchKlussen(sleutel(van), sleutel(tot)),
   });
   const klussen = useMemo(() => klussenQuery.data ?? [], [klussenQuery.data]);
+  // Zonder dit recht zijn alle bedragen 0; dan tonen we ze nergens en meet
+  // het balkje in een dagvak het aantal adressen in plaats van het geld.
+  const prijzenZien = useRecht("prijzen_zien");
 
   /** Kleur en naam per wijk, op volgorde van de wijkenlijst. */
   const wijkInfo = useMemo(() => {
@@ -336,8 +342,8 @@ function Planning() {
 
   // Het balkje in een dagvak is relatief aan de drukste dag van deze maand.
   const drukste = useMemo(
-    () => Math.max(1, ...[...perDag.values()].map((v) => v.bedrag)),
-    [perDag],
+    () => Math.max(1, ...[...perDag.values()].map((v) => (prijzenZien ? v.bedrag : v.aantal))),
+    [perDag, prijzenZien],
   );
 
   // --- Suggestie: welke wijk is wanneer aan de beurt? ---------------------
@@ -779,8 +785,9 @@ function Planning() {
       return;
     }
 
-    // Per dag verzetten: eerst eraf op de oude datum, dan erop bij de nieuwe.
-    // De upsert daar vangt het geval af dat er op de doeldag al iets stond.
+    // Per dag verzetten. Het blijft dezelfde regel met een andere datum, dus
+    // een aangepaste prijs van die keer gaat mee (ook als wie verschuift geen
+    // prijzen mag zien). Stond het adres op de doeldag al, dan blijft dat staan.
     const perDagOud = new Map<string, { customer_id: string; prijs: number }[]>();
     for (const r of teVerzetten) {
       const rij = perDagOud.get(r.datum) ?? [];
@@ -793,23 +800,45 @@ function Planning() {
       regels,
     }));
 
-    async function verplaats(lijst: { oud: string; nieuw: string; regels: DagRegels }[]) {
-      // Van achter naar voren, anders schuift een dag op een dag die zelf nog
-      // moet vertrekken.
-      for (const stap of [...lijst].sort((a, b) => b.oud.localeCompare(a.oud))) {
-        await haalUitWasdag(
+    type Stap = { oud: string; nieuw: string; regels: DagRegels };
+    async function verplaats(lijst: Stap[], richting: "vooruit" | "terug", gedaan?: Stap[]) {
+      // Vooruit van achter naar voren, terug van voren naar achteren: altijd
+      // eerst de dag die ergens heen gaat waar niets meer hoeft te vertrekken.
+      // Anders valt een adres dat op twee opeenvolgende dagen staat weg.
+      const volgorde = [...lijst].sort((a, b) =>
+        richting === "vooruit" ? b.oud.localeCompare(a.oud) : a.oud.localeCompare(b.oud),
+      );
+      for (const stap of volgorde) {
+        await verplaatsWasdag(
           stap.oud,
+          stap.nieuw,
           stap.regels.map((r) => r.customer_id),
         );
-        await voegToeAanWasdag(stap.nieuw, stap.regels);
+        gedaan?.push(stap);
       }
     }
 
+    const gelukt: Stap[] = [];
     try {
-      await verplaats(stappen);
-    } catch {
-      toast.error("Opschuiven mislukt.");
+      await verplaats(stappen, "vooruit", gelukt);
+    } catch (e) {
+      toast.error("Opschuiven mislukt: " + (e instanceof Error ? e.message : String(e)));
+      // Wat al verschoven was, kun je nog terugzetten.
+      if (gelukt.length > 0) {
+        pushUndo({
+          label: `Half opgeschoven planning (${gelukt.length} ${gelukt.length === 1 ? "dag" : "dagen"})`,
+          undo: async () => {
+            await verplaats(
+              gelukt.map((x) => ({ oud: x.nieuw, nieuw: x.oud, regels: x.regels })),
+              "terug",
+            );
+            qc.invalidateQueries({ queryKey: ["wasdagen"] });
+            qc.invalidateQueries({ queryKey: ["wasdag"] });
+          },
+        });
+      }
       qc.invalidateQueries({ queryKey: ["wasdagen"] });
+      qc.invalidateQueries({ queryKey: ["wasdag"] });
       return;
     }
 
@@ -818,7 +847,8 @@ function Planning() {
       undo: async () => {
         // Terug is dezelfde beweging andersom, en dan van voren naar achteren.
         await verplaats(
-          stappen.map((x) => ({ oud: x.nieuw, nieuw: x.oud, regels: x.regels })).reverse(),
+          stappen.map((x) => ({ oud: x.nieuw, nieuw: x.oud, regels: x.regels })),
+          "terug",
         );
         qc.invalidateQueries({ queryKey: ["wasdagen"] });
         qc.invalidateQueries({ queryKey: ["wasdag"] });
@@ -978,6 +1008,7 @@ function Planning() {
               onder: "achteraf geteld",
               icon: Droplet,
               kleur: "groen",
+              verberg: !prijzenZien,
             },
             {
               label: "Nog gepland",
@@ -985,6 +1016,7 @@ function Planning() {
               onder: "staat nog voor je",
               icon: CalendarCheck,
               kleur: "paars",
+              verberg: !prijzenZien,
             },
             {
               label: "Dagen met werk",
@@ -1138,14 +1170,16 @@ function Planning() {
                                     </span>
                                   </span>
                                 )}
-                                <span
-                                  style={inkt ? { color: inkt } : undefined}
-                                  className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.03em] tabular-nums sm:text-[15px] ${
-                                    info.wijken.length > 0 ? "mt-0.5" : "mt-auto"
-                                  }`}
-                                >
-                                  {formatPrice(info.bedrag)}
-                                </span>
+                                {prijzenZien && (
+                                  <span
+                                    style={inkt ? { color: inkt } : undefined}
+                                    className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.03em] tabular-nums sm:text-[15px] ${
+                                      info.wijken.length > 0 ? "mt-0.5" : "mt-auto"
+                                    }`}
+                                  >
+                                    {formatPrice(info.bedrag)}
+                                  </span>
+                                )}
                                 <span className="mt-1 hidden truncate text-[10.5px] text-muted-foreground sm:block">
                                   {info.straten.size > 0
                                     ? `${info.straten.size} ${info.straten.size === 1 ? "straat" : "straten"} · ${info.aantal}×`
@@ -1157,7 +1191,7 @@ function Planning() {
                                       inkt ? "" : isGedaan ? "bg-tint-groen-ink" : "bg-brand"
                                     }`}
                                     style={{
-                                      width: `${Math.round((info.bedrag / drukste) * 100)}%`,
+                                      width: `${Math.round(((prijzenZien ? info.bedrag : info.aantal) / drukste) * 100)}%`,
                                       ...(inkt
                                         ? { background: inkt, opacity: isGedaan ? 1 : 0.5 }
                                         : {}),
@@ -1318,9 +1352,11 @@ function Planning() {
             <h2 className="font-display text-[19px] font-semibold capitalize leading-tight tracking-[-0.02em]">
               {toonDatum(gekozenDag)}
             </h2>
-            <p className="mt-1 font-display text-[26px] font-semibold leading-tight tracking-[-0.02em] tabular-nums">
-              {formatPrice(dagBedrag)}
-            </p>
+            {prijzenZien && (
+              <p className="mt-1 font-display text-[26px] font-semibold leading-tight tracking-[-0.02em] tabular-nums">
+                {formatPrice(dagBedrag)}
+              </p>
+            )}
             <p className="text-[12.5px] text-muted-foreground">
               {dagRegels.length} {dagRegels.length === 1 ? "adres" : "adressen"}
             </p>
@@ -1338,18 +1374,22 @@ function Planning() {
                     <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">
                       {w.naam}
                     </span>
-                    <span className="text-[12px] tabular-nums text-muted-foreground">
-                      {formatPrice(w.bedrag)}
-                    </span>
+                    {prijzenZien && (
+                      <span className="text-[12px] tabular-nums text-muted-foreground">
+                        {formatPrice(w.bedrag)}
+                      </span>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     {w.straten.map((s) => (
                       <div key={s.id} className="flex items-baseline gap-2 text-[13px]">
                         <span className="min-w-0 flex-1 truncate">{s.naam}</span>
                         <span className="tabular-nums text-muted-foreground">{s.aantal}×</span>
-                        <span className="w-16 text-right tabular-nums">
-                          {formatPrice(s.bedrag)}
-                        </span>
+                        {prijzenZien && (
+                          <span className="w-16 text-right tabular-nums">
+                            {formatPrice(s.bedrag)}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1359,9 +1399,11 @@ function Planning() {
                 <div className="flex items-baseline gap-2 text-[13px] text-muted-foreground">
                   <span className="min-w-0 flex-1 truncate">Verwijderde adressen</span>
                   <span className="tabular-nums">{perWijk.kwijt.aantal}×</span>
-                  <span className="w-16 text-right tabular-nums">
-                    {formatPrice(perWijk.kwijt.bedrag)}
-                  </span>
+                  {prijzenZien && (
+                    <span className="w-16 text-right tabular-nums">
+                      {formatPrice(perWijk.kwijt.bedrag)}
+                    </span>
+                  )}
                 </div>
               )}
               {dagKlussen.length > 0 && (
@@ -1371,9 +1413,11 @@ function Planning() {
                     <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">
                       Extra opdrachten
                     </span>
-                    <span className="text-[12px] tabular-nums text-muted-foreground">
-                      {formatPrice(dagKlussen.reduce((sum, k) => sum + k.prijs, 0))}
-                    </span>
+                    {prijzenZien && (
+                      <span className="text-[12px] tabular-nums text-muted-foreground">
+                        {formatPrice(dagKlussen.reduce((sum, k) => sum + k.prijs, 0))}
+                      </span>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     {dagKlussen.map((k) => (
@@ -1381,7 +1425,9 @@ function Planning() {
                         <span className="min-w-0 flex-1 truncate">
                           {adresVan(k)} — {k.omschrijving}
                         </span>
-                        <span className="w-16 text-right tabular-nums">{formatPrice(k.prijs)}</span>
+                        {prijzenZien && (
+                          <span className="w-16 text-right tabular-nums">{formatPrice(k.prijs)}</span>
+                        )}
                       </div>
                     ))}
                   </div>

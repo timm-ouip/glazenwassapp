@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { aanmeldAdres, type Aanmelding } from "@/lib/aanmeldingen";
 import { formatPrice, type Klant } from "@/lib/klanten";
 import { bekendAdresOvernemen, redenLabel, type InactiefAdres } from "@/lib/stoppen";
+import { useRecht } from "@/lib/rechten";
 
 export function BekendAdresKaart({
   aanmelding: a,
@@ -32,6 +33,7 @@ export function BekendAdresKaart({
   onWeigeren: () => void;
 }) {
   const [bezig, setBezig] = useState<"nieuw" | "oud" | null>(null);
+  const prijzenZien = useRecht("prijzen_zien");
 
   async function overnemen(metVorigeKlant: boolean) {
     if (bezig) return;
@@ -73,7 +75,8 @@ export function BekendAdresKaart({
           <div className="rounded-[12px] bg-tint-blauw/50 px-3 py-2.5 text-[13px]">
             <p className="font-medium">Dit huis kennen we al</p>
             <p className="mt-0.5 text-muted-foreground">
-              {redenLabel(adres.inactief_reden)} sinds {sinds} · {formatPrice(adres.price)} ·{" "}
+              {redenLabel(adres.inactief_reden)} sinds {sinds} ·{" "}
+              {prijzenZien ? `${formatPrice(adres.price)} · ` : ""}
               {adres.interval_maanden <= 1 ? "elke maand" : `om de ${adres.interval_maanden} maanden`}
               {adres.note.trim() ? ` · ${adres.note.trim()}` : ""}
             </p>

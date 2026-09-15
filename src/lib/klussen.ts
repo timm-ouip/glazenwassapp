@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { vandaag } from "@/lib/wasdag";
+import { eenVan } from "@/lib/embed";
 
 /**
  * Een extra opdracht: werk bij een adres dat niet aan een maand vastzit. Een
@@ -55,7 +56,7 @@ export function blijvenLiggen(k: Klus, nu = vandaag()): boolean {
   return !k.gedaan_op && !!k.gepland_op && k.gepland_op < nu;
 }
 
-const VELDEN = "id,customer_id,omschrijving,prijs,gepland_op,gedaan_op";
+const VELDEN = "id,customer_id,omschrijving,gepland_op,gedaan_op,klus_prijzen(prijs)";
 
 /**
  * Alles wat openstaat, plus wat er al afgevinkt is binnen een periode — dat
@@ -80,7 +81,11 @@ export async function fetchKlussen(vanaf?: string, tot?: string): Promise<Klus[]
   const uit: Klus[] = [];
   for (const { data, error } of uitkomsten) {
     if (error) throw error;
-    for (const rij of data ?? []) uit.push({ ...rij, prijs: Number(rij.prijs) } as Klus);
+    for (const rij of (data ?? []) as unknown as (Omit<Klus, "prijs"> & { klus_prijzen: { prijs: number } | { prijs: number }[] | null })[]) {
+      // Het bedrag staat in klus_prijzen; zonder het recht "prijzen zien" is dat 0.
+      const { klus_prijzen, ...rest } = rij;
+      uit.push({ ...rest, prijs: Number(eenVan(klus_prijzen)?.prijs ?? 0) });
+    }
   }
   return uit;
 }
@@ -92,19 +97,30 @@ export async function nieuweKlus(
 ): Promise<string> {
   const { data, error } = await supabase
     .from("klussen")
-    .insert({ customer_id: customerId, omschrijving: omschrijving.trim(), prijs })
+    .insert({ customer_id: customerId, omschrijving: omschrijving.trim() })
     .select("id")
     .single();
   if (error) throw error;
-  return (data as { id: string }).id;
+  const id = (data as { id: string }).id;
+  // De database zette de prijs op 0; wie prijzen mag zien, zet hier het bedrag.
+  const { error: prijsFout } = await supabase.from("klus_prijzen").upsert({ klus_id: id, prijs }, { onConflict: "klus_id" });
+  if (prijsFout && prijsFout.code !== "42501") throw prijsFout;
+  return id;
 }
 
 export async function patchKlus(
   id: string,
   patch: Partial<Pick<Klus, "omschrijving" | "prijs" | "gepland_op" | "gedaan_op">>,
 ) {
-  const { error } = await supabase.from("klussen").update(patch).eq("id", id);
-  if (error) throw error;
+  const { prijs, ...rest } = patch;
+  if (Object.keys(rest).length > 0) {
+    const { error } = await supabase.from("klussen").update(rest).eq("id", id);
+    if (error) throw error;
+  }
+  if (prijs !== undefined) {
+    const { error } = await supabase.from("klus_prijzen").upsert({ klus_id: id, prijs }, { onConflict: "klus_id" });
+    if (error) throw error;
+  }
 }
 
 /** Op een dag zetten, of er met `null` weer af halen. */

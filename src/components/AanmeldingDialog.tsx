@@ -43,6 +43,7 @@ import {
   type District,
 } from "@/lib/klanten";
 import { aanmeldNummer, zetVerwerkt, type Aanmelding } from "@/lib/aanmeldingen";
+import { useRecht } from "@/lib/rechten";
 
 interface Props {
   open: boolean;
@@ -60,6 +61,8 @@ export function AanmeldingDialog({ open, onOpenChange, aanmelding, districts, on
   const [prijs, setPrijs] = useState("");
   const [ritme, setRitme] = useState<string>("");
   const [bezig, setBezig] = useState(false);
+  // Zonder dit recht vult hij geen prijs in; die zet iemand anders er later bij.
+  const prijzenZien = useRecht("prijzen_zien");
 
   // Bij het openen alles terugzetten naar wat de klant opgaf. De wijk raden we
   // niet: als de plaats bij precies één wijk hoort is dat een goede gok, maar
@@ -87,7 +90,7 @@ export function AanmeldingDialog({ open, onOpenChange, aanmelding, districts, on
       return;
     }
     const bedrag = Number(prijs.trim().replace(",", "."));
-    if (!prijs.trim() || Number.isNaN(bedrag)) {
+    if (prijzenZien && (!prijs.trim() || Number.isNaN(bedrag))) {
       toast.error("Vul een prijs in.");
       return;
     }
@@ -108,7 +111,7 @@ export function AanmeldingDialog({ open, onOpenChange, aanmelding, districts, on
         return;
       }
       await patchCustomer(customerId, {
-        price: bedrag,
+        ...(prijzenZien ? { price: bedrag } : {}),
         aangemeld_op: new Date().toISOString(),
         ...gekozen,
       });
@@ -190,17 +193,19 @@ export function AanmeldingDialog({ open, onOpenChange, aanmelding, districts, on
             </PopupPaar>
           </PopupBlok>
 
-          <PopupBlok label="Prijs en frequentie">
+          <PopupBlok label={prijzenZien ? "Prijs en frequentie" : "Frequentie"}>
             <PopupPaar>
-              <PopupVeld icoon={<CircleDollarSign className="size-4" />} achter="per beurt">
-                <Input
-                  className={popupInvoer}
-                  value={prijs}
-                  onChange={(e) => setPrijs(e.target.value)}
-                  placeholder="0,00"
-                  inputMode="decimal"
-                />
-              </PopupVeld>
+              {prijzenZien && (
+                <PopupVeld icoon={<CircleDollarSign className="size-4" />} achter="per beurt">
+                  <Input
+                    className={popupInvoer}
+                    value={prijs}
+                    onChange={(e) => setPrijs(e.target.value)}
+                    placeholder="0,00"
+                    inputMode="decimal"
+                  />
+                </PopupVeld>
+              )}
               <PopupVeld>
                 <Select value={ritme} onValueChange={setRitme}>
                   <SelectTrigger className={popupInvoer}>

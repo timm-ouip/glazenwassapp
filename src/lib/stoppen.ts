@@ -11,6 +11,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { vandaag } from "@/lib/wasdag";
+import { eenVan } from "@/lib/embed";
 
 export type StopReden = "verhuisd" | "gestopt";
 
@@ -117,7 +118,7 @@ export interface InactiefAdres {
 export async function fetchInactieveAdressen(): Promise<InactiefAdres[]> {
   const { data, error } = await supabase
     .from("customers")
-    .select("id,street_id,house_number,addition,klant_id,note,price,interval_maanden,ritme,inactief_op,inactief_reden")
+    .select("id,street_id,house_number,addition,klant_id,note,interval_maanden,ritme,inactief_op,inactief_reden,adres_prijzen(prijs)")
     .is("deleted_at", null)
     .not("inactief_op", "is", null)
     .order("inactief_op", { ascending: false });
@@ -126,7 +127,8 @@ export async function fetchInactieveAdressen(): Promise<InactiefAdres[]> {
     ...c,
     addition: c.addition ?? "",
     note: c.note ?? "",
-    price: Number(c.price),
+    // Uit adres_prijzen; zonder het recht "prijzen zien" is dat 0.
+    price: Number(eenVan(c.adres_prijzen)?.prijs ?? 0),
     interval_maanden: c.interval_maanden ?? 1,
     ritme: c.ritme ?? 1,
   })) as InactiefAdres[];

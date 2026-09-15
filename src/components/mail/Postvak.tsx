@@ -91,7 +91,8 @@ function zelfdeBron(a: Bron | null, b: Bron | null) {
   return !!a && !!b && bronSleutel(a) === bronSleutel(b);
 }
 
-export function Postvak({ onAankondigen }: { onAankondigen: () => void }) {
+/** Zonder onAankondigen (wie geen mail mag versturen) geen aankondigknop. */
+export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | undefined }) {
   const mailbox = useQuery({ queryKey: ["mailbox"], queryFn: fetchMailbox });
   const gekoppeld = !!mailbox.data && mailbox.data.status !== "uit";
   const mappen = useQuery({
@@ -156,9 +157,11 @@ export function Postvak({ onAankondigen }: { onAankondigen: () => void }) {
               Mailbox koppelen
             </Link>
           </Button>
-          <Button variant="outline" className="rounded-full" onClick={onAankondigen}>
-            <Megaphone className="size-4" /> Wasdag aankondigen
-          </Button>
+          {onAankondigen && (
+            <Button variant="outline" className="rounded-full" onClick={onAankondigen}>
+              <Megaphone className="size-4" /> Wasdag aankondigen
+            </Button>
+          )}
         </div>
       </section>
     );
@@ -331,7 +334,7 @@ function MapKolom({
   kanSchrijven: boolean;
   onKies: (bron: Bron) => void;
   onNieuweMail: () => void;
-  onAankondigen: () => void;
+  onAankondigen?: (() => void) | undefined;
 }) {
   const postvak = mappen.find((m) => m.id === postvakId);
   const overigeMappen = mappen.filter((m) => m.id !== postvakId);
@@ -342,9 +345,11 @@ function MapKolom({
         <Button className="w-full justify-start rounded-full" disabled={!kanSchrijven} onClick={onNieuweMail}>
           <SquarePen className="size-4" /> Nieuwe mail
         </Button>
-        <Button variant="outline" className="w-full justify-start rounded-full" onClick={onAankondigen}>
-          <Megaphone className="size-4" /> Wasdag aankondigen
-        </Button>
+        {onAankondigen && (
+          <Button variant="outline" className="w-full justify-start rounded-full" onClick={onAankondigen}>
+            <Megaphone className="size-4" /> Wasdag aankondigen
+          </Button>
+        )}
       </div>
 
       <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1">

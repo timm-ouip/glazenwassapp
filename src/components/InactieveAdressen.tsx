@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { formatPrice, type Klant, type Street } from "@/lib/klanten";
 import { redenLabel, zetActief, type InactiefAdres } from "@/lib/stoppen";
+import { useRecht } from "@/lib/rechten";
 
 function frequentie(a: InactiefAdres): string {
   return a.interval_maanden <= 1 ? "elke maand" : `om de ${a.interval_maanden} maanden`;
@@ -34,6 +35,9 @@ export function InactieveAdressen({
   onGewijzigd: () => void;
 }) {
   const [bezig, setBezig] = useState<string | null>(null);
+  const prijzenZien = useRecht("prijzen_zien");
+  // Weer actief zetten is een klant wijzigen.
+  const magKlanten = useRecht("klanten_bewerken");
   const straatVan = new Map(straten.map((s) => [s.id, s]));
   const klantVan = new Map(klanten.map((k) => [k.id, k]));
   const inWijk = adressen.filter((a) => straatVan.has(a.street_id));
@@ -78,7 +82,7 @@ export function InactieveAdressen({
             <th className="px-3 py-2.5">klant</th>
             <th className="px-3 py-2.5">reden</th>
             <th className="px-3 py-2.5">sinds</th>
-            <th className="px-3 py-2.5 text-right">prijs</th>
+            {prijzenZien && <th className="px-3 py-2.5 text-right">prijs</th>}
             <th className="px-3 py-2.5">frequentie</th>
             <th className="px-3 py-2.5" />
           </tr>
@@ -106,9 +110,10 @@ export function InactieveAdressen({
                   </span>
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{sinds(a.inactief_op)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatPrice(a.price)}</td>
+                {prijzenZien && <td className="px-3 py-2 text-right tabular-nums">{formatPrice(a.price)}</td>}
                 <td className="px-3 py-2 text-muted-foreground">{frequentie(a)}</td>
                 <td className="px-3 py-2 text-right">
+                  {magKlanten && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -119,6 +124,7 @@ export function InactieveAdressen({
                     {bezig === a.id ? <Loader2 className="size-3 animate-spin" /> : <RotateCcw className="size-3" />}
                     Weer actief
                   </Button>
+                  )}
                 </td>
               </tr>
             );

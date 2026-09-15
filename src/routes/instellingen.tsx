@@ -66,7 +66,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { heeftRecht } from "@/lib/rechten";
+import { heeftRecht, useRecht } from "@/lib/rechten";
 
 const TABBLADEN = ["account", "team", "wijken", "aanmelden", "mail", "voorkeuren"] as const;
 type Tab = (typeof TABBLADEN)[number];
@@ -810,6 +810,8 @@ function TeamTab() {
  * er weinig zijn is het een aanname, en dat hoort er gewoon te staan.
  */
 function WijkenTab() {
+  // Het tempo is in geld; zonder recht op prijzen tonen we alleen de dagen.
+  const prijzenZien = useRecht("prijzen_zien");
   const qc = useQueryClient();
   const [volgorde, setVolgorde] = useState<District[] | null>(null);
   const [bezig, setBezig] = useState(false);
@@ -907,11 +909,17 @@ function WijkenTab() {
                     <span className="block truncate text-sm font-medium">{d.name}</span>
                     <span className="block truncate text-[12px] text-muted-foreground">
                       {adressenPerWijk.get(d.id) ?? 0} adressen ·{" "}
-                      {tempo.bron === "aanname"
-                        ? `aanname: ${formatPrice(tempo.bedragPerDag)} per dag`
-                        : `${formatPrice(tempo.bedragPerDag)} per dag, gemeten over ${tempo.dagen} ${
-                            tempo.dagen === 1 ? "dag" : "dagen"
-                          }${tempo.bron === "alles" ? " (alle wijken)" : ""}`}
+                      {!prijzenZien
+                        ? tempo.bron === "aanname"
+                          ? "nog geen tempo gemeten"
+                          : `tempo gemeten over ${tempo.dagen} ${tempo.dagen === 1 ? "dag" : "dagen"}${
+                              tempo.bron === "alles" ? " (alle wijken)" : ""
+                            }`
+                        : tempo.bron === "aanname"
+                          ? `aanname: ${formatPrice(tempo.bedragPerDag)} per dag`
+                          : `${formatPrice(tempo.bedragPerDag)} per dag, gemeten over ${tempo.dagen} ${
+                              tempo.dagen === 1 ? "dag" : "dagen"
+                            }${tempo.bron === "alles" ? " (alle wijken)" : ""}`}
                     </span>
                   </span>
                   <span className="flex shrink-0 gap-1">
@@ -952,6 +960,7 @@ function WijkenTab() {
         )}
       </Kaart>
 
+      {prijzenZien && (
       <Kaart
         titel="Wat de app geleerd heeft"
         uitleg="Hoeveel je op een dag wegwast, afgeleid uit de dagen die je hebt afgevinkt. In geld en niet in adressen: een wijk met rijtjeshuizen en een wijk met villa's leveren heel verschillende aantallen op, maar een dag blijft een dag."
@@ -983,6 +992,7 @@ function WijkenTab() {
           )}
         </p>
       </Kaart>
+      )}
     </div>
   );
 }

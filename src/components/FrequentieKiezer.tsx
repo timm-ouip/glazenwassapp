@@ -24,6 +24,8 @@ import {
 interface Props {
   customer: Customer;
   onPatch: (patch: Partial<Customer>) => void;
+  /** Alleen het badge, zonder menu. */
+  alleenLezen?: boolean;
 }
 
 /** Even en oneven houden hun eigen kleur: zo blijft de lijst eruitzien zoals
@@ -50,7 +52,17 @@ function kleur(c: Pick<Customer, "interval_maanden" | "ritme">): string {
  * Het badge zegt de maanden en niet het interval, want dat is wat je wilt
  * weten als je langs de lijst gaat.
  */
-export function FrequentieKiezer({ customer: c, onPatch }: Props) {
+export function FrequentieKiezer({ customer: c, onPatch, alleenLezen = false }: Props) {
+  if (alleenLezen) {
+    return (
+      <span
+        title={ritmeOmschrijving(c)}
+        className={`min-w-[3.25rem] max-w-[5.5rem] shrink-0 truncate rounded-full px-1.5 py-[2px] text-center text-[10px] font-semibold ${kleur(c)}`}
+      >
+        {ritmeLabel(c)}
+      </span>
+    );
+  }
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

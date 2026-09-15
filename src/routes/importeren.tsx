@@ -58,6 +58,7 @@ import {
   stratenZonderPostcode,
 } from "@/lib/aanvullen";
 import { zoekWoonplaatsen } from "@/lib/postcode";
+import { isGeenRecht } from "@/lib/klanten";
 
 export const Route = createFileRoute("/importeren")({
   beforeLoad: async () => {
@@ -765,7 +766,6 @@ function ImportPagina() {
         house_number: r.huisnummer,
         addition: r.toevoeging,
         note: r.notitie,
-        price: r.prijs,
         // Het tabblad zegt of een notitie in de even of de oneven helft van
         // het jaar meegaat; dat is precies wat maandwerk beschrijft.
         maandwerk: maandwerkVanEvenOneven(r.notitieEven, r.notitieOneven) as unknown as Json,
@@ -773,8 +773,30 @@ function ImportPagina() {
         // Zo weet het dossier straks dat deze klant er vóór deze datum al was.
         geimporteerd: true,
       }));
-      const { error } = await supabase.from("customers").insert(payload);
+      const { data: ingevoegd, error } = await supabase
+        .from("customers")
+        .insert(payload)
+        .select("id,street_id,house_number,addition");
       if (error) throw error;
+
+      // De prijzen in hun eigen tabel. Op adres gekoppeld en niet op volgorde:
+      // dan kan een prijs nooit bij het verkeerde huis terechtkomen.
+      const sleutelVan = (straat: string, nummer: number, toevoeging: string | null) =>
+        `${straat}|${nummer}|${(toevoeging ?? "").trim().toLowerCase()}`;
+      const prijsVan = new Map(
+        lijst.map((r) => [sleutelVan(map.get(straatSleutel(r.straat))!, r.huisnummer, r.toevoeging), r.prijs]),
+      );
+      const prijzen = (ingevoegd ?? []).map((c) => ({
+        customer_id: c.id,
+        prijs: prijsVan.get(sleutelVan(c.street_id, c.house_number, c.addition)) ?? 0,
+      }));
+      if (prijzen.length > 0) {
+        const { error: prijsFout } = await supabase
+          .from("adres_prijzen")
+          .upsert(prijzen, { onConflict: "customer_id" });
+        // Wie geen prijzen mag zien, importeert de adressen zonder bedragen.
+        if (prijsFout && !isGeenRecht(prijsFout)) throw prijsFout;
+      }
       toast.success(`${payload.length} klanten geïmporteerd`);
 
       if (!werkPlaats) {

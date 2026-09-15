@@ -13,6 +13,7 @@ import {
   type Maandwerk,
   type QuickNote,
 } from "@/lib/klanten";
+import { useRecht } from "@/lib/rechten";
 
 const MAANDEN = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
 
@@ -50,11 +51,12 @@ function naarMaandwerk(regels: Regel[]): Maandwerk[] {
   );
 }
 
-/** Voor de tooltip: "serre in mrt/sep — € 15 extra". */
-function omschrijf(w: Maandwerk): string {
+/** Voor de tooltip: "serre in mrt/sep — € 15 extra". Zonder recht op prijzen
+ *  zonder bedrag. */
+function omschrijf(w: Maandwerk, prijzenZien: boolean): string {
   const maanden = w.maanden.map((m) => toonMaandKort(`2000-${m}`)).join("/");
-  const wat = `${w.notitie.trim() || "andere prijs"} in ${maanden}`;
-  return w.extra === null ? wat : `${wat} — ${formatPrice(w.extra)} extra`;
+  const wat = `${w.notitie.trim() || (prijzenZien ? "andere prijs" : "extra werk")} in ${maanden}`;
+  return w.extra === null || !prijzenZien ? wat : `${wat} — ${formatPrice(w.extra)} extra`;
 }
 
 interface Props {
@@ -71,6 +73,8 @@ interface Props {
    *  andere maanden kun je wel aanvinken — dan komt hij een keer extra — maar
    *  ze horen er anders uit te zien. */
   beurtMaanden?: string[] | undefined;
+  /** Alleen tonen, zonder schermpje: voor wie dit niet mag bijwerken. */
+  alleenLezen?: boolean;
 }
 
 /** Notitieveld met meervoudige snelkeuzes en de mogelijkheid nieuwe toe te voegen. */
@@ -83,12 +87,14 @@ export function NotitieCel({
   maandwerk,
   onChangeMaandwerk,
   beurtMaanden,
+  alleenLezen = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [tekst, setTekst] = useState(value);
   const [werk, setWerk] = useState<Regel[]>(() => naarRegels(maandwerk));
   const [nieuw, setNieuw] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const prijzenZien = useRecht("prijzen_zien");
 
   const maandVelden = Boolean(onChangeMaandwerk);
 
@@ -147,6 +153,22 @@ export function NotitieCel({
     });
   }
 
+  const stip = (maandwerk ?? []).length > 0 && (
+    <span
+      className="ml-1 inline-block size-2 rounded-full bg-tint-amber align-middle ring-1 ring-inset ring-tint-amber-ink/30"
+      title={(maandwerk ?? []).map((w) => omschrijf(w, prijzenZien)).join("; ")}
+    />
+  );
+
+  if (alleenLezen) {
+    return (
+      <span className="block w-full truncate px-1 py-0.5 text-left">
+        {value || <span className="text-muted-foreground/50">—</span>}
+        {stip}
+      </span>
+    );
+  }
+
   return (
     <Popover
       open={open}
@@ -173,12 +195,7 @@ export function NotitieCel({
           {value || <span className="text-muted-foreground/50">—</span>}
           {/* Kleine stip als er in bepaalde maanden werk bij hoort; anders zie
               je dat pas als je het veld opent. */}
-          {(maandwerk ?? []).length > 0 && (
-            <span
-              className="ml-1 inline-block size-2 rounded-full bg-tint-amber align-middle ring-1 ring-inset ring-tint-amber-ink/30"
-              title={(maandwerk ?? []).map(omschrijf).join("; ")}
-            />
-          )}
+          {stip}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-64 space-y-3 p-3" align="start">
@@ -315,7 +332,9 @@ export function NotitieCel({
                     onKeyDown={sluitBijEnter}
                   />
                   {/* Alleen wat er bij komt: op een factuur hoort het meerwerk
-                      apart te staan van wat het pand normaal kost. */}
+                      apart te staan van wat het pand normaal kost. Zonder
+                      recht op prijzen geen bedragveld. */}
+                  {prijzenZien && (
                   <Input
                     value={regel.extra}
                     placeholder="+ €"
@@ -325,6 +344,7 @@ export function NotitieCel({
                     onChange={(e) => pasAan(i, { extra: e.target.value })}
                     onKeyDown={sluitBijEnter}
                   />
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"

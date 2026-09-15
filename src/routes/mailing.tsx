@@ -16,7 +16,7 @@
  *    daarna langs dezelfde weg als overal elders in de app — mét undo.
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -116,19 +116,37 @@ function Mailing() {
   // blijven bij de eigenaar. Kom je vanaf de planning met een dag, dan wil je
   // aankondigen.
   const { employee } = useAuth();
+  // Lezen: het postvak en de antwoorden. Versturen: opstellen en wat er
+  // verstuurd is.
   const toonPostvak = heeftRecht(employee, "mail_lezen");
+  const toonVersturen = heeftRecht(employee, "mail_versturen");
   const toonRapport = employee?.rol === "eigenaar";
-  const [blad, setBlad] = useState<"postvak" | "opstellen" | "antwoorden" | "verstuurd" | "rapport" | "dagrapport">(
-    dag || !toonPostvak ? "opstellen" : "postvak",
-  );
+  type Blad = "postvak" | "opstellen" | "antwoorden" | "verstuurd" | "rapport" | "dagrapport";
+  const mag: Record<Blad, boolean> = {
+    postvak: toonPostvak,
+    opstellen: toonVersturen,
+    antwoorden: toonPostvak,
+    verstuurd: toonVersturen,
+    rapport: toonRapport,
+    dagrapport: toonRapport,
+  };
+  const startBlad: Blad = (dag && toonVersturen) || !toonPostvak ? "opstellen" : "postvak";
+  const [blad, setBlad] = useState<Blad>(startBlad);
 
-  // De rol is er soms pas na het eerste renderen; dan alsnog goed zetten.
+  // De rol is er soms pas na het eerste renderen. Dan het startblad alsnog
+  // één keer kiezen (de eigenaar hoort op Postvak te beginnen), en daarna
+  // alleen terugzetten als je op een blad staat dat je niet mag zien.
+  const startGekozen = useRef(false);
   useEffect(() => {
     if (!employee) return;
-    if ((!toonPostvak && blad === "postvak") || (!toonRapport && (blad === "rapport" || blad === "dagrapport"))) {
-      setBlad("opstellen");
+    if (!startGekozen.current) {
+      startGekozen.current = true;
+      if (blad !== startBlad) setBlad(startBlad);
+      return;
     }
-  }, [employee, toonPostvak, toonRapport, blad]);
+    if (!mag[blad]) setBlad(startBlad);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employee, toonPostvak, toonVersturen, toonRapport, blad]);
 
   return (
     <AppLayout
@@ -139,12 +157,14 @@ function Mailing() {
       <Tabs value={blad} onValueChange={(v) => setBlad(v as typeof blad)}>
         <TabsList className="mb-4">
           {toonPostvak && <TabsTrigger value="postvak">Postvak</TabsTrigger>}
-          <TabsTrigger value="opstellen">Opstellen</TabsTrigger>
-          <TabsTrigger value="antwoorden">
-            Antwoorden
-            <OpenTelletje />
-          </TabsTrigger>
-          <TabsTrigger value="verstuurd">Verstuurd</TabsTrigger>
+          {toonVersturen && <TabsTrigger value="opstellen">Opstellen</TabsTrigger>}
+          {toonPostvak && (
+            <TabsTrigger value="antwoorden">
+              Antwoorden
+              <OpenTelletje />
+            </TabsTrigger>
+          )}
+          {toonVersturen && <TabsTrigger value="verstuurd">Verstuurd</TabsTrigger>}
           {/* Het rapport ziet alleen de eigenaar (RLS); een medewerker zou hier
               een altijd lege lijst zien. */}
           {toonRapport && <TabsTrigger value="rapport">Rapport</TabsTrigger>}
@@ -153,21 +173,27 @@ function Mailing() {
 
         {toonPostvak && (
           <TabsContent value="postvak">
-            <Postvak onAankondigen={() => setBlad("opstellen")} />
+            <Postvak onAankondigen={toonVersturen ? () => setBlad("opstellen") : undefined} />
           </TabsContent>
         )}
-        <TabsContent value="opstellen">
-          <Opstellen beginDag={dag} />
-        </TabsContent>
-        <TabsContent value="antwoorden">
-          <div className="space-y-4">
-            <AssistentKaart />
-            <Antwoorden />
-          </div>
-        </TabsContent>
-        <TabsContent value="verstuurd">
-          <Verstuurd />
-        </TabsContent>
+        {toonVersturen && (
+          <TabsContent value="opstellen">
+            <Opstellen beginDag={dag} />
+          </TabsContent>
+        )}
+        {toonPostvak && (
+          <TabsContent value="antwoorden">
+            <div className="space-y-4">
+              <AssistentKaart />
+              <Antwoorden />
+            </div>
+          </TabsContent>
+        )}
+        {toonVersturen && (
+          <TabsContent value="verstuurd">
+            <Verstuurd />
+          </TabsContent>
+        )}
         {toonRapport && (
           <TabsContent value="dagrapport">
             <Dagrapporten />

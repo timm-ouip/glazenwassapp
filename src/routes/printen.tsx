@@ -74,6 +74,7 @@ import {
   type Customer,
   type Street,
 } from "@/lib/klanten";
+import { useRecht } from "@/lib/rechten";
 import { fetchWasdag, toonDatum } from "@/lib/wasdag";
 import { redenLabel } from "@/lib/stoppen";
 
@@ -389,6 +390,10 @@ const KOLOMMEN = 6;
 function PrintPagina() {
   useRequireAuth();
   const { wijk, maand, prijzen, liggend, vouwen: vouwenRaw, dag } = Route.useSearch();
+  // Zonder recht op prijzen komt er nooit een bedrag op papier, ook niet als
+  // de link "prijzen=true" zegt.
+  const prijzenZien = useRecht("prijzen_zien");
+  const toonPrijzen = prijzen && prijzenZien;
   // De ronde die je nu gaat lopen. Overslaan en "nieuw in mei" hangen aan een
   // echte kalendermaand, terwijl even/oneven alleen zegt welke helft van de
   // klanten meegaat.
@@ -982,18 +987,20 @@ function PrintPagina() {
                 Liggend
               </Label>
             </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="prijzen"
-                checked={prijzen}
-                onCheckedChange={(v) =>
-                  void navigate({ to: "/printen", search: { ...zoek, prijzen: v } })
-                }
-              />
-              <Label htmlFor="prijzen" className="text-sm text-muted-foreground">
-                Prijzen
-              </Label>
-            </div>
+            {prijzenZien && (
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="prijzen"
+                  checked={prijzen}
+                  onCheckedChange={(v) =>
+                    void navigate({ to: "/printen", search: { ...zoek, prijzen: v } })
+                  }
+                />
+                <Label htmlFor="prijzen" className="text-sm text-muted-foreground">
+                  Prijzen
+                </Label>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <Switch
                 id="vouwen"
@@ -1053,7 +1060,7 @@ function PrintPagina() {
                   )}
                 </h1>
 
-                {prijzen && (
+                {toonPrijzen && (
                   <span className="text-[11px] tabular-nums">Totaal {formatPrice(totaal)}</span>
                 )}
               </div>
@@ -1078,7 +1085,7 @@ function PrintPagina() {
                             <SleepbaarBlok
                               key={g.street.id}
                               g={g}
-                              prijzen={prijzen}
+                              prijzen={toonPrijzen}
                               maand={maand}
                               ronde={ronde}
                               markeringen={markeringen}
@@ -1089,7 +1096,7 @@ function PrintPagina() {
                             <StraatBlok
                               key={g.street.id}
                               g={g}
-                              prijzen={prijzen}
+                              prijzen={toonPrijzen}
                               maand={maand}
                               ronde={ronde}
                               markeringen={markeringen}
@@ -1114,7 +1121,7 @@ function PrintPagina() {
                             <SleepbaarBlok
                               key={g.street.id}
                               g={g}
-                              prijzen={prijzen}
+                              prijzen={toonPrijzen}
                               maand={maand}
                               ronde={ronde}
                               markeringen={markeringen}
@@ -1125,7 +1132,7 @@ function PrintPagina() {
                             <StraatBlok
                               key={g.street.id}
                               g={g}
-                              prijzen={prijzen}
+                              prijzen={toonPrijzen}
                               maand={maand}
                               ronde={ronde}
                               markeringen={markeringen}
@@ -1153,7 +1160,7 @@ function PrintPagina() {
                   >
                     <StraatBlok
                       g={g}
-                      prijzen={prijzen}
+                      prijzen={toonPrijzen}
                       maand={maand}
                       ronde={ronde}
                       markeringen={markeringen}

@@ -51,6 +51,7 @@ import {
   X,
 } from "lucide-react";
 import { NotitieCel } from "@/components/NotitieCel";
+import { useRecht } from "@/lib/rechten";
 import {
   adresVanRegel,
   bewaarKlant,
@@ -200,6 +201,8 @@ export function KlantgegevensDialog({
   const [koppelOpen, setKoppelOpen] = useState(false);
   const [wijkId, setWijkId] = useState("");
   const [saving, setSaving] = useState(false);
+  // Zonder dit recht geen prijsveld, en geen prijs meesturen bij opslaan.
+  const prijzenZien = useRecht("prijzen_zien");
   // Zodra de gebruiker zelf een postcode typt, houdt de opzoeking zijn mond.
   const [postcodeHandmatig, setPostcodeHandmatig] = useState(false);
   const [straatSuggesties, setStraatSuggesties] = useState<string[]>([]);
@@ -386,7 +389,7 @@ export function KlantgegevensDialog({
         await patchCustomer(
           adresId,
           schuifStartOp(dossierCustomer ?? { start_maand: "", created_at: nu, overslaan: [] }, {
-            price: prijsGetal(pand.price),
+            ...(prijzenZien ? { price: prijsGetal(pand.price) } : {}),
             note: pand.note.trim(),
             // De postcode hoort bij het pand, niet bij de bewoner — en de
             // klantenlijst leest hem daar ook vandaan.
@@ -714,18 +717,20 @@ export function KlantgegevensDialog({
 
           {tab === "adres" && (
             <>
-              <PopupBlok label="Prijs en frequentie">
+              <PopupBlok label={prijzenZien ? "Prijs en frequentie" : "Frequentie"}>
                 <PopupPaar>
-                  <PopupVeld icoon={<span className="text-sm">€</span>}>
-                    <Input
-                      id="prijs"
-                      inputMode="decimal"
-                      className={`${popupInvoer} tabular-nums`}
-                      placeholder="0"
-                      value={pand.price}
-                      onChange={(e) => setPand((p) => ({ ...p, price: e.target.value }))}
-                    />
-                  </PopupVeld>
+                  {prijzenZien && (
+                    <PopupVeld icoon={<span className="text-sm">€</span>}>
+                      <Input
+                        id="prijs"
+                        inputMode="decimal"
+                        className={`${popupInvoer} tabular-nums`}
+                        placeholder="0"
+                        value={pand.price}
+                        onChange={(e) => setPand((p) => ({ ...p, price: e.target.value }))}
+                      />
+                    </PopupVeld>
+                  )}
                   <PopupVeld icoon={<CalendarDays className="size-4" />}>
                     <Select
                       value={String(pand.interval_maanden)}
@@ -773,7 +778,7 @@ export function KlantgegevensDialog({
                 )}
               </PopupBlok>
 
-              <PopupBlok label="Notitie en meerwerk">
+              <PopupBlok label={prijzenZien ? "Notitie en meerwerk" : "Notitie"}>
                 {/* Hetzelfde veld met snelkeuzes als op de wijkenpagina, nu
                     inclusief het werk dat er in bepaalde maanden bij komt en
                     wat dat extra kost. */}
@@ -908,7 +913,7 @@ export function KlantgegevensDialog({
             <PopupBlok
               label="Openstaand werk"
               terzijde={
-                openKlussen.length > 0
+                openKlussen.length > 0 && prijzenZien
                   ? formatPrice(openKlussen.reduce((sum, k) => sum + k.prijs, 0))
                   : undefined
               }
@@ -938,7 +943,9 @@ export function KlantgegevensDialog({
                               {toonDatum(k.gepland_op)}
                             </span>
                           )}
-                          <span className="shrink-0 tabular-nums">{formatPrice(k.prijs)}</span>
+                          {prijzenZien && (
+                            <span className="shrink-0 tabular-nums">{formatPrice(k.prijs)}</span>
+                          )}
                         </li>
                       ))}
                     </ul>

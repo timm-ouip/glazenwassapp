@@ -161,6 +161,7 @@ import {
   type StraatGroep,
   type Street,
 } from "@/lib/klanten";
+import { useRecht } from "@/lib/rechten";
 import { StopDialog } from "@/components/StopDialog";
 import { draaiStoppenTerug, geplandeDagen, zetInactief, type StopReden } from "@/lib/stoppen";
 
@@ -221,6 +222,12 @@ function Index() {
   const ronde = isKalendermaand(filter) ? filter : maandSleutel(new Date());
   const [zoektermen, setZoektermen] = useState<string[]>([]);
   const [prijzenTonen, setPrijzenTonen] = useState(true);
+  // Wat je ziet en wat je mag, per recht. De database dwingt het af; dit
+  // zorgt dat er geen velden of knoppen staan die toch niets opslaan.
+  const prijzenZien = useRecht("prijzen_zien");
+  const magKlanten = useRecht("klanten_bewerken");
+  const magPlannen = useRecht("planning");
+  const toonPrijzen = prijzenTonen && prijzenZien;
   const [selectie, setSelectie] = useState<string[]>([]);
   /** Staat de selecteermodus aan? Dan vink je adressen aan zonder dat er al
    *  iets vastligt; met "Inplannen voor" zet je ze in één keer op een dag. */
@@ -838,16 +845,21 @@ function Index() {
     qc.setQueryData<Customer[]>(["customers"], (old) =>
       (old ?? []).map((x) => (x.id === c.id ? { ...x, ...patch } : x)),
     );
-    const { error } = await supabase.from("customers").update(alsRij(patch)).eq("id", c.id);
-    if (error) {
-      toast.error("Opslaan mislukt: " + error.message);
+    // Via patchCustomer: een prijs of meerprijs gaat dan naar zijn eigen tabel.
+    try {
+      await patchCustomer(c.id, patch);
+    } catch (error) {
+      toast.error(
+        "Opslaan mislukt: " +
+          (error instanceof Error ? error.message : String((error as { message?: string })?.message ?? error)),
+      );
       qc.invalidateQueries({ queryKey: ["customers"] });
       return;
     }
     pushUndo({
       label: `Wijziging ${formatNumber(c)}`,
       undo: async () => {
-        await supabase.from("customers").update(alsRij(vorige)).eq("id", c.id);
+        await patchCustomer(c.id, vorige);
         herlaad();
       },
     });
@@ -1409,7 +1421,9 @@ function Index() {
       aantal={g.aantal}
       totaal={g.totaal}
       sort={g.street.sort_desc ? "desc" : "asc"}
-      prijzenTonen={prijzenTonen}
+      prijzenTonen={toonPrijzen}
+      magKlanten={magKlanten}
+      magPlannen={magPlannen}
       quickNotes={quickNotes}
       markeringen={markeringen}
       klantNamen={klantNamen}
@@ -1488,15 +1502,17 @@ function Index() {
       acties={
         <>
           <ZoekBalk placeholder="Zoek straat" onTermen={setZoektermen} />
-          <Button
-            size="sm"
-            variant={selecteren ? "default" : "outline"}
-            className="rounded-full"
-            onClick={() => selecteermodus(!selecteren)}
-            title="Adressen aanvinken om daarna in te plannen"
-          >
-            <CheckSquare className="size-4" /> Selecteren
-          </Button>
+          {magPlannen && (
+            <Button
+              size="sm"
+              variant={selecteren ? "default" : "outline"}
+              className="rounded-full"
+              onClick={() => selecteermodus(!selecteren)}
+              title="Adressen aanvinken om daarna in te plannen"
+            >
+              <CheckSquare className="size-4" /> Selecteren
+            </Button>
+          )}
           {selecteren && (
             <>
               <Button
@@ -1564,13 +1580,15 @@ function Index() {
               <Printer className="size-4" /> Printlijst
             </Link>
           </Button>
-          <Button
-            size="sm"
-            className="rounded-full"
-            onClick={() => setKlantDialog({ open: true, customer: null })}
-          >
-            <Plus className="size-4" /> Klant
-          </Button>
+          {magKlanten && (
+            <Button
+              size="sm"
+              className="rounded-full"
+              onClick={() => setKlantDialog({ open: true, customer: null })}
+            >
+              <Plus className="size-4" /> Klant
+            </Button>
+          )}
         </>
       }
       kop={
@@ -1596,7 +1614,7 @@ function Index() {
               onder: isKalendermaand(filter) ? toonMaand(filter) : "alle maanden",
               icon: Euro,
               kleur: "groen",
-              verberg: !prijzenTonen,
+              verberg: !toonPrijzen,
             },
           ]}
         />
@@ -1646,12 +1664,14 @@ function Index() {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2">
-            <Switch id="prijzen" checked={prijzenTonen} onCheckedChange={setPrijzenTonen} />
-            <Label htmlFor="prijzen" className="text-sm text-muted-foreground">
-              Prijzen
-            </Label>
-          </div>
+          {prijzenZien && (
+            <div className="flex items-center gap-2">
+              <Switch id="prijzen" checked={prijzenTonen} onCheckedChange={setPrijzenTonen} />
+              <Label htmlFor="prijzen" className="text-sm text-muted-foreground">
+                Prijzen
+              </Label>
+            </div>
+          )}
 
           {selecteren && (
             // Blijft in beeld terwijl je naar beneden vinkt: het bedrag is
@@ -1670,9 +1690,11 @@ function Index() {
               ) : (
                 <span className="text-[13px] font-medium">Geselecteerd</span>
               )}
-              <span className="font-display text-[19px] font-semibold tabular-nums tracking-[-0.02em]">
-                {formatPrice(keuzeBedrag)}
-              </span>
+              {prijzenZien && (
+                <span className="font-display text-[19px] font-semibold tabular-nums tracking-[-0.02em]">
+                  {formatPrice(keuzeBedrag)}
+                </span>
+              )}
               <span className="text-[12.5px] text-muted-foreground">
                 {keuze.size} {keuze.size === 1 ? "adres" : "adressen"}
               </span>
@@ -1768,7 +1790,8 @@ function Index() {
                   totaal={sec.totaal}
                   klantIds={sec.klantIds}
                   ingeklapt={!zoekt && ingeklapt.has(groepSleutel(sec.groep.id))}
-                  prijzenTonen={prijzenTonen}
+                  prijzenTonen={toonPrijzen}
+                  magPlannen={magPlannen}
                   planmodus={selecteren}
                   dagKlaar={dagKlaar}
                   opDeDag={keuze}
@@ -1785,7 +1808,7 @@ function Index() {
                 </GroepSectie>
               ))}
               {losseBlokken.map((g) => straatBlok(g))}
-              {districts.length > 0 && <NieuweStraat onSubmit={nieuweStraat} />}
+              {districts.length > 0 && magPlannen && <NieuweStraat onSubmit={nieuweStraat} />}
             </div>
           </SortableContext>
           <DragOverlay>
@@ -1898,6 +1921,8 @@ interface SectieProps {
   totaal: number;
   ingeklapt: boolean;
   prijzenTonen: boolean;
+  /** Zonder planning: alleen kijken, niets verslepen, hernoemen of weggooien. */
+  magPlannen: boolean;
   planmodus: boolean;
   dagKlaar: boolean;
   opDeDag: Set<string>;
@@ -1924,6 +1949,7 @@ interface SectieProps {
 const GroepSectie = memo(function GroepSectie(p: SectieProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `g:${p.groep.id}`,
+    disabled: !p.magPlannen,
   });
 
   // Precies dezelfde optelling als in de straatkop, maar dan over de hele
@@ -2008,7 +2034,9 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
           />
         ) : (
           <button
-            className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing"
+            className={`cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing ${
+              p.magPlannen ? "" : "invisible"
+            }`}
             aria-label="Groep verslepen"
             {...attributes}
             {...listeners}
@@ -2054,7 +2082,7 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
         {p.prijzenTonen && (
           <span className="text-[12.5px] font-semibold tabular-nums">{formatPrice(p.totaal)}</span>
         )}
-        {!p.planmodus && (
+        {!p.planmodus && p.magPlannen && (
           <>
             <button
               className="rounded p-1 text-muted-foreground hover:bg-accent"
@@ -2094,6 +2122,10 @@ interface BlokProps {
   totaal: number;
   sort: "asc" | "desc";
   prijzenTonen: boolean;
+  /** Adressen toevoegen, stoppen en weggooien; huisnummer en prijs wijzigen. */
+  magKlanten: boolean;
+  /** Kleur, overslaan, notitie, frequentie en volgorde bijwerken. */
+  magPlannen: boolean;
   quickNotes: QuickNote[];
   markeringen: MarkeringRij[];
   /** Naam per klant-id, voor het personen-icoontje op een gekoppelde regel. */
@@ -2145,6 +2177,7 @@ interface BlokProps {
 const StraatBlok = memo(function StraatBlok(p: BlokProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `s:${p.street.id}`,
+    disabled: !p.magPlannen,
   });
 
   const zichtbaar = [...p.even, ...p.oneven];
@@ -2187,7 +2220,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
           groepen te maken heeft. Dat hoort niet in de kop zelf — die is al
           vol, en dit doe je een paar keer per jaar. */}
       <ContextMenu>
-        <ContextMenuTrigger asChild>
+        <ContextMenuTrigger asChild disabled={!p.magPlannen}>
           <div
             {...(p.planmodus
               ? {
@@ -2244,7 +2277,9 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
               />
             ) : (
               <button
-                className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing"
+                className={`cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing ${
+                  p.magPlannen ? "" : "invisible"
+                }`}
                 aria-label="Straat verslepen"
                 {...attributes}
                 {...listeners}
@@ -2298,39 +2333,47 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
 
             {!p.planmodus && (
               <>
-                <button
-                  className="rounded p-1 text-muted-foreground hover:bg-accent"
-                  onClick={() => p.onToggleSort(p.street)}
-                  aria-label={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
-                  title={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
-                >
-                  {p.sort === "asc" ? (
-                    <ArrowUpNarrowWide className="size-3.5" />
-                  ) : (
-                    <ArrowDownNarrowWide className="size-3.5" />
-                  )}
-                </button>
-                <button
-                  className="rounded p-1 text-muted-foreground hover:bg-accent"
-                  onClick={() => p.onAddKlant(p.street.id)}
-                  aria-label="Klant toevoegen"
-                >
-                  <Plus className="size-3.5" />
-                </button>
-                <button
-                  className="rounded p-1 text-muted-foreground hover:bg-accent"
-                  onClick={() => p.onEditStreet(p.street)}
-                  aria-label="Straat bewerken"
-                >
-                  <Pencil className="size-3.5" />
-                </button>
-                <button
-                  className="rounded p-1 text-muted-foreground hover:bg-accent"
-                  onClick={() => p.onDeleteStreet(p.street)}
-                  aria-label="Straat verwijderen"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+                {p.magPlannen && (
+                  <button
+                    className="rounded p-1 text-muted-foreground hover:bg-accent"
+                    onClick={() => p.onToggleSort(p.street)}
+                    aria-label={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
+                    title={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
+                  >
+                    {p.sort === "asc" ? (
+                      <ArrowUpNarrowWide className="size-3.5" />
+                    ) : (
+                      <ArrowDownNarrowWide className="size-3.5" />
+                    )}
+                  </button>
+                )}
+                {p.magKlanten && (
+                  <button
+                    className="rounded p-1 text-muted-foreground hover:bg-accent"
+                    onClick={() => p.onAddKlant(p.street.id)}
+                    aria-label="Klant toevoegen"
+                  >
+                    <Plus className="size-3.5" />
+                  </button>
+                )}
+                {p.magPlannen && (
+                  <>
+                    <button
+                      className="rounded p-1 text-muted-foreground hover:bg-accent"
+                      onClick={() => p.onEditStreet(p.street)}
+                      aria-label="Straat bewerken"
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button
+                      className="rounded p-1 text-muted-foreground hover:bg-accent"
+                      onClick={() => p.onDeleteStreet(p.street)}
+                      aria-label="Straat verwijderen"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -2386,7 +2429,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
               <span className="w-4" />
             </div>
             <StraatKolom regels={p[kant]} blok={p} kant={kant} />
-            {kant === "even" && (
+            {kant === "even" && p.magKlanten && (
               <NieuweRegel
                 onSubmit={(nr) => p.onNieuweRegel(p.street.id, nr)}
                 rowText={p.rowText}
@@ -2434,6 +2477,8 @@ const StraatKolom = memo(function StraatKolom({
             key={c.id}
             customer={c}
             prijzenTonen={p.prijzenTonen}
+            magKlanten={p.magKlanten}
+            magPlannen={p.magPlannen}
             quickNotes={p.quickNotes}
             markeringen={p.markeringen}
             klantNaam={c.klant_id ? p.klantNamen.get(c.klant_id) : undefined}
@@ -2467,6 +2512,8 @@ const StraatKolom = memo(function StraatKolom({
 interface RijProps {
   customer: Customer;
   prijzenTonen: boolean;
+  magKlanten: boolean;
+  magPlannen: boolean;
   quickNotes: QuickNote[];
   markeringen: MarkeringRij[];
   klantNaam?: string | undefined;
@@ -2584,6 +2631,8 @@ function KlantRijSleep({
 const KlantRijInhoud = memo(function KlantRijInhoud({
   customer: c,
   prijzenTonen,
+  magKlanten,
+  magPlannen,
   quickNotes,
   klantNaam,
   ronde: dezeMaand,
@@ -2643,6 +2692,7 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
           value={`${c.house_number}${c.addition ?? ""}`}
           align="left"
           className="min-w-0 font-medium"
+          alleenLezen={!magKlanten}
           onCommit={(v) => {
             const m = /^(\d+)\s*(.*)$/.exec(v.trim());
             if (!m) return;
@@ -2667,20 +2717,35 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
           quickNotes={quickNotes}
           onChange={(v) => onPatch(c, { note: v })}
           onAddQuickNote={onAddQuickNote}
+          alleenLezen={!magPlannen}
         />
       </div>
       {!planmodus && (
         <>
           <Overgeslagen customer={c} />
-          <WassenVanaf customer={c} ronde={dezeMaand} onPatch={(patch) => onPatch(c, patch)} />
+          <WassenVanaf
+            customer={c}
+            ronde={dezeMaand}
+            onPatch={(patch) => onPatch(c, patch)}
+            alleenLezen={!magPlannen}
+          />
         </>
       )}
       {prijzenTonen && (
         <div className="w-16 shrink-0">
-          <PrijsCel customer={c} ronde={dezeMaand} onPatch={(patch) => onPatch(c, patch)} />
+          <PrijsCel
+            customer={c}
+            ronde={dezeMaand}
+            onPatch={(patch) => onPatch(c, patch)}
+            alleenLezen={!magKlanten}
+          />
         </div>
       )}
-      <FrequentieKiezer customer={c} onPatch={(patch) => onPatch(c, patch)} />
+      <FrequentieKiezer
+        customer={c}
+        onPatch={(patch) => onPatch(c, patch)}
+        alleenLezen={!magPlannen}
+      />
       {/* Vaste breedte, ook zonder klant: anders krimpt de notitiekolom van
           precies die ene rij en lopen de kolommen uit de pas. */}
       <span className="w-3 shrink-0">
@@ -2699,15 +2764,20 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
           </button>
         )}
       </span>
-      <button
-        tabIndex={-1}
-        className="shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:!text-destructive"
-        onClick={() => onDelete(c)}
-        aria-label="Stoppen of verwijderen"
-        title="Stoppen of verwijderen"
-      >
-        <Trash2 className="size-3" />
-      </button>
+      {magKlanten ? (
+        <button
+          tabIndex={-1}
+          className="shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:!text-destructive"
+          onClick={() => onDelete(c)}
+          aria-label="Stoppen of verwijderen"
+          title="Stoppen of verwijderen"
+        >
+          <Trash2 className="size-3" />
+        </button>
+      ) : (
+        // Dezelfde breedte, zodat de kolommen in de pas blijven.
+        <span className="w-3 shrink-0" />
+      )}
     </>
   );
 });
@@ -2751,14 +2821,15 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
       onDossier={() => p.onDossier(c)}
       onHoekadres={() => p.onHoekadres(c)}
       onKlus={() => p.onKlus(c)}
-      onStoppen={() => p.onStoppen(c)}
+      onStoppen={p.magKlanten ? () => p.onStoppen(c) : undefined}
+      alleenLezen={!p.magPlannen}
       markeringen={p.markeringen}
     >
       <KlantRijSleep
         id={`c:${c.id}`}
         className={`group relative flex items-center gap-0.5 rounded-[9px] px-0.5 ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond} ${!p.geselecteerd && !achtergrond ? "hover:bg-muted/70" : ""} data-[state=open]:ring-2 data-[state=open]:ring-inset data-[state=open]:ring-foreground/60`}
         verfKlant={p.planmodus ? c.id : undefined}
-        onGreep={p.planmodus ? null : (e) => p.onSelect(c, e.shiftKey)}
+        onGreep={p.planmodus || !p.magPlannen ? null : (e) => p.onSelect(c, e.shiftKey)}
       >
         <KlantRijInhoud {...p} />
       </KlantRijSleep>

@@ -167,7 +167,6 @@ export type Database = {
           note_even: string
           note_oneven: string
           postcode: string
-          price: number
           sort_order: number
           street_id: string
         }
@@ -197,7 +196,6 @@ export type Database = {
           note_even?: string
           note_oneven?: string
           postcode?: string
-          price?: number
           sort_order?: number
           street_id: string
         }
@@ -227,7 +225,6 @@ export type Database = {
           note_even?: string
           note_oneven?: string
           postcode?: string
-          price?: number
           sort_order?: number
           street_id?: string
         }
@@ -520,7 +517,6 @@ export type Database = {
           gepland_op: string | null
           id: string
           omschrijving: string
-          prijs: number
         }
         Insert: {
           company_id?: string
@@ -531,7 +527,6 @@ export type Database = {
           gepland_op?: string | null
           id?: string
           omschrijving: string
-          prijs?: number
         }
         Update: {
           company_id?: string
@@ -542,7 +537,6 @@ export type Database = {
           gepland_op?: string | null
           id?: string
           omschrijving?: string
-          prijs?: number
         }
         Relationships: [
           {
@@ -1057,7 +1051,6 @@ export type Database = {
           datum: string
           id: string
           notitie: string | null
-          prijs: number
         }
         Insert: {
           company_id?: string
@@ -1066,7 +1059,6 @@ export type Database = {
           datum: string
           id?: string
           notitie?: string | null
-          prijs?: number
         }
         Update: {
           company_id?: string
@@ -1075,7 +1067,6 @@ export type Database = {
           datum?: string
           id?: string
           notitie?: string | null
-          prijs?: number
         }
         Relationships: [
           {
@@ -1504,6 +1495,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      heeft_recht: {
+        Args: { recht: string }
+        Returns: boolean
+      }
       zet_adressen_inactief: {
         Args: { adressen: string[]; reden: string; planning_weg: boolean; voor_bedrijf?: string }
         Returns: Json

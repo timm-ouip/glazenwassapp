@@ -56,6 +56,7 @@ import {
   type QuickNote,
   type Street,
 } from "@/lib/klanten";
+import { useRecht } from "@/lib/rechten";
 import { InactieveAdressen } from "@/components/InactieveAdressen";
 import { StopDialog } from "@/components/StopDialog";
 import { draaiStoppenTerug, fetchInactieveAdressen, geplandeDagen, zetInactief, type StopReden } from "@/lib/stoppen";
@@ -129,15 +130,27 @@ const KOLOMMEN = [
 function Aangemeld({
   customer,
   onPatch,
+  alleenLezen = false,
 }: {
   customer: Customer;
   onPatch: (patch: Partial<Customer>) => void;
+  alleenLezen?: boolean;
 }) {
   if (!customer.aangemeld_op) return null;
   const wanneer = new Date(customer.aangemeld_op).toLocaleDateString("nl-NL", {
     day: "numeric",
     month: "long",
   });
+  if (alleenLezen) {
+    return (
+      <span
+        title={`Zelf doorgegeven op ${wanneer}`}
+        className="shrink-0 rounded-full bg-tint-groen px-1.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-tint-groen-ink"
+      >
+        Aangemeld
+      </span>
+    );
+  }
   return (
     <button
       type="button"
@@ -173,6 +186,9 @@ const KlantRegel = memo(function KlantRegel({
   onVeld,
   onPostcode,
   markeringen,
+  magKlanten,
+  magPlannen,
+  prijzenZien,
 }: {
   regel: Regel;
   plaats: string;
@@ -185,6 +201,11 @@ const KlantRegel = memo(function KlantRegel({
   onVeld: (r: Regel, veld: keyof KlantVelden, waarde: string) => void;
   onPostcode: (c: Customer, waarde: string) => void;
   markeringen: MarkeringRij[];
+  /** Naam, mail, telefoon en postcode wijzigen, stoppen en weggooien. */
+  magKlanten: boolean;
+  /** Kleur, overslaan en de startmaand: dat mag ook wie plant. */
+  magPlannen: boolean;
+  prijzenZien: boolean;
 }) {
   const adres = adresTekst(r);
 
@@ -194,8 +215,9 @@ const KlantRegel = memo(function KlantRegel({
       onPatch={(patch) => onPatch(r.customer, patch)}
       onDossier={() => onDossier(r)}
       onHoekadres={() => onHoekadres(r.customer)}
-      onKlus={() => onKlus(r.customer)}
-      onStoppen={() => onStoppen(r)}
+      onKlus={magPlannen || magKlanten ? () => onKlus(r.customer) : undefined}
+      onStoppen={magKlanten ? () => onStoppen(r) : undefined}
+      alleenLezen={!magPlannen && !magKlanten}
       markeringen={markeringen}
     >
       <tr className="group border-b border-border/60 last:border-b-0 hover:bg-accent/30">
@@ -227,8 +249,16 @@ const KlantRegel = memo(function KlantRegel({
               </span>
             )}
             <Overgeslagen customer={r.customer} />
-            <Aangemeld customer={r.customer} onPatch={(patch) => onPatch(r.customer, patch)} />
-            <WassenVanaf customer={r.customer} onPatch={(patch) => onPatch(r.customer, patch)} />
+            <Aangemeld
+              customer={r.customer}
+              onPatch={(patch) => onPatch(r.customer, patch)}
+              alleenLezen={!magKlanten}
+            />
+            <WassenVanaf
+              customer={r.customer}
+              onPatch={(patch) => onPatch(r.customer, patch)}
+              alleenLezen={!magPlannen && !magKlanten}
+            />
           </span>
         </td>
         {KOLOMMEN.map((k) => (
@@ -237,6 +267,7 @@ const KlantRegel = memo(function KlantRegel({
               value={r.klant?.[k.veld] ?? ""}
               placeholder="—"
               onCommit={(v) => onVeld(r, k.veld, v)}
+              alleenLezen={!magKlanten}
             />
           </td>
         ))}
@@ -245,24 +276,29 @@ const KlantRegel = memo(function KlantRegel({
             value={r.customer.postcode}
             placeholder="—"
             onCommit={(v) => onPostcode(r.customer, v)}
+            alleenLezen={!magKlanten}
           />
         </td>
         <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">{plaats || "—"}</td>
-        <td
-          className="whitespace-nowrap px-2 py-1 text-right tabular-nums text-muted-foreground"
-          title={ritmeOmschrijving(r.customer)}
-        >
-          {r.customer.price ? formatPrice(r.customer.price) : "—"}
-        </td>
-        <td className="px-2 py-1">
-          <button
-            className="flex size-7 items-center justify-center rounded-full text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:bg-destructive/10 hover:!text-destructive"
-            aria-label={`${adres}: stoppen of verwijderen`}
-            title="Stoppen of verwijderen"
-            onClick={() => onVerwijder(r)}
+        {prijzenZien && (
+          <td
+            className="whitespace-nowrap px-2 py-1 text-right tabular-nums text-muted-foreground"
+            title={ritmeOmschrijving(r.customer)}
           >
-            <Trash2 className="size-4" />
-          </button>
+            {r.customer.price ? formatPrice(r.customer.price) : "—"}
+          </td>
+        )}
+        <td className="px-2 py-1">
+          {magKlanten && (
+            <button
+              className="flex size-7 items-center justify-center rounded-full text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:bg-destructive/10 hover:!text-destructive"
+              aria-label={`${adres}: stoppen of verwijderen`}
+              title="Stoppen of verwijderen"
+              onClick={() => onVerwijder(r)}
+            >
+              <Trash2 className="size-4" />
+            </button>
+          )}
         </td>
       </tr>
     </KlantMenu>
@@ -275,6 +311,11 @@ function Klanten() {
   const navigate = useNavigate();
   const bevestig = useBevestig();
   const { wijk, klant: klantUitUrl } = Route.useSearch();
+  // Wat je hier mag, per recht. De database dwingt het af; dit zorgt dat er
+  // geen velden of knoppen staan die toch niets opslaan.
+  const magKlanten = useRecht("klanten_bewerken");
+  const magPlannen = useRecht("planning");
+  const prijzenZien = useRecht("prijzen_zien");
 
   const [zoektermen, setZoektermen] = useState<string[]>([]);
   const [alleenLeeg, setAlleenLeeg] = useState(false);
@@ -710,19 +751,23 @@ function Klanten() {
       acties={
         <>
           <ZoekBalk placeholder="Zoek adres of naam" onTermen={setZoektermen} />
-          <PostcodesOphalen
-            streets={streets.filter((s) => s.district_id === actieveWijk)}
-            customers={customers}
-            plaats={wijkVanNu?.plaats ?? ""}
-            onSaved={herlaad}
-          />
-          <Button
-            size="sm"
-            className="rounded-full"
-            onClick={() => setDossier({ open: true, klant: null, customer: null })}
-          >
-            <Plus className="size-4" /> Klant
-          </Button>
+          {magKlanten && (
+            <>
+              <PostcodesOphalen
+                streets={streets.filter((s) => s.district_id === actieveWijk)}
+                customers={customers}
+                plaats={wijkVanNu?.plaats ?? ""}
+                onSaved={herlaad}
+              />
+              <Button
+                size="sm"
+                className="rounded-full"
+                onClick={() => setDossier({ open: true, klant: null, customer: null })}
+              >
+                <Plus className="size-4" /> Klant
+              </Button>
+            </>
+          )}
         </>
       }
       kop={
@@ -814,7 +859,7 @@ function Klanten() {
                   ))}
                   <th className="w-24 px-2 py-2.5">postcode</th>
                   <th className="w-28 px-2 py-2.5">plaats</th>
-                  <th className="w-24 px-2 py-2.5">prijs</th>
+                  {prijzenZien && <th className="w-24 px-2 py-2.5">prijs</th>}
                   <th className="w-9 px-2 py-2.5" />
                 </tr>
               </thead>
@@ -833,13 +878,16 @@ function Klanten() {
                     onVeld={opVeld}
                     onPostcode={opPostcode}
                     markeringen={markeringen}
+                    magKlanten={magKlanten}
+                    magPlannen={magPlannen}
+                    prijzenZien={prijzenZien}
                   />
                 ))}
                 {/* Geen inhoud, alleen een plek om te zien dat je onderaan
                     bent. Staat er niet als de lijst al helemaal getoond is. */}
                 {erIsMeer && (
                   <tr ref={meerRef} aria-hidden="true">
-                    <td colSpan={KOLOMMEN.length + 6} className="h-8" />
+                    <td colSpan={KOLOMMEN.length + (prijzenZien ? 6 : 5)} className="h-8" />
                   </tr>
                 )}
               </tbody>
@@ -885,6 +933,7 @@ function Klanten() {
                           <InlineCel
                             value={k[kol.veld]}
                             placeholder="—"
+                            alleenLezen={!magKlanten}
                             onCommit={(v) =>
                               void zetKlantVeld(k.id, kol.veld, v, k[kol.veld]).catch((e) =>
                                 toast.error("Opslaan mislukt: " + (e as Error).message),
@@ -894,16 +943,18 @@ function Klanten() {
                         </td>
                       ))}
                       <td className="w-9 px-2 py-1">
-                        <button
-                          className="flex size-7 items-center justify-center rounded-full text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:bg-destructive/10 hover:!text-destructive"
-                          aria-label={`Klant ${k.naam || "zonder naam"} verwijderen`}
-                          title="Klant verwijderen"
-                          onClick={() =>
-                            void verwijderRegel(null, k, `Klant "${k.naam || "zonder naam"}"`)
-                          }
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
+                        {magKlanten && (
+                          <button
+                            className="flex size-7 items-center justify-center rounded-full text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:bg-destructive/10 hover:!text-destructive"
+                            aria-label={`Klant ${k.naam || "zonder naam"} verwijderen`}
+                            title="Klant verwijderen"
+                            onClick={() =>
+                              void verwijderRegel(null, k, `Klant "${k.naam || "zonder naam"}"`)
+                            }
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

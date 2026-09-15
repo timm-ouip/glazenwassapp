@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { eenVan } from "@/lib/embed";
 
 /**
  * Een wasdag is niets meer dan een selectie adressen bij een datum. Wat er
@@ -51,10 +52,13 @@ export function toonDatum(datum: string): string {
 export async function fetchWasdag(datum: string): Promise<WasdagRegel[]> {
   const { data, error } = await supabase
     .from("wasdag_regels")
-    .select("customer_id,prijs,notitie")
+    .select("customer_id,notitie,wasdag_prijzen(prijs)")
     .eq("datum", datum);
   if (error) throw error;
-  return (data ?? []) as WasdagRegel[];
+  // Het bedrag staat in wasdag_prijzen; zonder het recht "prijzen zien" is dat 0.
+  return ((data ?? []) as unknown as { customer_id: string | null; notitie: string | null; wasdag_prijzen: { prijs: number } | { prijs: number }[] | null }[]).map(
+    (r) => ({ customer_id: r.customer_id, notitie: r.notitie, prijs: Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0) }),
+  );
 }
 
 /** Eén regel met de dag erbij, voor het maandoverzicht. */
@@ -66,11 +70,13 @@ export interface WasdagDagRegel extends WasdagRegel {
 export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagDagRegel[]> {
   const { data, error } = await supabase
     .from("wasdag_regels")
-    .select("datum,customer_id,prijs")
+    .select("datum,customer_id,wasdag_prijzen(prijs)")
     .gte("datum", vanaf)
     .lte("datum", tot);
   if (error) throw error;
-  return (data ?? []) as WasdagDagRegel[];
+  return ((data ?? []) as unknown as { datum: string; customer_id: string | null; wasdag_prijzen: { prijs: number } | { prijs: number }[] | null }[]).map(
+    (r) => ({ datum: r.datum, customer_id: r.customer_id, prijs: Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0) }),
+  );
 }
 
 /**
@@ -83,18 +89,30 @@ export async function voegToeAanWasdag(
   regels: { customer_id: string; prijs: number; notitie?: string | null }[],
 ) {
   if (regels.length === 0) return;
-  const { error } = await supabase.from("wasdag_regels").upsert(
-    regels.map((r) => ({
-      datum,
-      customer_id: r.customer_id,
-      prijs: r.prijs,
-      // Verhuist een adres naar een andere dag, dan gaat wat er die keer
-      // anders ging mee. Anders zou het bij het opschuiven verdwijnen.
-      notitie: r.notitie ?? null,
-    })),
-    { onConflict: "company_id,datum,customer_id" },
-  );
+  const { data, error } = await supabase
+    .from("wasdag_regels")
+    .upsert(
+      regels.map((r) => ({
+        datum,
+        customer_id: r.customer_id,
+        // Verhuist een adres naar een andere dag, dan gaat wat er die keer
+        // anders ging mee. Anders zou het bij het opschuiven verdwijnen.
+        notitie: r.notitie ?? null,
+      })),
+      { onConflict: "company_id,datum,customer_id" },
+    )
+    .select("id,customer_id");
   if (error) throw error;
+
+  // Het bedrag in zijn eigen tabel. Een nieuwe regel krijgt van de database al
+  // de prijs van dat moment; wie prijzen mag zien, zet hier het bedrag dat hij
+  // meegaf. Zonder dat recht weigert de database, en blijft de momentopname.
+  const prijsVan = new Map(regels.map((r) => [r.customer_id, r.prijs]));
+  const prijzen = (data ?? []).map((d) => ({ regel_id: d.id, prijs: prijsVan.get(d.customer_id ?? "") ?? 0 }));
+  if (prijzen.length > 0) {
+    const { error: prijsFout } = await supabase.from("wasdag_prijzen").upsert(prijzen, { onConflict: "regel_id" });
+    if (prijsFout && prijsFout.code !== "42501") throw prijsFout;
+  }
 }
 
 /**
@@ -123,12 +141,72 @@ export async function werkWasdagRegelBij(
   customerId: string,
   patch: { prijs?: number; notitie?: string | null },
 ) {
-  const { error } = await supabase
-    .from("wasdag_regels")
-    .update(patch)
-    .eq("datum", datum)
-    .eq("customer_id", customerId);
-  if (error) throw error;
+  const { prijs, ...rest } = patch;
+  if (Object.keys(rest).length > 0) {
+    const { error } = await supabase
+      .from("wasdag_regels")
+      .update(rest)
+      .eq("datum", datum)
+      .eq("customer_id", customerId);
+    if (error) throw error;
+  }
+  if (prijs !== undefined) {
+    // Het bedrag van deze dag staat in wasdag_prijzen, bij de regel.
+    const { data: regel, error: leesFout } = await supabase
+      .from("wasdag_regels")
+      .select("id")
+      .eq("datum", datum)
+      .eq("customer_id", customerId)
+      .maybeSingle();
+    if (leesFout) throw leesFout;
+    if (regel) {
+      const { error: prijsFout } = await supabase
+        .from("wasdag_prijzen")
+        .upsert({ regel_id: regel.id, prijs }, { onConflict: "regel_id" });
+      if (prijsFout) throw prijsFout;
+    }
+  }
+}
+
+/**
+ * Verplaatst adressen van de ene dag naar de andere. Het blijft dezelfde
+ * regel: alleen de datum verandert, dus het bedrag van die keer (en de
+ * notitie) gaat mee. Ook als wie verschuift geen prijzen mag zien: een
+ * aangepaste prijs ("alleen de voorkant, € 15") blijft zo staan.
+ *
+ * Staat een adres op de nieuwe dag al, dan blijft die regel zoals hij is en
+ * verdwijnt alleen de oude.
+ */
+export async function verplaatsWasdag(van: string, naar: string, customerIds: string[]) {
+  if (van === naar || customerIds.length === 0) return;
+  const PER_KEER = 80;
+  for (let i = 0; i < customerIds.length; i += PER_KEER) {
+    const stuk = customerIds.slice(i, i + PER_KEER);
+    const { data: alDaar, error: leesFout } = await supabase
+      .from("wasdag_regels")
+      .select("customer_id")
+      .eq("datum", naar)
+      .in("customer_id", stuk);
+    if (leesFout) throw leesFout;
+    const bezet = new Set((alDaar ?? []).map((r) => r.customer_id));
+    const vrij = stuk.filter((id) => !bezet.has(id));
+    if (vrij.length > 0) {
+      const { data: verzet, error } = await supabase
+        .from("wasdag_regels")
+        .update({ datum: naar })
+        .eq("datum", van)
+        .in("customer_id", vrij)
+        .select("customer_id");
+      if (error) throw error;
+      // Een geweigerde wijziging geeft geen fout, maar raakt nul regels. Dan
+      // eerlijk zeggen, in plaats van "verplaatst" terwijl er niets gebeurde.
+      if ((verzet ?? []).length === 0) {
+        throw new Error("Je rol mag de planning niet verschuiven.");
+      }
+    }
+    const dubbel = stuk.filter((id) => bezet.has(id));
+    if (dubbel.length > 0) await haalUitWasdag(van, dubbel);
+  }
 }
 
 /** Veegt een hele dag leeg — op datum, dus zonder lijst met id's. */
