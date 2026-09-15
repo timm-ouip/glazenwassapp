@@ -6,8 +6,9 @@ import type { KeyboardEvent } from "react";
  *
  * Een paar plekken houden Enter voor zichzelf, en die slaan we over:
  * een knop (Enter drukt die knop in — ook Annuleren), een tekstvak over
- * meerdere regels, een uitklaplijst, en het zoekveld van een keuzelijst,
- * waar Enter het gemarkeerde item kiest.
+ * meerdere regels, een uitklaplijst, het zoekveld van een keuzelijst, waar
+ * Enter het gemarkeerde item kiest, en een open menu (zoals de frequentie):
+ * daar kiest Enter wat je aanwijst, en de popup mag dan niet ineens opslaan.
  */
 export function opslaanBijEnter(opslaan: () => void) {
   return (e: KeyboardEvent) => {
@@ -19,6 +20,7 @@ export function opslaanBijEnter(opslaan: () => void) {
     if (doel.tagName === "BUTTON" || doel.tagName === "TEXTAREA") return;
     if (doel.getAttribute("role") === "combobox") return;
     if (doel.closest("[cmdk-root]")) return;
+    if (doel.closest('[role="menu"]')) return;
 
     e.preventDefault();
     opslaan();

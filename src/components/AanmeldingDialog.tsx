@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FrequentieOpties } from "@/components/FrequentieKiezer";
+import { FrequentieKeuze } from "@/components/FrequentieKiezer";
 import {
   PopupBlok,
   PopupBody,
@@ -209,14 +209,7 @@ export function AanmeldingDialog({ open, onOpenChange, aanmelding, districts, on
                 </PopupVeld>
               )}
               <PopupVeld>
-                <Select value={ritme} onValueChange={setRitme}>
-                  <SelectTrigger className={popupInvoer}>
-                    <SelectValue placeholder="Kies…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <FrequentieOpties />
-                  </SelectContent>
-                </Select>
+                <FrequentieKeuze value={ritme} onChange={setRitme} />
               </PopupVeld>
             </PopupPaar>
           </PopupBlok>

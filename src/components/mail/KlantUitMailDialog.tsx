@@ -15,7 +15,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FrequentieOpties } from "@/components/FrequentieKiezer";
+import { FrequentieKeuze } from "@/components/FrequentieKiezer";
 import {
   PopupBlok,
   PopupBody,
@@ -284,14 +284,7 @@ export function KlantUitMailDialog({ open, onOpenChange, b, onKlaar }: Props) {
                 </PopupVeld>
               )}
               <PopupVeld>
-                <Select value={ritme} onValueChange={setRitme}>
-                  <SelectTrigger className={popupInvoer}>
-                    <SelectValue placeholder="Kies…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <FrequentieOpties />
-                  </SelectContent>
-                </Select>
+                <FrequentieKeuze value={ritme} onChange={setRitme} />
               </PopupVeld>
             </PopupPaar>
           </PopupBlok>

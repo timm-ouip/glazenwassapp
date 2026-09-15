@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FrequentieOpties } from "@/components/FrequentieKiezer";
+import { FrequentieKeuze } from "@/components/FrequentieKiezer";
 import { toast } from "sonner";
 import {
   leesRitmeWaarde,
@@ -159,7 +159,11 @@ export function KlantDialog({
     onSaved();
   }
 
-  const straatNaam = streets.find((s) => s.id === streetId)?.name ?? "";
+  // De echte straatnaam (die de knop Straatnamen opzoekt), met de werknaam
+  // van de wijklijst als terugval: "Willem Beukelszoonstraat", niet "Beukels".
+  const volledig = (s: Street) => s.volledige_naam.trim() || s.name;
+  const gekozenStraat = streets.find((s) => s.id === streetId);
+  const straatNaam = gekozenStraat ? volledig(gekozenStraat) : "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -187,12 +191,17 @@ export function KlantDialog({
             <PopupVeld icoon={<House className="size-4" />}>
               <Select value={streetId} onValueChange={setStreetId}>
                 <SelectTrigger className="h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0">
-                  <SelectValue placeholder="Kies een straat" />
+                  {/* In het dichte vak alleen de echte naam; de werknaam staat in de uitgeklapte lijst. */}
+                  <SelectValue placeholder="Kies een straat">{straatNaam || undefined}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {streets.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
-                      {s.name}
+                      {volledig(s)}
+                      {/* De werknaam erachter als hij anders is: zo herken je de straat van de lijst. */}
+                      {s.volledige_naam.trim() && s.volledige_naam.trim().toLowerCase() !== s.name.trim().toLowerCase() && (
+                        <span className="ml-1.5 text-muted-foreground">({s.name})</span>
+                      )}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -298,19 +307,8 @@ export function KlantDialog({
                 </PopupVeld>
               )}
               <PopupVeld icoon={<CalendarDays className="size-4" />}>
-                <Select value={ritme} onValueChange={setRitme}>
-                  <SelectTrigger className="h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0">
-                    <SelectValue placeholder="Kies…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {/* Per interval een groepje met de maanden die erbij
-                        kunnen horen — dezelfde indeling als het menu op de
-                        wijkenlijst, zodat je hier niet minder kunt kiezen dan
-                        daar. Bij om de 1 is er één mogelijkheid, dus dan is de
-                        maandkeuze geen keuze. */}
-                    <FrequentieOpties />
-                  </SelectContent>
-                </Select>
+                {/* Hetzelfde menu als op de wijklijst: per frequentie een zijmenu met de maanden. */}
+                <FrequentieKeuze value={ritme} onChange={setRitme} />
               </PopupVeld>
             </PopupPaar>
             <PopupHint>
