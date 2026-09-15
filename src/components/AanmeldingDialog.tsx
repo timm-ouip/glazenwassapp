@@ -121,7 +121,9 @@ export function AanmeldingDialog({ open, onOpenChange, aanmelding, districts, on
       const klant = await bewaarKlant(null, {
         naam: aanmelding!.naam,
         email: aanmelding!.email,
+        email2: "",
         telefoon: aanmelding!.telefoon,
+        telefoon2: "",
         straat: straat.trim(),
         huisnummer: nummer.trim(),
         postcode: aanmelding!.postcode,

@@ -17,7 +17,6 @@ import { Link } from "@tanstack/react-router";
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
   ArrowLeft,
-  CalendarDays,
   FileText,
   Flag,
   Folder,
@@ -28,7 +27,6 @@ import {
   Megaphone,
   Newspaper,
   Paperclip,
-  Phone,
   Reply,
   Search,
   Send,
@@ -38,7 +36,6 @@ import {
   Tag,
   Trash2,
   Undo2,
-  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -48,7 +45,6 @@ import {
   bronSleutel,
   fetchBericht,
   fetchBerichten,
-  fetchKlantBijEmail,
   lijstDatum,
   PER_PAGINA,
   telWachtend,
@@ -60,9 +56,8 @@ import {
 import { gooiWeg, zetGelezen, zetTerug } from "@/lib/mailacties";
 import { fetchMailbox, fetchMappen, mapNaam, type MailMap, type MapRol } from "@/lib/mailbox";
 import { categorieTint, fetchCategorieen, type MailCategorie } from "@/lib/paaltje";
-import { klantAdres, ritmeLabel } from "@/lib/klanten";
-import { toonDatum, vandaag } from "@/lib/wasdag";
 import { MailOpstellen, type Opzet } from "@/components/mail/MailOpstellen";
+import { KlantKaart } from "@/components/mail/KlantKaart";
 import { PaaltjeKaart } from "@/components/mail/PaaltjeKaart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -826,6 +821,7 @@ function Leesvenster({
       b={b}
       acties={acties}
       paaltje={<PaaltjeKaart b={b} kanSchrijven={kanSchrijven} onBeantwoord={(begin) => onBeantwoord(b, begin)} />}
+      klant={<KlantKaart b={b} kanSchrijven={kanSchrijven} />}
       onTerug={onTerug}
     />
   );
@@ -835,11 +831,14 @@ function Mailweergave({
   b,
   acties,
   paaltje,
+  klant,
   onTerug,
 }: {
   b: Bericht;
   acties: React.ReactNode;
   paaltje: React.ReactNode;
+  /** Rechts naast een binnengekomen mail: wie het is. */
+  klant: React.ReactNode;
   onTerug: () => void;
 }) {
   const datum = new Date(b.ontvangen_op).toLocaleString("nl-NL", {
@@ -917,7 +916,7 @@ function Mailweergave({
         </div>
         {b.richting === "in" && (
           <aside className="max-h-[40%] overflow-y-auto border-t border-border p-4 xl:max-h-none xl:border-l xl:border-t-0">
-            <KlantKaart email={b.van_email} />
+            {klant}
           </aside>
         )}
       </div>
@@ -957,70 +956,5 @@ function MailHtml({ html }: { html: string }) {
       referrerPolicy="no-referrer"
       className="min-h-0 w-full flex-1 bg-white"
     />
-  );
-}
-
-// --- Klant ---------------------------------------------------------------------
-
-function KlantKaart({ email }: { email: string }) {
-  const dag = vandaag();
-  const klanten = useQuery({
-    queryKey: ["klant-bij-email", email.toLowerCase(), dag],
-    queryFn: () => fetchKlantBijEmail(email, dag),
-    enabled: !!email,
-  });
-
-  if (klanten.isLoading) return <p className="text-[12.5px] text-muted-foreground">Klant zoeken…</p>;
-
-  if (klanten.isError) {
-    return (
-      <p className="rounded-[14px] bg-tint-rood p-3 text-[12.5px] text-tint-rood-ink">
-        Klant opzoeken lukte niet. Probeer het zo nog eens.
-      </p>
-    );
-  }
-
-  if (!klanten.data?.length) {
-    return (
-      <div className="rounded-[14px] bg-muted/50 p-3">
-        <p className="flex items-center gap-1.5 text-[13px] font-medium">
-          <UserRound className="size-3.5 text-muted-foreground" /> Geen klant
-        </p>
-        <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
-          {email || "Dit adres"} hoort nog bij geen klant.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      {klanten.data.map((k) => {
-        const frequenties = [...new Set(k.adressen.map((a) => ritmeLabel(a)))];
-        return (
-          <div key={k.id} className="rounded-[14px] bg-tint-groen p-3 text-tint-groen-ink">
-            <p className="flex items-center gap-1.5 text-[13.5px] font-semibold">
-              <UserRound className="size-3.5" /> {k.naam}
-            </p>
-            {klantAdres(k) && <p className="mt-1 text-[12.5px]">{klantAdres(k)}</p>}
-            {k.telefoon && (
-              <a href={`tel:${k.telefoon}`} className="mt-1 flex items-center gap-1.5 text-[12.5px] underline-offset-2 hover:underline">
-                <Phone className="size-3" /> {k.telefoon}
-              </a>
-            )}
-            <div className="mt-2 space-y-0.5 border-t border-tint-groen-ink/15 pt-2 text-[12px]">
-              <p>
-                {k.adressen.length} {k.adressen.length === 1 ? "adres" : "adressen"}
-                {frequenties.length > 0 && ` · frequentie ${frequenties.join(", ").toLowerCase()}`}
-              </p>
-              <p className="flex items-center gap-1.5">
-                <CalendarDays className="size-3" />
-                {k.volgendeWasdag ? `Volgende wasdag: ${toonDatum(k.volgendeWasdag)}` : "Nog niet ingepland"}
-              </p>
-            </div>
-          </div>
-        );
-      })}
-    </div>
   );
 }

@@ -186,7 +186,11 @@ export interface Klant {
   id: string;
   naam: string;
   email: string;
+  /** Een tweede mailadres: vaak mailen de man én de vrouw. */
+  email2: string;
   telefoon: string;
+  /** Een tweede telefoonnummer, om dezelfde reden. */
+  telefoon2: string;
   straat: string;
   huisnummer: string;
   postcode: string;
@@ -503,7 +507,7 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
   })) as Customer[];
 }
 
-const KLANT_VELDEN = "id,naam,email,telefoon,straat,huisnummer,postcode,plaats,notitie";
+const KLANT_VELDEN = "id,naam,email,email2,telefoon,telefoon2,straat,huisnummer,postcode,plaats,notitie";
 
 export async function fetchKlanten(): Promise<Klant[]> {
   const { data, error } = await supabase
@@ -520,7 +524,9 @@ export async function bewaarKlant(id: string | null, velden: KlantVelden): Promi
   const payload = {
     naam: velden.naam.trim(),
     email: velden.email.trim(),
+    email2: velden.email2.trim(),
     telefoon: velden.telefoon.trim(),
+    telefoon2: velden.telefoon2.trim(),
     straat: velden.straat.trim(),
     huisnummer: velden.huisnummer.trim(),
     postcode: velden.postcode.trim(),

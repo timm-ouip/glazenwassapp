@@ -160,7 +160,9 @@ function prijsGetal(waarde: string) {
 const LEEG = {
   naam: "",
   email: "",
+  email2: "",
   telefoon: "",
+  telefoon2: "",
   straat: "",
   huisnummer: "",
   postcode: "",
@@ -344,7 +346,9 @@ export function KlantgegevensDialog({
       const persoonlijk = Boolean(
         velden.naam.trim() ||
         velden.email.trim() ||
+        velden.email2.trim() ||
         velden.telefoon.trim() ||
+        velden.telefoon2.trim() ||
         velden.notitie.trim(),
       );
       // Bestaat het adres nog niet op een wijklijst, dan maken we het nu aan:
@@ -559,6 +563,31 @@ export function KlantgegevensDialog({
                       placeholder="06 12 34 56 78"
                       value={velden.telefoon}
                       onChange={(e) => zet({ telefoon: e.target.value })}
+                    />
+                  </PopupVeld>
+                </PopupPaar>
+                {/* Een tweede adres en nummer: vaak mailen of appen de man én de vrouw. */}
+                <PopupPaar>
+                  <PopupVeld icoon={<Mail className="size-4" />}>
+                    <Input
+                      id="email2"
+                      type="email"
+                      inputMode="email"
+                      className={popupInvoer}
+                      placeholder="Tweede e-mail"
+                      value={velden.email2}
+                      onChange={(e) => zet({ email2: e.target.value })}
+                    />
+                  </PopupVeld>
+                  <PopupVeld icoon={<Phone className="size-4" />}>
+                    <Input
+                      id="telefoon2"
+                      type="tel"
+                      inputMode="tel"
+                      className={popupInvoer}
+                      placeholder="Tweede telefoon"
+                      value={velden.telefoon2}
+                      onChange={(e) => zet({ telefoon2: e.target.value })}
                     />
                   </PopupVeld>
                 </PopupPaar>

@@ -19,6 +19,14 @@ import { categorieenVan, leesMail, richtprijzen, type TeLezen } from "../_gedeel
 import { voerActiesUit, type MailStand, type Voorstel } from "../_gedeeld/acties.ts";
 import { stuurAntwoord } from "../_gedeeld/verzenden.ts";
 import { stelAfsprakenVoor } from "../_gedeeld/afspraken.ts";
+import {
+  GEEN_GEGEVENS,
+  herken,
+  leesKlantgegevens,
+  vulAan,
+  zekerGekoppeld,
+  type KlantGegevens,
+} from "../_gedeeld/klantgegevens.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
@@ -56,6 +64,7 @@ type Gepakt = TeLezen &
     message_id: string;
     referenties: string[];
     antwoord_naar: string;
+    klantgegevens: unknown;
   };
 
 async function leesRonde(db: Db) {
@@ -106,7 +115,7 @@ async function leesRonde(db: Db) {
       .eq("id", id)
       .eq("paaltje_status", "wacht")
       .select(
-        "id,company_id,mailbox_id,van_naam,van_email,onderwerp,tekst,ontvangen_op,in_reply_to,voorstel,klant_id,beantwoord_op,afgehandeld_op,paaltje_pogingen,indeling_door_mens,message_id,referenties,antwoord_naar",
+        "id,company_id,mailbox_id,van_naam,van_email,onderwerp,tekst,ontvangen_op,in_reply_to,voorstel,klant_id,beantwoord_op,afgehandeld_op,paaltje_pogingen,indeling_door_mens,message_id,referenties,antwoord_naar,klantgegevens",
       );
     if (pakFout) {
       console.error(`bericht ${id} pakken:`, pakFout.message);
@@ -194,6 +203,59 @@ async function leesEen(
   // anders denkt.
   const isKlantmail = uit.is_klantmail || (mail.indeling_door_mens && indeling.length > 0);
 
+  // Klantgegevens (zie _gedeeld/klantgegevens.ts). Hoort het mailadres bij geen
+  // klant, maar klopt het telefoonnummer (of adres én naam) wel bij een klant,
+  // dan koppelen we het adres en leest Paaltje de mail de volgende ronde
+  // opnieuw, nu mét die klant. Zo komt er niet eerst een aanmelding of een
+  // antwoord alsof het een onbekende is.
+  const eerderKg = leesKlantgegevens(mail.klantgegevens);
+  let gokUitAdres: string | null = null;
+  if (isKlantmail && uit.aanmelding && !mail.klant_id && !uit.klant_bekend) {
+    const { herkend, gok } = await herken(
+      db,
+      mail.company_id,
+      uit.aanmelding,
+      mail.van_naam,
+      eerderKg.afgewezen ?? [],
+    );
+    if (herkend) {
+      const email = mail.van_email.trim().toLowerCase();
+      if (email) {
+        const { error: koppelFout } = await db
+          .from("klant_emails")
+          .insert({ company_id: mail.company_id, klant_id: herkend.klant_id, email, bron: "paaltje" });
+        if (koppelFout && koppelFout.code !== "23505") throw new Error(`Mailadres koppelen: ${koppelFout.message}`);
+      }
+      const opnieuw: KlantGegevens = {
+        ...eerderKg,
+        gevonden: uit.aanmelding,
+        herkend: { ...herkend, email },
+      };
+      const { error: terugFout } = await db
+        .from("berichten")
+        .update({
+          klant_id: herkend.klant_id,
+          klant_gok_id: null,
+          klantgegevens: opnieuw,
+          paaltje_status: "wacht",
+          paaltje_pogingen: 0,
+          ai_fout: "",
+        })
+        .eq("id", mail.id);
+      if (terugFout) throw new Error(`Herkende klant bewaren: ${terugFout.message}`);
+      return;
+    }
+    gokUitAdres = gok;
+  }
+
+  // Herkend aan telefoon of adres in de mail is niet hetzelfde als zeker: dat
+  // kan iedereen typen. Zolang een mens het niet bevestigde, voert Paaltje
+  // voor deze klant niets zelf door en komt het mailadres niet bij de klant.
+  const klantVoorActies = mail.klant_id ?? uit.klant_id;
+  const klantZeker = klantVoorActies
+    ? await zekerGekoppeld(db, mail.company_id, mail.van_email, klantVoorActies)
+    : true;
+
   const acties = await voerActiesUit(
     db,
     mail,
@@ -201,6 +263,7 @@ async function leesEen(
     categorieen,
     {
       klant_id: mail.klant_id,
+      klant_zeker: klantZeker,
       beantwoord_op: mail.beantwoord_op,
       afgehandeld_op: mail.afgehandeld_op,
       voorstel: (mail.voorstel as Voorstel | null) ?? {},
@@ -218,8 +281,39 @@ async function leesEen(
     paaltje_status: "klaar",
     paaltje_pogingen: 0,
     gelezen_door_paaltje_op: new Date().toISOString(),
-    klant_gok_id: mail.klant_id ? null : uit.klant_gok_id,
+    klant_gok_id: mail.klant_id ? null : (uit.klant_gok_id ?? gokUitAdres),
   };
+
+  // Lege vakjes bij de klant aanvullen met wat in de mail staat. Een fout hier
+  // maakt de gelezen mail niet "fout": het aanvullen is een extraatje.
+  const klantgegevens: KlantGegevens = { ...eerderKg };
+  delete klantgegevens.anders;
+  if (isKlantmail) {
+    if (uit.aanmelding) klantgegevens.gevonden = uit.aanmelding;
+    const klantId = mail.klant_id ?? uit.klant_id;
+    if (klantId) {
+      try {
+        const r = await vulAan(
+          db,
+          mail.company_id,
+          klantId,
+          uit.aanmelding ?? GEEN_GEGEVENS,
+          klantZeker ? mail.van_email : "",
+          eerderKg.teruggedraaid?.waarden ?? [],
+        );
+        // Opnieuw lezen vindt de vakjes niet meer leeg: wat er eerder bij
+        // dezelfde klant ingevuld werd, blijft in de lijst staan.
+        const eerder = eerderKg.toegevoegd?.klant_id === klantId ? eerderKg.toegevoegd.velden : {};
+        const velden = { ...eerder, ...r.toegevoegd };
+        if (Object.keys(velden).length > 0) klantgegevens.toegevoegd = { klant_id: klantId, velden };
+        else delete klantgegevens.toegevoegd;
+        if (Object.keys(r.anders).length > 0) klantgegevens.anders = r.anders;
+      } catch (e) {
+        console.error(`klantgegevens ${mail.id}:`, e instanceof Error ? e.message : e);
+      }
+    }
+  }
+  bijwerken.klantgegevens = klantgegevens;
   // Een al beantwoorde mail houdt zijn verstuurde tekst, en ook het concept
   // van Paaltje waar dat antwoord op aansloot: een nieuw concept achteraf zou
   // bij "afspraken voorstellen" vergeleken worden met iets dat nooit iemand zag.

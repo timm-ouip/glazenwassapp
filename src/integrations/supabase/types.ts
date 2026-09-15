@@ -451,6 +451,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           email: string
+          email2: string
           huisnummer: string
           id: string
           naam: string
@@ -459,6 +460,7 @@ export type Database = {
           postcode: string
           straat: string
           telefoon: string
+          telefoon2: string
           updated_at: string
         }
         Insert: {
@@ -466,6 +468,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           email?: string
+          email2?: string
           huisnummer?: string
           id?: string
           naam: string
@@ -474,6 +477,7 @@ export type Database = {
           postcode?: string
           straat?: string
           telefoon?: string
+          telefoon2?: string
           updated_at?: string
         }
         Update: {
@@ -481,6 +485,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           email?: string
+          email2?: string
           huisnummer?: string
           id?: string
           naam?: string
@@ -489,6 +494,7 @@ export type Database = {
           postcode?: string
           straat?: string
           telefoon?: string
+          telefoon2?: string
           updated_at?: string
         }
         Relationships: [
@@ -1082,6 +1088,7 @@ export type Database = {
           gelezen_door_paaltje_op: string | null
           is_klantmail: boolean | null
           klant_gok_id: string | null
+          klantgegevens: Json
           samenvatting: string
           voorstel: Json
           zekerheid: number | null
@@ -1132,6 +1139,7 @@ export type Database = {
           gelezen_door_paaltje_op?: string | null
           is_klantmail?: boolean | null
           klant_gok_id?: string | null
+          klantgegevens?: Json
           samenvatting?: string
           voorstel?: Json
           zekerheid?: number | null
@@ -1182,6 +1190,7 @@ export type Database = {
           gelezen_door_paaltje_op?: string | null
           is_klantmail?: boolean | null
           klant_gok_id?: string | null
+          klantgegevens?: Json
           samenvatting?: string
           voorstel?: Json
           zekerheid?: number | null

@@ -72,6 +72,8 @@ export interface TeLezen {
   tekst: string;
   ontvangen_op: string;
   in_reply_to: string;
+  /** De klant die al op de mail staat (gekoppeld of herkend); die telt als bekend. */
+  klant_id?: string | null;
 }
 
 const Lezing = z.object({
@@ -105,6 +107,8 @@ export interface Uitkomst {
   /** Geraden: het adres hoort bij geen klant, maar Paaltje denkt deze. */
   klant_gok_id: string | null;
   klanten: KlantInfo[];
+  /** Hoort het mailadres (of de klant op de mail) bij minstens één klant? */
+  klant_bekend: boolean;
   maanden: string[];
   concept: string;
   zekerheid: number;
@@ -221,6 +225,10 @@ async function zoekKlanten(
     if (error) throw new Error(`Klant zoeken: ${error.message}`);
     bekendeIds = [...new Set((data ?? []).map((r: { klant_id: string }) => r.klant_id))];
   }
+  // Staat er al een klant op de mail (met de hand gekoppeld, of herkend aan
+  // telefoon of adres), dan is die ook bekend: ook als de mail geen afzender-
+  // adres heeft om op te zoeken.
+  if (mail.klant_id && !bekendeIds.includes(mail.klant_id)) bekendeIds.unshift(mail.klant_id);
 
   let kandidaatIds: string[] = [];
   if (bekendeIds.length === 0) {
@@ -250,6 +258,7 @@ async function zoekKlanten(
     .from("klanten")
     .select("id,naam")
     .eq("company_id", mail.company_id)
+    .is("deleted_at", null)
     .in("id", alle);
   const adressen = await adressenVan(db, mail.company_id, alle);
   const info = (id: string): KlantInfo | null => {
@@ -378,6 +387,7 @@ export async function leesMail(
     klant_id: klanten.bekend.length === 1 ? klanten.bekend[0].id : null,
     klant_gok_id: null,
     klanten: [...klanten.bekend, ...klanten.kandidaten],
+    klant_bekend: klanten.bekend.length > 0,
     maanden: [],
     concept: "",
     zekerheid: 0,
@@ -418,8 +428,11 @@ export async function leesMail(
       ? `   Deze klant kreeg onlangs een aankondiging voor ${overDatum}; "deze keer" is die maand.`
       : '   Zonder genoemde maand is "deze keer" de eerstvolgende maand dat we komen.',
     "",
-    "5. `aanmelding` alleen bij een nieuwe klant: naam, adres en telefoon zoals ze in",
-    "   de mail staan. Wat er niet staat laat je leeg; verzin niets.",
+    "5. `aanmelding` bij elke klantmail, ook van een bestaande klant: naam, adres en",
+    "   telefoon van de afzender zelf, zoals ze in de mail staan (ook uit een",
+    "   handtekening onderaan). Niet van anderen die hij noemt (de buurman, een",
+    `   verhuurder) en niet van ${bedrijfNaam} zelf uit een geciteerde eerdere mail.`,
+    "   Wat er niet staat laat je leeg; verzin niets.",
     "",
     "6. `concept`: een antwoord in het Nederlands dat de glazenwasser kan versturen.",
     "   Beloof niets wat je niet weet (tijdstippen, kortingen). Bij een prijsvraag van",

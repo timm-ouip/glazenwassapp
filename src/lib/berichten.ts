@@ -52,6 +52,41 @@ export interface Voorstel {
   };
 }
 
+export type KlantVeld =
+  | "naam"
+  | "email"
+  | "email2"
+  | "telefoon"
+  | "telefoon2"
+  | "straat"
+  | "huisnummer"
+  | "postcode"
+  | "plaats";
+
+/**
+ * Wat Wooshy met de klantgegevens in een mail deed (zie
+ * supabase/functions/_gedeeld/klantgegevens.ts, waar het ontstaat).
+ */
+export interface KlantGegevens {
+  /** Wat Paaltje in de mail vond over de afzender. */
+  gevonden?: { naam: string; straat: string; huisnummer: string; postcode: string; plaats: string; telefoon: string };
+  /** Herkend aan telefoon of adres; het mailadres is toen aan de klant gekoppeld. */
+  herkend?: { klant_id: string; via: "telefoon" | "adres"; email: string };
+  /** Lege velden die Wooshy bij deze klant invulde. */
+  toegevoegd?: { klant_id: string; velden: Partial<Record<KlantVeld, string>> };
+  /** Wat in de mail anders is dan bij de klant, en niet meer in een leeg vak paste. */
+  anders?: { telefoon?: string; email?: string; adres?: string };
+  /** Klanten die niet opnieuw herkend mogen worden (teruggedraaid). */
+  afgewezen?: string[];
+  teruggedraaid?: {
+    op: string;
+    velden: Partial<Record<KlantVeld, string>>;
+    herkend?: { klant_id: string; via: "telefoon" | "adres"; email: string };
+    /** Velden die intussen door iemand gewijzigd waren en dus bleven staan. */
+    bleven: KlantVeld[];
+  };
+}
+
 export interface Bericht extends BerichtRegel {
   cc: Adres[];
   antwoord_naar: string;
@@ -70,6 +105,7 @@ export interface Bericht extends BerichtRegel {
   voorstel: Voorstel;
   ai_fout: string;
   klant_gok_id: string | null;
+  klantgegevens: KlantGegevens;
   doorgevoerd_op: string | null;
   doorgevoerd_automatisch: boolean;
   beantwoord_op: string | null;
@@ -236,7 +272,7 @@ export async function telWachtend(postvakId: string): Promise<number> {
   return count ?? 0;
 }
 
-const BERICHT_KOLOMMEN = `${REGEL_KOLOMMEN},cc,antwoord_naar,tekst,html,afgekapt,message_id,klant_id,paaltje_status,samenvatting,zekerheid,ai_fout,klant_gok_id,doorgevoerd_op,doorgevoerd_automatisch,beantwoord_op`;
+const BERICHT_KOLOMMEN = `${REGEL_KOLOMMEN},cc,antwoord_naar,tekst,html,afgekapt,message_id,klant_id,paaltje_status,samenvatting,zekerheid,ai_fout,klant_gok_id,klantgegevens,doorgevoerd_op,doorgevoerd_automatisch,beantwoord_op`;
 
 /** Eén mail, zolang hij nog op de server staat en niet weggelegd is. */
 export async function fetchBericht(id: string): Promise<Bericht | null> {
@@ -264,6 +300,7 @@ export async function fetchBericht(id: string): Promise<Bericht | null> {
       | "zekerheid"
       | "ai_fout"
       | "klant_gok_id"
+      | "klantgegevens"
       | "doorgevoerd_op"
       | "doorgevoerd_automatisch"
       | "beantwoord_op"
@@ -286,6 +323,7 @@ export async function fetchBericht(id: string): Promise<Bericht | null> {
     voorstel: (r.voorstel as unknown as Voorstel | null) ?? {},
     ai_fout: r.ai_fout,
     klant_gok_id: r.klant_gok_id,
+    klantgegevens: (r.klantgegevens as unknown as KlantGegevens | null) ?? {},
     doorgevoerd_op: r.doorgevoerd_op,
     doorgevoerd_automatisch: r.doorgevoerd_automatisch,
     beantwoord_op: r.beantwoord_op,
@@ -297,7 +335,10 @@ export async function fetchBericht(id: string): Promise<Bericht | null> {
 export interface KlantBijMail {
   id: string;
   naam: string;
+  email: string;
+  email2: string;
   telefoon: string;
+  telefoon2: string;
   straat: string;
   huisnummer: string;
   postcode: string;
@@ -317,17 +358,24 @@ export interface KlantBijMail {
  * terwijl het opzoeken gewoon mislukte, zet de glazenwasser op het verkeerde
  * been.
  */
-export async function fetchKlantBijEmail(email: string, vandaag: string): Promise<KlantBijMail[]> {
+export async function fetchKlantBijEmail(
+  email: string,
+  vandaag: string,
+  /** De klant die al op de mail staat; ook als het mailadres (nog) nergens bij hoort. */
+  klantId: string | null = null,
+): Promise<KlantBijMail[]> {
   const schoon = email.trim().toLowerCase();
-  if (!schoon) return [];
-  const { data: koppelingen, error: koppelFout } = await supabase
-    .from("klant_emails")
-    .select("klant_id")
-    .eq("email", schoon)
-    .limit(5);
-  if (koppelFout) throw koppelFout;
-  const ids = [...new Set((koppelingen ?? []).map((k) => k.klant_id))];
-  return await klantenMetAdressen(ids, vandaag);
+  const ids: string[] = klantId ? [klantId] : [];
+  if (schoon) {
+    const { data: koppelingen, error: koppelFout } = await supabase
+      .from("klant_emails")
+      .select("klant_id")
+      .eq("email", schoon)
+      .limit(5);
+    if (koppelFout) throw koppelFout;
+    ids.push(...(koppelingen ?? []).map((k) => k.klant_id));
+  }
+  return await klantenMetAdressen([...new Set(ids)], vandaag);
 }
 
 /** Klanten op id, met adressen en eerstvolgende wasdag (voor de kaart en de gok). */
@@ -357,7 +405,7 @@ export async function klantenMetAdressen(ids: string[], vandaag: string): Promis
   if (ids.length === 0) return [];
   const { data: klanten, error } = await supabase
     .from("klanten")
-    .select("id,naam,telefoon,straat,huisnummer,postcode,plaats")
+    .select("id,naam,email,email2,telefoon,telefoon2,straat,huisnummer,postcode,plaats")
     .in("id", ids)
     .is("deleted_at", null);
   if (error) throw error;
@@ -396,6 +444,134 @@ export async function klantenMetAdressen(ids: string[], vandaag: string): Promis
       };
     }),
   );
+}
+
+/** Eén keuze bij "Koppelen aan adres": een adres (met of zonder klant), of een klant zonder adres. */
+export interface AdresKeuze {
+  sleutel: string;
+  customerId: string | null;
+  adres: string;
+  /** Los, om bij een nieuwe klant het postadres in te vullen. */
+  straat: string;
+  huisnummer: string;
+  klantId: string | null;
+  klantNaam: string;
+  /** Gestopt of verhuisd: daar koppel je geen nieuwe mail aan. */
+  inactief: boolean;
+}
+
+type AdresRij = {
+  id: string;
+  house_number: number;
+  addition: string | null;
+  klant_id: string | null;
+  inactief_op: string | null;
+  streets: { name: string; volledige_naam: string | null } | null;
+  klanten: { naam: string; deleted_at: string | null } | null;
+};
+
+const ADRES_KOLOMMEN = "id,house_number,addition,klant_id,inactief_op,streets(name,volledige_naam),klanten(naam,deleted_at)";
+
+function alsKeuze(c: AdresRij): AdresKeuze {
+  const straat = c.streets ? c.streets.volledige_naam || c.streets.name : "";
+  const klant = c.klanten && !c.klanten.deleted_at ? c.klanten : null;
+  return {
+    sleutel: `a:${c.id}`,
+    customerId: c.id,
+    adres: `${straat} ${c.house_number}${c.addition ?? ""}`.trim(),
+    straat,
+    huisnummer: `${c.house_number}${c.addition ?? ""}`,
+    klantId: klant ? c.klant_id : null,
+    klantNaam: klant?.naam ?? "",
+    inactief: !!c.inactief_op,
+  };
+}
+
+/**
+ * Zoeken voor "Koppelen aan adres": "Kerkstraat 12" zoekt het adres, een naam
+ * zoekt de klant. Hooguit een handvol treffers; typ meer voor minder.
+ */
+export async function zoekAdresOfKlant(zoek: string): Promise<AdresKeuze[]> {
+  // Tekens die de filtertaal van PostgREST zelf gebruikt, eruit.
+  const term = zoek.replace(/[%,()*"\\]/g, " ").replace(/\s+/g, " ").trim();
+  if (term.length < 2) return [];
+  const uit: AdresKeuze[] = [];
+
+  const m = term.match(/^(.*?)\s*(\d+)\s*([a-zA-Z]{0,3})$/);
+  const straatDeel = (m ? (m[1] ?? "") : term).trim();
+  const nummer = m ? Number(m[2]) : null;
+
+  if (straatDeel.length >= 2) {
+    const { data: straten, error } = await supabase
+      .from("streets")
+      .select("id")
+      .or(`name.ilike.%${straatDeel}%,volledige_naam.ilike.%${straatDeel}%`)
+      .is("deleted_at", null)
+      .limit(40);
+    if (error) throw error;
+    const ids = (straten ?? []).map((s) => s.id);
+    if (ids.length > 0) {
+      let query = supabase.from("customers").select(ADRES_KOLOMMEN).in("street_id", ids).is("deleted_at", null);
+      if (nummer !== null) query = query.eq("house_number", nummer);
+      const { data, error: adresFout } = await query.order("house_number").limit(20);
+      if (adresFout) throw adresFout;
+      uit.push(...((data ?? []) as unknown as AdresRij[]).map(alsKeuze));
+    }
+  }
+
+  // Zonder huisnummer ook op naam: een klant zoek je vaak zo.
+  if (nummer === null) {
+    const { data: klanten, error } = await supabase
+      .from("klanten")
+      .select("id,naam")
+      .ilike("naam", `%${term}%`)
+      .is("deleted_at", null)
+      .limit(10);
+    if (error) throw error;
+    const ids = (klanten ?? []).map((k) => k.id);
+    if (ids.length > 0) {
+      const { data, error: adresFout } = await supabase
+        .from("customers")
+        .select(ADRES_KOLOMMEN)
+        .in("klant_id", ids)
+        .is("deleted_at", null)
+        .limit(20);
+      if (adresFout) throw adresFout;
+      const rijen = ((data ?? []) as unknown as AdresRij[]).map(alsKeuze);
+      uit.push(...rijen);
+      // Klanten zonder adres kun je ook kiezen.
+      const metAdres = new Set(rijen.map((r) => r.klantId));
+      for (const k of klanten ?? []) {
+        if (!metAdres.has(k.id)) {
+          uit.push({
+            sleutel: `k:${k.id}`,
+            customerId: null,
+            adres: "",
+            straat: "",
+            huisnummer: "",
+            klantId: k.id,
+            klantNaam: k.naam,
+            inactief: false,
+          });
+        }
+      }
+    }
+  }
+
+  const gezien = new Set<string>();
+  return uit.filter((k) => (gezien.has(k.sleutel) ? false : (gezien.add(k.sleutel), true))).slice(0, 25);
+}
+
+/** De klant die al aan een adres hangt, als die er is (niet weggelegd). */
+export async function klantVanAdres(customerId: string): Promise<{ id: string; naam: string } | null> {
+  const { data, error } = await supabase
+    .from("customers")
+    .select("klant_id,klanten(id,naam,deleted_at)")
+    .eq("id", customerId)
+    .maybeSingle();
+  if (error) throw error;
+  const k = (data as unknown as { klanten: { id: string; naam: string; deleted_at: string | null } | null } | null)?.klanten;
+  return k && !k.deleted_at ? { id: k.id, naam: k.naam } : null;
 }
 
 /** Wie het is, zoals een mailprogramma het in de lijst zet. */

@@ -445,7 +445,7 @@ function Klanten() {
     return regels.filter((r) => {
       if (alleenLeeg && r.klant?.naam.trim()) return false;
       const k = r.klant;
-      return pastZoek([adresTekst(r), k?.naam, k?.email, k?.telefoon, r.customer.postcode]);
+      return pastZoek([adresTekst(r), k?.naam, k?.email, k?.email2, k?.telefoon, k?.telefoon2, r.customer.postcode]);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regels, zoektermen, alleenLeeg]);
@@ -453,7 +453,7 @@ function Klanten() {
   const zichtbareLos = useMemo(() => {
     return losseKlanten.filter((k) => {
       if (alleenLeeg && k.naam.trim()) return false;
-      return pastZoek([k.naam, k.email, k.telefoon, k.postcode, k.straat, k.plaats]);
+      return pastZoek([k.naam, k.email, k.email2, k.telefoon, k.telefoon2, k.postcode, k.straat, k.plaats]);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [losseKlanten, zoektermen, alleenLeeg]);
@@ -554,7 +554,9 @@ function Klanten() {
       const nieuw = await bewaarKlant(null, {
         naam: "",
         email: "",
+        email2: "",
         telefoon: "",
+        telefoon2: "",
         notitie: "",
         postcode: r.customer.postcode,
         straat: adres.straat,

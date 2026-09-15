@@ -70,6 +70,15 @@ export function koppelKlant(berichtId: string, klantId: string): Promise<{ ok: t
   return roep({ actie: "klant-koppelen", bericht_id: berichtId, klant_id: klantId });
 }
 
+/**
+ * Alles terugdraaien wat Wooshy met de klantgegevens uit deze mail deed:
+ * ingevulde velden weer leeg, een zelf gekoppeld mailadres eraf. `bleven` zijn
+ * velden die intussen door iemand gewijzigd waren; die blijven staan.
+ */
+export function draaiKlantgegevensTerug(berichtId: string): Promise<{ ok: true; bleven: string[] }> {
+  return roep({ actie: "klantgegevens-terugdraaien", bericht_id: berichtId });
+}
+
 /** Het stopvoorstel van Paaltje doorvoeren: de adressen gaan naar de prullenbak. */
 export function stoppenDoorvoeren(
   berichtId: string,

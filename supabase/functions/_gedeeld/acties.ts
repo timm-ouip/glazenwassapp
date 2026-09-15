@@ -52,6 +52,12 @@ export interface Resultaat {
 export interface MailStand {
   /** Door een mens gekoppelde klant; die gaat voor op wat Paaltje vond. */
   klant_id: string | null;
+  /**
+   * Is het mailadres echt van deze klant (op de klant zelf, of door een mens
+   * gekoppeld)? Onwaar als Wooshy de klant alleen aan telefoon of adres in de
+   * mail herkende: dat kan iedereen typen, dus dan voert Paaltje niets zelf door.
+   */
+  klant_zeker?: boolean;
   beantwoord_op: string | null;
   afgehandeld_op: string | null;
   voorstel: Voorstel;
@@ -127,6 +133,7 @@ export async function voerActiesUit(
     voorstel.overslaan = { maanden: uit.maanden, adressen: adresIds, ...(teruggedraaid ? { teruggedraaid } : {}) };
     const mag =
       !teruggedraaid &&
+      stand.klant_zeker !== false &&
       overslaan >= NIVEAU.zelf_doorvoeren &&
       uit.zekerheid >= ZEKER_AUTOMATISCH &&
       adresIds.length === 1 &&
