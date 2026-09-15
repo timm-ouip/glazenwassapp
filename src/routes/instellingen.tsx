@@ -23,6 +23,7 @@ import {
   addQuickNote,
   deleteQuickNote,
   fetchCustomers,
+  fetchCustomersMetInactief,
   fetchDistricts,
   fetchMarkeringen,
   fetchQuickNotes,
@@ -808,6 +809,12 @@ function WijkenTab() {
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
+  // Het tempo komt uit gedaan werk, en daar horen adressen die later stopten
+  // gewoon bij. Het aantal adressen per wijk blijft op de actieve lijst.
+  const adressenQuery = useQuery({
+    queryKey: ["customers", "met-inactief"],
+    queryFn: fetchCustomersMetInactief,
+  });
 
   // Een half jaar terugkijken is genoeg om een tempo uit af te leiden, en kort
   // genoeg dat een oude werkwijze het gemiddelde niet blijft vertekenen.
@@ -825,8 +832,8 @@ function WijkenTab() {
 
   const districts = volgorde ?? districtsQuery.data ?? [];
   const gemeten = useMemo(
-    () => meetTempo(wasdagenQuery.data ?? [], customersQuery.data ?? [], streetsQuery.data ?? []),
-    [wasdagenQuery.data, customersQuery.data, streetsQuery.data],
+    () => meetTempo(wasdagenQuery.data ?? [], adressenQuery.data ?? [], streetsQuery.data ?? []),
+    [wasdagenQuery.data, adressenQuery.data, streetsQuery.data],
   );
 
   /** Hoeveel adressen hangen er aan deze wijk? Zegt of een wijk groot of

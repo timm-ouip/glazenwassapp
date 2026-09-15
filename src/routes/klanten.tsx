@@ -56,6 +56,9 @@ import {
   type QuickNote,
   type Street,
 } from "@/lib/klanten";
+import { InactieveAdressen } from "@/components/InactieveAdressen";
+import { StopDialog } from "@/components/StopDialog";
+import { draaiStoppenTerug, fetchInactieveAdressen, geplandeDagen, zetInactief, type StopReden } from "@/lib/stoppen";
 
 interface KlantenSearch {
   wijk?: string;
@@ -165,6 +168,7 @@ const KlantRegel = memo(function KlantRegel({
   onDossier,
   onHoekadres,
   onKlus,
+  onStoppen,
   onVerwijder,
   onVeld,
   onPostcode,
@@ -176,6 +180,7 @@ const KlantRegel = memo(function KlantRegel({
   onDossier: (r: Regel) => void;
   onHoekadres: (c: Customer) => void;
   onKlus: (c: Customer) => void;
+  onStoppen: (r: Regel) => void;
   onVerwijder: (r: Regel) => void;
   onVeld: (r: Regel, veld: keyof KlantVelden, waarde: string) => void;
   onPostcode: (c: Customer, waarde: string) => void;
@@ -190,6 +195,7 @@ const KlantRegel = memo(function KlantRegel({
       onDossier={() => onDossier(r)}
       onHoekadres={() => onHoekadres(r.customer)}
       onKlus={() => onKlus(r.customer)}
+      onStoppen={() => onStoppen(r)}
       markeringen={markeringen}
     >
       <tr className="group border-b border-border/60 last:border-b-0 hover:bg-accent/30">
@@ -272,6 +278,8 @@ function Klanten() {
 
   const [zoektermen, setZoektermen] = useState<string[]>([]);
   const [alleenLeeg, setAlleenLeeg] = useState(false);
+  const [toonInactief, setToonInactief] = useState(false);
+  const [stop, setStop] = useState<{ open: boolean; regel: Regel | null }>({ open: false, regel: null });
   const [dossier, setDossier] = useState<{
     open: boolean;
     klant: Klant | null;
@@ -294,6 +302,7 @@ function Klanten() {
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
   const klantenQuery = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten });
+  const inactiefQuery = useQuery({ queryKey: ["customers-inactief"], queryFn: fetchInactieveAdressen });
   const quickNotesQuery = useQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes });
   const markeringQuery = useQuery({ queryKey: ["markeringen"], queryFn: fetchMarkeringen });
 
@@ -375,8 +384,11 @@ function Klanten() {
     const opWijklijst = new Set(
       customers.filter((c) => c.klant_id && straatInWijk.has(c.street_id)).map((c) => c.klant_id),
     );
-    return klanten.filter((k) => !opWijklijst.has(k.id));
-  }, [customers, streets, districts, klanten]);
+    // Een klant die gestopt is heeft geen actief adres meer, maar hoort niet
+    // bij "nog zonder wijk": zijn adres staat bij Inactief.
+    const inactief = new Set((inactiefQuery.data ?? []).map((a) => a.klant_id).filter(Boolean));
+    return klanten.filter((k) => !opWijklijst.has(k.id) && !inactief.has(k.id));
+  }, [customers, streets, districts, klanten, inactiefQuery.data]);
 
   const zoektermenKlein = zoektermen.map((t) => t.toLowerCase());
 
@@ -449,6 +461,36 @@ function Klanten() {
   function herlaad() {
     qc.invalidateQueries({ queryKey: ["klanten"] });
     qc.invalidateQueries({ queryKey: ["customers"] });
+    qc.invalidateQueries({ queryKey: ["customers-inactief"] });
+  }
+
+  /** Een klant laat stoppen: het adres gaat naar Inactief, met alles bewaard. */
+  async function stopRegel(r: Regel, reden: StopReden, planningWeg: boolean) {
+    const adres = adresTekst(r);
+    const u = await zetInactief([r.customer.id], reden, planningWeg);
+    herlaad();
+    if (u.adressen.length === 0) {
+      toast.info(`${adres} was al inactief of weg.`);
+      return;
+    }
+    pushUndo({
+      label: `Stoppen ${adres}`,
+      undo: async () => {
+        await draaiStoppenTerug(u);
+        herlaad();
+      },
+    });
+    toast(`${adres} staat nu bij Inactief`, {
+      duration: 12000,
+      action: {
+        label: "Ongedaan maken",
+        onClick: () => {
+          void undoLaatste().then((label) => {
+            if (label) toast.success("Teruggedraaid: " + label);
+          });
+        },
+      },
+    });
   }
 
   /**
@@ -604,6 +646,7 @@ function Klanten() {
   );
   const opHoekadres = useStabiel((c: Customer) => setHoek({ open: true, customer: c }));
   const opKlus = useStabiel((c: Customer) => setKlus({ open: true, customer: c }));
+  const opStoppen = useStabiel((r: Regel) => setStop({ open: true, regel: r }));
 
   /** Zie de wijkenpagina: een opdracht komt zonder dag binnen. */
   async function maakKlus(customerId: string, omschrijving: string, prijs: number) {
@@ -713,6 +756,12 @@ function Klanten() {
               Alleen nog in te vullen
             </Label>
           </div>
+          <div className="flex items-center gap-2">
+            <Switch id="inactief" checked={toonInactief} onCheckedChange={setToonInactief} />
+            <Label htmlFor="inactief" className="text-[13px]">
+              Inactief
+            </Label>
+          </div>
           <span className="ml-auto text-xs text-muted-foreground">
             {zichtbaar.length} van {regels.length} regels
           </span>
@@ -725,7 +774,15 @@ function Klanten() {
           </p>
         )}
 
-        {zichtbaar.length === 0 ? (
+        {toonInactief ? (
+          <InactieveAdressen
+            adressen={inactiefQuery.data ?? []}
+            straten={streets.filter((s) => s.district_id === actieveWijk)}
+            klanten={klanten}
+            laden={inactiefQuery.isLoading}
+            onGewijzigd={herlaad}
+          />
+        ) : zichtbaar.length === 0 ? (
           <div className="rounded-[18px] border border-dashed border-border bg-card/50 px-6 py-12 text-center">
             <p className="font-display text-lg font-semibold">
               {regels.length === 0 ? "Nog geen adressen in deze wijk" : "Niets gevonden"}
@@ -766,6 +823,7 @@ function Klanten() {
                     onDossier={opDossier}
                     onHoekadres={opHoekadres}
                     onKlus={opKlus}
+                    onStoppen={opStoppen}
                     onVerwijder={opVerwijder}
                     onVeld={opVeld}
                     onPostcode={opPostcode}
@@ -786,7 +844,7 @@ function Klanten() {
 
         {/* Klanten zonder adres op een wijklijst. Ze horen bij geen enkele
             wijk, dus ze staan apart in plaats van bij de wijk van dat moment. */}
-        {zichtbareLos.length > 0 && (
+        {!toonInactief && zichtbareLos.length > 0 && (
           <div className="space-y-2 pt-2">
             <div>
               <h2 className="font-display text-[15px] font-semibold">Nog zonder wijk</h2>
@@ -851,6 +909,16 @@ function Klanten() {
         )}
       </div>
 
+      <StopDialog
+        open={stop.open}
+        onOpenChange={(open) => setStop((s) => ({ ...s, open }))}
+        titel={stop.regel?.klant?.naam ? `${stop.regel.klant.naam} stopt` : "Klant stopt"}
+        omschrijving={stop.regel ? adresTekst(stop.regel) : ""}
+        telDagen={() => geplandeDagen(stop.regel ? [stop.regel.customer.id] : [])}
+        onBevestig={(reden, planningWeg) =>
+          stop.regel ? stopRegel(stop.regel, reden, planningWeg) : Promise.resolve()
+        }
+      />
       <KlusDialog
         open={klus.open}
         onOpenChange={(open) => setKlus((k) => ({ ...k, open }))}

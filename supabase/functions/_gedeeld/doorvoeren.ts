@@ -111,6 +111,8 @@ export async function voerOverslaanDoor(
     )
     .eq("company_id", o.companyId)
     .is("deleted_at", null)
+    // Een inactief adres komt niet, dus valt er niets over te slaan.
+    .is("inactief_op", null)
     .in("id", o.customerIds);
   // Niet kunnen lezen is niet "niets te doen": dan telt alles als mislukt.
   if (leesFout) return { aangepast: 0, mislukt: o.customerIds.length };
@@ -186,71 +188,166 @@ export async function voerOverslaanDoor(
   return { aangepast, mislukt };
 }
 
+export type StopReden = "verhuisd" | "gestopt";
+
 export interface Stopzetting {
   companyId: string;
   berichtId: string;
   customerIds: string[];
+  /** Verhuisd: klantgegevens naar de prullenbak. Gestopt: alles blijft. */
+  reden: StopReden;
+  /** Ook de wasdagen vanaf vandaag van de planning halen. */
+  planningWeg: boolean;
   /** De medewerker die klikte. Stoppen gebeurt nooit automatisch. */
   door: string;
 }
 
+/** Eén weggehaalde regel van de planning, zoals `zet_adressen_inactief` hem teruggeeft. */
+interface Planningsregel {
+  datum: string;
+  customer_id: string;
+  prijs: number | null;
+  notitie: string | null;
+}
+
 /**
- * Een klant laten stoppen: zijn adressen gaan naar de prullenbak (wegleggen,
- * niet wissen), elk met een regel in het rapport. Daar is het terug te draaien:
- * het adres komt dan gewoon terug, met alles erop en eraan.
+ * Wat er in `details` van een stoprapportregel staat. Alles wat nodig is om
+ * precies dít adres terug te draaien, en niet meer: de planning van één adres,
+ * en alleen de klant die bij dít adres hoort.
+ */
+interface StopDetails {
+  inactief_op?: string;
+  reden?: StopReden;
+  klanten?: string[];
+  planning?: Planningsregel[];
+  /** Van vóór inactief: toen ging het adres zelf naar de prullenbak. */
+  deleted_at?: string;
+}
+
+/** "jjjj-mm-dd" in Nederlandse tijd. */
+function vandaagInNederland(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/**
+ * Een stopzetting van één adres ongedaan maken. Voorzichtig: alleen wat nog
+ * precies zo staat als deze stopzetting het achterliet. Is het adres intussen
+ * met de hand weer actief gemaakt en opnieuw gestopt (ander tijdstip), of de
+ * klant al uit de prullenbak gehaald, dan blijft dat staan.
+ */
+async function draaiStoppenTerug(
+  db: Db,
+  companyId: string,
+  customerId: string,
+  d: StopDetails,
+): Promise<{ ok: true } | { ok: false; fout: string }> {
+  if (!d.inactief_op) return { ok: false, fout: "Bij deze aanpassing staat niet wanneer het adres stopte." };
+
+  // Eén stap in de database (stoppen_terugdraaien), dezelfde als de ongedaan-
+  // knop in de app: alleen wat nog van déze stopzetting is, klantgegevens
+  // alleen als ze nog sinds dit moment in de prullenbak liggen, planning alleen
+  // vanaf vandaag en nooit over een intussen opnieuw ingeplande dag heen.
+  const { error } = await db.rpc("stoppen_terugdraaien", {
+    uitkomst: {
+      adressen: [customerId],
+      klanten: (d.klanten ?? []).filter((k) => typeof k === "string"),
+      planning: (d.planning ?? []).filter((r) => r && r.customer_id === customerId),
+      inactief_op: d.inactief_op,
+    },
+    voor_bedrijf: companyId,
+  });
+  if (error) return { ok: false, fout: "Terugdraaien lukte niet." };
+  return { ok: true };
+}
+
+/**
+ * Een klant laten stoppen: zijn adressen worden inactief (niet weggegooid), elk
+ * met een regel in het rapport. Daar is het terug te draaien: het adres wordt
+ * weer actief, en wat er met de klantgegevens en de planning gebeurde komt
+ * terug.
+ *
+ * Het inactief maken zelf gebeurt in één keer in de database
+ * (`zet_adressen_inactief`): adres, planning en klantgegevens gaan samen, of
+ * niets gaat.
  */
 export async function voerStoppenDoor(
   db: Db,
   o: Stopzetting,
 ): Promise<{ aangepast: number; mislukt: number; mislukteIds: string[] }> {
   if (o.customerIds.length === 0) return { aangepast: 0, mislukt: 0, mislukteIds: [] };
+  const allesMislukt = { aangepast: 0, mislukt: o.customerIds.length, mislukteIds: o.customerIds };
+
+  // Eerst de namen, voor het rapport: na de verhuizing ligt de klant in de
+  // prullenbak, en dan is zijn naam lastiger te vinden.
   const { data: rijen, error: leesFout } = await db
     .from("customers")
-    .select("id,house_number,addition,streets(name,volledige_naam),klanten(naam)")
+    .select("id,klant_id,house_number,addition,streets(name,volledige_naam),klanten(naam)")
     .eq("company_id", o.companyId)
-    .is("deleted_at", null)
     .in("id", o.customerIds);
-  if (leesFout) return { aangepast: 0, mislukt: o.customerIds.length, mislukteIds: o.customerIds };
+  if (leesFout) return allesMislukt;
+  const perId = new Map<string, { klant_id: string | null; adres: string; klant: string }>();
+  for (const c of rijen ?? []) {
+    const straat = c.streets ? c.streets.volledige_naam || c.streets.name || "" : "";
+    perId.set(c.id, {
+      klant_id: c.klant_id ?? null,
+      adres: `${straat} ${c.house_number}${c.addition ?? ""}`.trim(),
+      klant: c.klanten?.naam ?? "",
+    });
+  }
 
+  const { data: uitkomst, error: rpcFout } = await db.rpc("zet_adressen_inactief", {
+    adressen: o.customerIds,
+    reden: o.reden,
+    planning_weg: o.planningWeg,
+    voor_bedrijf: o.companyId,
+  });
+  if (rpcFout || !uitkomst) {
+    console.error("stoppen:", rpcFout?.message);
+    return allesMislukt;
+  }
+  const gezet: string[] = uitkomst.adressen ?? [];
+  const klantenWeg: string[] = uitkomst.klanten ?? [];
+  const planning: Planningsregel[] = uitkomst.planning ?? [];
+  const inactiefOp: string = uitkomst.inactief_op;
+
+  // Adressen die gevraagd waren maar niet in `gezet` staan waren al inactief of
+  // weg: niets gebeurd, niets te melden, en ook niet mislukt.
   let aangepast = 0;
   const mislukteIds: string[] = [];
-  for (const c of rijen ?? []) {
-    const nu = new Date().toISOString();
-    const { data: weg, error } = await db
-      .from("customers")
-      .update({ deleted_at: nu })
-      .eq("company_id", o.companyId)
-      .eq("id", c.id)
-      .is("deleted_at", null)
-      .select("id");
-    if (error) {
-      mislukteIds.push(c.id);
-      continue;
-    }
-    if (!weg?.length) continue; // intussen al weggelegd
-    const straat = c.streets ? c.streets.volledige_naam || c.streets.name || "" : "";
+  for (const id of gezet) {
+    const info = perId.get(id);
+    const details: StopDetails = {
+      inactief_op: inactiefOp,
+      reden: o.reden,
+      // De klant komt bij elk adres van hem dat nu stopte. Draai je er één
+      // terug, dan heeft dat adres zijn klant weer nodig; de rest van die
+      // regels vindt de klant daarna gewoon niet meer in de prullenbak.
+      klanten: info?.klant_id && klantenWeg.includes(info.klant_id) ? [info.klant_id] : [],
+      planning: planning.filter((r) => r.customer_id === id),
+    };
     const { error: rapportFout } = await db.from("mail_wijzigingen").insert({
       company_id: o.companyId,
       bericht_id: o.berichtId,
-      customer_id: c.id,
-      adres: `${straat} ${c.house_number}${c.addition ?? ""}`.trim(),
-      klant: c.klanten?.naam ?? "",
+      customer_id: id,
+      adres: info?.adres ?? "",
+      klant: info?.klant ?? "",
       soort: "stoppen",
       automatisch: false,
       door: o.door,
-      details: { deleted_at: nu },
+      details,
     });
     if (rapportFout) {
       // Zonder regel in het rapport is het niet terug te draaien: dan het
-      // adres meteen terugzetten en het als mislukt tellen.
+      // adres meteen terugzetten (met klant en planning) en als mislukt tellen.
       console.error("rapport stoppen:", rapportFout.message);
-      await db
-        .from("customers")
-        .update({ deleted_at: null })
-        .eq("company_id", o.companyId)
-        .eq("id", c.id)
-        .eq("deleted_at", nu);
-      mislukteIds.push(c.id);
+      const terug = await draaiStoppenTerug(db, o.companyId, id, details);
+      if (!terug.ok) console.error("stoppen terugzetten:", terug.fout);
+      mislukteIds.push(id);
       continue;
     }
     aangepast += 1;
@@ -299,11 +396,17 @@ export async function draaiTerug(
   }
   if (!w.customer_id) return { ok: false, fout: "Het adres bestaat niet meer." };
 
-  if (w.soort === "stoppen") {
+  const stopDetails = (w.details ?? {}) as StopDetails;
+  if (w.soort === "stoppen" && stopDetails.inactief_op) {
+    // Een stopzetting als inactief: adres weer actief, klant en planning terug.
+    const terug = await draaiStoppenTerug(db, companyId, w.customer_id, stopDetails);
+    if (!terug.ok) return terug;
+  } else if (w.soort === "stoppen") {
+    // Een oude regel, van toen stoppen het adres naar de prullenbak legde.
     // Terug uit de prullenbak, maar alleen als het adres nog weggelegd is op
     // het moment van deze aanpassing: is het intussen met de hand teruggezet
     // of opnieuw weggelegd, dan blijft dat staan.
-    const weggelegdOp = (w.details as { deleted_at?: string } | null)?.deleted_at ?? null;
+    const weggelegdOp = stopDetails.deleted_at ?? null;
     const { data: adres } = await db
       .from("customers")
       .select("id,deleted_at")

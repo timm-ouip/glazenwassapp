@@ -15,7 +15,7 @@ import { ontsleutel } from "../_gedeeld/geheim.ts";
 import { maakOp } from "../_gedeeld/opmaken.ts";
 import { knip, maakImap, uitlegFout, type MapRol } from "../_gedeeld/ophalen.ts";
 import { MogelijkVerstuurd, verstuurBericht } from "../_gedeeld/smtp.ts";
-import { voerOverslaanDoor, voerStoppenDoor } from "../_gedeeld/doorvoeren.ts";
+import { type StopReden, voerOverslaanDoor, voerStoppenDoor } from "../_gedeeld/doorvoeren.ts";
 import { eigenTekst } from "../_gedeeld/paaltje.ts";
 
 interface Adres {
@@ -33,7 +33,12 @@ interface Verzoek {
     | "opnieuw-lezen"
     | "overslaan-doorvoeren"
     | "klant-koppelen"
-    | "stoppen-doorvoeren";
+    | "stoppen-doorvoeren"
+    | "stoppen-planning";
+  /** Bij stoppen-doorvoeren: waarom de klant stopt. */
+  reden?: string;
+  /** Bij stoppen-doorvoeren: ook de wasdagen vanaf morgen van de planning halen (vandaag blijft staan). */
+  planning_weg?: boolean;
   /** Bij klant-koppelen: welke klant. */
   klant_id?: string;
   /** Bij afhandelen: klaar (true) of toch weer open (false). */
@@ -151,8 +156,22 @@ Deno.serve(async (req) => {
         return await leesOpnieuw(db, box, String(verzoek.bericht_id ?? ""));
       case "overslaan-doorvoeren":
         return await overslaanDoorvoeren(db, box, String(verzoek.bericht_id ?? ""), medewerker.id);
-      case "stoppen-doorvoeren":
-        return await stoppenDoorvoeren(db, box, String(verzoek.bericht_id ?? ""), medewerker.id);
+      case "stoppen-doorvoeren": {
+        const reden = verzoek.reden;
+        if (reden !== "verhuisd" && reden !== "gestopt") {
+          return antwoord({ fout: "Kies of de klant verhuisd is of gestopt." }, 400);
+        }
+        return await stoppenDoorvoeren(
+          db,
+          box,
+          String(verzoek.bericht_id ?? ""),
+          medewerker.id,
+          reden,
+          verzoek.planning_weg === true,
+        );
+      }
+      case "stoppen-planning":
+        return await stoppenPlanning(db, box, String(verzoek.bericht_id ?? ""));
       case "klant-koppelen":
         return await koppelKlant(db, box, String(verzoek.bericht_id ?? ""), String(verzoek.klant_id ?? ""));
       default:
@@ -539,11 +558,78 @@ async function koppelKlant(db: Db, box: Box, id: string, klantId: string): Promi
   return antwoord({ ok: true });
 }
 
+/** "jjjj-mm-dd" in Nederlandse tijd — de server draait in UTC. */
+function vandaagInNederland(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/** Hoeveel losse dagen `stoppen-planning` hooguit noemt. */
+const MAX_DAGEN = 10;
+
 /**
- * Het stopvoorstel van Paaltje uitvoeren: de adressen van de klant gaan naar de
- * prullenbak, met een regel in het rapport (daar terug te draaien).
+ * Wat er van de planning af zou gaan als je het stopvoorstel doorvoert: hoeveel
+ * wasdagen vanaf morgen (vandaag blijft altijd staan) er voor die adressen staan, en op welke dagen. Zo zie
+ * je vóór het klikken of "ook van de planning halen" iets uitmaakt.
+ *
+ * Alleen adressen die nog actief zijn: de rest verandert bij doorvoeren niet.
  */
-async function stoppenDoorvoeren(db: Db, box: Box, id: string, door: string): Promise<Response> {
+async function stoppenPlanning(db: Db, box: Box, id: string): Promise<Response> {
+  if (!UUID.test(id)) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
+  const { data: rij, error } = await db
+    .from("berichten")
+    .select("id,voorstel")
+    .eq("id", id)
+    .eq("mailbox_id", box.id)
+    .maybeSingle();
+  if (error) throw new Error(`Mail opzoeken: ${error.message}`);
+  if (!rij) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
+  const voorstel = (rij.voorstel ?? {}) as { stoppen?: { adressen?: string[] } };
+  const gevraagd = (voorstel.stoppen?.adressen ?? []).filter((a) => UUID.test(String(a)));
+  if (gevraagd.length === 0) return antwoord({ fout: "Bij deze mail staat geen stopvoorstel." }, 400);
+
+  const { data: actief, error: adresFout } = await db
+    .from("customers")
+    .select("id")
+    .eq("company_id", box.company_id)
+    .is("deleted_at", null)
+    .is("inactief_op", null)
+    .in("id", gevraagd);
+  if (adresFout) throw new Error(`Adressen opzoeken: ${adresFout.message}`);
+  const adressen = (actief ?? []).map((c: { id: string }) => c.id);
+  if (adressen.length === 0) return antwoord({ aantal: 0, dagen: [] });
+
+  const { data: regels, error: planFout } = await db
+    .from("wasdag_regels")
+    .select("datum")
+    .eq("company_id", box.company_id)
+    .in("customer_id", adressen)
+    .gt("datum", vandaagInNederland())
+    .order("datum", { ascending: true })
+    .limit(500);
+  if (planFout) throw new Error(`Planning opzoeken: ${planFout.message}`);
+  // Twee panden op dezelfde dag is één dag: tel de datums, niet de regels.
+  const alleDagen = [...new Set((regels ?? []).map((r: { datum: string }) => r.datum))];
+  return antwoord({ aantal: alleDagen.length, dagen: alleDagen.slice(0, MAX_DAGEN) });
+}
+
+/**
+ * Het stopvoorstel van Paaltje uitvoeren: de adressen van de klant worden
+ * inactief (verhuisd of gestopt), met een regel in het rapport (daar terug te
+ * draaien).
+ */
+async function stoppenDoorvoeren(
+  db: Db,
+  box: Box,
+  id: string,
+  door: string,
+  reden: StopReden,
+  planningWeg: boolean,
+): Promise<Response> {
   if (!UUID.test(id)) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
   const { data: rij, error } = await db
     .from("berichten")
@@ -577,12 +663,14 @@ async function stoppenDoorvoeren(db: Db, box: Box, id: string, door: string): Pr
     companyId: box.company_id,
     berichtId: rij.id,
     customerIds: s.adressen,
+    reden,
+    planningWeg,
     door,
   });
   if (uit.aangepast === 0 && uit.mislukt === 0) {
     // Niets te doen: dan het voorstel weer open zetten.
     await db.from("berichten").update({ voorstel }).eq("id", rij.id);
-    return antwoord({ fout: "Deze adressen staan al in de prullenbak of bestaan niet meer." }, 409);
+    return antwoord({ fout: "Deze adressen zijn al inactief of bestaan niet meer." }, 409);
   }
   if (uit.mislukt > 0) {
     // Wat lukte staat in Rapport; de rest blijft als voorstel staan, zodat de
@@ -592,7 +680,7 @@ async function stoppenDoorvoeren(db: Db, box: Box, id: string, door: string): Pr
       .update({ voorstel: { ...voorstel, stoppen: { adressen: uit.mislukteIds } } })
       .eq("id", rij.id);
     return antwoord(
-      { fout: `${uit.mislukt} ${uit.mislukt === 1 ? "adres kon" : "adressen konden"} niet weggelegd worden. Probeer het nog eens.` },
+      { fout: `${uit.mislukt} ${uit.mislukt === 1 ? "adres kon" : "adressen konden"} niet op inactief gezet worden. Probeer het nog eens.` },
       500,
     );
   }

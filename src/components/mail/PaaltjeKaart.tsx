@@ -23,7 +23,15 @@ import {
 import { toast } from "sonner";
 
 import { adresNamen, klantenMetAdressen, type Bericht } from "@/lib/berichten";
-import { handelAf, koppelKlant, laatOpnieuwLezen, overslaanDoorvoeren, stoppenDoorvoeren } from "@/lib/mailacties";
+import {
+  handelAf,
+  koppelKlant,
+  laatOpnieuwLezen,
+  overslaanDoorvoeren,
+  stoppenDoorvoeren,
+  stoppenPlanning,
+} from "@/lib/mailacties";
+import { StopDialog } from "@/components/StopDialog";
 import { categorieTint, fetchCategorieen, zetCategorieen, type MailCategorie } from "@/lib/paaltje";
 import { toonMaand } from "@/lib/klanten";
 import { vandaag } from "@/lib/wasdag";
@@ -46,6 +54,12 @@ export function PaaltjeKaart({
   const bevestig = useBevestig();
   const categorieen = useQuery({ queryKey: ["mail-categorieen"], queryFn: fetchCategorieen });
   const [bezig, setBezig] = useState<string | null>(null);
+  const [stopOpen, setStopOpen] = useState(false);
+  const stopNamen = useQuery({
+    queryKey: ["adres-namen", b.voorstel.stoppen?.adressen ?? []],
+    queryFn: () => adresNamen(b.voorstel.stoppen?.adressen ?? []),
+    enabled: stopOpen,
+  });
 
   const ververs = () => {
     void qc.invalidateQueries({ queryKey: ["bericht", b.id] });
@@ -213,7 +227,7 @@ export function PaaltjeKaart({
               <CircleCheck className="size-3.5 text-tint-groen-ink" />
               <span>
                 Gestopt: {b.voorstel.stoppen.adressen.length}{" "}
-                {b.voorstel.stoppen.adressen.length === 1 ? "adres staat" : "adressen staan"} in de prullenbak.
+                {b.voorstel.stoppen.adressen.length === 1 ? "adres staat" : "adressen staan"} bij Inactief.
               </span>
               <span className="text-[12px]">Terugdraaien kan in Rapport</span>
             </>
@@ -229,33 +243,32 @@ export function PaaltjeKaart({
                 variant="outline"
                 className="h-7 rounded-full"
                 disabled={!kanSchrijven || bezig !== null}
-                onClick={async () => {
-                  const ids = b.voorstel.stoppen?.adressen ?? [];
-                  const namen = await adresNamen(ids).catch(() => [] as string[]);
-                  const aantal = namen.length || ids.length;
-                  const wat = namen.length ? namen.join(", ") : `${aantal} ${aantal === 1 ? "adres" : "adressen"}`;
-                  const ja = await bevestig({
-                    titel: "Klant laten stoppen?",
-                    tekst: `${wat} ${aantal === 1 ? "gaat" : "gaan"} naar de prullenbak en ${aantal === 1 ? "komt" : "komen"} niet meer op de planning. Klopt de klant? In Rapport kun je het terugdraaien.`,
-                    bevestigLabel: "Laten stoppen",
-                    gevaarlijk: true,
-                  });
-                  if (ja)
-                    void doe(
-                      "stoppen",
-                      async () => {
-                        await stoppenDoorvoeren(b.id);
-                        void qc.invalidateQueries({ queryKey: ["customers"] });
-                        void qc.invalidateQueries({ queryKey: ["klanten"] });
-                        void qc.invalidateQueries({ queryKey: ["prullenbak"] });
-                      },
-                      "De klant is gestopt.",
-                    );
-                }}
+                onClick={() => setStopOpen(true)}
               >
                 {bezig === "stoppen" ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
                 Klant laten stoppen
               </Button>
+              <StopDialog
+                open={stopOpen}
+                onOpenChange={setStopOpen}
+                titel="Klant stopt"
+                omschrijving={stopNamen.data?.join(", ") ?? ""}
+                telDagen={() => stoppenPlanning(b.id)}
+                onBevestig={async (reden, planningWeg) => {
+                  setBezig("stoppen");
+                  try {
+                    await stoppenDoorvoeren(b.id, reden, planningWeg);
+                    toast.success("De klant staat nu bij Inactief. Terugdraaien kan in Rapport.");
+                    ververs();
+                    void qc.invalidateQueries({ queryKey: ["customers"] });
+                    void qc.invalidateQueries({ queryKey: ["customers-inactief"] });
+                    void qc.invalidateQueries({ queryKey: ["klanten"] });
+                    void qc.invalidateQueries({ queryKey: ["prullenbak"] });
+                  } finally {
+                    setBezig(null);
+                  }
+                }}
+              />
             </>
           )}
         </Regel>

@@ -1067,6 +1067,9 @@ async function lijstVoorDag(
       .select("id,klant_id,house_number,addition,street_id,overslaan")
       .eq("company_id", companyId)
       .is("deleted_at", null)
+      // Inactief (gestopt of verhuisd): die krijgt geen aankondiging meer, ook
+      // als er nog een oude regel op de planning staat.
+      .is("inactief_op", null)
       .in("id", stuk);
     for (const c of data ?? []) {
       if (((c["overslaan"] as string[] | null) ?? []).includes(maand)) continue;
@@ -1168,6 +1171,8 @@ async function telDekking(
       .select("klant_id,overslaan")
       .eq("company_id", companyId)
       .is("deleted_at", null)
+      // Zelfde telling als lijstVoorDag: inactieve adressen doen niet mee.
+      .is("inactief_op", null)
       .in("id", stuk);
     for (const c of data ?? []) {
       if (((c["overslaan"] as string[] | null) ?? []).includes(maand)) {

@@ -123,6 +123,9 @@ export interface Street {
 }
 
 export interface Customer {
+  /** Alleen gevuld bij fetchCustomersMetInactief: gestopt of verhuisd. */
+  inactief_op?: string | null;
+  inactief_reden?: string | null;
   id: string;
   street_id: string;
   house_number: number;
@@ -441,15 +444,33 @@ export async function fetchStreets(): Promise<Street[]> {
   return (data ?? []).map((s) => ({ ...s, volledige_naam: s.volledige_naam ?? "" })) as Street[];
 }
 
-export async function fetchCustomers(): Promise<Customer[]> {
-  const { data, error } = await supabase
+/** De actieve adressen: wat op de wijklijst, de planning en in de omzet hoort. */
+export function fetchCustomers(): Promise<Customer[]> {
+  return haalCustomers(false);
+}
+
+/**
+ * Ook de inactieve adressen (gestopt of verhuisd). Voor wat al gebeurd is:
+ * een wasdag die bleef staan, de omzet van vorige maand, het tempo per wijk.
+ * Niet voor lijsten waar je nieuw werk uit kiest.
+ */
+export function fetchCustomersMetInactief(): Promise<Customer[]> {
+  return haalCustomers(true);
+}
+
+async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
+  let vraag = supabase
     .from("customers")
     // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
     // met een samengestelde string lukt dat niet meer.
     .select(
-      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op",
+      "id,street_id,house_number,addition,note,note_even,note_oneven,price,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op,inactief_op,inactief_reden",
     )
-    .is("deleted_at", null)
+    .is("deleted_at", null);
+  // Inactief (gestopt of verhuisd) hoort niet op de wijklijst, de planning
+  // of in de omzet; die staan apart, zie lib/stoppen.
+  if (!metInactief) vraag = vraag.is("inactief_op", null);
+  const { data, error } = await vraag
     .order("sort_order", { ascending: true })
     .order("house_number", { ascending: true });
   if (error) throw error;
@@ -574,17 +595,30 @@ export async function zorgVoorAdresRegel(
 
   const { data: nummers, error: nummerFout } = await supabase
     .from("customers")
-    .select("id,house_number,addition")
+    .select("id,house_number,addition,inactief_op")
     .eq("street_id", streetId)
     .is("deleted_at", null);
   if (nummerFout) throw nummerFout;
 
-  const bestaand = (nummers ?? []).find(
+  const kandidaten = (nummers ?? []).filter(
     (c) =>
       c.house_number === nummer.house_number &&
       (c.addition ?? "").trim().toLowerCase() === nummer.addition.toLowerCase(),
   );
-  if (bestaand) return bestaand.id;
+  // Na samenvoegen kan hetzelfde nummer er twee keer staan, een actief en een
+  // inactief adres. Dan telt het actieve.
+  const bestaand = kandidaten.find((c) => !c.inactief_op) ?? kandidaten[0];
+  if (bestaand) {
+    // Een inactief huis niet stil overschrijven: dan verdwijnen prijs en
+    // notities, en blijft de nieuwe klant onzichtbaar (inactief staat niet op
+    // de wijklijst). Eerst bewust weer actief maken.
+    if (bestaand.inactief_op) {
+      throw new Error(
+        "Dit adres staat bij Inactief (gestopt of verhuisd). Zet het eerst weer actief via Klanten → Inactief; dan blijven prijs en notities bewaard.",
+      );
+    }
+    return bestaand.id;
+  }
 
   const { data, error } = await supabase
     .from("customers")

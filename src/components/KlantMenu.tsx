@@ -6,6 +6,7 @@ import {
   FileText,
   Flag,
   Hammer,
+  UserMinus,
 } from "lucide-react";
 import { Fragment, useRef, useState, type ReactNode } from "react";
 
@@ -46,6 +47,8 @@ interface Props {
   /** Extra opdracht bij dit adres: werk zonder maand, dat meerijdt als je
    *  toch in die wijk bent. */
   onKlus: () => void;
+  /** Klant laat stoppen: gestopt of verhuisd. Laat weg waar dat niet kan. */
+  onStoppen?: (() => void) | undefined;
   /** De kleuren die dit bedrijf zelf gemaakt heeft, uit Instellingen. */
   markeringen: MarkeringRij[];
   children: ReactNode;
@@ -70,6 +73,7 @@ export function KlantMenu({
   onDossier,
   onHoekadres,
   onKlus,
+  onStoppen,
   markeringen,
   children,
 }: Props) {
@@ -226,6 +230,11 @@ export function KlantMenu({
         <ContextMenuItem onSelect={onKlus}>
           <Hammer className="size-4" /> Extra opdracht…
         </ContextMenuItem>
+        {onStoppen && (
+          <ContextMenuItem onSelect={onStoppen}>
+            <UserMinus className="size-4" /> Klant stopt…
+          </ContextMenuItem>
+        )}
 
         <ContextMenuSeparator />
         <ContextMenuLabel>Kleur op printlijst</ContextMenuLabel>

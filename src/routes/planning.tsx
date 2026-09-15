@@ -53,6 +53,7 @@ import { pushUndo, undoLaatste } from "@/lib/undo";
 import {
   aanDeBeurt,
   fetchCustomers,
+  fetchCustomersMetInactief,
   fetchDistricts,
   fetchStreets,
   formatNumber,
@@ -230,6 +231,14 @@ function Planning() {
   // Deze twee staan meestal al in de cache van de wijkenpagina; ze zijn hier
   // alleen nodig om te laten zien wélke straten er op een dag staan.
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
+  // Voor wat er al op een dag staat of gedaan is: ook gestopte en verhuisde
+  // adressen, anders vallen hun regels uit de wijken, de bedragen en het
+  // tempo. Nieuw werk kiezen (voorstel, wijk inplannen) blijft op de actieve
+  // lijst hierboven.
+  const adressenQuery = useQuery({
+    queryKey: ["customers", "met-inactief"],
+    queryFn: fetchCustomersMetInactief,
+  });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
 
@@ -255,7 +264,7 @@ function Planning() {
   /** Van adres naar wijk, in twee stappen: adres → straat → wijk. Zowel de
    *  kalender als de strook met opdrachten heeft dit nodig. */
   const wijkVanKlant = useMemo(() => {
-    const straatVan = new Map((customersQuery.data ?? []).map((c) => [c.id, c.street_id]));
+    const straatVan = new Map((adressenQuery.data ?? []).map((c) => [c.id, c.street_id]));
     const wijkVan = new Map((streetsQuery.data ?? []).map((s) => [s.id, s.district_id]));
     const kaart = new Map<string, string>();
     for (const [klantId, straatId] of straatVan) {
@@ -263,10 +272,10 @@ function Planning() {
       if (wijkId) kaart.set(klantId, wijkId);
     }
     return kaart;
-  }, [customersQuery.data, streetsQuery.data]);
+  }, [adressenQuery.data, streetsQuery.data]);
 
   const perDag = useMemo(() => {
-    const straatVan = new Map((customersQuery.data ?? []).map((c) => [c.id, c.street_id]));
+    const straatVan = new Map((adressenQuery.data ?? []).map((c) => [c.id, c.street_id]));
     const wijkVan = new Map((streetsQuery.data ?? []).map((s) => [s.id, s.district_id]));
 
     interface Dag {
@@ -323,7 +332,7 @@ function Planning() {
       dag.wijken.sort((a, b) => (wijkInfo.get(a)?.index ?? 0) - (wijkInfo.get(b)?.index ?? 0));
     }
     return kaart;
-  }, [regels, klussen, wijkVanKlant, customersQuery.data, streetsQuery.data, wijkInfo]);
+  }, [regels, klussen, wijkVanKlant, adressenQuery.data, streetsQuery.data, wijkInfo]);
 
   // Het balkje in een dagvak is relatief aan de drukste dag van deze maand.
   const drukste = useMemo(
@@ -358,7 +367,9 @@ function Planning() {
 
     const maandSleutelVanBlad = format(maand, "yyyy-MM");
     const regelsDezeMaand = regels.filter((r) => r.datum.startsWith(maandSleutelVanBlad));
-    const gemeten = meetTempo(historieQuery.data ?? [], customers, streets);
+    // Het tempo komt uit gedaan werk, dus mét gestopte adressen; wat er nog
+    // moet alleen uit de actieve.
+    const gemeten = meetTempo(historieQuery.data ?? [], adressenQuery.data ?? [], streets);
     const werk = werkPerWijk(
       maandSleutelVanBlad,
       districts,
@@ -374,6 +385,7 @@ function Planning() {
     districtsQuery.data,
     streetsQuery.data,
     customersQuery.data,
+    adressenQuery.data,
     regels,
     historieQuery.data,
     maand,
@@ -623,7 +635,7 @@ function Planning() {
 
   /** "Kerkstraat 12" bij een opdracht; de wijk staat er met een kleurstip bij. */
   const adresVan = useMemo(() => {
-    const adres = new Map((customersQuery.data ?? []).map((c) => [c.id, c]));
+    const adres = new Map((adressenQuery.data ?? []).map((c) => [c.id, c]));
     const straat = new Map((streetsQuery.data ?? []).map((s) => [s.id, s]));
     return (k: Klus) => {
       const c = adres.get(k.customer_id);
@@ -631,7 +643,7 @@ function Planning() {
       if (!c) return "Verwijderd adres";
       return `${s?.name ?? "?"} ${formatNumber(c)}`;
     };
-  }, [customersQuery.data, streetsQuery.data]);
+  }, [adressenQuery.data, streetsQuery.data]);
 
   /** Een lijst die al op wijk staat in groepjes, met een kopje per wijk.
    *  Binnen een wijk eerst wat al op een dag staat (op datum), dan wat bleef
@@ -680,7 +692,7 @@ function Planning() {
 
   /** De dag uitgesplitst per wijk, en daarbinnen per straat. */
   const perWijk = useMemo(() => {
-    const adres = new Map((customersQuery.data ?? []).map((c) => [c.id, c]));
+    const adres = new Map((adressenQuery.data ?? []).map((c) => [c.id, c]));
     const straat = new Map((streetsQuery.data ?? []).map((s) => [s.id, s]));
 
     interface Straat {
@@ -737,7 +749,7 @@ function Planning() {
         })),
       kwijt,
     };
-  }, [dagRegels, customersQuery.data, streetsQuery.data, wijkInfo]);
+  }, [dagRegels, adressenQuery.data, streetsQuery.data, wijkInfo]);
 
   /**
    * Schuift alles wat er vanaf deze dag t/m het eind van de maand staat een

@@ -71,8 +71,19 @@ export function koppelKlant(berichtId: string, klantId: string): Promise<{ ok: t
 }
 
 /** Het stopvoorstel van Paaltje doorvoeren: de adressen gaan naar de prullenbak. */
-export function stoppenDoorvoeren(berichtId: string): Promise<{ ok: true; aangepast: number }> {
-  return roep({ actie: "stoppen-doorvoeren", bericht_id: berichtId });
+export function stoppenDoorvoeren(
+  berichtId: string,
+  reden: "verhuisd" | "gestopt",
+  planningWeg: boolean,
+): Promise<{ ok: true; aangepast: number }> {
+  return roep({ actie: "stoppen-doorvoeren", bericht_id: berichtId, reden, planning_weg: planningWeg });
+}
+
+/** De wasdagen (vanaf morgen) waarop de adressen van een stopvoorstel nog staan.
+ *  `dagen` is hooguit de eerste tien; `aantal` is het totaal. */
+export async function stoppenPlanning(berichtId: string): Promise<{ dagen: string[]; aantal: number }> {
+  const uit = await roep<{ aantal: number; dagen: string[] }>({ actie: "stoppen-planning", bericht_id: berichtId });
+  return { dagen: uit.dagen ?? [], aantal: uit.aantal ?? 0 };
 }
 
 /** Het overslaan-voorstel van Paaltje doorvoeren. */

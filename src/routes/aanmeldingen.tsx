@@ -34,6 +34,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { PopupBody, PopupKader, PopupKop, PopupVoet } from "@/components/Popup";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BekendAdresKaart } from "@/components/BekendAdresKaart";
+import { fetchInactieveAdressen } from "@/lib/stoppen";
 
 export const Route = createFileRoute("/aanmeldingen")({
   beforeLoad: async () => {
@@ -63,6 +65,7 @@ function Aanmeldingen() {
   const alles = useQuery({ queryKey: ["aanmeldingen"], queryFn: fetchAanmeldingen });
   const wijken = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const klanten = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten });
+  const inactief = useQuery({ queryKey: ["customers-inactief"], queryFn: fetchInactieveAdressen });
 
   // Geen useMemo: het zijn twee filters over een handjevol regels, en een
   // memo op een lijst die elke render een nieuw array is levert niets op.
@@ -79,6 +82,7 @@ function Aanmeldingen() {
     // staat op elke pagina en haalt niet de hele lijst op.
     await qc.invalidateQueries({ queryKey: ["aanmeldingen-open"] });
     await qc.invalidateQueries({ queryKey: ["customers"] });
+    await qc.invalidateQueries({ queryKey: ["customers-inactief"] });
   }
 
   async function weigeren(a: Aanmelding) {
@@ -122,7 +126,16 @@ function Aanmeldingen() {
             <Leeg tekst="Niets te doen. Alles wat binnenkwam paste op een adres dat je al had." />
           ) : (
             open.map((a) =>
-              a.soort === "wijziging" ? (
+              a.soort === "bekend_adres" ? (
+                <BekendAdresKaart
+                  key={a.id}
+                  aanmelding={a}
+                  adres={(inactief.data ?? []).find((c) => c.id === a.customer_id) ?? null}
+                  oudeKlant={klantVan(a.klant_id)}
+                  onKlaar={opnieuw}
+                  onWeigeren={() => void weigeren(a)}
+                />
+              ) : a.soort === "wijziging" ? (
                 <WijzigingKaart
                   key={a.id}
                   aanmelding={a}

@@ -47,6 +47,7 @@ import { pushUndo } from "@/lib/undo";
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import {
   fetchCustomers,
+  fetchCustomersMetInactief,
   fetchDistricts,
   fetchStreets,
   formatNumber,
@@ -74,6 +75,7 @@ import {
   type Street,
 } from "@/lib/klanten";
 import { fetchWasdag, toonDatum } from "@/lib/wasdag";
+import { redenLabel } from "@/lib/stoppen";
 
 interface PrintSearch {
   wijk: string;
@@ -211,6 +213,12 @@ const StraatBlok = memo(function StraatBlok({
                         {formatNumber(c)}
                       </td>
                       <td className="px-[2px] text-[9px] leading-[1.1] break-words hyphens-auto">
+                        {/* Alleen bij een dagroute: gestopt na het inplannen. */}
+                        {c.inactief_op && (
+                          <span className="font-bold uppercase">
+                            {redenLabel(c.inactief_reden)}{" "}
+                          </span>
+                        )}
                         {c.hoek_straat && (
                           <span className="font-bold uppercase">{c.hoek_straat} </span>
                         )}
@@ -391,6 +399,14 @@ function PrintPagina() {
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
+  // Een dag die al ingepland is kan een adres bevatten dat daarna stopte; dat
+  // staat er nog op en hoort dus mee op papier. Een maandlijst kiest nieuw
+  // werk en blijft bij de actieve adressen.
+  const adressenQuery = useQuery({
+    queryKey: ["customers", "met-inactief"],
+    queryFn: fetchCustomersMetInactief,
+    enabled: Boolean(dag),
+  });
   const markeringQuery = useQuery({ queryKey: ["markeringen"], queryFn: fetchMarkeringen });
   // Print je een dag, dan bepaalt de wasdag wie er meegaat.
   const wasdagQuery = useQuery({
@@ -417,7 +433,7 @@ function PrintPagina() {
     () => (dag ? alleStreets : alleStreets.filter((s) => !wijkId || s.district_id === wijkId)),
     [alleStreets, wijkId, dag],
   );
-  const customers = customersQuery.data ?? [];
+  const customers = (dag ? adressenQuery.data : customersQuery.data) ?? [];
   const markeringen = markeringQuery.data ?? [];
 
   // Live volgorde tijdens het slepen (ids van straten in deze wijk).

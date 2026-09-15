@@ -161,6 +161,8 @@ import {
   type StraatGroep,
   type Street,
 } from "@/lib/klanten";
+import { StopDialog } from "@/components/StopDialog";
+import { draaiStoppenTerug, geplandeDagen, zetInactief, type StopReden } from "@/lib/stoppen";
 
 interface IndexSearch {
   wijk?: string;
@@ -271,6 +273,10 @@ function Index() {
     customer: null,
   });
   /** Extra opdracht bij een adres: werk zonder maand. */
+  const [stop, setStop] = useState<{ open: boolean; customer: Customer | null }>({
+    open: false,
+    customer: null,
+  });
   const [klus, setKlus] = useState<{ open: boolean; customer: Customer | null }>({
     open: false,
     customer: null,
@@ -881,6 +887,27 @@ function Index() {
     }
   }
 
+  /** Een klant laat stoppen: het adres wordt inactief, met alles bewaard. */
+  async function stopKlant(c: Customer, reden: StopReden, planningWeg: boolean) {
+    const straat = streets.find((s) => s.id === c.street_id)?.name;
+    const adres = straat ? `${straat} ${formatNumber(c)}` : `Klant ${formatNumber(c)}`;
+    const u = await zetInactief([c.id], reden, planningWeg);
+    if (u.adressen.length === 0) {
+      toast.info(`${adres} was al inactief of weg.`);
+      herlaad();
+      return;
+    }
+    pushUndo({
+      label: `Stoppen ${adres}`,
+      undo: async () => {
+        await draaiStoppenTerug(u);
+        herlaad();
+      },
+    });
+    herlaad();
+    meldUndo(`${adres} staat nu bij Inactief (klantenpagina)`);
+  }
+
   async function verwijderKlant(c: Customer) {
     // Met de straat erbij: "Klant 8" zegt niet welke 8, en elke straat heeft er een.
     const straat = streets.find((s) => s.id === c.street_id)?.name;
@@ -1147,6 +1174,7 @@ function Index() {
   const opDossier = useStabiel((c: Customer) => setDossier({ open: true, customer: c }));
   const opHoekadres = useStabiel((c: Customer) => setHoek({ open: true, customer: c }));
   const opKlus = useStabiel((c: Customer) => setKlus({ open: true, customer: c }));
+  const opStoppen = useStabiel((c: Customer) => setStop({ open: true, customer: c }));
   const opAddQuickNote = useStabiel(nieuweSnelkeuze);
   const opVerfStart = useStabiel(startVerf);
   const opKlantOpDag = useStabiel((c: Customer, aan: boolean) => {
@@ -1399,6 +1427,7 @@ function Index() {
       onDossier={opDossier}
       onHoekadres={opHoekadres}
       onKlus={opKlus}
+      onStoppen={opStoppen}
       onNieuweRegel={opNieuweRegel}
       onEditStreet={opEditStreet}
       onDeleteStreet={opDeleteStreet}
@@ -1787,6 +1816,20 @@ function Index() {
         onAddQuickNote={nieuweSnelkeuze}
         onSaved={herlaad}
       />
+      <StopDialog
+        open={stop.open}
+        onOpenChange={(open) => setStop((s) => ({ ...s, open }))}
+        titel="Klant stopt"
+        omschrijving={
+          stop.customer
+            ? `${streets.find((s) => s.id === stop.customer?.street_id)?.name ?? ""} ${formatNumber(stop.customer)}`.trim()
+            : ""
+        }
+        telDagen={() => geplandeDagen(stop.customer ? [stop.customer.id] : [])}
+        onBevestig={(reden, planningWeg) =>
+          stop.customer ? stopKlant(stop.customer, reden, planningWeg) : Promise.resolve()
+        }
+      />
       <KlusDialog
         open={klus.open}
         onOpenChange={(open) => setKlus((k) => ({ ...k, open }))}
@@ -2070,6 +2113,7 @@ interface BlokProps {
   onDossier: (c: Customer) => void;
   onHoekadres: (c: Customer) => void;
   onKlus: (c: Customer) => void;
+  onStoppen: (c: Customer) => void;
   onNieuweRegel: (streetId: string, nummer: string) => void;
   onEditStreet: (street: Street) => void;
   onDeleteStreet: (street: Street) => void;
@@ -2414,6 +2458,7 @@ const StraatKolom = memo(function StraatKolom({
             onDossier={p.onDossier}
             onHoekadres={p.onHoekadres}
             onKlus={p.onKlus}
+            onStoppen={p.onStoppen}
           />
         ))}
       </div>
@@ -2449,6 +2494,7 @@ interface RijProps {
   onDossier: (c: Customer) => void;
   onHoekadres: (c: Customer) => void;
   onKlus: (c: Customer) => void;
+  onStoppen: (c: Customer) => void;
 }
 
 /**
@@ -2706,6 +2752,7 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
       onDossier={() => p.onDossier(c)}
       onHoekadres={() => p.onHoekadres(c)}
       onKlus={() => p.onKlus(c)}
+      onStoppen={() => p.onStoppen(c)}
       markeringen={p.markeringen}
     >
       <KlantRijSleep

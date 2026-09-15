@@ -368,7 +368,8 @@ export async function klantenMetAdressen(ids: string[], vandaag: string): Promis
         .from("customers")
         .select("id,interval_maanden,ritme")
         .eq("klant_id", k.id)
-        .is("deleted_at", null);
+        .is("deleted_at", null)
+        .is("inactief_op", null);
       if (adresFout) throw adresFout;
 
       const adresIds = (adressen ?? []).map((a) => a.id);

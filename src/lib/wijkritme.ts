@@ -55,6 +55,10 @@ function wijkVanAdres(streets: Street[]): Map<string, string> {
  * Een dag telt alleen mee voor de wijk waar het meeste geld van die dag zat:
  * rijd je 's ochtends de laatste tien van Gouda en 's middags heel Madestein,
  * dan zegt die dag iets over Madestein en niets over Gouda.
+ *
+ * Geef `customers` mét de inactieve adressen mee (fetchCustomersMetInactief):
+ * wie later stopte is toen wel gewassen. Zonder hen valt hun omzet uit de
+ * dagen en lijkt een wijk trager dan hij was.
  */
 export function meetTempo(
   regels: WasdagDagRegel[],

@@ -95,6 +95,7 @@ export async function leesBericht(db: Db, b: Binnengekomen): Promise<Gelezen> {
       .select("id,house_number,addition,streets(name,volledige_naam)")
       .eq("company_id", b.companyId)
       .is("deleted_at", null)
+      .is("inactief_op", null)
       .eq("klant_id", klant.id);
     for (const c of rijen ?? []) {
       const straat = c.streets ? c.streets.volledige_naam || c.streets.name || "" : "";

@@ -64,18 +64,37 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
     try {
       const doel = g.straten[0]!;
       const overige = g.straten.slice(1);
-      const teVerplaatsen = sortCustomers(
-        overige.flatMap((s) => customers.filter((c) => c.street_id === s.id)),
-      );
+      // Alle adressen van de dubbele straten, rechtstreeks uit de database:
+      // ook de inactieve (gestopt of verhuisd) en die in de prullenbak. De
+      // straat wordt hierna echt verwijderd, en wat er dan nog aan hangt gaat
+      // voorgoed mee, met prijs en notities.
+      const { data: alles, error: leesFout } = await supabase
+        .from("customers")
+        .select("id,street_id,sort_order,house_number")
+        .in(
+          "street_id",
+          overige.map((s) => s.id),
+        )
+        .order("sort_order", { ascending: true })
+        .order("house_number", { ascending: true });
+      if (leesFout) throw leesFout;
+      const teVerplaatsen = alles ?? [];
       const origineel = teVerplaatsen.map((c) => ({
         id: c.id,
         street_id: c.street_id,
         sort_order: c.sort_order,
       }));
-      const max = Math.max(
-        0,
-        ...customers.filter((c) => c.street_id === doel.id).map((c) => c.sort_order),
-      );
+      // Het hoogste volgnummer in de straat die blijft, ook van inactieve
+      // adressen: anders krijgt een verplaatst adres hetzelfde nummer als een
+      // gestopt huis dat later weer actief wordt.
+      const { data: hoogste, error: maxFout } = await supabase
+        .from("customers")
+        .select("sort_order")
+        .eq("street_id", doel.id)
+        .order("sort_order", { ascending: false })
+        .limit(1);
+      if (maxFout) throw maxFout;
+      const max = Math.max(0, hoogste?.[0]?.sort_order ?? 0);
 
       for (const [i, c] of teVerplaatsen.entries()) {
         const { error } = await supabase

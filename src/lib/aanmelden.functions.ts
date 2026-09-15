@@ -154,7 +154,7 @@ async function zoekAdresRegel(
   if (pc) {
     const { data } = await admin
       .from("customers")
-      .select("id,house_number,addition,postcode,klant_id")
+      .select("id,house_number,addition,postcode,klant_id,inactief_op,inactief_reden")
       .eq("company_id", companyId)
       .eq("house_number", velden.nummer)
       .is("deleted_at", null);
@@ -192,7 +192,7 @@ async function zoekAdresRegel(
 
   const { data: adressen } = await admin
     .from("customers")
-    .select("id,house_number,addition,postcode,klant_id")
+    .select("id,house_number,addition,postcode,klant_id,inactief_op,inactief_reden")
     .in("street_id", straatIds)
     .eq("house_number", velden.nummer)
     .is("deleted_at", null);
@@ -258,10 +258,16 @@ export const dienGegevensIn = createServerFn({ method: "POST" })
       toevoeging: nr.toevoeging,
     });
 
-    let soort: "gekoppeld" | "wijziging" | "onbekend" = "onbekend";
+    let soort: "gekoppeld" | "wijziging" | "onbekend" | "bekend_adres" = "onbekend";
     let klantId: string | null = null;
 
-    if (adres) {
+    if (adres?.inactief_op) {
+      // Dit huis kennen we: iemand stopte of verhuisde. Niets automatisch
+      // koppelen; de eigenaar ziet de oude gegevens als voorstel. Bij "gestopt"
+      // hoort de vorige klant er nog bij, bij "verhuisd" ligt die in de prullenbak.
+      soort = "bekend_adres";
+      klantId = adres.inactief_reden === "gestopt" ? adres.klant_id : null;
+    } else if (adres) {
       // Staan er al gegevens bij dit adres? Dan wordt er niets aangeraakt.
       // Iemand die een postcode kan typen mag niet het telefoonnummer van een
       // bestaande klant kunnen overschrijven.

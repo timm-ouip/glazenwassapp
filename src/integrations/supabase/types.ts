@@ -142,6 +142,8 @@ export type Database = {
       }
       customers: {
         Row: {
+          inactief_op: string | null
+          inactief_reden: string | null
           aangemeld_op: string | null
           addition: string
           company_id: string
@@ -170,6 +172,8 @@ export type Database = {
           street_id: string
         }
         Insert: {
+          inactief_op?: string | null
+          inactief_reden?: string | null
           aangemeld_op?: string | null
           addition?: string
           company_id?: string
@@ -198,6 +202,8 @@ export type Database = {
           street_id: string
         }
         Update: {
+          inactief_op?: string | null
+          inactief_reden?: string | null
           aangemeld_op?: string | null
           addition?: string
           company_id?: string
@@ -1498,6 +1504,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      zet_adressen_inactief: {
+        Args: { adressen: string[]; reden: string; planning_weg: boolean; voor_bedrijf?: string }
+        Returns: Json
+      }
+      zet_adressen_actief: {
+        Args: { adressen: string[]; voor_bedrijf?: string }
+        Returns: number
+      }
+      stoppen_terugdraaien: {
+        Args: { uitkomst: Json; voor_bedrijf?: string }
+        Returns: number
+      }
+      bekend_adres_overnemen: {
+        Args: { aanmelding: string; met_vorige_klant: boolean }
+        Returns: string
+      }
       zet_bericht_categorieen: {
         Args: { bericht: string; categorieen: string[] }
         Returns: undefined

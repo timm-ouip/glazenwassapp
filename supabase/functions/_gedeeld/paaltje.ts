@@ -47,7 +47,18 @@ export interface Categorie {
 export interface KlantInfo {
   id: string;
   naam: string;
-  adressen: { id: string; omschrijving: string; prijs: number; frequentie: string }[];
+  adressen: {
+    id: string;
+    omschrijving: string;
+    prijs: number;
+    frequentie: string;
+    /**
+     * Waarom het adres inactief is, of null als het gewoon actief is. Paaltje
+     * ziet inactieve adressen wel (zo herkent hij een oud-klant die terug wil),
+     * maar `acties.ts` doet er niets mee.
+     */
+    inactief: "verhuisd" | "gestopt" | null;
+  }[];
 }
 
 /** De mail zoals Paaltje hem nodig heeft. */
@@ -153,12 +164,18 @@ export async function categorieenVan(db: Db, companyId: string): Promise<Categor
   return (data ?? []) as Categorie[];
 }
 
-/** Adressen van klanten, met straatnaam, prijs en frequentie. */
+/**
+ * Adressen van klanten, met straatnaam, prijs en frequentie. Ook de inactieve:
+ * mailt een klant die gestopt is, dan moet Paaltje weten dat het een oud-klant
+ * is en niet een onbekende of een klant die nog gewoon op de planning staat.
+ */
 async function adressenVan(db: Db, companyId: string, klantIds: string[]) {
   if (klantIds.length === 0) return new Map<string, KlantInfo["adressen"]>();
   const { data, error } = await db
     .from("customers")
-    .select("id,klant_id,house_number,addition,price,interval_maanden,ritme,streets(name,volledige_naam)")
+    .select(
+      "id,klant_id,house_number,addition,price,interval_maanden,ritme,inactief_op,inactief_reden,streets(name,volledige_naam)",
+    )
     .eq("company_id", companyId)
     .is("deleted_at", null)
     .in("klant_id", klantIds);
@@ -172,6 +189,8 @@ async function adressenVan(db: Db, companyId: string, klantIds: string[]) {
       omschrijving: `${straat} ${c.house_number}${c.addition ?? ""}`.trim(),
       prijs: Number(c.price) || 0,
       frequentie: frequentieVan(c.interval_maanden, c.ritme),
+      // Een stempel zonder (bekende) reden telt als gestopt: inactief is het hoe dan ook.
+      inactief: c.inactief_op ? (c.inactief_reden === "verhuisd" ? "verhuisd" : "gestopt") : null,
     });
     uit.set(c.klant_id, lijst);
   }
@@ -511,7 +530,13 @@ function uitlegSleutel(sleutel: Sleutel | null): string {
 function adresTekst(k: KlantInfo): string {
   if (k.adressen.length === 0) return "";
   return ` — ${k.adressen
-    .map((a) => `${a.omschrijving} (${a.frequentie}${a.prijs ? `, €${a.prijs}` : ""})`)
+    .map((a) =>
+      a.inactief
+        ? // Geen frequentie of prijs: die gelden niet meer, en een oude prijs hoort
+          // niet ongemerkt in een concept.
+          `${a.omschrijving} (inactief: ${a.inactief === "verhuisd" ? "klant is verhuisd" : "gestopt als klant"})`
+        : `${a.omschrijving} (${a.frequentie}${a.prijs ? `, €${a.prijs}` : ""})`,
+    )
     .join("; ")}`;
 }
 

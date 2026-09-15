@@ -57,14 +57,20 @@ export interface MailStand {
   voorstel: Voorstel;
 }
 
-/** Adressen (id, omschrijving, prijs) van een klant, alleen binnen dit bedrijf. */
+/**
+ * De actieve adressen (id, omschrijving, prijs) van een klant, alleen binnen
+ * dit bedrijf. Inactieve adressen niet: die kun je niet overslaan of nog eens
+ * laten stoppen, en een oude prijs van een gestopt adres hoort niet in een
+ * prijsvoorstel.
+ */
 async function adressenVanKlant(db: Db, companyId: string, klantId: string) {
   const { data, error } = await db
     .from("customers")
     .select("id,house_number,addition,price,streets(name,volledige_naam)")
     .eq("company_id", companyId)
     .eq("klant_id", klantId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .is("inactief_op", null);
   if (error) throw new Error(`Adressen van klant: ${error.message}`);
   return (data ?? []).map((c: { id: string; house_number: number; addition: string | null; price: number; streets: { name: string; volledige_naam: string } | null }) => ({
     id: c.id,
@@ -102,8 +108,11 @@ export async function voerActiesUit(
 
   // Welke klant: die een mens koppelde gaat voor.
   const klantId = stand.klant_id ?? uit.klant_id;
+  // Alleen actieve adressen: Paaltje ziet de inactieve ook (om een oud-klant te
+  // herkennen), maar overslaan, stoppen of een prijs noemen gaat daar niet over.
   const adressen = klantId
-    ? (uit.klanten.find((k) => k.id === klantId)?.adressen ?? (await adressenVanKlant(db, mail.company_id, klantId)))
+    ? (uit.klanten.find((k) => k.id === klantId)?.adressen.filter((a) => !a.inactief) ??
+      (await adressenVanKlant(db, mail.company_id, klantId)))
     : [];
   const adresIds = adressen.map((a) => a.id);
   const voorstel: Voorstel = { ...eerder };

@@ -16,7 +16,9 @@ import { supabase } from "@/integrations/supabase/client";
  *  - `onbekend`: geen of meerdere passende adressen. Er is niets aangemaakt,
  *    want bij een nieuw adres horen een wijk en een prijs.
  */
-export type AanmeldSoort = "gekoppeld" | "wijziging" | "onbekend";
+/** bekend_adres: het adres staat inactief (gestopt of verhuisd); de oude
+ *  gegevens van het huis komen als voorstel. */
+export type AanmeldSoort = "gekoppeld" | "wijziging" | "onbekend" | "bekend_adres";
 
 export type AanmeldStatus = "open" | "klaar" | "geweigerd";
 

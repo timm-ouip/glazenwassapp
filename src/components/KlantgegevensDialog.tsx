@@ -340,19 +340,21 @@ export function KlantgegevensDialog({
         velden.telefoon.trim() ||
         velden.notitie.trim(),
       );
-      const klantId =
-        klant || persoonlijk || extra.length > 0
-          ? (await bewaarKlant(klant?.id ?? null, velden)).id
-          : null;
-
       // Bestaat het adres nog niet op een wijklijst, dan maken we het nu aan:
       // de klantenpagina en de wijkenlijst horen hetzelfde te laten zien.
+      // Vóór de klant: staat het adres bij Inactief, dan stopt het hier, en
+      // blijft er geen losse klant achter (en bij nog eens proberen geen tweede).
       let adresId = dossierCustomer?.id ?? null;
       let aangemaakt = false;
       if (!adresId && wijkId && velden.straat.trim() && velden.huisnummer.trim()) {
         adresId = await zorgVoorAdresRegel(wijkId, velden.straat, velden.huisnummer);
         aangemaakt = Boolean(adresId);
       }
+
+      const klantId =
+        klant || persoonlijk || extra.length > 0
+          ? (await bewaarKlant(klant?.id ?? null, velden)).id
+          : null;
 
       const alles = [adresId, ...extra].filter((id): id is string => Boolean(id));
       const was = beginKoppeling.current;

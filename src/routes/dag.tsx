@@ -27,6 +27,7 @@ import { OverslaanKnop } from "@/components/OverslaanKnop";
 import { DagAdresDialog } from "@/components/DagAdresDialog";
 import {
   fetchCustomers,
+  fetchCustomersMetInactief,
   fetchDistricts,
   fetchStraatGroepen,
   fetchStreets,
@@ -52,6 +53,7 @@ import { fetchKlussen, telDagVan, vinkKlusAf, zetKlusOpDag, type Klus } from "@/
 import { Checkbox } from "@/components/ui/checkbox";
 import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
 import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
+import { redenLabel } from "@/lib/stoppen";
 
 interface DagSearch {
   datum?: string;
@@ -158,6 +160,13 @@ function DagPagina() {
   const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
+  // Ook gestopte en verhuisde adressen: een regel die op de dag bleef staan is
+  // gewoon werk, en hoort in de lijst, het bedrag en de vorige ronde mee te
+  // tellen. De actieve lijst hierboven is alleen voor overslaan (toekomst).
+  const adressenQuery = useQuery({
+    queryKey: ["customers", "met-inactief"],
+    queryFn: fetchCustomersMetInactief,
+  });
   const groepenQuery = useQuery({ queryKey: ["straat_groepen"], queryFn: fetchStraatGroepen });
   const qc = useQueryClient();
   const undoLabel = useLaatsteUndoLabel();
@@ -221,14 +230,14 @@ function DagPagina() {
 
   /** "Kerkstraat 12" bij een opdracht. */
   const adresVan = useMemo(() => {
-    const adres = new Map((customersQuery.data ?? []).map((c) => [c.id, c]));
+    const adres = new Map((adressenQuery.data ?? []).map((c) => [c.id, c]));
     const straten = new Map((streetsQuery.data ?? []).map((s) => [s.id, s]));
     return (k: Klus) => {
       const c = adres.get(k.customer_id);
       const s = c ? straten.get(c.street_id) : undefined;
       return c ? `${s?.name ?? "?"} ${formatNumber(c)}` : "Verwijderd adres";
     };
-  }, [customersQuery.data, streetsQuery.data]);
+  }, [adressenQuery.data, streetsQuery.data]);
 
   async function vinkAf(k: Klus, aan: boolean) {
     try {
@@ -261,7 +270,7 @@ function DagPagina() {
    */
   const perWijk = useMemo(() => {
     const regels = wasdagQuery.data ?? [];
-    const adres = new Map((customersQuery.data ?? []).map((c) => [c.id, c]));
+    const adres = new Map((adressenQuery.data ?? []).map((c) => [c.id, c]));
     const straat = new Map((streetsQuery.data ?? []).map((s) => [s.id, s]));
     const wijkIndex = new Map((districtsQuery.data ?? []).map((d, i) => [d.id, i]));
     const wijkNaam = new Map((districtsQuery.data ?? []).map((d) => [d.id, d.name]));
@@ -392,7 +401,7 @@ function DagPagina() {
     return { wijken: wijkenUit, kwijt, regelVan, idsVan };
   }, [
     wasdagQuery.data,
-    customersQuery.data,
+    adressenQuery.data,
     streetsQuery.data,
     districtsQuery.data,
     groepenQuery.data,
@@ -685,7 +694,7 @@ function DagPagina() {
   const vorigeRonde = useMemo(() => {
     const rijen = terugblikQuery.data ?? [];
     if (rijen.length === 0) return null;
-    const adres = new Map((customersQuery.data ?? []).map((c) => [c.id, c]));
+    const adres = new Map((adressenQuery.data ?? []).map((c) => [c.id, c]));
     const straat = new Map((streetsQuery.data ?? []).map((st) => [st.id, st]));
     const hier = new Set(perWijk.wijken.map((w) => w.id));
     if (hier.size === 0) return null;
@@ -705,7 +714,7 @@ function DagPagina() {
       .sort((a, b) => b[0].localeCompare(a[0]));
     const laatste = zelfdeWijk[0];
     return laatste ? { datum: laatste[0], bedrag: laatste[1].bedrag } : null;
-  }, [terugblikQuery.data, customersQuery.data, streetsQuery.data, perWijk.wijken, datum]);
+  }, [terugblikQuery.data, adressenQuery.data, streetsQuery.data, perWijk.wijken, datum]);
 
   /**
    * Waar het geld van de dag zit, per straat. Twee straten kunnen evenveel
@@ -730,7 +739,8 @@ function DagPagina() {
 
   /**
    * De aangevinkte adressen als adres en niet als id: overslaan werkt op het
-   * adres zelf (zijn ritme), en heeft dus het hele ding nodig.
+   * adres zelf (zijn ritme), en heeft dus het hele ding nodig. Uit de actieve
+   * lijst: een gestopt adres komt toch niet meer aan de beurt.
    */
   const gekozenAdressen = useMemo(
     () => (customersQuery.data ?? []).filter((c) => keuze.has(c.id)),
@@ -847,7 +857,8 @@ function DagPagina() {
                   erna. Allebei dingen die je bedenkt terwijl je naar de dag
                   kijkt, dus staan ze naast elkaar — net als op de wijkenpagina. */}
               <OverslaanKnop
-                aantal={keuze.size}
+                // Gestopte adressen slaan niet over; die tellen niet mee.
+                aantal={gekozenAdressen.length}
                 onOverslaan={(m) => void slaSelectieOver(gekozenAdressen, m, qc)}
                 onNietsOverslaan={() => void wisOverslaanVanSelectie(gekozenAdressen, qc)}
               />
@@ -1319,6 +1330,13 @@ function StraatRij({
                 />
               )}
               <span className="w-9 shrink-0 font-medium tabular-nums">{formatNumber(c)}</span>
+              {/* Gestopt of verhuisd na het inplannen: de regel staat er nog,
+                  maar je moet het wel zien voor je aanbelt. */}
+              {c.inactief_op && (
+                <span className="shrink-0 rounded-full bg-surface px-2 py-[1px] text-[10.5px] text-muted-foreground">
+                  {redenLabel(c.inactief_reden)}
+                </span>
+              )}
               <span
                 className={`min-w-0 flex-1 truncate ${
                   anders ? "italic" : gekozen ? "" : "text-muted-foreground"
