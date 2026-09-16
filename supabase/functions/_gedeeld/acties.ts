@@ -21,7 +21,7 @@
  * gebeurt niets meer.
  */
 import { veiligVoorAutomatisch, voerOverslaanDoor, ZEKER_AUTOMATISCH } from "./doorvoeren.ts";
-import type { Categorie, TeLezen, Uitkomst, Zelfstandigheid } from "./paaltje.ts";
+import { telefoonAlsSleutel, type Categorie, type TeLezen, type Uitkomst, type Zelfstandigheid } from "./paaltje.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -178,7 +178,12 @@ export async function voerActiesUit(
         company_id: mail.company_id,
         naam: a.naam || mail.van_naam,
         email: mail.van_email,
-        telefoon: a.telefoon,
+        // Via WhatsApp is het nummer waarmee hij appte het telefoonnummer.
+        telefoon:
+          a.telefoon ||
+          (mail.kanaal === "whatsapp" && mail.wa_telefoon
+            ? telefoonAlsSleutel(mail.wa_telefoon) || `+${mail.wa_telefoon}`
+            : ""),
         postcode: a.postcode.replace(/\s+/g, "").toUpperCase(),
         straat: a.straat,
         huisnummer: a.huisnummer,

@@ -5,12 +5,27 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, CheckCheck, FileText, Loader2, Send, Smartphone } from "lucide-react";
+import {
+  Check,
+  CheckCheck,
+  FileText,
+  Loader2,
+  Send,
+  Smartphone,
+  Sparkles,
+  Undo2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { useRecht } from "@/lib/rechten";
+import { useAuth } from "@/lib/auth";
+import { draaiWijzigingTerug } from "@/lib/mailing";
+import { toonMaand } from "@/lib/klanten";
 import {
+  annuleerAntwoord,
+  fetchWijzigingenVan,
+  verstuurAntwoordNu,
   fetchWaBerichten,
   haalMediaAlsnogOp,
   mediaLink,
@@ -22,6 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export function ChatVenster({ telefoon, className }: { telefoon: string; className?: string }) {
+  const [tekst, setTekst] = useState("");
   const berichten = useQuery({
     queryKey: ["wa-berichten", telefoon],
     queryFn: () => fetchWaBerichten(telefoon),
@@ -51,15 +67,25 @@ export function ChatVenster({ telefoon, className }: { telefoon: string; classNa
           <Bubbel key={b.id} bericht={b} />
         ))}
       </div>
-      <Antwoordveld telefoon={telefoon} berichten={berichten.data ?? []} />
+      <PaaltjeStrook berichten={lijst} telefoon={telefoon} onGebruik={setTekst} />
+      <Antwoordveld telefoon={telefoon} berichten={lijst} tekst={tekst} setTekst={setTekst} />
     </div>
   );
 }
 
-function Antwoordveld({ telefoon, berichten }: { telefoon: string; berichten: WaBericht[] }) {
+function Antwoordveld({
+  telefoon,
+  berichten,
+  tekst,
+  setTekst,
+}: {
+  telefoon: string;
+  berichten: WaBericht[];
+  tekst: string;
+  setTekst: (t: string) => void;
+}) {
   const qc = useQueryClient();
   const magVersturen = useRecht("mail_versturen");
-  const [tekst, setTekst] = useState("");
   const [bezig, setBezig] = useState(false);
   const open = vensterOpen(berichten);
 
@@ -166,6 +192,14 @@ export function Bubbel({ bericht: b }: { bericht: WaBericht }) {
           </p>
         )}
         <p className="mt-0.5 flex items-center justify-end gap-1 text-[10.5px] opacity-70">
+          {b.bron === "paaltje" && (
+            <span
+              className="inline-flex items-center gap-0.5 font-medium"
+              title="Verstuurd door Paaltje"
+            >
+              <Sparkles className="size-3" /> Paaltje
+            </span>
+          )}
           {b.bron === "app" && (
             <span className="inline-flex items-center gap-0.5" title="Verstuurd vanaf je telefoon">
               <Smartphone className="size-3" />
@@ -274,5 +308,218 @@ function Media({
     >
       <FileText className="size-4" /> {m.naam || "Bestand downloaden"}
     </a>
+  );
+}
+
+/**
+ * Wat Paaltje met het laatste bericht van de klant deed of van plan is: een
+ * ingepland antwoord (tegen te houden of meteen te versturen), een voorstel
+ * om te gebruiken, of iets wat hij in Wooshy veranderde (geel, terug te
+ * draaien).
+ */
+function PaaltjeStrook({
+  berichten,
+  telefoon,
+  onGebruik,
+}: {
+  berichten: WaBericht[];
+  telefoon: string;
+  onGebruik: (tekst: string) => void;
+}) {
+  const qc = useQueryClient();
+  const { employee } = useAuth();
+  const isEigenaar = employee?.rol === "eigenaar";
+  const magVersturen = useRecht("mail_versturen");
+  const [bezig, setBezig] = useState(false);
+
+  // Het laatste bericht van de klant waar Paaltje iets mee deed; de rest van
+  // de beurt ("Samen gelezen…") hoort erbij.
+  const laatsteIn = [...berichten]
+    .reverse()
+    .find(
+      (b) =>
+        b.richting === "in" &&
+        b.bron !== "geschiedenis" &&
+        b.samenvatting !== "Samen gelezen met het bericht erna.",
+    );
+  const wijzigingen = useQuery({
+    queryKey: ["wa-wijzigingen", laatsteIn?.id],
+    queryFn: () => fetchWijzigingenVan(laatsteIn!.id),
+    enabled: isEigenaar && !!laatsteIn && laatsteIn.paaltje_status === "klaar",
+  });
+
+  if (!laatsteIn || !["wacht", "bezig", "klaar"].includes(laatsteIn.paaltje_status)) return null;
+  const b = laatsteIn;
+  const ververs = () => {
+    void qc.invalidateQueries({ queryKey: ["wa-berichten", telefoon] });
+    void qc.invalidateQueries({ queryKey: ["wa-wijzigingen", b.id] });
+  };
+
+  async function doe(actie: () => Promise<unknown>, gelukt: string) {
+    setBezig(true);
+    try {
+      await actie();
+      toast.success(gelukt);
+      ververs();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+      ververs();
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  if (b.paaltje_status !== "klaar") {
+    return (
+      <p className="flex items-center gap-1.5 border-t border-border px-3 py-1.5 text-[12px] text-muted-foreground">
+        <Sparkles className="size-3.5" /> Paaltje leest mee…
+      </p>
+    );
+  }
+
+  const open = (wijzigingen.data ?? []).filter((w) => !w.teruggedraaid_op);
+  const overslaan = open.find((w) => w.soort === "overslaan");
+  const afgemeld = open.find((w) => w.soort === "whatsapp_afgemeld");
+  const tijd = b.wa_antwoord_op
+    ? new Date(b.wa_antwoord_op).toLocaleString("nl-NL", {
+        weekday:
+          new Date(b.wa_antwoord_op).toDateString() === new Date().toDateString()
+            ? undefined
+            : "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
+  const concept = b.concept.trim();
+  const onbeantwoord = !b.beantwoord_op;
+
+  return (
+    <div className="space-y-1.5 border-t border-border px-3 py-2 text-[12.5px]">
+      {b.samenvatting && (
+        <p className="flex items-start gap-1.5 text-muted-foreground">
+          <Sparkles className="mt-0.5 size-3.5 shrink-0" />
+          <span>{b.samenvatting}</span>
+        </p>
+      )}
+
+      {overslaan && (
+        <Geel>
+          <span className="flex-1">
+            Paaltje zette {overslaan.maanden.map(toonMaand).join(" en ")} op overslaan.
+          </span>
+          <KleineKnop
+            disabled={bezig}
+            onClick={() => void doe(() => draaiWijzigingTerug(overslaan.id), "Teruggedraaid.")}
+          >
+            <Undo2 className="size-3.5" /> Ongedaan maken
+          </KleineKnop>
+        </Geel>
+      )}
+
+      {afgemeld && (
+        <Geel>
+          <span className="flex-1">Deze klant wil geen WhatsApp meer; Paaltje zette het uit.</span>
+          <KleineKnop
+            disabled={bezig}
+            onClick={() =>
+              void doe(() => draaiWijzigingTerug(afgemeld.id), "WhatsApp staat weer aan.")
+            }
+          >
+            <Undo2 className="size-3.5" /> Ongedaan maken
+          </KleineKnop>
+        </Geel>
+      )}
+
+      {b.wa_antwoord_status === "gepland" && concept && (
+        <Geel>
+          <span className="w-full">
+            Paaltje antwoordt om {tijd}: <q className="italic">{concept}</q>
+          </span>
+          {magVersturen && (
+            <>
+              <KleineKnop
+                disabled={bezig}
+                onClick={() =>
+                  void doe(
+                    () => verstuurAntwoordNu(b.id),
+                    "Wordt binnen een minuut verstuurd, ook buiten de antwoordtijden.",
+                  )
+                }
+              >
+                <Send className="size-3.5" /> Nu versturen
+              </KleineKnop>
+              <KleineKnop
+                disabled={bezig}
+                onClick={() =>
+                  void doe(async () => {
+                    await annuleerAntwoord(b.id);
+                    onGebruik(concept);
+                  }, "Het antwoord staat in het tekstvak.")
+                }
+              >
+                Aanpassen
+              </KleineKnop>
+              <KleineKnop
+                disabled={bezig}
+                onClick={() => void doe(() => annuleerAntwoord(b.id), "Paaltje stuurt dit niet.")}
+              >
+                Niet versturen
+              </KleineKnop>
+            </>
+          )}
+        </Geel>
+      )}
+
+      {b.wa_antwoord_status !== "gepland" &&
+        b.wa_antwoord_status !== "verstuurd" &&
+        b.wa_antwoord_status !== "bezig" &&
+        concept &&
+        onbeantwoord &&
+        magVersturen && (
+          <p className="flex flex-wrap items-center gap-2 rounded-[10px] bg-muted/60 px-2.5 py-1.5">
+            <span className="min-w-0 flex-1">
+              {b.wa_antwoord_status === "mislukt" ? "Versturen mislukte" : "Paaltje stelt voor"}:{" "}
+              <q className="italic">{concept}</q>
+              {b.wa_antwoord_status && b.wa_antwoord_reden && (
+                <span className="block text-[11.5px] text-muted-foreground">
+                  {b.wa_antwoord_reden}
+                </span>
+              )}
+            </span>
+            <KleineKnop onClick={() => onGebruik(concept)}>Gebruiken</KleineKnop>
+          </p>
+        )}
+    </div>
+  );
+}
+
+function Geel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-[10px] bg-tint-amber px-2.5 py-1.5 text-tint-amber-ink">
+      {children}
+    </div>
+  );
+}
+
+function KleineKnop({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="h-7 rounded-full px-2.5 text-[12px]"
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {children}
+    </Button>
   );
 }

@@ -15,6 +15,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { ontsleutel } from "../_gedeeld/geheim.ts";
 import {
+  annuleerGeplandeAntwoorden,
   haalMediaBinnen,
   handtekeningKlopt,
   leesWijziging,
@@ -89,7 +90,7 @@ async function verwerk(db: Db, field: string, value: Record<string, unknown>) {
   if (!phoneNumberId) return;
   const { data: koppeling, error } = await db
     .from("whatsapp_koppelingen")
-    .select("id,company_id,status,weergavenummer")
+    .select("id,company_id,status,weergavenummer,paaltje_vanaf")
     .eq("phone_number_id", phoneNumberId)
     .maybeSingle();
   if (error) throw new Error(`Koppeling ophalen: ${error.message}`);
@@ -97,6 +98,12 @@ async function verwerk(db: Db, field: string, value: Record<string, unknown>) {
   if (!koppeling || koppeling.status === "uit") return;
 
   const inhoud = leesWijziging(field, value, koppeling.company_id, koppeling.weergavenummer);
+
+  // Paaltje leest wat een klant stuurt, vanaf het koppelen (niet de oude chats).
+  const vanaf = new Date(koppeling.paaltje_vanaf).getTime();
+  for (const r of inhoud.rijen) {
+    if (r.bron === "klant" && new Date(r.ontvangen_op).getTime() >= vanaf) r.paaltje_status = "wacht";
+  }
 
   if (inhoud.rijen.length > 0) {
     const { data: nieuw, error: opslaanFout } = await db
@@ -130,6 +137,28 @@ async function verwerk(db: Db, field: string, value: Record<string, unknown>) {
       .update({ laatste_bericht_op: new Date().toISOString(), status: "actief", fout: "" })
       .eq("id", koppeling.id);
     if (bijwerkFout) console.error("whatsapp-webhook laatste bericht:", bijwerkFout.message);
+
+    // Je antwoordde zelf op je telefoon: wat Paaltje voor dat gesprek had
+    // ingepland gaat niet meer, en wat openstond is beantwoord.
+    const zelfGeantwoord = new Map<string, string>();
+    for (const r of inhoud.rijen) {
+      if (r.bron !== "app") continue;
+      const eerder = zelfGeantwoord.get(r.wa_telefoon);
+      if (!eerder || r.ontvangen_op > eerder) zelfGeantwoord.set(r.wa_telefoon, r.ontvangen_op);
+    }
+    for (const [nummer, op] of zelfGeantwoord) {
+      await annuleerGeplandeAntwoorden(db, koppeling.company_id, nummer, "Je antwoordde zelf op je telefoon.");
+      const { error: beantwoordFout } = await db
+        .from("berichten")
+        .update({ beantwoord_op: op })
+        .eq("company_id", koppeling.company_id)
+        .eq("kanaal", "whatsapp")
+        .eq("wa_telefoon", nummer)
+        .eq("richting", "in")
+        .is("beantwoord_op", null)
+        .lte("ontvangen_op", op);
+      if (beantwoordFout) console.error("whatsapp-webhook beantwoord:", beantwoordFout.message);
+    }
   }
 
   for (const s of inhoud.statussen) {

@@ -17,6 +17,7 @@ import { antwoord, CORS } from "../_gedeeld/mail.ts";
 import { ontsleutel, versleutel } from "../_gedeeld/geheim.ts";
 import { heeftRecht } from "../_gedeeld/rechten.ts";
 import {
+  annuleerGeplandeAntwoorden,
   graph,
   haalMediaBinnen,
   tokenVan,
@@ -40,7 +41,14 @@ interface Medewerker {
 }
 
 interface Verzoek {
-  actie?: "test_instellen" | "ontkoppelen" | "gelezen" | "versturen" | "media_ophalen";
+  actie?:
+    | "test_instellen"
+    | "ontkoppelen"
+    | "gelezen"
+    | "versturen"
+    | "media_ophalen"
+    | "antwoord_annuleren"
+    | "antwoord_nu";
   tekst?: string;
   bericht_id?: string;
   phone_number_id?: string;
@@ -100,6 +108,12 @@ Deno.serve(async (req) => {
           return antwoord({ fout: "Je mag geen berichten versturen." }, 403);
         }
         return await verstuur(db, m, String(verzoek.telefoon ?? ""), String(verzoek.tekst ?? ""));
+      case "antwoord_annuleren":
+      case "antwoord_nu":
+        if (!(await heeftRecht(db, m, "mail_versturen"))) {
+          return antwoord({ fout: "Je mag geen berichten versturen." }, 403);
+        }
+        return await geplandAntwoord(db, m, String(verzoek.bericht_id ?? ""), verzoek.actie === "antwoord_nu");
       default:
         return antwoord({ fout: "Onbekende actie." }, 400);
     }
@@ -271,6 +285,9 @@ async function verstuur(db: Db, m: Medewerker, telefoon: string, invoer: string)
     return antwoord({ fout: "Even rustig aan: te veel berichten in één minuut." }, 429);
   }
 
+  // Eerst Paaltjes ingeplande antwoord tegenhouden, dan pas zelf versturen:
+  // anders kunnen ze tegelijk weggaan.
+  await annuleerGeplandeAntwoorden(db, m.company_id, nummer, "Er is vanuit Wooshy geantwoord.");
   const uit = await verstuurTekst(koppeling.token, koppeling.phone_number_id, nummer, tekst);
   if (!uit.ok) {
     console.error("whatsapp versturen:", uit.status, uit.fout);
@@ -338,4 +355,28 @@ async function mediaOphalen(db: Db, m: Medewerker, berichtId: string): Promise<R
   const uit = await haalMediaBinnen(db, koppeling.token, m.company_id, bericht.id, media);
   if (!uit.compleet) return antwoord({ fout: "Het bestand kon niet worden opgehaald. Probeer het zo nog eens." }, 502);
   return antwoord({ ok: true, media: uit.media });
+}
+
+/**
+ * Wat Paaltje heeft ingepland: niet versturen, of nu meteen. "Nu" zet alleen
+ * het moment op nu; de planner verstuurt het binnen een minuut, met alle
+ * controles (al geantwoord, nieuw bericht, 24 uur).
+ */
+async function geplandAntwoord(db: Db, m: Medewerker, berichtId: string, nu: boolean): Promise<Response> {
+  if (!/^[0-9a-f-]{36}$/i.test(berichtId)) return antwoord({ fout: "Onbekend bericht." }, 400);
+  const { data, error } = await db
+    .from("berichten")
+    .update(
+      nu
+        ? { wa_antwoord_op: new Date().toISOString(), wa_antwoord_direct: true }
+        : { wa_antwoord_status: "geannuleerd", wa_antwoord_reden: "Je zette het stop.", wa_antwoord_op: null },
+    )
+    .eq("company_id", m.company_id)
+    .eq("kanaal", "whatsapp")
+    .eq("id", berichtId)
+    .eq("wa_antwoord_status", "gepland")
+    .select("id");
+  if (error) throw new Error(`Gepland antwoord: ${error.message}`);
+  if (!data?.length) return antwoord({ fout: "Dit antwoord staat niet (meer) klaar." }, 409);
+  return antwoord({ ok: true });
 }

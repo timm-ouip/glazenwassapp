@@ -15,6 +15,7 @@ export type Sleutel =
   | "afzeggingen"
   | "overslaan"
   | "prijsopvraging"
+  | "planning"
   | "overig";
 
 export interface MailCategorie {
@@ -23,6 +24,8 @@ export interface MailCategorie {
   naam: string;
   omschrijving: string;
   zelfstandigheid: Zelfstandigheid;
+  /** Mag Paaltje een WhatsApp in deze categorie zelf beantwoorden? */
+  zelf_antwoorden_whatsapp: boolean;
   volgorde: number;
 }
 
@@ -58,6 +61,7 @@ const VASTE_TINT: Record<Sleutel, string> = {
   afzeggingen: "bg-tint-oranje text-tint-oranje-ink",
   overslaan: "bg-tint-blauw text-tint-blauw-ink",
   prijsopvraging: "bg-tint-amber text-tint-amber-ink",
+  planning: "bg-tint-limoen text-tint-limoen-ink",
   overig: GEEN_TINT,
 };
 
@@ -76,7 +80,7 @@ export function categorieTint(c: MailCategorie, index: number): string {
 export async function fetchCategorieen(): Promise<MailCategorie[]> {
   const { data, error } = await supabase
     .from("mail_categorieen")
-    .select("id,sleutel,naam,omschrijving,zelfstandigheid,volgorde")
+    .select("id,sleutel,naam,omschrijving,zelfstandigheid,zelf_antwoorden_whatsapp,volgorde")
     .is("deleted_at", null)
     .order("volgorde")
     .order("naam");
@@ -86,7 +90,7 @@ export async function fetchCategorieen(): Promise<MailCategorie[]> {
 
 export async function wijzigCategorie(
   id: string,
-  patch: Partial<Pick<MailCategorie, "naam" | "omschrijving" | "zelfstandigheid">>,
+  patch: Partial<Pick<MailCategorie, "naam" | "omschrijving" | "zelfstandigheid" | "zelf_antwoorden_whatsapp">>,
 ): Promise<void> {
   const { error } = await supabase.from("mail_categorieen").update(patch).eq("id", id);
   if (error) throw error;

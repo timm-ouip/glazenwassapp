@@ -70,6 +70,9 @@ export type Database = {
       };
       companies: {
         Row: {
+          wa_wachttijd_min: number;
+          wa_antwoord_van: string;
+          wa_antwoord_tot: string;
           aanmeld_aan: boolean;
           aanmeld_token: string;
           adres: string;
@@ -90,6 +93,9 @@ export type Database = {
           werkdagen: number[];
         };
         Insert: {
+          wa_wachttijd_min?: number;
+          wa_antwoord_van?: string;
+          wa_antwoord_tot?: string;
           aanmeld_aan?: boolean;
           aanmeld_token?: string;
           adres?: string;
@@ -110,6 +116,9 @@ export type Database = {
           werkdagen?: number[];
         };
         Update: {
+          wa_wachttijd_min?: number;
+          wa_antwoord_van?: string;
+          wa_antwoord_tot?: string;
           aanmeld_aan?: boolean;
           aanmeld_token?: string;
           adres?: string;
@@ -444,6 +453,7 @@ export type Database = {
       };
       klanten: {
         Row: {
+          wa_afgemeld_op: string | null;
           company_id: string;
           created_at: string;
           deleted_at: string | null;
@@ -461,6 +471,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          wa_afgemeld_op?: string | null;
           company_id?: string;
           created_at?: string;
           deleted_at?: string | null;
@@ -478,6 +489,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          wa_afgemeld_op?: string | null;
           company_id?: string;
           created_at?: string;
           deleted_at?: string | null;
@@ -1076,6 +1088,10 @@ export type Database = {
       };
       berichten: {
         Row: {
+          wa_antwoord_direct: boolean;
+          wa_antwoord_op: string | null;
+          wa_antwoord_status: string;
+          wa_antwoord_reden: string;
           kanaal: string;
           wa_id: string | null;
           wa_telefoon: string;
@@ -1136,6 +1152,10 @@ export type Database = {
           weg_sinds: string | null;
         };
         Insert: {
+          wa_antwoord_direct?: boolean;
+          wa_antwoord_op?: string | null;
+          wa_antwoord_status?: string;
+          wa_antwoord_reden?: string;
           kanaal?: string;
           wa_id?: string | null;
           wa_telefoon?: string;
@@ -1196,6 +1216,10 @@ export type Database = {
           weg_sinds?: string | null;
         };
         Update: {
+          wa_antwoord_direct?: boolean;
+          wa_antwoord_op?: string | null;
+          wa_antwoord_status?: string;
+          wa_antwoord_reden?: string;
           kanaal?: string;
           wa_id?: string | null;
           wa_telefoon?: string;
@@ -1259,6 +1283,7 @@ export type Database = {
       };
       mail_categorieen: {
         Row: {
+          zelf_antwoorden_whatsapp: boolean;
           company_id: string;
           created_at: string;
           deleted_at: string | null;
@@ -1270,6 +1295,7 @@ export type Database = {
           zelfstandigheid: string;
         };
         Insert: {
+          zelf_antwoorden_whatsapp?: boolean;
           company_id?: string;
           created_at?: string;
           deleted_at?: string | null;
@@ -1281,6 +1307,7 @@ export type Database = {
           zelfstandigheid?: string;
         };
         Update: {
+          zelf_antwoorden_whatsapp?: boolean;
           company_id?: string;
           created_at?: string;
           deleted_at?: string | null;

@@ -40,7 +40,9 @@ export function PaaltjeCategorieen({ isEigenaar }: { isEigenaar: boolean }) {
   const [omschrijving, setOmschrijving] = useState("");
 
   if (!isEigenaar) {
-    return <p className="text-[13px] text-muted-foreground">Alleen de eigenaar kan Paaltje instellen.</p>;
+    return (
+      <p className="text-[13px] text-muted-foreground">Alleen de eigenaar kan Paaltje instellen.</p>
+    );
   }
   const ververs = () => void qc.invalidateQueries({ queryKey: ["mail-categorieen"] });
 
@@ -51,7 +53,9 @@ export function PaaltjeCategorieen({ isEigenaar }: { isEigenaar: boolean }) {
           <li key={c.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
             <div className="min-w-0 flex-1">
               <p className="text-[13.5px] font-medium">{c.naam}</p>
-              {c.omschrijving && <p className="text-[12px] text-muted-foreground">{c.omschrijving}</p>}
+              {c.omschrijving && (
+                <p className="text-[12px] text-muted-foreground">{c.omschrijving}</p>
+              )}
             </div>
             <select
               aria-label={`Wat Paaltje mag bij ${c.naam}`}
@@ -70,6 +74,22 @@ export function PaaltjeCategorieen({ isEigenaar }: { isEigenaar: boolean }) {
                 </option>
               ))}
             </select>
+            <label
+              className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground"
+              title="Paaltje beantwoordt een WhatsApp in deze categorie zelf, na de wachttijd, als het nummer bij een klant hoort en hij heel zeker is."
+            >
+              <input
+                type="checkbox"
+                checked={c.zelf_antwoorden_whatsapp}
+                onChange={(e) =>
+                  void wijzigCategorie(c.id, { zelf_antwoorden_whatsapp: e.target.checked })
+                    .then(ververs)
+                    .catch(melding)
+                }
+                className="size-4 accent-primary"
+              />
+              WhatsApp zelf
+            </label>
             {!c.sleutel && (
               <button
                 type="button"
@@ -78,7 +98,8 @@ export function PaaltjeCategorieen({ isEigenaar }: { isEigenaar: boolean }) {
                 onClick={async () => {
                   const ja = await bevestig({
                     titel: `${c.naam} weggooien?`,
-                    tekst: "Paaltje deelt geen nieuwe mail meer in deze categorie in. Oude mail houdt zijn label.",
+                    tekst:
+                      "Paaltje deelt geen nieuwe mail meer in deze categorie in. Oude mail houdt zijn label.",
                     bevestigLabel: "Weggooien",
                     gevaarlijk: true,
                   });
@@ -100,7 +121,17 @@ export function PaaltjeCategorieen({ isEigenaar }: { isEigenaar: boolean }) {
               <span className="font-medium text-foreground">{z.naam}:</span> {z.uitleg}
             </li>
           ))}
-          <li>Zelf doorvoeren kan alleen bij Overslaan; een klant laten stoppen doet Paaltje nooit zelf.</li>
+          <li>
+            Zelf doorvoeren kan alleen bij Overslaan; een klant laten stoppen doet Paaltje nooit
+            zelf.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">WhatsApp zelf:</span> Paaltje beantwoordt
+            een WhatsApp in deze categorie zelf, na de wachttijd en binnen de antwoordtijden (in te
+            stellen bij WhatsApp). Alleen als het nummer bij een klant hoort en hij heel zeker is.
+            Bij WhatsApp voert hij overslaan ook zelf door als het op voorstellen staat, want een
+            nummer is lastig na te maken.
+          </li>
         </ul>
       </details>
 
@@ -145,11 +176,17 @@ export function PaaltjeCategorieen({ isEigenaar }: { isEigenaar: boolean }) {
 
 export function PaaltjeAfspraken({ isEigenaar }: { isEigenaar: boolean }) {
   const qc = useQueryClient();
-  const afspraken = useQuery({ queryKey: ["paaltje-afspraken"], queryFn: fetchAfspraken, enabled: isEigenaar });
+  const afspraken = useQuery({
+    queryKey: ["paaltje-afspraken"],
+    queryFn: fetchAfspraken,
+    enabled: isEigenaar,
+  });
   const [tekst, setTekst] = useState("");
 
   if (!isEigenaar) {
-    return <p className="text-[13px] text-muted-foreground">Alleen de eigenaar kan Paaltje instellen.</p>;
+    return (
+      <p className="text-[13px] text-muted-foreground">Alleen de eigenaar kan Paaltje instellen.</p>
+    );
   }
   const ververs = () => void qc.invalidateQueries({ queryKey: ["paaltje-afspraken"] });
   const voorgesteld = (afspraken.data ?? []).filter((a) => a.status === "voorgesteld");
@@ -166,7 +203,10 @@ export function PaaltjeAfspraken({ isEigenaar }: { isEigenaar: boolean }) {
         <div className="space-y-1.5">
           <p className="text-[12px] font-medium text-muted-foreground">Voorgesteld door Paaltje</p>
           {voorgesteld.map((a) => (
-            <div key={a.id} className="flex items-start gap-2 rounded-[10px] bg-tint-paars/60 px-3 py-2 text-[13px]">
+            <div
+              key={a.id}
+              className="flex items-start gap-2 rounded-[10px] bg-tint-paars/60 px-3 py-2 text-[13px]"
+            >
               <span className="min-w-0 flex-1">{a.tekst}</span>
               <button
                 type="button"

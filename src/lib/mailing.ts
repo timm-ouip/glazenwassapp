@@ -174,7 +174,7 @@ export async function bewaarAfzender(companyId: string, afzender: Afzender) {
 export interface Wijziging {
   id: string;
   created_at: string;
-  /** overslaan, stoppen, aanmelding of klant_email. */
+  /** overslaan, stoppen, aanmelding, klant_email of whatsapp_afgemeld. */
   soort: string;
   /** Adres en klant zoals ze heetten op het moment van aanpassen. */
   adres: string;

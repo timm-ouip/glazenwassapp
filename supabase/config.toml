@@ -35,6 +35,11 @@ verify_jwt = true
 [functions.whatsapp-webhook]
 verify_jwt = false
 
+# Verstuurt de antwoorden die Paaltje inplande; elke minuut door pg_cron,
+# met dezelfde sleutel als het ophalen van mail.
+[functions.whatsapp-planner]
+verify_jwt = false
+
 # Het dagrapport om half zeven; ook door pg_cron, met dezelfde sleutel.
 [functions.dagrapport]
 verify_jwt = false

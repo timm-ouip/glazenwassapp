@@ -41,6 +41,16 @@ export interface WaBericht {
   ontvangen_op: string;
   media: { media_id: string; mime: string; naam: string; pad: string }[];
   klant_id: string | null;
+  /** Wat Paaltje ervan maakte (alleen bij berichten van de klant). */
+  paaltje_status: string;
+  samenvatting: string;
+  concept: string;
+  zekerheid: number | null;
+  voorstel: { overslaan?: { maanden?: string[]; doorgevoerd?: boolean } } | null;
+  beantwoord_op: string | null;
+  wa_antwoord_op: string | null;
+  wa_antwoord_status: string;
+  wa_antwoord_reden: string;
 }
 
 async function roep<T>(body: Record<string, unknown>): Promise<T> {
@@ -103,7 +113,9 @@ export async function fetchGesprekken(): Promise<WaGesprek[]> {
 export async function fetchWaBerichten(telefoon: string): Promise<WaBericht[]> {
   const { data, error } = await supabase
     .from("berichten")
-    .select("id,richting,bron,wa_type,wa_status,tekst,van_naam,ontvangen_op,media,klant_id")
+    .select(
+      "id,richting,bron,wa_type,wa_status,tekst,van_naam,ontvangen_op,media,klant_id,paaltje_status,samenvatting,concept,zekerheid,voorstel,beantwoord_op,wa_antwoord_op,wa_antwoord_status,wa_antwoord_reden",
+    )
     .eq("kanaal", "whatsapp")
     .eq("wa_telefoon", telefoon)
     .is("deleted_at", null)
@@ -181,4 +193,59 @@ export async function fetchKlantNummers(klantId: string): Promise<string[]> {
     .limit(500);
   if (error) throw error;
   return [...new Set((data ?? []).map((r) => r.wa_telefoon))];
+}
+
+export interface AntwoordTijden {
+  wachttijd: number;
+  van: string;
+  tot: string;
+}
+
+/** Hoe lang Paaltje wacht en tussen welke tijden hij zelf antwoordt. */
+export async function fetchAntwoordTijden(companyId: string): Promise<AntwoordTijden> {
+  const { data, error } = await supabase
+    .from("companies")
+    .select("wa_wachttijd_min,wa_antwoord_van,wa_antwoord_tot")
+    .eq("id", companyId)
+    .single();
+  if (error) throw error;
+  return {
+    wachttijd: data.wa_wachttijd_min,
+    van: String(data.wa_antwoord_van).slice(0, 5),
+    tot: String(data.wa_antwoord_tot).slice(0, 5),
+  };
+}
+
+export async function zetAntwoordTijden(companyId: string, t: AntwoordTijden): Promise<void> {
+  const { error } = await supabase
+    .from("companies")
+    .update({ wa_wachttijd_min: t.wachttijd, wa_antwoord_van: t.van, wa_antwoord_tot: t.tot })
+    .eq("id", companyId);
+  if (error) throw error;
+}
+
+export function annuleerAntwoord(berichtId: string): Promise<{ ok: true }> {
+  return roep({ actie: "antwoord_annuleren", bericht_id: berichtId });
+}
+
+export function verstuurAntwoordNu(berichtId: string): Promise<{ ok: true }> {
+  return roep({ actie: "antwoord_nu", bericht_id: berichtId });
+}
+
+export interface BerichtWijziging {
+  id: string;
+  soort: string;
+  maanden: string[];
+  teruggedraaid_op: string | null;
+}
+
+/** Wat Paaltje na dit bericht in Wooshy veranderde (alleen de eigenaar ziet dit). */
+export async function fetchWijzigingenVan(berichtId: string): Promise<BerichtWijziging[]> {
+  const { data, error } = await supabase
+    .from("mail_wijzigingen")
+    .select("id,soort,maanden,teruggedraaid_op")
+    .eq("bericht_id", berichtId)
+    .order("created_at");
+  if (error) throw error;
+  return (data ?? []) as BerichtWijziging[];
 }

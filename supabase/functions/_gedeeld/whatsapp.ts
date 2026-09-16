@@ -409,3 +409,66 @@ export async function verstuurTekst(
 
 /** Het 24-uursvenster: vrije tekst mag tot 24 uur na het laatste bericht van de klant. */
 export const VENSTER_MS = 24 * 60 * 60 * 1000;
+
+/** Datum en tijd zoals in Nederland op de klok. */
+function nederlandseKlok(d: Date): { j: number; m: number; d: number; u: number; min: number } {
+  const delen = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Amsterdam",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(d)
+      .map((p) => [p.type, p.value]),
+  );
+  return { j: +delen.year, m: +delen.month, d: +delen.day, u: +delen.hour, min: +delen.minute };
+}
+
+/** Een Nederlandse kloktijd als echt moment (houdt rekening met zomer- en wintertijd). */
+function vanNederlandseKlok(j: number, m: number, d: number, u: number, min: number): Date {
+  const gok = Date.UTC(j, m - 1, d, u, min);
+  const k = nederlandseKlok(new Date(gok));
+  const verschil = Date.UTC(k.j, k.m - 1, k.d, k.u, k.min) - gok;
+  return new Date(gok - verschil);
+}
+
+function minuten(tijd: string): number {
+  const [u, m] = tijd.split(":").map((x) => Number(x));
+  return (Number.isFinite(u) ? u : 0) * 60 + (Number.isFinite(m) ? m : 0);
+}
+
+/**
+ * Het eerste moment vanaf `moment` dat binnen de antwoordtijden valt
+ * ("07:00" tot "21:00", Nederlandse tijd). Valt het er al binnen, dan dat.
+ */
+export function binnenAntwoordtijd(moment: Date, van: string, tot: string): Date {
+  const k = nederlandseKlok(moment);
+  const nu = k.u * 60 + k.min;
+  const begin = minuten(van);
+  const eind = minuten(tot);
+  if (begin >= eind) return moment; // niet ingesteld zoals verwacht: dan altijd
+  if (nu >= begin && nu < eind) return moment;
+  const morgen = nu >= eind ? 1 : 0;
+  const dag = new Date(Date.UTC(k.j, k.m - 1, k.d + morgen));
+  return vanNederlandseKlok(dag.getUTCFullYear(), dag.getUTCMonth() + 1, dag.getUTCDate(), Math.floor(begin / 60), begin % 60);
+}
+
+export function binnenTijden(moment: Date, van: string, tot: string): boolean {
+  return binnenAntwoordtijd(moment, van, tot).getTime() === moment.getTime();
+}
+
+/** Iemand antwoordde zelf: wat Paaltje voor dit nummer had ingepland, gaat niet meer. */
+export async function annuleerGeplandeAntwoorden(db: Db, companyId: string, nummer: string, reden: string) {
+  const { error } = await db
+    .from("berichten")
+    .update({ wa_antwoord_status: "geannuleerd", wa_antwoord_reden: reden })
+    .eq("company_id", companyId)
+    .eq("kanaal", "whatsapp")
+    .eq("wa_telefoon", nummer)
+    .eq("wa_antwoord_status", "gepland");
+  if (error) console.error("geplande antwoorden annuleren:", error.message);
+}

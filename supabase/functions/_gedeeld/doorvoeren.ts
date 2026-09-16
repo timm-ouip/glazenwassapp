@@ -397,6 +397,36 @@ export async function draaiTerug(
       return { ok: false, fout: "Paaltje leest deze mail net. Probeer het zo nog eens." };
     }
   }
+  // Paaltje zette WhatsApp uit voor een klant ("stop"): weer aan, als het
+  // sindsdien niet opnieuw (door iemand anders) is uitgezet.
+  if (w.soort === "whatsapp_afgemeld") {
+    const details = (w.details ?? {}) as { klant_id?: string; afgemeld_op?: string };
+    if (!details.klant_id) return { ok: false, fout: "De klant bestaat niet meer." };
+    const { data: klant } = await db
+      .from("klanten")
+      .select("id,wa_afgemeld_op")
+      .eq("company_id", companyId)
+      .eq("id", details.klant_id)
+      .maybeSingle();
+    if (!klant) return { ok: false, fout: "De klant bestaat niet meer." };
+    if (
+      klant.wa_afgemeld_op &&
+      details.afgemeld_op &&
+      new Date(klant.wa_afgemeld_op).getTime() === new Date(details.afgemeld_op).getTime()
+    ) {
+      const { error: aanFout } = await db
+        .from("klanten")
+        .update({ wa_afgemeld_op: null })
+        .eq("company_id", companyId)
+        .eq("id", klant.id);
+      if (aanFout) return { ok: false, fout: "WhatsApp weer aanzetten lukte niet." };
+    }
+    await db
+      .from("mail_wijzigingen")
+      .update({ teruggedraaid_op: new Date().toISOString(), teruggedraaid_door: door })
+      .eq("id", w.id);
+    return { ok: true };
+  }
   if (w.soort !== "overslaan" && w.soort !== "stoppen") {
     return { ok: false, fout: "Dit soort aanpassing kun je niet vanuit het rapport terugdraaien." };
   }

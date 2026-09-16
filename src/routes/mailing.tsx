@@ -608,7 +608,9 @@ function Rapport() {
     const ja = await bevestig({
       titel: "Terugdraaien?",
       tekst:
-        w.soort === "stoppen"
+        w.soort === "whatsapp_afgemeld"
+          ? `${w.klant} krijgt dan weer WhatsApp-berichten.`
+          : w.soort === "stoppen"
           ? `${w.adres} komt terug uit de prullenbak en staat weer op de planning.`
           : `${w.adres} slaat ${w.maanden.map(toonMaand).join(" en ")} dan niet meer over, en staat weer op de planning.`,
       bevestigLabel: "Terugdraaien",
@@ -649,7 +651,7 @@ function Rapport() {
             w.teruggedraaid_op ? "opacity-60" : ""
           }`}
         >
-          <span className="text-[13.5px] font-semibold">{w.adres || "Adres"}</span>
+          <span className="text-[13.5px] font-semibold">{w.adres || w.klant || "Adres"}</span>
           {w.klant && <span className="text-[12.5px] text-muted-foreground">{w.klant}</span>}
           <span className="text-[13px]">
             {w.soort === "stoppen"
@@ -658,7 +660,9 @@ function Rapport() {
                 ? "aanmelding klaargezet"
                 : w.soort === "klant_email"
                   ? "mailadres gekoppeld"
-                  : `slaat ${w.maanden.map(toonMaand).join(" en ")} over`}
+                  : w.soort === "whatsapp_afgemeld"
+                    ? "wil geen WhatsApp meer"
+                    : `slaat ${w.maanden.map(toonMaand).join(" en ")} over`}
           </span>
           <span
             className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
@@ -672,7 +676,9 @@ function Rapport() {
           <span className="ml-auto">
             {w.teruggedraaid_op ? (
               <span className="text-[12px] text-muted-foreground">teruggedraaid</span>
-            ) : w.soort !== "overslaan" && w.soort !== "stoppen" ? null : (
+            ) : w.soort !== "overslaan" &&
+              w.soort !== "stoppen" &&
+              w.soort !== "whatsapp_afgemeld" ? null : (
               <Button
                 size="sm"
                 variant="ghost"

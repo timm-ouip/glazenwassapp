@@ -15,7 +15,14 @@ import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { fetchWhatsAppKoppeling, ontkoppelWhatsApp, stelTestnummerIn } from "@/lib/whatsapp";
+import {
+  fetchAntwoordTijden,
+  fetchWhatsAppKoppeling,
+  ontkoppelWhatsApp,
+  stelTestnummerIn,
+  zetAntwoordTijden,
+} from "@/lib/whatsapp";
+import { useAuth } from "@/lib/auth";
 
 /** Het adres waar Meta de berichten heen moet sturen. */
 const WEBHOOK_URL = `${import.meta.env["VITE_SUPABASE_URL"]}/functions/v1/whatsapp-webhook`;
@@ -203,6 +210,105 @@ export function WhatsAppInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
           </Button>
         </form>
       )}
+
+      {gekoppeld && isEigenaar && <AntwoordTijdenFormulier />}
     </div>
+  );
+}
+
+/** Hoe lang Paaltje wacht voor hij zelf antwoordt, en tussen welke tijden. */
+function AntwoordTijdenFormulier() {
+  const { employee } = useAuth();
+  const qc = useQueryClient();
+  const companyId = employee?.company_id ?? "";
+  const tijden = useQuery({
+    queryKey: ["wa-antwoordtijden", companyId],
+    queryFn: () => fetchAntwoordTijden(companyId),
+    enabled: !!companyId,
+  });
+  const [wachttijd, setWachttijd] = useState<string | null>(null);
+  const [van, setVan] = useState<string | null>(null);
+  const [tot, setTot] = useState<string | null>(null);
+  const [bezig, setBezig] = useState(false);
+  if (!tijden.data) return null;
+
+  const w = wachttijd ?? String(tijden.data.wachttijd);
+  const v = van ?? tijden.data.van;
+  const t = tot ?? tijden.data.tot;
+
+  async function bewaar(e: React.FormEvent) {
+    e.preventDefault();
+    const minuten = Number(w);
+    if (!Number.isInteger(minuten) || minuten < 0 || minuten > 240) {
+      toast.error("De wachttijd is een aantal minuten tussen 0 en 240.");
+      return;
+    }
+    if (!/^\d{2}:\d{2}$/.test(v) || !/^\d{2}:\d{2}$/.test(t) || v >= t) {
+      toast.error("Kies een begintijd die vóór de eindtijd ligt.");
+      return;
+    }
+    setBezig(true);
+    try {
+      await zetAntwoordTijden(companyId, { wachttijd: minuten, van: v, tot: t });
+      setWachttijd(null);
+      setVan(null);
+      setTot(null);
+      void qc.invalidateQueries({ queryKey: ["wa-antwoordtijden", companyId] });
+      toast.success("Opgeslagen.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  return (
+    <form onSubmit={(e) => void bewaar(e)} className="space-y-3 border-t border-border pt-4">
+      <div>
+        <p className="text-[13.5px] font-medium">Paaltje op WhatsApp</p>
+        <p className="text-[12.5px] text-muted-foreground">
+          Mag Paaltje een bericht zelf beantwoorden (in te stellen per categorie bij Paaltje:
+          categorieën), dan wacht hij eerst. Antwoord je intussen zelf, in de app of in Wooshy, dan
+          stuurt hij niets.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="wa-wachttijd">Wachttijd (minuten)</Label>
+          <Input
+            id="wa-wachttijd"
+            type="number"
+            min={0}
+            max={240}
+            value={w}
+            onChange={(e) => setWachttijd(e.target.value)}
+            className="w-28"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="wa-van">Antwoorden vanaf</Label>
+          <Input
+            id="wa-van"
+            type="time"
+            value={v}
+            onChange={(e) => setVan(e.target.value)}
+            className="w-32"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="wa-tot">tot</Label>
+          <Input
+            id="wa-tot"
+            type="time"
+            value={t}
+            onChange={(e) => setTot(e.target.value)}
+            className="w-32"
+          />
+        </div>
+        <Button type="submit" size="sm" className="rounded-full" disabled={bezig}>
+          {bezig ? "Bezig…" : "Opslaan"}
+        </Button>
+      </div>
+    </form>
   );
 }
