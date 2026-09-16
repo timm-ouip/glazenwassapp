@@ -16,9 +16,17 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { antwoord, CORS } from "../_gedeeld/mail.ts";
 import { ontsleutel, versleutel } from "../_gedeeld/geheim.ts";
 import { heeftRecht } from "../_gedeeld/rechten.ts";
+import { telefoonAlsSleutel } from "../_gedeeld/paaltje.ts";
 import {
   annuleerGeplandeAntwoorden,
+  datumVoluit,
   graph,
+  SJABLOON_STATUS,
+  sjabloonVoorMeta,
+  verstuurSjabloon,
+  voorbeeldWaarden,
+  vulSjabloonIn,
+  type Plaatshouder,
   haalMediaBinnen,
   tokenVan,
   VENSTER_MS,
@@ -48,7 +56,16 @@ interface Verzoek {
     | "versturen"
     | "media_ophalen"
     | "antwoord_annuleren"
-    | "antwoord_nu";
+    | "antwoord_nu"
+    | "sjabloon_maken"
+    | "sjablonen_verversen"
+    | "sjabloon_weg"
+    | "sjabloon_voorbeeld"
+    | "sjabloon_versturen";
+  titel?: string;
+  categorie?: string;
+  sjabloon_id?: string;
+  waarden?: Record<string, unknown>;
   tekst?: string;
   bericht_id?: string;
   phone_number_id?: string;
@@ -114,6 +131,23 @@ Deno.serve(async (req) => {
           return antwoord({ fout: "Je mag geen berichten versturen." }, 403);
         }
         return await geplandAntwoord(db, m, String(verzoek.bericht_id ?? ""), verzoek.actie === "antwoord_nu");
+      case "sjabloon_maken":
+        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan sjablonen maken." }, 403);
+        return await sjabloonMaken(db, m, verzoek);
+      case "sjabloon_weg":
+        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan sjablonen weggooien." }, 403);
+        return await sjabloonWeg(db, m, String(verzoek.sjabloon_id ?? ""));
+      case "sjablonen_verversen":
+        if (!(await heeftRecht(db, m, "mail_versturen"))) {
+          return antwoord({ fout: "Je mag geen berichten versturen." }, 403);
+        }
+        return await sjablonenVerversen(db, m);
+      case "sjabloon_voorbeeld":
+      case "sjabloon_versturen":
+        if (!(await heeftRecht(db, m, "mail_versturen"))) {
+          return antwoord({ fout: "Je mag geen berichten versturen." }, 403);
+        }
+        return await sjabloonNaarKlant(db, m, verzoek, verzoek.actie === "sjabloon_versturen");
       default:
         return antwoord({ fout: "Onbekende actie." }, 400);
     }
@@ -379,4 +413,278 @@ async function geplandAntwoord(db: Db, m: Medewerker, berichtId: string, nu: boo
   if (error) throw new Error(`Gepland antwoord: ${error.message}`);
   if (!data?.length) return antwoord({ fout: "Dit antwoord staat niet (meer) klaar." }, 409);
   return antwoord({ ok: true });
+}
+
+// ---------------------------------------------------------------------
+// Sjablonen
+// ---------------------------------------------------------------------
+
+const UUID = /^[0-9a-f-]{36}$/i;
+
+async function koppelingMetAccount(db: Db, m: Medewerker) {
+  const k = await actieveKoppeling(db, m);
+  if (k instanceof Response) return k;
+  const { data, error } = await db.from("whatsapp_koppelingen").select("waba_id").eq("id", k.id).single();
+  if (error) throw new Error(`Account ophalen: ${error.message}`);
+  if (!data?.waba_id) return antwoord({ fout: "Het WhatsApp-account-ID ontbreekt. Koppel het nummer opnieuw." }, 409);
+  return { ...k, waba_id: String(data.waba_id) };
+}
+
+async function sjabloonMaken(db: Db, m: Medewerker, verzoek: Verzoek): Promise<Response> {
+  const titel = String(verzoek.titel ?? "").trim().slice(0, 60);
+  const categorie = verzoek.categorie === "marketing" ? "marketing" : "utility";
+  if (!titel) return antwoord({ fout: "Geef het sjabloon een naam." }, 400);
+  const omgezet = sjabloonVoorMeta(String(verzoek.tekst ?? ""));
+  if (!omgezet.ok) return antwoord({ fout: omgezet.fout }, 400);
+
+  const k = await koppelingMetAccount(db, m);
+  if (k instanceof Response) return k;
+
+  // De naam bij Meta: uit de titel, met iets unieks erachter (een afgewezen
+  // naam kun je bij Meta een tijd niet opnieuw gebruiken).
+  const basis = titel
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40) || "sjabloon";
+  const metaNaam = `${basis}_${crypto.randomUUID().slice(0, 6)}`;
+
+  const uit = await graph<{ id?: string; status?: string; category?: string }>(`${k.waba_id}/message_templates`, k.token, {
+    method: "POST",
+    body: JSON.stringify({
+      name: metaNaam,
+      language: "nl",
+      category: categorie === "marketing" ? "MARKETING" : "UTILITY",
+      components: [
+        {
+          type: "BODY",
+          text: omgezet.body,
+          ...(omgezet.variabelen.length > 0
+            ? { example: { body_text: [voorbeeldWaarden(omgezet.variabelen)] } }
+            : {}),
+        },
+      ],
+    }),
+  });
+  if (!uit.ok) return antwoord({ fout: `Meta nam het sjabloon niet aan: ${uit.fout}` }, 400);
+
+  const { data, error } = await db
+    .from("wa_sjablonen")
+    .insert({
+      company_id: m.company_id,
+      titel,
+      meta_naam: metaNaam,
+      meta_id: String(uit.data.id ?? ""),
+      // Meta kan de categorie meteen aanpassen (utility dat eigenlijk reclame is).
+      categorie: String(uit.data.category ?? "").toUpperCase() === "MARKETING" ? "marketing" : categorie,
+      tekst: String(verzoek.tekst ?? "").replace(/\r\n/g, "\n").trim(),
+      variabelen: omgezet.variabelen,
+      status: SJABLOON_STATUS[String(uit.data.status ?? "PENDING").toUpperCase()] ?? "ingediend",
+    })
+    .select("id,status")
+    .single();
+  if (error) throw new Error(`Sjabloon bewaren: ${error.message}`);
+  return antwoord({ ok: true, id: data.id, status: data.status });
+}
+
+async function sjablonenVerversen(db: Db, m: Medewerker): Promise<Response> {
+  const k = await koppelingMetAccount(db, m);
+  if (k instanceof Response) return k;
+  const uit = await graph<{ data?: { id?: string; name?: string; status?: string; category?: string; rejected_reason?: string }[] }>(
+    `${k.waba_id}/message_templates?fields=id,name,status,category,rejected_reason&limit=200`,
+    k.token,
+  );
+  if (!uit.ok) return antwoord({ fout: `Meta gaf de sjablonen niet: ${uit.fout}` }, 502);
+  let bijgewerkt = 0;
+  for (const t of uit.data.data ?? []) {
+    if (!t.name) continue;
+    const reden = String(t.rejected_reason ?? "");
+    const { data, error } = await db
+      .from("wa_sjablonen")
+      .update({
+        status: SJABLOON_STATUS[String(t.status ?? "").toUpperCase()] ?? "ingediend",
+        categorie: String(t.category ?? "").toUpperCase() === "MARKETING" ? "marketing" : "utility",
+        afwijsreden: reden && reden !== "NONE" ? reden.slice(0, 300) : "",
+        ...(t.id ? { meta_id: t.id } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("company_id", m.company_id)
+      .eq("meta_naam", t.name)
+      .select("id");
+    if (error) throw new Error(`Sjabloon bijwerken: ${error.message}`);
+    bijgewerkt += (data ?? []).length;
+  }
+  return antwoord({ ok: true, bijgewerkt });
+}
+
+async function sjabloonWeg(db: Db, m: Medewerker, id: string): Promise<Response> {
+  if (!UUID.test(id)) return antwoord({ fout: "Onbekend sjabloon." }, 400);
+  const { data: sjabloon } = await db
+    .from("wa_sjablonen")
+    .select("id,meta_naam")
+    .eq("company_id", m.company_id)
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!sjabloon) return antwoord({ fout: "Onbekend sjabloon." }, 404);
+  // Eerst bij Meta: lukt dat niet, dan blijft hij hier ook staan, anders
+  // denk je dat hij weg is terwijl hij bij Meta nog bestaat.
+  const k = await koppelingMetAccount(db, m);
+  if (k instanceof Response) return k;
+  const uit = await graph(`${k.waba_id}/message_templates?name=${encodeURIComponent(sjabloon.meta_naam)}`, k.token, {
+    method: "DELETE",
+  });
+  // Bestaat hij bij Meta al niet meer, dan is dat prima.
+  if (!uit.ok && uit.status !== 404) {
+    return antwoord({ fout: `Meta gooide het sjabloon niet weg: ${uit.fout}` }, 502);
+  }
+  const { error } = await db
+    .from("wa_sjablonen")
+    .update({ deleted_at: new Date().toISOString(), status: "uitgeschakeld" })
+    .eq("id", sjabloon.id);
+  if (error) throw new Error(`Sjabloon weggooien: ${error.message}`);
+  return antwoord({ ok: true });
+}
+
+/**
+ * Een sjabloon naar één klant: `voorbeeld` geeft de ingevulde tekst terug,
+ * `versturen` stuurt hem. De waarden vult de server zelf in uit de klant
+ * (naam, adres, volgende wasdag); wat je zelf intypt gaat voor.
+ */
+async function sjabloonNaarKlant(db: Db, m: Medewerker, verzoek: Verzoek, versturen: boolean): Promise<Response> {
+  const nummer = waNummer(verzoek.telefoon);
+  const id = String(verzoek.sjabloon_id ?? "");
+  if (!nummer || !UUID.test(id)) return antwoord({ fout: "Kies een klant en een sjabloon." }, 400);
+
+  const { data: sjabloon } = await db
+    .from("wa_sjablonen")
+    .select("id,meta_naam,categorie,tekst,variabelen,status")
+    .eq("company_id", m.company_id)
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!sjabloon) return antwoord({ fout: "Onbekend sjabloon." }, 404);
+  if (sjabloon.status !== "goedgekeurd") return antwoord({ fout: "Dit sjabloon is (nog) niet goedgekeurd door Meta." }, 409);
+
+  // Alleen naar een nummer dat bij een klant hoort.
+  const sleutel = telefoonAlsSleutel(nummer);
+  const { data: bijNummer, error: nummerFout } = await db
+    .from("klant_telefoons")
+    .select("klant_id,klanten!inner(deleted_at)")
+    .eq("company_id", m.company_id)
+    .eq("telefoon", sleutel || "-")
+    .is("klanten.deleted_at", null)
+    .limit(5);
+  if (nummerFout) throw new Error(`Klant zoeken: ${nummerFout.message}`);
+  const klantIds = [...new Set<string>((bijNummer ?? []).map((r: { klant_id: string }) => r.klant_id))];
+  if (klantIds.length !== 1) return antwoord({ fout: "Dit nummer hoort niet bij (precies één) klant." }, 409);
+  const klantId = klantIds[0];
+  const { data: klant } = await db
+    .from("klanten")
+    .select("id,naam,wa_afgemeld_op,wa_marketing_op")
+    .eq("company_id", m.company_id)
+    .eq("id", klantId)
+    .maybeSingle();
+  if (!klant) return antwoord({ fout: "Klant niet gevonden." }, 404);
+  if (versturen && klant.wa_afgemeld_op) {
+    return antwoord({ fout: "Deze klant wil geen WhatsApp-berichten meer." }, 409);
+  }
+  if (versturen && sjabloon.categorie === "marketing" && !klant.wa_marketing_op) {
+    return antwoord({ fout: "Deze klant gaf geen toestemming voor nieuws en acties via WhatsApp." }, 409);
+  }
+
+  const standaard = await klantWaarden(db, m.company_id, klant.id, klant.naam);
+  const eigen = verzoek.waarden && typeof verzoek.waarden === "object" ? verzoek.waarden : {};
+  const waarden: Record<Plaatshouder, string> = { ...standaard };
+  for (const sleutel of ["naam", "datum", "adres"] as Plaatshouder[]) {
+    const v = eigen[sleutel];
+    if (typeof v === "string" && v.trim()) waarden[sleutel] = v.replace(/\s+/g, " ").trim().slice(0, 200);
+  }
+  const variabelen = (sjabloon.variabelen ?? []) as Plaatshouder[];
+  const tekst = vulSjabloonIn(sjabloon.tekst, waarden);
+  const leeg = [...new Set(variabelen.filter((v) => !waarden[v]))];
+  if (!versturen) return antwoord({ ok: true, tekst, waarden, leeg });
+  if (leeg.length > 0) return antwoord({ fout: `Vul nog in: ${leeg.join(", ")}.` }, 400);
+
+  // Zelfde rem als bij gewone antwoorden: elk sjabloonbericht kost geld.
+  const { count, error: telFout } = await db
+    .from("berichten")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", m.company_id)
+    .eq("kanaal", "whatsapp")
+    .eq("bron", "wooshy")
+    .gte("ontvangen_op", new Date(Date.now() - 60_000).toISOString());
+  if (telFout) throw new Error(`Tellen: ${telFout.message}`);
+  if ((count ?? 0) >= MAX_PER_MINUUT) {
+    return antwoord({ fout: "Even rustig aan: te veel berichten in één minuut." }, 429);
+  }
+
+  const k = await actieveKoppeling(db, m);
+  if (k instanceof Response) return k;
+  const uit = await verstuurSjabloon(k.token, k.phone_number_id, nummer, sjabloon.meta_naam, variabelen.map((v) => waarden[v]));
+  if (!uit.ok) return antwoord({ fout: `WhatsApp weigerde het bericht: ${uit.fout}` }, 502);
+
+  const nu = new Date().toISOString();
+  const { error } = await db.from("berichten").insert({
+    company_id: m.company_id,
+    kanaal: "whatsapp",
+    wa_id: uit.waId,
+    wa_telefoon: nummer,
+    wa_type: "template",
+    wa_status: "verstuurd",
+    richting: "uit",
+    bron: "wooshy",
+    tekst,
+    fragment: tekst.replace(/\s+/g, " ").slice(0, 200),
+    ontvangen_op: nu,
+    gelezen: true,
+    op_server: false,
+    paaltje_status: "overslaan",
+  });
+  if (error) console.error("sjabloonbericht opslaan:", error.message);
+  return antwoord({ ok: true, bewaard: !error });
+}
+
+/** Naam, adres(sen) en de eerstvolgende wasdag van een klant, voor in een sjabloon. */
+async function klantWaarden(db: Db, companyId: string, klantId: string, naam: string): Promise<Record<Plaatshouder, string>> {
+  const { data: adressen, error } = await db
+    .from("customers")
+    .select("id,house_number,addition,overslaan,streets(name,volledige_naam)")
+    .eq("company_id", companyId)
+    .eq("klant_id", klantId)
+    .is("deleted_at", null)
+    .is("inactief_op", null);
+  if (error) throw new Error(`Adressen: ${error.message}`);
+  const lijst = (adressen ?? []) as {
+    id: string;
+    house_number: number;
+    addition: string | null;
+    overslaan: string[] | null;
+    streets: { name: string; volledige_naam: string } | null;
+  }[];
+  const adres = lijst
+    .map((a) => `${a.streets?.volledige_naam || a.streets?.name || ""} ${a.house_number}${a.addition ?? ""}`.trim())
+    .join(" en ");
+
+  let datum = "";
+  if (lijst.length > 0) {
+    const vandaag = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Amsterdam" }).format(new Date());
+    const { data: dagen, error: dagFout } = await db
+      .from("wasdag_regels")
+      .select("customer_id,datum")
+      .eq("company_id", companyId)
+      .in("customer_id", lijst.map((a) => a.id))
+      .gte("datum", vandaag)
+      .order("datum")
+      .limit(50);
+    if (dagFout) throw new Error(`Planning: ${dagFout.message}`);
+    const overslaan = new Map(lijst.map((a) => [a.id, new Set(a.overslaan ?? [])]));
+    const eerst = (dagen ?? []).find(
+      (d: { customer_id: string; datum: string }) => !overslaan.get(d.customer_id)?.has(String(d.datum).slice(0, 7)),
+    );
+    if (eerst) datum = datumVoluit(String(eerst.datum));
+  }
+  return { naam: naam.trim(), adres, datum };
 }

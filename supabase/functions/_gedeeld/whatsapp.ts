@@ -472,3 +472,130 @@ export async function annuleerGeplandeAntwoorden(db: Db, companyId: string, numm
     .eq("wa_antwoord_status", "gepland");
   if (error) console.error("geplande antwoorden annuleren:", error.message);
 }
+
+// ---------------------------------------------------------------------
+// Sjablonen
+// ---------------------------------------------------------------------
+
+/** De plaatshouders die je in een sjabloon mag gebruiken. */
+export const PLAATSHOUDERS = ["naam", "datum", "adres"] as const;
+export type Plaatshouder = (typeof PLAATSHOUDERS)[number];
+
+/** Een voorbeeld per plaatshouder: Meta wil bij het indienen zien wat erin komt. */
+const VOORBEELD: Record<Plaatshouder, string> = {
+  naam: "Jan de Vries",
+  datum: "dinsdag 22 september",
+  adres: "Dorpsstraat 12",
+};
+
+/**
+ * Jouw tekst ("Hoi {naam}, we komen {datum}") omzetten naar de vorm van Meta
+ * ("Hoi {{1}}, we komen {{2}}"), met de plaatshouders op volgorde. Geeft een
+ * fout in gewone taal als iets niet mag.
+ */
+export function sjabloonVoorMeta(
+  tekst: string,
+): { ok: true; body: string; variabelen: Plaatshouder[] } | { ok: false; fout: string } {
+  const schoon = tekst.replace(/\r\n/g, "\n").trim();
+  if (!schoon) return { ok: false, fout: "De tekst is leeg." };
+  if (schoon.length > 1024) return { ok: false, fout: "Hooguit 1024 tekens." };
+  if (/\n{3,}/.test(schoon)) return { ok: false, fout: "Hooguit één lege regel achter elkaar." };
+  const onbekend = [...schoon.matchAll(/\{([^{}]*)\}/g)].map((m) => m[1]).filter((n) => !PLAATSHOUDERS.includes(n as Plaatshouder));
+  if (onbekend.length > 0) {
+    return { ok: false, fout: `Onbekende plaatshouder {${onbekend[0]}}. Gebruik {naam}, {datum} of {adres}.` };
+  }
+  if (/\{\{|\}\}/.test(schoon)) return { ok: false, fout: "Gebruik enkele accolades: {naam}." };
+  if (/^\{[a-z]+\}/.test(schoon) || /\{[a-z]+\}[.!?]?$/.test(schoon)) {
+    return { ok: false, fout: "Meta staat niet toe dat de tekst begint of eindigt met een plaatshouder." };
+  }
+  if (/\}\s*\{/.test(schoon)) return { ok: false, fout: "Zet tekst tussen twee plaatshouders." };
+  const variabelen: Plaatshouder[] = [];
+  const body = schoon.replace(/\{(naam|datum|adres)\}/g, (_, n: Plaatshouder) => {
+    variabelen.push(n);
+    return `{{${variabelen.length}}}`;
+  });
+  return { ok: true, body, variabelen };
+}
+
+export function voorbeeldWaarden(variabelen: string[]): string[] {
+  return variabelen.map((v) => VOORBEELD[v as Plaatshouder] ?? "voorbeeld");
+}
+
+/** De tekst zoals de klant hem krijgt. */
+export function vulSjabloonIn(tekst: string, waarden: Partial<Record<Plaatshouder, string>>): string {
+  return tekst.replace(/\{(naam|datum|adres)\}/g, (_, n: Plaatshouder) => waarden[n] ?? "");
+}
+
+/** Status bij Meta → wat wij bewaren. */
+export const SJABLOON_STATUS: Record<string, string> = {
+  APPROVED: "goedgekeurd",
+  REJECTED: "afgewezen",
+  PENDING: "ingediend",
+  IN_APPEAL: "ingediend",
+  PENDING_DELETION: "uitgeschakeld",
+  DELETED: "uitgeschakeld",
+  DISABLED: "uitgeschakeld",
+  PAUSED: "gepauzeerd",
+  REINSTATED: "goedgekeurd",
+  LIMIT_EXCEEDED: "gepauzeerd",
+};
+
+/** Een goedgekeurd sjabloon versturen. Geeft het wamid terug. */
+export async function verstuurSjabloon(
+  token: string,
+  phoneNumberId: string,
+  aan: string,
+  metaNaam: string,
+  parameters: string[],
+): Promise<{ ok: true; waId: string } | { ok: false; status: number; fout: string }> {
+  const uit = await graph<{ messages?: { id?: string }[] }>(`${phoneNumberId}/messages`, token, {
+    method: "POST",
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: aan,
+      type: "template",
+      template: {
+        name: metaNaam,
+        language: { code: "nl" },
+        ...(parameters.length > 0
+          ? {
+              components: [
+                {
+                  type: "body",
+                  // WhatsApp weigert lege parameters en regeleinden erin.
+                  parameters: parameters.map((p) => ({
+                    type: "text",
+                    text: (p.replace(/\s+/g, " ").trim() || "-").slice(0, 200),
+                  })),
+                },
+              ],
+            }
+          : {}),
+      },
+    }),
+  });
+  if (!uit.ok) return uit;
+  const waId = String(uit.data.messages?.[0]?.id ?? "");
+  if (!waId) return { ok: false, status: 502, fout: "WhatsApp gaf geen bericht-id terug." };
+  return { ok: true, waId };
+}
+
+const DAGEN = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
+const MAANDNAMEN = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
+
+/** "2026-09-22" → "dinsdag 22 september". */
+export function datumVoluit(datum: string): string {
+  const m = datum.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return datum;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return `${DAGEN[d.getUTCDay()]} ${+m[3]} ${MAANDNAMEN[+m[2] - 1]}`;
+}
+
+/** Een Nederlands mobiel nummer ("06…") als WhatsApp-nummer ("316…"); leeg als het geen 06-nummer is. */
+export function mobielAlsWa(tekst: string): string {
+  let d = String(tekst ?? "").replace(/\D/g, "");
+  if (d.startsWith("0031")) d = `0${d.slice(4)}`;
+  else if (d.startsWith("31") && d.length === 11) d = `0${d.slice(2)}`;
+  return /^06\d{8}$/.test(d) ? `31${d.slice(1)}` : "";
+}

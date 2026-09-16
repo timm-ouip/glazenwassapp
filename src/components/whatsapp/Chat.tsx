@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useRecht } from "@/lib/rechten";
 import { useAuth } from "@/lib/auth";
+import { SjabloonBericht } from "@/components/whatsapp/Sjablonen";
 import { draaiWijzigingTerug } from "@/lib/mailing";
 import { toonMaand } from "@/lib/klanten";
 import {
@@ -98,10 +99,13 @@ function Antwoordveld({
   }
   if (!open) {
     return (
-      <p className="border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
-        De klant appte langer dan 24 uur geleden. WhatsApp staat dan alleen een goedgekeurd sjabloon
-        toe; dat komt in een volgende stap. Antwoord voor nu op je telefoon.
-      </p>
+      <SjabloonBericht
+        telefoon={telefoon}
+        onVerstuurd={() => {
+          void qc.invalidateQueries({ queryKey: ["wa-berichten", telefoon] });
+          void qc.invalidateQueries({ queryKey: ["wa-gesprekken"] });
+        }}
+      />
     );
   }
 

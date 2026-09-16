@@ -15,6 +15,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { ontsleutel } from "../_gedeeld/geheim.ts";
 import {
+  SJABLOON_STATUS,
   annuleerGeplandeAntwoorden,
   haalMediaBinnen,
   handtekeningKlopt,
@@ -59,7 +60,7 @@ Deno.serve(async (req) => {
     return tekst("Handtekening klopt niet", 401);
   }
 
-  let json: { object?: string; entry?: { changes?: { field?: string; value?: Record<string, unknown> }[] }[] };
+  let json: { object?: string; entry?: { id?: string; changes?: { field?: string; value?: Record<string, unknown> }[] }[] };
   try {
     json = JSON.parse(body);
   } catch {
@@ -74,7 +75,12 @@ Deno.serve(async (req) => {
   try {
     for (const entry of json.entry ?? []) {
       for (const change of entry.changes ?? []) {
-        await verwerk(db, String(change.field ?? ""), change.value ?? {});
+        const field = String(change.field ?? "");
+        if (field === "message_template_status_update" || field === "template_category_update") {
+          await sjabloonBijwerken(db, String(entry.id ?? ""), field, change.value ?? {});
+        } else {
+          await verwerk(db, field, change.value ?? {});
+        }
       }
     }
   } catch (e) {
@@ -183,4 +189,38 @@ async function verwerk(db: Db, field: string, value: Record<string, unknown>) {
       .eq("id", bericht.id);
     if (statusFout) console.error("whatsapp-webhook status bijwerken:", statusFout.message);
   }
+}
+
+/** Meta keurde een sjabloon goed of af, of gaf het een andere categorie. */
+async function sjabloonBijwerken(db: Db, wabaId: string, field: string, value: Record<string, unknown>) {
+  const metaId = String(value.message_template_id ?? "");
+  if (!wabaId || !metaId) return;
+  // Het account kan bij meer koppelingen horen (een oude die uit staat): alleen
+  // de actieve tellen, en het sjabloon moet bij een van die bedrijven horen.
+  const { data: koppelingen, error: koppelFout } = await db
+    .from("whatsapp_koppelingen")
+    .select("company_id")
+    .eq("waba_id", wabaId)
+    .neq("status", "uit");
+  if (koppelFout) throw new Error(`Koppeling bij sjabloon: ${koppelFout.message}`);
+  const bedrijven = [...new Set((koppelingen ?? []).map((k: { company_id: string }) => k.company_id))];
+  if (bedrijven.length === 0) return;
+  const bijwerken: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (field === "message_template_status_update") {
+    const status = SJABLOON_STATUS[String(value.event ?? "").toUpperCase()];
+    if (!status) return;
+    bijwerken.status = status;
+    const reden = String(value.reason ?? "");
+    bijwerken.afwijsreden = reden && reden !== "NONE" ? reden.slice(0, 300) : "";
+  } else {
+    const nieuw = String(value.new_category ?? "").toUpperCase();
+    if (!nieuw) return;
+    bijwerken.categorie = nieuw === "MARKETING" ? "marketing" : "utility";
+  }
+  const { error } = await db
+    .from("wa_sjablonen")
+    .update(bijwerken)
+    .in("company_id", bedrijven)
+    .eq("meta_id", metaId);
+  if (error) throw new Error(`Sjabloon bijwerken: ${error.message}`);
 }

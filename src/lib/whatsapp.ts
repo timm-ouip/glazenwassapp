@@ -249,3 +249,143 @@ export async function fetchWijzigingenVan(berichtId: string): Promise<BerichtWij
   if (error) throw error;
   return (data ?? []) as BerichtWijziging[];
 }
+
+// ---------------------------------------------------------------------
+// Sjablonen
+// ---------------------------------------------------------------------
+
+export type SjabloonStatus =
+  "ingediend" | "goedgekeurd" | "afgewezen" | "gepauzeerd" | "uitgeschakeld";
+
+export interface Sjabloon {
+  id: string;
+  titel: string;
+  categorie: "utility" | "marketing";
+  tekst: string;
+  variabelen: string[];
+  status: SjabloonStatus;
+  afwijsreden: string;
+  created_at: string;
+}
+
+export const SJABLOON_STATUS_TEKST: Record<SjabloonStatus, string> = {
+  ingediend: "Wacht op Meta",
+  goedgekeurd: "Goedgekeurd",
+  afgewezen: "Afgewezen",
+  gepauzeerd: "Gepauzeerd",
+  uitgeschakeld: "Uitgeschakeld",
+};
+
+export async function fetchSjablonen(): Promise<Sjabloon[]> {
+  const { data, error } = await supabase
+    .from("wa_sjablonen")
+    .select("id,titel,categorie,tekst,variabelen,status,afwijsreden,created_at")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as Sjabloon[];
+}
+
+export function maakSjabloon(invoer: {
+  titel: string;
+  categorie: "utility" | "marketing";
+  tekst: string;
+}): Promise<{ ok: true; status: SjabloonStatus }> {
+  return roep({ actie: "sjabloon_maken", ...invoer });
+}
+
+export function verversSjablonen(): Promise<{ ok: true; bijgewerkt: number }> {
+  return roep({ actie: "sjablonen_verversen" });
+}
+
+export function gooiSjabloonWeg(id: string): Promise<{ ok: true }> {
+  return roep({ actie: "sjabloon_weg", sjabloon_id: id });
+}
+
+export type SjabloonWaarden = { naam: string; datum: string; adres: string };
+
+export function sjabloonVoorbeeld(
+  telefoon: string,
+  sjabloonId: string,
+  waarden: Partial<SjabloonWaarden> = {},
+): Promise<{ ok: true; tekst: string; waarden: SjabloonWaarden; leeg: string[] }> {
+  return roep({ actie: "sjabloon_voorbeeld", telefoon, sjabloon_id: sjabloonId, waarden });
+}
+
+export function verstuurSjabloon(
+  telefoon: string,
+  sjabloonId: string,
+  waarden: Partial<SjabloonWaarden>,
+): Promise<{ ok: true; bewaard: boolean }> {
+  return roep({ actie: "sjabloon_versturen", telefoon, sjabloon_id: sjabloonId, waarden });
+}
+
+// ---------------------------------------------------------------------
+// Toestemming en voorkeur per klant
+// ---------------------------------------------------------------------
+
+export async function fetchToestemmingTelling(): Promise<{
+  zonder: number;
+  met: number;
+  afgemeld: number;
+}> {
+  const { data, error } = await supabase.rpc("wa_toestemming_telling");
+  if (error) throw error;
+  const r = data?.[0];
+  return {
+    zonder: Number(r?.zonder ?? 0),
+    met: Number(r?.met ?? 0),
+    afgemeld: Number(r?.afgemeld ?? 0),
+  };
+}
+
+export async function zetToestemmingBestaandeKlanten(): Promise<{ aantal: number; op: string }> {
+  const { data, error } = await supabase.rpc("wa_toestemming_bestaande_klanten");
+  if (error) throw error;
+  const r = data?.[0];
+  return { aantal: Number(r?.aantal ?? 0), op: String(r?.op ?? "") };
+}
+
+export async function draaiToestemmingTerug(op: string): Promise<number> {
+  const { data, error } = await supabase.rpc("wa_toestemming_bestaande_klanten_terug", { op });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
+export interface KlantWhatsApp {
+  kanaal_voorkeur: "mail" | "whatsapp" | "beide";
+  wa_toestemming_op: string | null;
+  wa_toestemming_bron: string;
+  wa_marketing_op: string | null;
+  wa_afgemeld_op: string | null;
+}
+
+export async function fetchKlantWhatsApp(klantId: string): Promise<KlantWhatsApp> {
+  const { data, error } = await supabase
+    .from("klanten")
+    .select("kanaal_voorkeur,wa_toestemming_op,wa_toestemming_bron,wa_marketing_op,wa_afgemeld_op")
+    .eq("id", klantId)
+    .single();
+  if (error) throw error;
+  return data as KlantWhatsApp;
+}
+
+export async function zetKlantWhatsApp(
+  klantId: string,
+  patch: Partial<KlantWhatsApp>,
+): Promise<void> {
+  const { error } = await supabase.from("klanten").update(patch).eq("id", klantId);
+  if (error) throw error;
+}
+
+/** "2026-09-22" → "dinsdag 22 september", zoals in het appje. */
+export function datumVoluit(datum: string): string {
+  const m = datum.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return datum;
+  return new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!)).toLocaleDateString("nl-NL", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  });
+}

@@ -453,6 +453,10 @@ export type Database = {
       };
       klanten: {
         Row: {
+          kanaal_voorkeur: string;
+          wa_toestemming_op: string | null;
+          wa_toestemming_bron: string;
+          wa_marketing_op: string | null;
           wa_afgemeld_op: string | null;
           company_id: string;
           created_at: string;
@@ -471,6 +475,10 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          kanaal_voorkeur?: string;
+          wa_toestemming_op?: string | null;
+          wa_toestemming_bron?: string;
+          wa_marketing_op?: string | null;
           wa_afgemeld_op?: string | null;
           company_id?: string;
           created_at?: string;
@@ -489,6 +497,10 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          kanaal_voorkeur?: string;
+          wa_toestemming_op?: string | null;
+          wa_toestemming_bron?: string;
+          wa_marketing_op?: string | null;
           wa_afgemeld_op?: string | null;
           company_id?: string;
           created_at?: string;
@@ -566,6 +578,8 @@ export type Database = {
       };
       mail_ontvangers: {
         Row: {
+          kanaal: string;
+          telefoon: string;
           adressen: string;
           company_id: string;
           created_at: string;
@@ -578,6 +592,8 @@ export type Database = {
           status: string;
         };
         Insert: {
+          kanaal?: string;
+          telefoon?: string;
           adressen?: string;
           company_id: string;
           created_at?: string;
@@ -590,6 +606,8 @@ export type Database = {
           status?: string;
         };
         Update: {
+          kanaal?: string;
+          telefoon?: string;
           adressen?: string;
           company_id?: string;
           created_at?: string;
@@ -711,6 +729,9 @@ export type Database = {
       };
       mailingen: {
         Row: {
+          kanaal: string;
+          sjabloon_id: string | null;
+          aantal_whatsapp: number;
           aantal: number;
           company_id: string;
           created_at: string;
@@ -723,6 +744,9 @@ export type Database = {
           verzonden_door: string | null;
         };
         Insert: {
+          kanaal?: string;
+          sjabloon_id?: string | null;
+          aantal_whatsapp?: number;
           aantal?: number;
           company_id: string;
           created_at?: string;
@@ -735,6 +759,9 @@ export type Database = {
           verzonden_door?: string | null;
         };
         Update: {
+          kanaal?: string;
+          sjabloon_id?: string | null;
+          aantal_whatsapp?: number;
           aantal?: number;
           company_id?: string;
           created_at?: string;
@@ -1488,6 +1515,54 @@ export type Database = {
         };
         Relationships: [];
       };
+      wa_sjablonen: {
+        Row: {
+          afwijsreden: string;
+          categorie: string;
+          company_id: string;
+          created_at: string;
+          deleted_at: string | null;
+          id: string;
+          meta_id: string;
+          meta_naam: string;
+          status: string;
+          tekst: string;
+          titel: string;
+          updated_at: string;
+          variabelen: string[];
+        };
+        Insert: {
+          afwijsreden?: string;
+          categorie: string;
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          id?: string;
+          meta_id?: string;
+          meta_naam: string;
+          status?: string;
+          tekst: string;
+          titel: string;
+          updated_at?: string;
+          variabelen?: string[];
+        };
+        Update: {
+          afwijsreden?: string;
+          categorie?: string;
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          id?: string;
+          meta_id?: string;
+          meta_naam?: string;
+          status?: string;
+          tekst?: string;
+          titel?: string;
+          updated_at?: string;
+          variabelen?: string[];
+        };
+        Relationships: [];
+      };
       whatsapp_koppelingen: {
         Row: {
           company_id: string;
@@ -1899,6 +1974,18 @@ export type Database = {
           aantal: number;
           map_id: string;
         }[];
+      };
+      wa_toestemming_bestaande_klanten: {
+        Args: never;
+        Returns: { aantal: number; op: string }[];
+      };
+      wa_toestemming_bestaande_klanten_terug: {
+        Args: { op: string };
+        Returns: number;
+      };
+      wa_toestemming_telling: {
+        Args: never;
+        Returns: { zonder: number; met: number; afgemeld: number }[];
       };
       whatsapp_gesprekken: {
         Args: { ouder_dan?: string | null; aantal?: number };

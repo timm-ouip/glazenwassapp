@@ -23,6 +23,7 @@ import {
   zetAntwoordTijden,
 } from "@/lib/whatsapp";
 import { useAuth } from "@/lib/auth";
+import { SjablonenBeheer, ToestemmingBestaandeKlanten } from "@/components/whatsapp/Sjablonen";
 
 /** Het adres waar Meta de berichten heen moet sturen. */
 const WEBHOOK_URL = `${import.meta.env["VITE_SUPABASE_URL"]}/functions/v1/whatsapp-webhook`;
@@ -212,6 +213,12 @@ export function WhatsAppInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
       )}
 
       {gekoppeld && isEigenaar && <AntwoordTijdenFormulier />}
+      {gekoppeld && (
+        <div className="space-y-4 border-t border-border pt-4">
+          <SjablonenBeheer isEigenaar={isEigenaar} />
+          {isEigenaar && <ToestemmingBestaandeKlanten />}
+        </div>
+      )}
     </div>
   );
 }

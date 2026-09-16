@@ -1,5 +1,5 @@
 /**
- * De aankondigingsmail versturen.
+ * De aankondiging versturen, per mail en/of per WhatsApp.
  *
  * Eén ingang met twee standen. `tellen` bouwt de ontvangerslijst en geeft die
  * terug zonder iets te versturen; `versturen` doet precies hetzelfde en stuurt
@@ -25,6 +25,14 @@ import {
   vulIn,
 } from "../_gedeeld/mail.ts";
 import { draaiTerug } from "../_gedeeld/doorvoeren.ts";
+import { ontsleutel } from "../_gedeeld/geheim.ts";
+import {
+  datumVoluit,
+  mobielAlsWa,
+  tokenVan,
+  verstuurSjabloon,
+  vulSjabloonIn,
+} from "../_gedeeld/whatsapp.ts";
 import { heeftRecht } from "../_gedeeld/rechten.ts";
 
 interface Verzoek {
@@ -44,6 +52,31 @@ interface Verzoek {
   test?: boolean;
   /** Bij `terugdraaien`: welke regel uit het rapport. */
   wijziging_id?: string;
+  /** Waarlangs: mail, WhatsApp, allebei, of zoals bij elke klant ingesteld. */
+  kanaal?: Kanaal;
+  /** Het WhatsApp-sjabloon voor de appjes. */
+  sjabloon_id?: string;
+  /** Proef via WhatsApp naar dit nummer. */
+  proef_telefoon?: string;
+}
+
+type Kanaal = "mail" | "whatsapp" | "beide" | "voorkeur";
+
+interface WaOntvanger {
+  wa: string;
+  naam: string;
+  klant_id: string | null;
+  adressen: string[];
+}
+
+interface Sjabloon {
+  id: string;
+  titel: string;
+  meta_naam: string;
+  categorie: "utility" | "marketing";
+  tekst: string;
+  variabelen: string[];
+  status: string;
 }
 
 /** Eén ontvanger: een mens, met alle adressen die hij die dag heeft. */
@@ -149,25 +182,35 @@ Deno.serve(async (req) => {
   const tekst = String(verzoek.tekst ?? "").trim().slice(0, MAX_TEKST);
   const versturen = verzoek.actie === "versturen";
   const test = verzoek.test === true;
+  const kanaal: Kanaal = ["mail", "whatsapp", "beide", "voorkeur"].includes(String(verzoek.kanaal))
+    ? (verzoek.kanaal as Kanaal)
+    : "mail";
 
-  if (versturen && (!onderwerp || !tekst)) {
-    return antwoord({ fout: "Vul een onderwerp en een tekst in." }, 400);
+  // Het WhatsApp-sjabloon, als er appjes bij kunnen zitten. Een reclame-
+  // sjabloon gaat alleen naar wie daar apart ja op zei.
+  let sjabloon: Sjabloon | null = null;
+  if (kanaal !== "mail" && verzoek.sjabloon_id) {
+    const { data } = await beheerder
+      .from("wa_sjablonen")
+      .select("id,titel,meta_naam,categorie,tekst,variabelen,status")
+      .eq("company_id", bedrijf.id)
+      .eq("id", String(verzoek.sjabloon_id))
+      .is("deleted_at", null)
+      .maybeSingle();
+    sjabloon = (data as Sjabloon | null) ?? null;
   }
 
-  // Mag dit bedrijf vanaf zijn afzender versturen? Eerst dat, dan pas de lijst
-  // opbouwen: wie niet mag, hoeft daar niet op te wachten.
-  if (versturen) {
-    const vooraf = await afzenderFout(beheerder, bedrijf.id, brevo, String(bedrijf.mail_afzender_email ?? ""));
-    if (vooraf) return antwoord({ fout: vooraf }, 400);
-  }
-
-  // 3. De ontvangerslijst, uit de dag zelf.
-  const ontvangers = await lijstVoorDag(beheerder, bedrijf.id, datum);
+  // 3. De ontvangers, uit de dag zelf, per kanaal.
+  const klanten = await klantenVoorDag(beheerder, bedrijf.id, datum);
+  const verdeling = verdeel(klanten, kanaal, sjabloon?.categorie === "marketing");
+  const ontvangers = verdeling.mail;
 
   if (!versturen) {
     const dekking = await telDekking(beheerder, bedrijf.id, datum);
     return antwoord({
       aantal: ontvangers.length,
+      aantalWhatsApp: verdeling.whatsapp.length,
+      zonderWhatsApp: verdeling.zonderWhatsApp,
       zonderEmail: dekking.zonderEmail,
       overgeslagen: dekking.overgeslagen,
       voorbeeld: ontvangers.slice(0, 5).map((o) => ({
@@ -175,18 +218,71 @@ Deno.serve(async (req) => {
         email: o.email,
         adressen: o.adressen,
       })),
+      voorbeeldWhatsApp: verdeling.whatsapp.slice(0, 5).map((o) => ({
+        naam: o.naam,
+        telefoon: o.wa,
+        adressen: o.adressen,
+      })),
     });
   }
 
+  // Een proef gaat naar jezelf (mail) en/of naar het proefnummer (WhatsApp).
+  // Een WhatsApp-proef alleen naar een 06-nummer, en alleen met een sjabloon:
+  // zonder sjabloon is er geen appje om te proberen, en dan gaat alleen de
+  // proefmail.
+  const proefTelefoon = test ? mobielAlsWa(String(verzoek.proef_telefoon ?? "")) : "";
+  const metMail = test ? kanaal !== "whatsapp" : ontvangers.length > 0;
+  const metWhatsApp = test
+    ? kanaal !== "mail" && !!proefTelefoon && !!sjabloon
+    : verdeling.whatsapp.length > 0;
+
+  if (!metMail && !metWhatsApp) {
+    return antwoord(
+      {
+        fout: test
+          ? "Kies een sjabloon en vul een 06-nummer in om de WhatsApp-proef te versturen."
+          : "Er staat niemand op deze dag die een bericht kan krijgen.",
+      },
+      400,
+    );
+  }
+  if (metMail && (!onderwerp || !tekst)) {
+    return antwoord({ fout: "Vul een onderwerp en een tekst in." }, 400);
+  }
+  if (metWhatsApp && (!sjabloon || sjabloon.status !== "goedgekeurd")) {
+    return antwoord({ fout: "Kies een WhatsApp-sjabloon dat door Meta is goedgekeurd." }, 400);
+  }
+
+  // Mag dit bedrijf vanaf zijn afzender mailen? Eerst dat, dan pas versturen.
+  if (metMail) {
+    const vooraf = await afzenderFout(beheerder, bedrijf.id, brevo, String(bedrijf.mail_afzender_email ?? ""));
+    if (vooraf) return antwoord({ fout: vooraf }, 400);
+  }
+
+  // En WhatsApp: gekoppeld, met token.
+  let wa: { phoneNumberId: string; token: string } | null = null;
+  if (metWhatsApp) {
+    const { data: koppeling } = await beheerder
+      .from("whatsapp_koppelingen")
+      .select("id,phone_number_id,status")
+      .eq("company_id", bedrijf.id)
+      .maybeSingle();
+    const token = koppeling && koppeling.status !== "uit" ? await tokenVan(beheerder, koppeling.id, ontsleutel) : null;
+    if (!koppeling || !token) {
+      return antwoord({ fout: "WhatsApp is niet (meer) gekoppeld. Koppel het nummer opnieuw bij Instellingen." }, 400);
+    }
+    wa = { phoneNumberId: koppeling.phone_number_id, token };
+  }
+
   // 4. Vanaf hier gaat er echt iets de deur uit.
-  if (!brevo) {
+  if (metMail && !brevo) {
     return antwoord(
       { fout: "De Brevo-sleutel ontbreekt op de server. Zet BREVO_API_KEY als secret." },
       500,
     );
   }
   const afzenderEmail = (bedrijf.mail_afzender_email ?? "").trim();
-  if (!afzenderEmail) {
+  if (metMail && !afzenderEmail) {
     return antwoord(
       { fout: "Stel eerst een afzender in bij Instellingen." },
       400,
@@ -197,12 +293,13 @@ Deno.serve(async (req) => {
     email: afzenderEmail,
   };
 
-  const mailboxAdres = await mailboxAdresVan(beheerder, bedrijf.id);
+  const mailboxAdres = metMail ? await mailboxAdresVan(beheerder, bedrijf.id) : "";
   const antwoordNaar = antwoordAdres(mailboxAdres);
 
   // Een proef gaat naar jezelf, maar met de gegevens van de eerste echte
   // ontvanger erin: zo zie je wat er in de plaatshouders terechtkomt.
   const echt = ontvangers;
+  const echtWa = verdeling.whatsapp;
 
   // Een proef mag ook naar een ander adres, bijvoorbeeld een Hotmail-adres om
   // te zien wat klanten zien. Eén adres, en hooguit 10 proeven per uur per
@@ -219,22 +316,36 @@ Deno.serve(async (req) => {
     }
   }
 
-  const teVersturen: Ontvanger[] = test
-    ? [
-        {
-          email: proefAdres,
-          // De naam van de eerste echte ontvanger, zodat {{naam}} er in de
-          // proef uitziet zoals bij een klant.
-          naam: echt[0]?.naam || medewerker.naam || proefAdres,
-          klant_id: null,
-          adressen: echt[0]?.adressen ?? ["Voorbeeldstraat 1"],
-        },
-      ]
-    : echt;
+  const voorbeeldKlant = echt[0] ?? echtWa[0];
+  const teVersturen: Ontvanger[] = !metMail
+    ? []
+    : test
+      ? [
+          {
+            email: proefAdres,
+            // De naam van de eerste echte ontvanger, zodat {{naam}} er in de
+            // proef uitziet zoals bij een klant.
+            naam: voorbeeldKlant?.naam || medewerker.naam || proefAdres,
+            klant_id: null,
+            adressen: voorbeeldKlant?.adressen ?? ["Voorbeeldstraat 1"],
+          },
+        ]
+      : echt;
+  const appjes: WaOntvanger[] = !metWhatsApp
+    ? []
+    : test
+      ? [
+          {
+            wa: proefTelefoon,
+            naam: voorbeeldKlant?.naam || medewerker.naam || "Klant",
+            klant_id: null,
+            adressen: voorbeeldKlant?.adressen ?? ["Voorbeeldstraat 1"],
+          },
+        ]
+      : echtWa;
 
-  if (teVersturen.length === 0) {
-    return antwoord({ fout: "Er staat niemand met een e-mailadres op deze dag." }, 400);
-  }
+  const vastOnderwerp = onderwerp || `WhatsApp: ${sjabloon?.titel ?? "aankondiging"}`;
+  const vastTekst = tekst || sjabloon?.tekst || "";
 
   let mailing: { id: string };
   if (test) {
@@ -243,24 +354,31 @@ Deno.serve(async (req) => {
     const { data: plek, error: plekFout } = await beheerder.rpc("proefmail_vastleggen", {
       bedrijf: bedrijf.id,
       dag: datum,
-      onderwerp,
-      tekst,
+      onderwerp: vastOnderwerp,
+      tekst: vastTekst,
       door: medewerker.id,
     });
     if (plekFout) return antwoord({ fout: "Kon de proef niet vastleggen." }, 500);
     if (!plek) {
-      return antwoord({ fout: "Je hebt het afgelopen uur al 10 proefmails verstuurd. Probeer het straks nog eens." }, 429);
+      return antwoord({ fout: "Je hebt het afgelopen uur al 10 proeven verstuurd. Probeer het straks nog eens." }, 429);
     }
     mailing = { id: String(plek) };
+    const { error: kanaalFout } = await beheerder
+      .from("mailingen")
+      .update({ kanaal, sjabloon_id: sjabloon?.id ?? null })
+      .eq("id", mailing.id);
+    if (kanaalFout) console.error("proef kanaal vastleggen:", kanaalFout.message);
   } else {
     const { data, error: mailingFout } = await beheerder
       .from("mailingen")
       .insert({
         company_id: bedrijf.id,
         datum,
-        onderwerp,
-        tekst,
+        onderwerp: vastOnderwerp,
+        tekst: vastTekst,
         test,
+        kanaal,
+        sjabloon_id: sjabloon?.id ?? null,
         verzonden_door: medewerker.id,
       })
       .select("id")
@@ -286,29 +404,91 @@ Deno.serve(async (req) => {
     company_id: bedrijf.id,
     mailing_id: mailing.id,
     klant_id: o.klant_id,
+    kanaal: "mail",
     email: o.email,
+    telefoon: "",
     naam: o.naam,
     adressen: o.adressen.join(", "),
     status: res.ok ? "verzonden" : "mislukt",
     fout: res.ok ? "" : res.fout,
   }));
+
+  // De appjes: per klant het sjabloon, met zijn naam, adres en de dag.
+  const datumTekst = datumVoluit(datum);
+  const waUitslag = await perGroepje(appjes, 4, async (o) => {
+    // Zelfde als in de mail: zonder naam "buurtbewoner", en dat staat dan ook in het gesprek.
+    const waarden = { naam: o.naam || "buurtbewoner", adres: o.adressen.join(" en "), datum: datumTekst };
+    const parameters = (sjabloon!.variabelen ?? []).map((v) => waarden[v as keyof typeof waarden] ?? "");
+    const res = await verstuurSjabloon(wa!.token, wa!.phoneNumberId, o.wa, sjabloon!.meta_naam, parameters);
+    return { o, res, tekst: vulSjabloonIn(sjabloon!.tekst, waarden) };
+  });
+  for (const { o, res } of waUitslag) {
+    rijen.push({
+      company_id: bedrijf.id,
+      mailing_id: mailing.id,
+      klant_id: o.klant_id,
+      kanaal: "whatsapp",
+      email: "",
+      telefoon: o.wa,
+      naam: o.naam,
+      adressen: o.adressen.join(", "),
+      status: res.ok ? "verzonden" : "mislukt",
+      fout: res.ok ? "" : res.fout.slice(0, 300),
+    });
+  }
+  // Wat via WhatsApp wegging, staat ook in het gesprek met de klant.
+  // Een proef niet: dan zou het proefnummer als gesprek (of in een dossier) verschijnen.
+  const gesprekRijen = waUitslag
+    .filter(({ res }) => res.ok && !test)
+    .map(({ o, res, tekst: t }) => ({
+      company_id: bedrijf.id,
+      kanaal: "whatsapp",
+      wa_id: (res as { waId: string }).waId,
+      wa_telefoon: o.wa,
+      wa_type: "template",
+      wa_status: "verstuurd",
+      richting: "uit",
+      bron: "wooshy",
+      tekst: t,
+      fragment: t.replace(/\s+/g, " ").slice(0, 200),
+      ontvangen_op: new Date().toISOString(),
+      gelezen: true,
+      op_server: false,
+      paaltje_status: "overslaan",
+    }));
+  for (const stuk of inStukjes(gesprekRijen, 200)) {
+    const { error } = await beheerder.from("berichten").insert(stuk);
+    if (error) console.error("aankondiging in gesprek:", error.message);
+  }
+
+  let opslagFout = "";
   for (const stuk of inStukjes(rijen, 200)) {
-    await beheerder.from("mail_ontvangers").insert(stuk);
+    const { error } = await beheerder.from("mail_ontvangers").insert(stuk);
+    if (error) {
+      console.error("ontvangers opslaan:", error.message);
+      opslagFout = "Verstuurd, maar de lijst met ontvangers kon niet bewaard worden.";
+    }
   }
 
   const mislukt = rijen.filter((r) => r.status === "mislukt").length;
-  await beheerder
+  const gelukt = (k: string) => rijen.filter((r) => r.kanaal === k && r.status === "verzonden").length;
+  const { error: aantalFout } = await beheerder
     .from("mailingen")
-    .update({ aantal: rijen.length - mislukt, mislukt })
+    .update({ aantal: gelukt("mail"), aantal_whatsapp: gelukt("whatsapp"), mislukt })
     .eq("id", mailing.id);
+  if (aantalFout) {
+    console.error("aantallen bijwerken:", aantalFout.message);
+    opslagFout ||= "Verstuurd, maar de aantallen konden niet bewaard worden.";
+  }
 
   return antwoord({
     mailing_id: mailing.id,
-    verstuurd: rijen.length - mislukt,
+    verstuurd: gelukt("mail"),
+    verstuurdWhatsApp: gelukt("whatsapp"),
     mislukt,
     // Eén voorbeeldfout is genoeg om te snappen wat er mis ging; de rest
     // staat in de tabel.
-    eersteFout: rijen.find((r) => r.status === "mislukt")?.fout ?? "",
+    eersteFout: rijen.find((r) => r.status === "mislukt")?.fout ?? opslagFout,
   });
 });
 
@@ -496,18 +676,32 @@ function antwoordAdres(mailboxAdres: string): string | undefined {
   return mailboxAdres || undefined;
 }
 
+/** Eén klant op de dag, met alles wat nodig is om te kiezen waarlangs hij bericht krijgt. */
+interface KlantOpDag {
+  klant_id: string;
+  naam: string;
+  email: string;
+  /** Als WhatsApp-nummer ("316…"), leeg als hij geen 06-nummer heeft. */
+  wa: string;
+  voorkeur: "mail" | "whatsapp" | "beide";
+  toestemming: boolean;
+  marketing: boolean;
+  afgemeld: boolean;
+  adressen: string[];
+}
+
 /**
- * De mensen achter de adressen van één dag, één regel per e-mailadres.
+ * De klanten achter de adressen van één dag.
  *
  * Van de dag naar de adressen, van de adressen naar de klanten. Een klant met
- * twee panden op dezelfde dag krijgt één mail met beide adressen erin — twee
- * losse mailtjes over dezelfde ochtend leest als een storing.
+ * twee panden op dezelfde dag krijgt één bericht met beide adressen erin — twee
+ * losse berichtjes over dezelfde ochtend leest als een storing.
  */
-async function lijstVoorDag(
+async function klantenVoorDag(
   db: ReturnType<typeof createClient>,
   companyId: string,
   datum: string,
-): Promise<Ontvanger[]> {
+): Promise<KlantOpDag[]> {
   // Wie deze maand overslaat staat nog wel op de dag, maar komt niet: die
   // hoort ook geen aankondiging te krijgen.
   const maand = datum.slice(0, 7);
@@ -553,7 +747,7 @@ async function lijstVoorDag(
   if (klantIds.length === 0) return [];
 
   // De straatnamen erbij. `volledige_naam` als die er is: op de lijst staat
-  // "Ameland", maar in een mail hoort "Amelandstraat".
+  // "Ameland", maar in een bericht hoort "Amelandstraat".
   const straatIds = [...new Set(adressen.map((a) => a.street_id))];
   const straatNaam = new Map<string, string>();
   for (const stuk of inStukjes(straatIds)) {
@@ -568,45 +762,89 @@ async function lijstVoorDag(
     }
   }
 
-  const klanten = new Map<string, { naam: string; email: string }>();
+  const klanten = new Map<string, KlantOpDag>();
   for (const stuk of inStukjes(klantIds)) {
     const { data } = await db
       .from("klanten")
-      .select("id,naam,email")
+      .select("id,naam,email,telefoon,telefoon2,kanaal_voorkeur,wa_toestemming_op,wa_marketing_op,wa_afgemeld_op")
       .eq("company_id", companyId)
       .is("deleted_at", null)
       .in("id", stuk);
     for (const k of data ?? []) {
-      const email = ((k["email"] as string) ?? "").trim();
-      if (email) klanten.set(k["id"] as string, { naam: (k["naam"] as string) ?? "", email });
-    }
-  }
-
-  // Op e-mailadres en niet op klant-id: twee klantkaarten met hetzelfde adres
-  // erachter is één mens met één postvak.
-  const perEmail = new Map<string, Ontvanger>();
-  for (const a of adressen) {
-    if (!a.klant_id) continue;
-    const klant = klanten.get(a.klant_id);
-    if (!klant) continue;
-    const sleutel = klant.email.toLowerCase();
-    const straat = straatNaam.get(a.street_id) ?? "";
-    const adres = `${straat} ${a.huis}${a.toevoeging}`.trim();
-    const bestaand = perEmail.get(sleutel);
-    if (bestaand) {
-      if (!bestaand.adressen.includes(adres)) bestaand.adressen.push(adres);
-    } else {
-      perEmail.set(sleutel, {
-        email: klant.email,
-        naam: klant.naam,
-        klant_id: a.klant_id,
-        adressen: [adres],
+      const voorkeur = String(k["kanaal_voorkeur"] ?? "mail");
+      klanten.set(k["id"] as string, {
+        klant_id: k["id"] as string,
+        naam: (k["naam"] as string) ?? "",
+        email: ((k["email"] as string) ?? "").trim(),
+        wa: mobielAlsWa(String(k["telefoon"] ?? "")) || mobielAlsWa(String(k["telefoon2"] ?? "")),
+        voorkeur: voorkeur === "whatsapp" || voorkeur === "beide" ? voorkeur : "mail",
+        toestemming: !!k["wa_toestemming_op"],
+        marketing: !!k["wa_marketing_op"],
+        afgemeld: !!k["wa_afgemeld_op"],
+        adressen: [],
       });
     }
   }
 
-  return [...perEmail.values()].sort((a, b) => a.naam.localeCompare(b.naam, "nl"));
+  for (const a of adressen) {
+    if (!a.klant_id) continue;
+    const klant = klanten.get(a.klant_id);
+    if (!klant) continue;
+    const adres = `${straatNaam.get(a.street_id) ?? ""} ${a.huis}${a.toevoeging}`.trim();
+    if (!klant.adressen.includes(adres)) klant.adressen.push(adres);
+  }
+
+  return [...klanten.values()]
+    .filter((k) => k.adressen.length > 0)
+    .sort((a, b) => a.naam.localeCompare(b.naam, "nl"));
 }
+
+/**
+ * Wie krijgt een mail en wie een appje. Bij "voorkeur" telt wat bij de klant
+ * staat; kan hij geen WhatsApp krijgen (geen 06-nummer, geen toestemming,
+ * afgemeld), dan krijgt hij een mail als dat kan. Kies je zelf "WhatsApp",
+ * dan krijgt wie het niet kan niets — dat staat in de telling.
+ */
+function verdeel(
+  klanten: KlantOpDag[],
+  kanaal: Kanaal,
+  marketing: boolean,
+): { mail: Ontvanger[]; whatsapp: WaOntvanger[]; zonderWhatsApp: number } {
+  const perEmail = new Map<string, Ontvanger>();
+  const perNummer = new Map<string, WaOntvanger>();
+  let zonderWhatsApp = 0;
+  for (const k of klanten) {
+    const wil = kanaal === "voorkeur" ? k.voorkeur : kanaal;
+    const kanWa = !!k.wa && k.toestemming && !k.afgemeld && (!marketing || k.marketing);
+    const wilWa = wil === "whatsapp" || wil === "beide";
+    const doeWa = wilWa && kanWa;
+    if (wilWa && !kanWa) zonderWhatsApp += 1;
+    const doeMail =
+      !!k.email && (wil === "mail" || wil === "beide" || (kanaal === "voorkeur" && wil === "whatsapp" && !kanWa));
+
+    if (doeMail) {
+      // Op e-mailadres: twee klantkaarten met hetzelfde adres erachter is één
+      // mens met één postvak.
+      const sleutel = k.email.toLowerCase();
+      const bestaand = perEmail.get(sleutel);
+      if (bestaand) {
+        for (const a of k.adressen) if (!bestaand.adressen.includes(a)) bestaand.adressen.push(a);
+      } else {
+        perEmail.set(sleutel, { email: k.email, naam: k.naam, klant_id: k.klant_id, adressen: [...k.adressen] });
+      }
+    }
+    if (doeWa) {
+      const bestaand = perNummer.get(k.wa);
+      if (bestaand) {
+        for (const a of k.adressen) if (!bestaand.adressen.includes(a)) bestaand.adressen.push(a);
+      } else {
+        perNummer.set(k.wa, { wa: k.wa, naam: k.naam, klant_id: k.klant_id, adressen: [...k.adressen] });
+      }
+    }
+  }
+  return { mail: [...perEmail.values()], whatsapp: [...perNummer.values()], zonderWhatsApp };
+}
+
 
 /**
  * Hoe goed de aankondiging deze dag dekt: hoeveel adressen we niet kunnen

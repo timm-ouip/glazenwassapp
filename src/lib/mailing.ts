@@ -22,10 +22,19 @@ export interface Telling {
   overgeslagen: number;
   /** De eerste paar, om te zien dat het de goede mensen zijn. */
   voorbeeld: { naam: string; email: string; adressen: string[] }[];
+  /** Hoeveel klanten een appje krijgen. */
+  aantalWhatsApp: number;
+  /** Klanten die WhatsApp willen maar het niet kunnen krijgen (geen 06, geen toestemming, afgemeld). */
+  zonderWhatsApp: number;
+  voorbeeldWhatsApp: { naam: string; telefoon: string; adressen: string[] }[];
 }
+
+/** Waarlangs een aankondiging gaat. */
+export type AankondigKanaal = "voorkeur" | "mail" | "whatsapp" | "beide";
 
 export interface Verzending {
   verstuurd: number;
+  verstuurdWhatsApp: number;
   mislukt: number;
   eersteFout: string;
 }
@@ -90,8 +99,17 @@ export function draaiWijzigingTerug(wijziging_id: string): Promise<{ ok: true }>
 }
 
 /** Hoeveel mensen krijgen de mail van deze dag? Verstuurt niets. */
-export function telOntvangers(datum: string): Promise<Telling> {
-  return roep<Telling>({ actie: "tellen", datum });
+export function telOntvangers(
+  datum: string,
+  kanaal: AankondigKanaal = "mail",
+  sjabloonId = "",
+): Promise<Telling> {
+  return roep<Telling>({
+    actie: "tellen",
+    datum,
+    kanaal,
+    ...(sjabloonId ? { sjabloon_id: sjabloonId } : {}),
+  });
 }
 
 /**
@@ -104,9 +122,18 @@ export function verstuurAankondiging(opdracht: {
   tekst: string;
   test: boolean;
   proefNaar?: string;
+  kanaal?: AankondigKanaal;
+  sjabloonId?: string;
+  proefTelefoon?: string;
 }): Promise<Verzending> {
-  const { proefNaar, ...rest } = opdracht;
-  return roep<Verzending>({ actie: "versturen", ...rest, ...(proefNaar ? { proef_naar: proefNaar } : {}) });
+  const { proefNaar, sjabloonId, proefTelefoon, ...rest } = opdracht;
+  return roep<Verzending>({
+    actie: "versturen",
+    ...rest,
+    ...(proefNaar ? { proef_naar: proefNaar } : {}),
+    ...(sjabloonId ? { sjabloon_id: sjabloonId } : {}),
+    ...(proefTelefoon ? { proef_telefoon: proefTelefoon } : {}),
+  });
 }
 
 // ---------------------------------------------------------------------

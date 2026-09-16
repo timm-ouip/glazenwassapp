@@ -5,7 +5,8 @@
  * deed hoort niet door diezelfde assistent geschreven te worden.
  *
  * De getallen gaan over het postvak, net als de mappen in de app: wat in spam
- * of een andere map binnenkwam, telt hier niet mee.
+ * of een andere map binnenkwam, telt hier niet mee. WhatsApp staat er apart
+ * bij.
  */
 
 // deno-lint-ignore no-explicit-any
@@ -31,6 +32,14 @@ export interface RapportInhoud {
   problemen: string[];
   /** Al langer zo (bijv. oude fouten): wel in het rapport, maar geen reden voor een rapport. */
   opmerkingen: string[];
+  /** Alleen als WhatsApp gekoppeld is. */
+  whatsapp?: {
+    binnen: number;
+    vanKlanten: number;
+    paaltjeAntwoorden: number;
+    aankondigingen: number;
+    wacht: { aantal: number; voorbeelden: { van: string; samenvatting: string }[] };
+  };
 }
 
 /** Gebeurde er in deze periode iets? Een mail die al dagen wacht is geen nieuws. */
@@ -40,7 +49,10 @@ export function heeftIets(r: RapportInhoud): boolean {
     r.zelfGedaan.length > 0 ||
     r.verstuurd > 0 ||
     r.problemen.length > 0 ||
-    r.klachten.nieuw.length > 0
+    r.klachten.nieuw.length > 0 ||
+    (r.whatsapp?.binnen ?? 0) > 0 ||
+    (r.whatsapp?.paaltjeAntwoorden ?? 0) > 0 ||
+    (r.whatsapp?.aankondigingen ?? 0) > 0
   );
 }
 
@@ -227,8 +239,11 @@ export async function stelSamen(db: Db, companyId: string, vanaf: Date, tot: Dat
   if (alleFouten.error) throw new Error(`Paaltje-fouten: ${alleFouten.error.message}`);
   const nieuw = nieuweFouten.count ?? 0;
   const oud = (alleFouten.count ?? 0) - nieuw;
-  if (nieuw > 0) problemen.push(`Paaltje kon ${nieuw} ${nieuw === 1 ? "mail" : "mails"} niet lezen.`);
-  if (oud > 0) opmerkingen.push(`Er ${oud === 1 ? "staat" : "staan"} nog ${oud} oudere ${oud === 1 ? "mail" : "mails"} die Paaltje niet kon lezen.`);
+  if (nieuw > 0) problemen.push(`Paaltje kon ${nieuw} ${nieuw === 1 ? "bericht" : "berichten"} niet lezen.`);
+  if (oud > 0) opmerkingen.push(`Er ${oud === 1 ? "staat" : "staan"} nog ${oud} ${oud === 1 ? "ouder bericht" : "oudere berichten"} die Paaltje niet kon lezen.`);
+
+  // 7. WhatsApp, als het gekoppeld is.
+  const whatsapp = await whatsappDeel(db, companyId, van, t, problemen);
 
   return {
     vanaf: van,
@@ -268,6 +283,100 @@ export async function stelSamen(db: Db, companyId: string, vanaf: Date, tot: Dat
     },
     problemen,
     opmerkingen,
+    ...(whatsapp ? { whatsapp } : {}),
+  };
+}
+
+async function whatsappDeel(
+  db: Db,
+  companyId: string,
+  van: string,
+  t: string,
+  problemen: string[],
+): Promise<RapportInhoud["whatsapp"] | null> {
+  const koppeling = check(
+    await db.from("whatsapp_koppelingen").select("status,fout").eq("company_id", companyId).maybeSingle(),
+    "WhatsApp-koppeling",
+  ) as { status: string; fout: string } | null;
+  if (!koppeling || koppeling.status === "uit") return null;
+  if (koppeling.status === "fout" || koppeling.fout) {
+    problemen.push(`WhatsApp gaf een storing: ${eenRegel(koppeling.fout || "de koppeling werkt niet", 160)}`);
+  }
+
+  // deno-lint-ignore no-explicit-any
+  const tel = async (wat: string, bouw: (q: any) => any) => {
+    const uit = await bouw(
+      db.from("berichten").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("kanaal", "whatsapp"),
+    );
+    if (uit.error) throw new Error(`${wat}: ${uit.error.message}`);
+    return uit.count ?? 0;
+  };
+
+  const binnen = await tel("WhatsApp binnen", (q) =>
+    q.eq("richting", "in").eq("bron", "klant").gte("created_at", van).lt("created_at", t),
+  );
+  const vanKlanten = await tel("WhatsApp van klanten", (q) =>
+    q.eq("richting", "in").eq("bron", "klant").eq("is_klantmail", true).gte("created_at", van).lt("created_at", t),
+  );
+  const paaltjeAntwoorden = await tel("Antwoorden van Paaltje", (q) =>
+    q.eq("richting", "uit").eq("bron", "paaltje").gte("created_at", van).lt("created_at", t),
+  );
+  // Alleen echte aankondigingen (geen proef, geen los appje vanuit de chat).
+  const aankondigingUit = await db
+    .from("mail_ontvangers")
+    .select("id,mailingen!inner(test)", { count: "exact", head: true })
+    .eq("company_id", companyId)
+    .eq("kanaal", "whatsapp")
+    .eq("status", "verzonden")
+    .eq("mailingen.test", false)
+    .gte("created_at", van)
+    .lt("created_at", t);
+  if (aankondigingUit.error) throw new Error(`Aankondigingen via WhatsApp: ${aankondigingUit.error.message}`);
+  const aankondigingen = aankondigingUit.count ?? 0;
+  // De planner zet wa_antwoord_op op het moment dat hij het antwoord oppakt.
+  const mislukt = await tel("Mislukte antwoorden", (q) =>
+    q.eq("wa_antwoord_status", "mislukt").gte("wa_antwoord_op", van).lt("wa_antwoord_op", t),
+  );
+  if (mislukt > 0) {
+    problemen.push(`${mislukt} ${mislukt === 1 ? "antwoord" : "antwoorden"} van Paaltje via WhatsApp ${mislukt === 1 ? "ging" : "gingen"} niet weg.`);
+  }
+
+  // Wat op jou wacht: een klantbericht met iets klaar, niet beantwoord en
+  // niet ingepland door Paaltje.
+  // deno-lint-ignore no-explicit-any
+  const wachtBasis = (q: any) =>
+    q
+      .eq("richting", "in")
+      .eq("bron", "klant")
+      .eq("is_klantmail", true)
+      .is("deleted_at", null)
+      .is("beantwoord_op", null)
+      .is("afgehandeld_op", null)
+      .neq("wa_antwoord_status", "gepland")
+      .neq("samenvatting", "Samen gelezen met het bericht erna.")
+      .or('concept.neq."",voorstel.neq.{}');
+  const wachtAantal = await tel("WhatsApp wacht op jou", wachtBasis);
+  const wachtRijen = (check(
+    await wachtBasis(
+      db.from("berichten").select("van_naam,wa_telefoon,samenvatting").eq("company_id", companyId).eq("kanaal", "whatsapp"),
+    )
+      .order("ontvangen_op", { ascending: false })
+      .limit(5),
+    "WhatsApp wacht op jou",
+  ) ?? []) as { van_naam: string; wa_telefoon: string; samenvatting: string }[];
+
+  return {
+    binnen,
+    vanKlanten,
+    paaltjeAntwoorden,
+    aankondigingen,
+    wacht: {
+      aantal: wachtAantal,
+      voorbeelden: wachtRijen.map((r) => ({
+        van: eenRegel(r.van_naam || `+${r.wa_telefoon}`, 80),
+        samenvatting: eenRegel(r.samenvatting, 160),
+      })),
+    },
   };
 }
 
@@ -283,6 +392,8 @@ export function wijzigingZin(w: RapportInhoud["zelfGedaan"][number]): string {
       return `${wie}: gestopt als klant`;
     case "klant_email":
       return `${wie}: mailadres aan de klant gekoppeld`;
+    case "whatsapp_afgemeld":
+      return `${wie}: wil geen WhatsApp meer, uitgezet`;
     default:
       return wie;
   }
@@ -325,10 +436,24 @@ export function alsTekst(r: RapportInhoud, appUrl: string): string {
   }
 
   if (r.verstuurd > 0) {
-    regels.push(`Beantwoord: ${r.verstuurd} ${r.verstuurd === 1 ? "mail" : "mails"}`, "");
+    regels.push(`Beantwoord: ${r.verstuurd} ${r.verstuurd === 1 ? "bericht" : "berichten"}`, "");
   }
 
-  regels.push(`Wacht op jou: ${r.wacht.aantal}`);
+  if (r.whatsapp) {
+    const w = r.whatsapp;
+    regels.push(
+      `WhatsApp: ${w.binnen} ${w.binnen === 1 ? "bericht" : "berichten"} binnen (${w.vanKlanten} van klanten)` +
+        `, ${w.paaltjeAntwoorden} keer zelf beantwoord door Paaltje` +
+        (w.aankondigingen ? `, ${w.aankondigingen} aankondigingen verstuurd` : ""),
+    );
+    if (w.wacht.aantal > 0) {
+      regels.push(`WhatsApp wacht op jou: ${w.wacht.aantal}`);
+      for (const v of w.wacht.voorbeelden) regels.push(`- ${v.van}${v.samenvatting ? `: ${v.samenvatting}` : ""}`);
+    }
+    regels.push("");
+  }
+
+  regels.push(`Mail die op jou wacht: ${r.wacht.aantal}`);
   for (const v of r.wacht.voorbeelden) {
     regels.push(`- ${v.van} — ${v.onderwerp || "(geen onderwerp)"}${v.samenvatting ? `: ${v.samenvatting}` : ""}`);
   }

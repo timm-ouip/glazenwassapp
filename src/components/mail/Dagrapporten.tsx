@@ -2,7 +2,15 @@
  * De dagrapporten teruglezen: wat Wooshy elke ochtend mailde.
  */
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CalendarDays, CheckCircle2, Hand, Inbox, MessageSquareWarning, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  Hand,
+  Inbox,
+  MessageSquareWarning,
+  Sparkles,
+} from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toonMaand } from "@/lib/klanten";
@@ -19,11 +27,24 @@ interface RapportInhoud {
   };
   zelfGedaan: { soort: string; klant: string; adres: string; maanden: string[]; tijd: string }[];
   verstuurd: number;
-  wacht: { aantal: number; voorbeelden: { van: string; onderwerp: string; samenvatting: string }[] };
+  wacht: {
+    aantal: number;
+    voorbeelden: { van: string; onderwerp: string; samenvatting: string }[];
+  };
   /** Pas sinds de klachten in het dossier; oudere rapporten hebben het niet. */
-  klachten?: { nieuw: { klant: string; omschrijving: string; door_paaltje: boolean }[]; open: number };
+  klachten?: {
+    nieuw: { klant: string; omschrijving: string; door_paaltje: boolean }[];
+    open: number;
+  };
   problemen: string[];
   opmerkingen?: string[];
+  whatsapp?: {
+    binnen: number;
+    vanKlanten: number;
+    paaltjeAntwoorden: number;
+    aankondigingen: number;
+    wacht: { aantal: number; voorbeelden: { van: string; samenvatting: string }[] };
+  };
 }
 
 interface Rapport {
@@ -57,7 +78,9 @@ export function Dagrapporten() {
 
   if (rapporten.isLoading) return <p className="text-[13px] text-muted-foreground">Even kijken…</p>;
   if (rapporten.isError) {
-    return <p className="text-[13px] text-tint-rood-ink">De dagrapporten konden niet geladen worden.</p>;
+    return (
+      <p className="text-[13px] text-tint-rood-ink">De dagrapporten konden niet geladen worden.</p>
+    );
   }
   if (!rapporten.data?.length) {
     return (
@@ -66,8 +89,8 @@ export function Dagrapporten() {
           <CalendarDays className="size-4 text-muted-foreground" /> Nog geen dagrapport
         </p>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Elke ochtend om half zeven stuurt Paaltje je een overzicht van wat er sinds gisteren gebeurde, en het
-          komt hier te staan. Gebeurde er niets, dan komt er geen rapport.
+          Elke ochtend om half zeven stuurt Paaltje je een overzicht van wat er sinds gisteren
+          gebeurde, en het komt hier te staan. Gebeurde er niets, dan komt er geen rapport.
         </p>
       </section>
     );
@@ -104,17 +127,55 @@ function RapportKaart({ r }: { r: Rapport }) {
       )}
 
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        <Tegel icoon={<Inbox className="size-4" />} tint="bg-tint-blauw text-tint-blauw-ink" getal={i.binnen.totaal} label="binnengekomen">
+        <Tegel
+          icoon={<Inbox className="size-4" />}
+          tint="bg-tint-blauw text-tint-blauw-ink"
+          getal={i.binnen.totaal}
+          label="binnengekomen"
+        >
           {i.binnen.klantmail} van klanten · {i.binnen.overige} overige post
           {i.binnen.nogNietGelezen ? ` · ${i.binnen.nogNietGelezen} nog niet gelezen` : ""}
         </Tegel>
-        <Tegel icoon={<Sparkles className="size-4" />} tint="bg-tint-paars text-tint-paars-ink" getal={i.zelfGedaan.length} label="zelf gedaan door Paaltje">
+        <Tegel
+          icoon={<Sparkles className="size-4" />}
+          tint="bg-tint-paars text-tint-paars-ink"
+          getal={i.zelfGedaan.length}
+          label="zelf gedaan door Paaltje"
+        >
           {i.verstuurd} beantwoord
         </Tegel>
-        <Tegel icoon={<Hand className="size-4" />} tint="bg-tint-amber text-tint-amber-ink" getal={i.wacht.aantal} label="wachtte op jou">
+        <Tegel
+          icoon={<Hand className="size-4" />}
+          tint="bg-tint-amber text-tint-amber-ink"
+          getal={i.wacht.aantal}
+          label="wachtte op jou"
+        >
           stand van die ochtend
         </Tegel>
       </div>
+
+      {i.whatsapp && (
+        <div className="mt-3 rounded-[12px] bg-tint-groen px-3 py-2 text-[13px] text-tint-groen-ink">
+          <p className="font-medium">
+            WhatsApp: {i.whatsapp.binnen} binnen ({i.whatsapp.vanKlanten} van klanten) ·{" "}
+            {i.whatsapp.paaltjeAntwoorden} zelf beantwoord door Paaltje
+            {i.whatsapp.aankondigingen ? ` · ${i.whatsapp.aankondigingen} aankondigingen` : ""}
+          </p>
+          {i.whatsapp.wacht.aantal > 0 && (
+            <>
+              <p className="mt-1">{i.whatsapp.wacht.aantal} wachtten op jou:</p>
+              <ul className="space-y-0.5">
+                {i.whatsapp.wacht.voorbeelden.map((v, n) => (
+                  <li key={`${v.van}-${n}`}>
+                    {v.van}
+                    {v.samenvatting ? `: ${v.samenvatting}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       {i.klachten && (i.klachten.nieuw.length > 0 || i.klachten.open > 0) && (
         <div className="mt-3 rounded-[12px] bg-tint-rood px-3 py-2 text-[13px] text-tint-rood-ink">
@@ -156,7 +217,9 @@ function RapportKaart({ r }: { r: Rapport }) {
                       ? "gestopt als klant"
                       : w.soort === "klant_email"
                         ? "mailadres aan de klant gekoppeld"
-                        : w.soort}
+                        : w.soort === "whatsapp_afgemeld"
+                          ? "wil geen WhatsApp meer, uitgezet"
+                          : w.soort}
               </span>
             </li>
           ))}

@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WhatsAppGesprekken } from "@/components/whatsapp/WhatsAppGesprekken";
+import { datumVoluit, fetchSjablonen, fetchWhatsAppKoppeling } from "@/lib/whatsapp";
 import { toonMaand } from "@/lib/klanten";
 import { datumSleutel, fetchWasdagen, toonDatum, vandaag } from "@/lib/wasdag";
 import {
@@ -48,6 +49,7 @@ import {
   fetchMailingen,
   telOntvangers,
   verstuurAankondiging,
+  type AankondigKanaal,
   type Controle,
 } from "@/lib/mailing";
 import { heeftRecht } from "@/lib/rechten";
@@ -189,12 +191,27 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
   const [tekst, setTekst] = useState(VOORBEELDTEKST);
   const [bezig, setBezig] = useState(false);
   const { employee: ik } = useAuth();
+  // WhatsApp erbij, als het gekoppeld is.
+  const koppeling = useQuery({ queryKey: ["whatsapp-koppeling"], queryFn: fetchWhatsAppKoppeling });
+  const waAan = !!koppeling.data && koppeling.data.status !== "uit";
+  const [kanaalKeuze, setKanaal] = useState<AankondigKanaal>("voorkeur");
+  const kanaal: AankondigKanaal = waAan ? kanaalKeuze : "mail";
+  const sjablonen = useQuery({
+    queryKey: ["wa-sjablonen"],
+    queryFn: fetchSjablonen,
+    enabled: waAan,
+  });
+  const goedgekeurd = (sjablonen.data ?? []).filter((x) => x.status === "goedgekeurd");
+  const [sjabloonId, setSjabloonId] = useState("");
+  const sjabloon = goedgekeurd.find((x) => x.id === sjabloonId) ?? null;
+  const [proefTelefoon, setProefTelefoon] = useState("");
   // Naar welk adres een proef gaat. Onthouden in deze browser: wie een keer
   // zijn Hotmail invult, wil daar de volgende keer weer naartoe.
   const [proefNaar, setProefNaar] = useState("");
   useEffect(() => {
     try {
       setProefNaar(localStorage.getItem("proef-naar") ?? "");
+      setProefTelefoon(localStorage.getItem("proef-telefoon") ?? "");
     } catch {
       // Geen opslag: dan gaat de proef gewoon naar jezelf.
     }
@@ -222,25 +239,39 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
 
   // De telling komt van de server, want die bouwt straks ook de echte lijst.
   const telling = useQuery({
-    queryKey: ["mail-telling", datum],
-    queryFn: () => telOntvangers(datum),
+    queryKey: ["mail-telling", datum, kanaal, sjabloonId],
+    queryFn: () => telOntvangers(datum, kanaal, sjabloonId),
     enabled: !!datum,
   });
 
   const aantal = telling.data?.aantal ?? 0;
-  const klaar = onderwerp.trim().length > 0 && tekst.trim().length > 0;
+  const aantalWa = telling.data?.aantalWhatsApp ?? 0;
+  const metMail = kanaal !== "whatsapp";
+  const metWa = kanaal !== "mail";
+  const mailKlaar = !metMail || (onderwerp.trim().length > 0 && tekst.trim().length > 0);
+  const waKlaar = !metWa || !!sjabloon || aantalWa === 0;
+  const klaar = mailKlaar && waKlaar;
+  const totaal = aantal + (sjabloon ? aantalWa : 0);
 
   async function verstuur(test: boolean) {
     if (!klaar) {
-      toast.error("Vul een onderwerp en een tekst in.");
+      toast.error(
+        !mailKlaar
+          ? "Vul een onderwerp en een tekst in."
+          : "Kies een goedgekeurd WhatsApp-sjabloon.",
+      );
       return;
     }
     if (!test) {
+      const delen = [
+        aantal > 0 ? `${aantal} ${aantal === 1 ? "mail" : "mails"}` : "",
+        sjabloon && aantalWa > 0
+          ? `${aantalWa} ${aantalWa === 1 ? "WhatsApp-bericht" : "WhatsApp-berichten"}`
+          : "",
+      ].filter(Boolean);
       const ja = await bevestig({
-        titel: `Versturen naar ${aantal} ${aantal === 1 ? "ontvanger" : "ontvangers"}?`,
-        tekst:
-          `De aankondiging voor ${toonDatum(datum)} gaat naar ${aantal} ` +
-          `${aantal === 1 ? "klant" : "klanten"}. Dit kun je niet terugnemen.`,
+        titel: `${delen.join(" en ")} versturen?`,
+        tekst: `De aankondiging voor ${toonDatum(datum)} gaat de deur uit. Dit kun je niet terugnemen.`,
         bevestigLabel: "Versturen",
       });
       if (!ja) return;
@@ -248,17 +279,34 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
     setBezig(true);
     try {
       const naar = proefNaar.trim();
-      const uit = await verstuurAankondiging({ datum, onderwerp, tekst, test, ...(test && naar ? { proefNaar: naar } : {}) });
+      const uit = await verstuurAankondiging({
+        datum,
+        onderwerp,
+        tekst,
+        test,
+        kanaal,
+        ...(sjabloon ? { sjabloonId: sjabloon.id } : {}),
+        ...(test && naar ? { proefNaar: naar } : {}),
+        ...(test && sjabloon && proefTelefoon.trim()
+          ? { proefTelefoon: proefTelefoon.trim() }
+          : {}),
+      });
+      const samen = [
+        uit.verstuurd > 0 ? `${uit.verstuurd} ${uit.verstuurd === 1 ? "mail" : "mails"}` : "",
+        uit.verstuurdWhatsApp > 0 ? `${uit.verstuurdWhatsApp} WhatsApp` : "",
+      ]
+        .filter(Boolean)
+        .join(" en ");
       if (test && uit.mislukt > 0) {
-        toast.error(`Proefmail naar ${naar || "jezelf"} lukte niet. ${uit.eersteFout}`.trim());
+        toast.error(`Proef lukte niet. ${uit.eersteFout}`.trim());
       } else if (test) {
-        toast.success(`Proefmail verstuurd naar ${naar || "jezelf"}.`);
+        toast.success(`Proef verstuurd: ${samen || "niets"}.`);
       } else if (uit.mislukt > 0) {
         toast.warning(
-          `${uit.verstuurd} verstuurd, ${uit.mislukt} mislukt. ${uit.eersteFout}`.trim(),
+          `${samen || "Niets"} verstuurd, ${uit.mislukt} mislukt. ${uit.eersteFout}`.trim(),
         );
       } else {
-        toast.success(`${uit.verstuurd} mails onderweg.`);
+        toast.success(`${samen} onderweg.`);
       }
     } catch (e) {
       toast.error("Versturen mislukte: " + (e instanceof Error ? e.message : String(e)));
@@ -299,27 +347,104 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
           )}
         </Kaart>
 
-        <Kaart titel="Het bericht">
-          <label className="block text-[12px] font-medium text-muted-foreground">Onderwerp</label>
-          <Input
-            value={onderwerp}
-            onChange={(e) => setOnderwerp(e.target.value)}
-            maxLength={200}
-            className="mt-1"
-          />
-          <label className="mt-3 block text-[12px] font-medium text-muted-foreground">Tekst</label>
-          <Textarea
-            value={tekst}
-            onChange={(e) => setTekst(e.target.value)}
-            rows={14}
-            className="mt-1 font-[inherit] text-[13.5px] leading-relaxed"
-          />
-          <p className="mt-2 text-[12px] text-muted-foreground">
-            <code className="rounded bg-muted px-1">{"{{naam}}"}</code> wordt de naam van de klant,{" "}
-            <code className="rounded bg-muted px-1">{"{{adres}}"}</code> zijn adres — of zijn
-            adressen, als hij er die dag meer heeft.
-          </p>
-        </Kaart>
+        {waAan && (
+          <Kaart titel="Waarlangs">
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ["voorkeur", "Zoals bij elke klant ingesteld"],
+                  ["mail", "Mail"],
+                  ["whatsapp", "WhatsApp"],
+                  ["beide", "Mail én WhatsApp"],
+                ] as [AankondigKanaal, string][]
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setKanaal(k)}
+                  className={`rounded-full border px-3 py-1.5 text-[12.5px] transition-colors ${
+                    k === kanaal
+                      ? "border-transparent bg-foreground text-background"
+                      : "border-border bg-card hover:bg-card/70"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[12px] text-muted-foreground">
+              Bij "zoals ingesteld" krijgt een klant die WhatsApp wil maar het niet kan krijgen
+              (geen 06-nummer, geen toestemming) gewoon een mail.
+            </p>
+          </Kaart>
+        )}
+
+        {metWa && (
+          <Kaart titel="WhatsApp-bericht">
+            {goedgekeurd.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground">
+                Er is nog geen goedgekeurd sjabloon. Maak er een bij{" "}
+                <Link to="/instellingen" search={{ tab: "mail" }} className="underline">
+                  Instellingen → mail → WhatsApp
+                </Link>
+                .
+              </p>
+            ) : (
+              <>
+                <select
+                  aria-label="WhatsApp-sjabloon"
+                  value={sjabloonId}
+                  onChange={(e) => setSjabloonId(e.target.value)}
+                  className="h-9 w-full rounded-[10px] border border-input bg-background px-2 text-[13px]"
+                >
+                  <option value="">Kies een sjabloon…</option>
+                  {goedgekeurd.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.titel}
+                      {x.categorie === "marketing" ? " (nieuws en acties)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {sjabloon && (
+                  <p className="mt-2 whitespace-pre-wrap rounded-[12px] bg-muted/60 px-3 py-2 text-[13px]">
+                    {sjabloon.tekst.replaceAll("{datum}", datumVoluit(datum))}
+                  </p>
+                )}
+                <p className="mt-2 text-[12px] text-muted-foreground">
+                  {"{naam}"}, {"{adres}"} en {"{datum}"} vult Wooshy per klant in.
+                  {sjabloon?.categorie === "marketing" &&
+                    " Nieuws en acties gaan alleen naar klanten die daar apart ja op zeiden."}
+                </p>
+              </>
+            )}
+          </Kaart>
+        )}
+
+        {metMail && (
+          <Kaart titel="Het bericht">
+            <label className="block text-[12px] font-medium text-muted-foreground">Onderwerp</label>
+            <Input
+              value={onderwerp}
+              onChange={(e) => setOnderwerp(e.target.value)}
+              maxLength={200}
+              className="mt-1"
+            />
+            <label className="mt-3 block text-[12px] font-medium text-muted-foreground">
+              Tekst
+            </label>
+            <Textarea
+              value={tekst}
+              onChange={(e) => setTekst(e.target.value)}
+              rows={14}
+              className="mt-1 font-[inherit] text-[13.5px] leading-relaxed"
+            />
+            <p className="mt-2 text-[12px] text-muted-foreground">
+              <code className="rounded bg-muted px-1">{"{{naam}}"}</code> wordt de naam van de
+              klant, <code className="rounded bg-muted px-1">{"{{adres}}"}</code> zijn adres — of
+              zijn adressen, als hij er die dag meer heeft.
+            </p>
+          </Kaart>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -334,13 +459,31 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
             </p>
           ) : (
             <>
-              <p className="flex items-baseline gap-2">
-                <span className="font-display text-[28px] font-bold tabular-nums">{aantal}</span>
-                <span className="text-[13px] text-muted-foreground">
-                  {aantal === 1 ? "ontvanger" : "ontvangers"}
-                </span>
-              </p>
-              {(telling.data?.zonderEmail ?? 0) > 0 && (
+              {metMail && (
+                <p className="flex items-baseline gap-2">
+                  <span className="font-display text-[28px] font-bold tabular-nums">{aantal}</span>
+                  <span className="text-[13px] text-muted-foreground">
+                    {aantal === 1 ? "mail" : "mails"}
+                  </span>
+                </p>
+              )}
+              {metWa && (
+                <p className="flex items-baseline gap-2">
+                  <span className="font-display text-[28px] font-bold tabular-nums">
+                    {aantalWa}
+                  </span>
+                  <span className="text-[13px] text-muted-foreground">via WhatsApp</span>
+                </p>
+              )}
+              {metWa && (telling.data?.zonderWhatsApp ?? 0) > 0 && (
+                <p className="mt-1 flex items-start gap-1.5 text-[12.5px] text-muted-foreground">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-tint-amber-ink" />
+                  {telling.data?.zonderWhatsApp} klanten willen WhatsApp maar kunnen het niet
+                  krijgen (geen 06-nummer, geen toestemming of afgemeld)
+                  {kanaal === "voorkeur" ? "; die krijgen een mail als dat kan" : ""}.
+                </p>
+              )}
+              {metMail && (telling.data?.zonderEmail ?? 0) > 0 && (
                 <p className="mt-1 flex items-start gap-1.5 text-[12.5px] text-muted-foreground">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-tint-amber-ink" />
                   {telling.data?.zonderEmail} adressen op deze dag hebben geen e-mailadres.
@@ -365,7 +508,10 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
         </Kaart>
 
         <div className="space-y-2">
-          <label className="block text-[12px] font-medium text-muted-foreground" htmlFor="proef-naar">
+          <label
+            className="block text-[12px] font-medium text-muted-foreground"
+            htmlFor="proef-naar"
+          >
             Proef naar
           </label>
           <Input
@@ -385,6 +531,32 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
             placeholder={ik?.email ?? "jouw mailadres"}
             maxLength={254}
           />
+          {metWa && (
+            <>
+              <label
+                className="block text-[12px] font-medium text-muted-foreground"
+                htmlFor="proef-telefoon"
+              >
+                WhatsApp-proef naar
+              </label>
+              <Input
+                id="proef-telefoon"
+                type="tel"
+                inputMode="tel"
+                value={proefTelefoon}
+                onChange={(e) => {
+                  setProefTelefoon(e.target.value);
+                  try {
+                    localStorage.setItem("proef-telefoon", e.target.value.trim());
+                  } catch {
+                    // Niet kunnen onthouden is geen probleem.
+                  }
+                }}
+                placeholder="06-nummer (bij het testnummer: een testontvanger)"
+                maxLength={20}
+              />
+            </>
+          )}
           <Button
             variant="outline"
             className="w-full rounded-full"
@@ -395,14 +567,16 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
           </Button>
           <Button
             className="w-full rounded-full"
-            disabled={bezig || !klaar || aantal === 0}
+            disabled={bezig || !klaar || totaal === 0}
             onClick={() => void verstuur(false)}
           >
             <Send className="size-4" />
-            {aantal === 0 ? "Niemand om te mailen" : `Versturen naar ${aantal}`}
+            {totaal === 0 ? "Niemand om te bereiken" : `Versturen naar ${totaal}`}
           </Button>
           <p className="text-center text-[11.5px] text-muted-foreground">
-            Stuur eerst een proef. Die gaat alleen naar het adres hierboven, of leeg naar jezelf.
+            Stuur eerst een proef. Die gaat alleen naar het adres{metWa ? " en het nummer" : ""}{" "}
+            hierboven
+            {metMail ? ", of leeg naar jezelf" : ""}.
           </p>
         </div>
       </div>
@@ -611,8 +785,8 @@ function Rapport() {
         w.soort === "whatsapp_afgemeld"
           ? `${w.klant} krijgt dan weer WhatsApp-berichten.`
           : w.soort === "stoppen"
-          ? `${w.adres} komt terug uit de prullenbak en staat weer op de planning.`
-          : `${w.adres} slaat ${w.maanden.map(toonMaand).join(" en ")} dan niet meer over, en staat weer op de planning.`,
+            ? `${w.adres} komt terug uit de prullenbak en staat weer op de planning.`
+            : `${w.adres} slaat ${w.maanden.map(toonMaand).join(" en ")} dan niet meer over, en staat weer op de planning.`,
       bevestigLabel: "Terugdraaien",
     });
     if (!ja) return;
