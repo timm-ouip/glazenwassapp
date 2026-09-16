@@ -46,6 +46,21 @@ export function zetGelezen(berichtId: string, gelezen: boolean): Promise<{ ok: t
   return roep({ actie: "gelezen", bericht_id: berichtId, gelezen });
 }
 
+/** Naar een andere map: een eigen map, spam ("spam melden") of het postvak ("geen spam"). */
+export function verplaatsNaar(berichtId: string, mapId: string): Promise<{ ok: true; verplaatst: boolean }> {
+  return roep({ actie: "verplaatsen", bericht_id: berichtId, map_id: mapId });
+}
+
+/** Een nieuwe map in de mailbox. */
+export function maakMap(naam: string): Promise<{ ok: true; map_id: string }> {
+  return roep({ actie: "map-maken", naam });
+}
+
+/** Een vlag op de mail zetten of eraf halen. */
+export function zetGemarkeerd(berichtId: string, gemarkeerd: boolean): Promise<{ ok: true }> {
+  return roep({ actie: "markeren", bericht_id: berichtId, gemarkeerd });
+}
+
 /** `verplaatst` is onwaar als de server de nieuwe plek nog niet gaf. */
 export function gooiWeg(berichtId: string): Promise<{ ok: true; verplaatst: boolean }> {
   return roep({ actie: "weggooien", bericht_id: berichtId });

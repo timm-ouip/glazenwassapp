@@ -398,7 +398,7 @@ async function leesEen(
   const klantVanKlacht = mail.klant_id ?? uit.klant_id;
   if (isKlantmail && klantVanKlacht && indeling.some((c) => c.id === klachtCategorie)) {
     try {
-      await klachtUitMail(db, mail, klantVanKlacht, uit.samenvatting, uit.aanmelding);
+      await klachtUitMail(db, mail, klantVanKlacht, uit.klacht, uit.aanmelding);
     } catch (e) {
       console.error(`klacht ${mail.id}:`, e instanceof Error ? e.message : e);
     }

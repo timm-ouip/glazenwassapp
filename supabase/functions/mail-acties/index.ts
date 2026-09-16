@@ -34,6 +34,9 @@ interface Adres {
 interface Verzoek {
   actie:
     | "gelezen"
+    | "markeren"
+    | "verplaatsen"
+    | "map-maken"
     | "weggooien"
     | "terugzetten"
     | "versturen"
@@ -54,6 +57,12 @@ interface Verzoek {
   klaar?: boolean;
   bericht_id?: string;
   gelezen?: boolean;
+  /** Bij verplaatsen: de map waar de mail heen gaat. */
+  map_id?: string;
+  /** Bij map-maken: de naam van de nieuwe map. */
+  naam?: string;
+  /** Bij markeren: vlag erop (true) of eraf (false). */
+  gemarkeerd?: boolean;
   aan?: Adres[];
   cc?: Adres[];
   onderwerp?: string;
@@ -123,8 +132,20 @@ Deno.serve(async (req) => {
   // stoppen) komt in het rapport van de eigenaar, en blijft daarom bij de
   // eigenaar. Een klant koppelen, of terugdraaien wat Wooshy bij een klant
   // invulde, mag ook wie klanten bewerkt.
-  if (verzoek.actie === "versturen" && !(await heeftRecht(db, medewerker, "mail_versturen"))) {
-    return antwoord({ fout: "Je hebt geen recht om mail te versturen." }, 403);
+  // Een map maken verandert de echte mailbox (ook op de telefoon): dat is meer dan lezen.
+  if (
+    (verzoek.actie === "versturen" || verzoek.actie === "map-maken") &&
+    !(await heeftRecht(db, medewerker, "mail_versturen"))
+  ) {
+    return antwoord(
+      {
+        fout:
+          verzoek.actie === "map-maken"
+            ? "Je hebt geen recht om mappen te maken."
+            : "Je hebt geen recht om mail te versturen.",
+      },
+      403,
+    );
   }
   const alleenEigenaar = ["overslaan-doorvoeren", "stoppen-doorvoeren", "stoppen-planning"];
   if (alleenEigenaar.includes(String(verzoek.actie)) && medewerker.rol !== "eigenaar") {
@@ -168,6 +189,14 @@ Deno.serve(async (req) => {
     switch (verzoek.actie) {
       case "gelezen":
         return await zetGelezen(db, box, wachtwoord, verzoek);
+      case "markeren":
+        return await zetGemarkeerd(db, box, wachtwoord, verzoek);
+      case "verplaatsen":
+        return await verplaats(db, box, wachtwoord, String(verzoek.bericht_id ?? ""), {
+          naar: String(verzoek.map_id ?? ""),
+        });
+      case "map-maken":
+        return await maakMap(db, box, wachtwoord, String(verzoek.naam ?? ""));
       case "weggooien":
         return await verplaats(db, box, wachtwoord, String(verzoek.bericht_id ?? ""), "weg");
       case "terugzetten":
@@ -275,14 +304,14 @@ async function metImap<T>(
 async function mapMetRol(db: Db, box: Box, rol: MapRol) {
   const { data, error } = await db
     .from("mail_mappen")
-    .select("id,pad,uidvalidity")
+    .select("id,pad,uidvalidity,rol")
     .eq("mailbox_id", box.id)
     .eq("rol", rol)
     .order("pad", { ascending: true })
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(`Map opzoeken: ${error.message}`);
-  return data as { id: string; pad: string; uidvalidity: number | null } | null;
+  return data as { id: string; pad: string; uidvalidity: number | null; rol: MapRol } | null;
 }
 
 const VERANDERD =
@@ -313,6 +342,31 @@ async function zetGelezen(db: Db, box: Box, wachtwoord: string, verzoek: Verzoek
   return antwoord({ ok: true });
 }
 
+/** Een vlag op de mail, net als in een mailprogramma (op de server \Flagged). */
+async function zetGemarkeerd(db: Db, box: Box, wachtwoord: string, verzoek: Verzoek): Promise<Response> {
+  const plek = await plekVan(db, box, String(verzoek.bericht_id ?? ""));
+  if (!plek) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
+  const gemarkeerd = verzoek.gemarkeerd !== false;
+
+  const gelukt = await metImap(box, wachtwoord, async (client) => {
+    const lock = await client.getMailboxLock(plek.pad);
+    try {
+      if (Number(client.mailbox && client.mailbox.uidValidity) !== plek.uidvalidity) return false;
+      const bereik = String(plek.uid);
+      if (gemarkeerd) await client.messageFlagsAdd(bereik, ["\\Flagged"], { uid: true });
+      else await client.messageFlagsRemove(bereik, ["\\Flagged"], { uid: true });
+      return true;
+    } finally {
+      lock.release();
+    }
+  });
+  if (!gelukt) return antwoord({ fout: VERANDERD }, 409);
+
+  const { error } = await db.from("berichten").update({ gemarkeerd }).eq("id", plek.id);
+  if (error) console.error("gemarkeerd bijwerken:", error.message);
+  return antwoord({ ok: true });
+}
+
 /** De map waar een mail in stond voor hij in de prullenbak ging, als die er nog is. */
 async function vorigeMap(db: Db, box: Box, id: string) {
   const { data: rij, error } = await db
@@ -330,7 +384,7 @@ async function vorigeMap(db: Db, box: Box, id: string) {
     .maybeSingle();
   if (mapFout) throw new Error(`Vorige map opzoeken: ${mapFout.message}`);
   if (!map || map.rol === "prullenbak") return null;
-  return map as { id: string; pad: string; uidvalidity: number | null };
+  return map as { id: string; pad: string; uidvalidity: number | null; rol: MapRol };
 }
 
 /**
@@ -345,13 +399,26 @@ async function verplaats(
   box: Box,
   wachtwoord: string,
   id: string,
-  richting: "weg" | "terug",
+  richting: "weg" | "terug" | { naar: string },
 ): Promise<Response> {
   const plek = await plekVan(db, box, id);
   if (!plek) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
 
-  let doel: { id: string; pad: string; uidvalidity: number | null } | null;
-  if (richting === "weg") {
+  let doel: { id: string; pad: string; uidvalidity: number | null; rol?: MapRol } | null;
+  if (typeof richting === "object") {
+    // Naar een map naar keuze: alleen een map van deze mailbox.
+    if (!UUID.test(richting.naar)) return antwoord({ fout: "Die map bestaat niet (meer)." }, 404);
+    if (richting.naar === plek.map_id) return antwoord({ ok: true, verplaatst: true });
+    const { data, error } = await db
+      .from("mail_mappen")
+      .select("id,pad,uidvalidity,rol")
+      .eq("id", richting.naar)
+      .eq("mailbox_id", box.id)
+      .maybeSingle();
+    if (error) throw new Error(`Map opzoeken: ${error.message}`);
+    if (!data) return antwoord({ fout: "Die map bestaat niet (meer)." }, 404);
+    doel = data;
+  } else if (richting === "weg") {
     if (plek.rol === "prullenbak") return antwoord({ ok: true, verplaatst: true });
     doel = await mapMetRol(db, box, "prullenbak");
     if (!doel) return antwoord({ fout: "Er is geen prullenbak in deze mailbox." }, 400);
@@ -361,7 +428,8 @@ async function verplaats(
     if (!doel) return antwoord({ fout: "Er is geen postvak gevonden." }, 400);
   }
   const bestemming = doel;
-  const vorige = richting === "weg" ? plek.map_id : null;
+  // Onthouden waar hij vandaan kwam: terugzetten uit de prullenbak gaat daarheen.
+  const vorige = richting === "terug" ? null : plek.map_id;
 
   const uitkomst = await metImap(box, wachtwoord, async (client) => {
     const lock = await client.getMailboxLock(plek.pad);
@@ -405,7 +473,10 @@ async function verplaats(
         .neq("id", plek.id);
       ({ error } = await db.from("berichten").update(nieuwePlek).eq("id", plek.id));
     }
-    if (!error) return antwoord({ ok: true, verplaatst: true });
+    if (!error) {
+      await paaltjeNaVerplaatsen(db, box, plek.id, bestemming.rol);
+      return antwoord({ ok: true, verplaatst: true });
+    }
     console.error("verplaatsen bijwerken:", error.message);
   }
   // Nieuwe plek onbekend: uit beeld, en de volgende ronde hangt hem goed.
@@ -414,7 +485,75 @@ async function verplaats(
     .update({ op_server: false, weg_sinds: new Date().toISOString(), vorige_map_id: vorige })
     .eq("id", plek.id);
   if (wegFout) console.error("uit beeld zetten:", wegFout.message);
+  await paaltjeNaVerplaatsen(db, box, plek.id, bestemming.rol);
   return antwoord({ ok: true, verplaatst: false });
+}
+
+/**
+ * Paaltje leest alleen wat in het postvak staat. Gaat een mail die nog op hem
+ * wacht naar spam, de prullenbak of een eigen map, dan niet meer. Komt hij in
+ * het postvak ("geen spam", terugzetten), dan leest hij hem alsnog — maar
+ * alleen als hij dat nog nooit deed en de mail niet ouder is dan het moment
+ * dat Paaltje aanging, net als bij het ophalen.
+ */
+async function paaltjeNaVerplaatsen(db: Db, box: Box, id: string, rol: MapRol | undefined) {
+  if (rol !== "postvak") {
+    const { error } = await db
+      .from("berichten")
+      .update({ paaltje_status: "overslaan" })
+      .eq("id", id)
+      .eq("paaltje_status", "wacht");
+    if (error) console.error("paaltje niet laten lezen:", error.message);
+    return;
+  }
+  const { data: mb, error: mbFout } = await db
+    .from("mailboxen")
+    .select("paaltje_vanaf")
+    .eq("id", box.id)
+    .maybeSingle();
+  if (mbFout || !mb?.paaltje_vanaf) return;
+  const { error } = await db
+    .from("berichten")
+    .update({ paaltje_status: "wacht" })
+    .eq("id", id)
+    .eq("richting", "in")
+    .eq("paaltje_status", "overslaan")
+    .is("gelezen_door_paaltje_op", null)
+    .gte("ontvangen_op", mb.paaltje_vanaf);
+  if (error) console.error("paaltje laten lezen:", error.message);
+}
+
+/** Een nieuwe map in de mailbox, net als in een mailprogramma. */
+async function maakMap(db: Db, box: Box, wachtwoord: string, ruweNaam: string): Promise<Response> {
+  const naam = ruweNaam.replace(/\s+/g, " ").trim();
+  if (!naam) return antwoord({ fout: "Geef de map een naam." }, 400);
+  if (naam.length > 60) return antwoord({ fout: "Die naam is te lang (hooguit 60 tekens)." }, 400);
+  // Deze tekens betekenen iets voor de mailserver (submap, zoeken).
+  if (/[/\\.*%"]/.test(naam) || naam.toUpperCase() === "INBOX") {
+    return antwoord({ fout: "Gebruik in de naam geen / . \\ * % of aanhalingstekens." }, 400);
+  }
+
+  const pad = await metImap(box, wachtwoord, async (client) => {
+    const bestaat = (await client.list()).some((m) => m.path.toLowerCase() === naam.toLowerCase());
+    if (bestaat) return null;
+    const res = await client.mailboxCreate(naam);
+    // Meteen abonneren: anders tonen sommige mailprogramma's hem niet.
+    try {
+      await client.mailboxSubscribe(res.path);
+    } catch {
+      // niet erg
+    }
+    return res.path;
+  });
+  if (!pad) return antwoord({ fout: "Er is al een map met die naam." }, 409);
+
+  const { data, error } = await db
+    .from("mail_mappen")
+    .upsert({ company_id: box.company_id, mailbox_id: box.id, pad, rol: "overig" }, { onConflict: "mailbox_id,pad" })
+    .select("id")
+    .single();
+  if (error) throw new Error(`Map bewaren: ${error.message}`);
+  return antwoord({ ok: true, map_id: data.id });
 }
 
 /**

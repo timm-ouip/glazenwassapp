@@ -23,7 +23,8 @@ export async function klachtUitMail(
   db: Db,
   mail: { id: string; company_id: string; onderwerp: string; ontvangen_op: string },
   klantId: string,
-  samenvatting: string,
+  /** Kort wat er niet goed was, zoals Paaltje het las. */
+  watNietGoed: string,
   adres: AdresUitMail | null,
 ): Promise<void> {
   const { data: al, error: alFout } = await db
@@ -47,7 +48,7 @@ export async function klachtUitMail(
 
   let klachtId: string | undefined = open?.[0]?.id;
   if (!klachtId) {
-    const omschrijving = (samenvatting.trim() || mail.onderwerp.trim() || "Klacht uit mail").slice(0, 500);
+    const omschrijving = (watNietGoed.trim() || mail.onderwerp.trim() || "Klacht uit mail").slice(0, 500);
     const { data: nieuw, error: nieuwFout } = await db
       .from("klachten")
       .insert({

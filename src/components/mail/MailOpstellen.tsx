@@ -32,6 +32,10 @@ export interface Opzet {
   antwoordOp?: string;
   /** Vanuit een dossier: de mail komt bij deze klant. */
   klantId?: string;
+  /** Al ingevuld Cc-vak, bijvoorbeeld bij allen beantwoorden. */
+  cc?: string;
+  /** Een opmerking boven het formulier, bijvoorbeeld dat bijlagen niet meegaan. */
+  opmerking?: string;
 }
 
 const UITLEG = "Gaat weg vanaf je eigen mailadres en komt in Verzonden.";
@@ -58,19 +62,20 @@ export function MailOpstellen({
   useEffect(() => {
     if (!open) return;
     setAan(opzet?.aan ?? "");
-    setCc("");
-    setToonCc(false);
+    setCc(opzet?.cc ?? "");
+    setToonCc(!!opzet?.cc);
     setOnderwerp(opzet?.onderwerp ?? "");
     setTekst(opzet?.tekst ?? "");
   }, [open, opzet]);
 
   const isAntwoord = !!opzet?.antwoordOp;
+  const isDoorsturen = !isAntwoord && /^fwd:/i.test(opzet?.onderwerp ?? "") && !opzet?.aan;
   const teLang = tekst.length > MAX_MAILTEKST;
 
   /** Is er iets getypt dat nog niet in de opzet stond? */
   const gewijzigd =
     aan !== (opzet?.aan ?? "") ||
-    cc !== "" ||
+    cc !== (opzet?.cc ?? "") ||
     onderwerp !== (opzet?.onderwerp ?? "") ||
     tekst !== (opzet?.tekst ?? "");
 
@@ -139,10 +144,13 @@ export function MailOpstellen({
         <form onSubmit={(e) => void verstuur(e)} className="flex max-h-[90vh] flex-col">
           <PopupKop
             icoon={<SquarePen className="size-5" />}
-            titel={isAntwoord ? "Beantwoorden" : "Nieuwe mail"}
+            titel={isAntwoord ? (opzet?.cc ? "Allen beantwoorden" : "Beantwoorden") : isDoorsturen ? "Doorsturen" : "Nieuwe mail"}
             subtitel={UITLEG}
           />
           <PopupBody className="gap-2.5">
+            {opzet?.opmerking && (
+              <p className="rounded-[10px] bg-tint-geel px-3 py-1.5 text-[12px] text-tint-geel-ink">{opzet.opmerking}</p>
+            )}
             <PopupVeld icoon={<span className="block w-[4.5rem] text-[12.5px]">Aan</span>}>
               <Input
                 aria-label="Aan"
