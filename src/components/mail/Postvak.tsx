@@ -62,6 +62,7 @@ import {
   fetchGepland,
   fetchSpamRegels,
   lijstDatum,
+  telVlag,
   PER_PAGINA,
   telWachtend,
   veiligeMailHtml,
@@ -168,6 +169,14 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
     enabled: !!postvak,
     refetchInterval: VERVERS_MS,
   });
+  const prullenbak = mappen.data?.find((m) => m.rol === "prullenbak") ?? null;
+  // Onder "mail-wacht", zodat alles wat dat telletje ververst deze ook ververst.
+  const vlag = useQuery({
+    queryKey: ["mail-wacht", "vlag", prullenbak?.id ?? null],
+    queryFn: () => telVlag(prullenbak?.id ?? null),
+    enabled: gekoppeld && !!mappen.data,
+    refetchInterval: VERVERS_MS,
+  });
 
   const [bron, setBron] = useState<Bron | null>(null);
   const [berichtId, setBerichtId] = useState<string | null>(null);
@@ -244,6 +253,8 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
             categorieen={categorieen.data ?? []}
             postvakId={postvak?.id ?? null}
             wachtAantal={wacht.data ?? 0}
+            vlagAantal={vlag.data ?? 0}
+            prullenbakId={prullenbak?.id ?? null}
             fout={mappen.isError}
             actief={bron}
             laatsteSync={mailbox.data?.laatste_sync ?? null}
@@ -342,6 +353,8 @@ function bronTitel(bron: Bron | null, mappen: MailMap[], categorieen: MailCatego
       return "Gepland";
     case "overige":
       return "Overige post";
+    case "vlag":
+      return "Met vlag";
     case "categorie":
       return categorieen.find((c) => c.id === bron.categorieId)?.naam ?? "";
   }
@@ -446,6 +459,8 @@ function MapKolom({
   categorieen,
   postvakId,
   wachtAantal,
+  vlagAantal,
+  prullenbakId,
   fout,
   actief,
   laatsteSync,
@@ -458,6 +473,8 @@ function MapKolom({
   categorieen: MailCategorie[];
   postvakId: string | null;
   wachtAantal: number;
+  vlagAantal: number;
+  prullenbakId: string | null;
   fout: boolean;
   actief: Bron | null;
   laatsteSync: string | null;
@@ -507,6 +524,13 @@ function MapKolom({
               tint="amber"
               actief={zelfdeBron(actief, { soort: "wacht", postvakId })}
               onClick={() => onKies({ soort: "wacht", postvakId })}
+            />
+            <MapKnop
+              icoon={Flag}
+              naam="Met vlag"
+              telletje={vlagAantal}
+              actief={zelfdeBron(actief, { soort: "vlag", prullenbakId })}
+              onClick={() => onKies({ soort: "vlag", prullenbakId })}
             />
             <p className="mt-2 flex items-center gap-1 px-2.5 pb-1 text-[10.5px] font-medium tracking-[0.06em] text-muted-foreground/80">
               <Sparkles className="size-3" /> paaltje
@@ -1007,6 +1031,8 @@ function BerichtLijst({
   const leeg =
     bron.soort === "wacht"
       ? "Er wacht niets op je."
+      : bron.soort === "vlag"
+        ? "Geen mail met een vlag. Zet er een op met de muis op een mail, of met S."
       : bron.soort === "overige"
         ? "Geen overige post."
         : bron.soort === "categorie"
@@ -1040,9 +1066,15 @@ function BerichtLijst({
             <SnelKnop label="Markeren als ongelezen" onClick={() => void voorAlle("ongelezen")} uit={bulkBezig || !kanSchrijven}>
               <Mail className="size-3.5" />
             </SnelKnop>
-            <SnelKnop label="Vlag erop" onClick={() => void voorAlle("vlag")} uit={bulkBezig || !kanSchrijven}>
-              <Flag className="size-3.5" />
-            </SnelKnop>
+            {bron.soort === "vlag" ? (
+              <SnelKnop label="Vlag eraf" onClick={() => void voorAlle("vlag-eraf")} uit={bulkBezig || !kanSchrijven}>
+                <FlagOff className="size-3.5" />
+              </SnelKnop>
+            ) : (
+              <SnelKnop label="Vlag erop" onClick={() => void voorAlle("vlag")} uit={bulkBezig || !kanSchrijven}>
+                <Flag className="size-3.5" />
+              </SnelKnop>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button

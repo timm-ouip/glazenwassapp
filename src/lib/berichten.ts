@@ -120,6 +120,8 @@ export type Bron =
   | { soort: "wacht"; postvakId: string }
   | { soort: "overige"; postvakId: string }
   | { soort: "categorie"; postvakId: string; categorieId: string }
+  /** Alle mail met een vlag, uit alle mappen behalve de prullenbak. */
+  | { soort: "vlag"; prullenbakId: string | null }
   /** Mail die later verstuurd wordt; geen echte lijst met berichten. */
   | { soort: "gepland" };
 
@@ -230,6 +232,10 @@ export async function fetchBerichten(
     case "overige":
       query = query.eq("map_id", bron.postvakId).eq("is_klantmail", false);
       break;
+    case "vlag":
+      query = query.eq("gemarkeerd", true);
+      if (bron.prullenbakId) query = query.neq("map_id", bron.prullenbakId);
+      break;
     case "categorie":
       query = query.eq("map_id", bron.postvakId).eq("bericht_categorieen.categorie_id", bron.categorieId);
       break;
@@ -266,6 +272,20 @@ export async function fetchBerichten(
 function wachtFilter(): string {
   const nu = new Date().toISOString();
   return `and(is_klantmail.eq.true,afgehandeld_op.is.null,or(concept.neq."",voorstel.neq.{})),herinner_op.lte.${nu}`;
+}
+
+/** Hoeveel mails een vlag hebben (voor het telletje bij "Met vlag"). */
+export async function telVlag(prullenbakId: string | null): Promise<number> {
+  let query = supabase
+    .from("berichten")
+    .select("id", { count: "exact", head: true })
+    .eq("op_server", true)
+    .is("deleted_at", null)
+    .eq("gemarkeerd", true);
+  if (prullenbakId) query = query.neq("map_id", prullenbakId);
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
 }
 
 /** Hoeveel mails er op je wachten (voor het telletje bij "Wacht op jou"). */
