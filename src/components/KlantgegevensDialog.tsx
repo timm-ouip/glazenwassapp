@@ -89,6 +89,7 @@ import { blijvenLiggen, fetchKlussen, nieuweKlus, staatOpen } from "@/lib/klusse
 import { toonDatum } from "@/lib/wasdag";
 import { KlusDialog } from "@/components/KlusDialog";
 import { DossierMail } from "@/components/dossier/DossierMail";
+import { DossierWhatsApp } from "@/components/dossier/DossierWhatsApp";
 import { DossierKlachten } from "@/components/dossier/DossierKlachten";
 import { fetchKlachtenVanKlant } from "@/lib/klachten";
 
@@ -537,7 +538,7 @@ export function KlantgegevensDialog({
                   onClick={() => setTab("mail")}
                   icoon={<Mail className="size-[15px]" />}
                 >
-                  Mail
+                  Berichten
                 </PopupTab>
               )}
               {klant && (
@@ -1038,7 +1039,12 @@ export function KlantgegevensDialog({
           )}
           </fieldset>
           {/* Buiten het formulier: mail en klachten hebben hun eigen rechten en slaan zelf op. */}
-          {tab === "mail" && klant && magMailLezen && <DossierMail klant={klant} />}
+          {tab === "mail" && klant && magMailLezen && (
+            <div className="flex flex-col gap-5">
+              <DossierMail klant={klant} />
+              <DossierWhatsApp klant={klant} />
+            </div>
+          )}
           {tab === "klachten" && klant && (
             <DossierKlachten
               klantId={klant.id}

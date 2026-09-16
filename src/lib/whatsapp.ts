@@ -120,3 +120,65 @@ export function toonNummer(nummer: string): string {
   if (/^31\d{9}$/.test(d)) return `+31 ${d.slice(2, 4)} ${d.slice(4)}`;
   return d ? `+${d}` : "";
 }
+
+/** Fout bij versturen omdat het 24-uursvenster dicht is. */
+export class VensterDichtFout extends Error {}
+
+export async function verstuurWhatsApp(
+  telefoon: string,
+  tekst: string,
+): Promise<{ ok: true; id: string | null; bewaard: boolean }> {
+  const { data, error } = await supabase.functions.invoke("whatsapp", {
+    body: { actie: "versturen", telefoon, tekst },
+  });
+  if (error) {
+    const res = (error as { context?: Response })?.context;
+    let uitleg: { fout?: string; venster_dicht?: boolean } = {};
+    if (res && typeof res.text === "function") {
+      try {
+        uitleg = JSON.parse(await res.text()) as typeof uitleg;
+      } catch {
+        // geen uitleg meegestuurd
+      }
+    }
+    if (uitleg.venster_dicht)
+      throw new VensterDichtFout(uitleg.fout ?? "Het 24-uursvenster is dicht.");
+    throw new Error(uitleg.fout || error.message);
+  }
+  return data as { ok: true; id: string | null; bewaard: boolean };
+}
+
+export function haalMediaAlsnogOp(berichtId: string): Promise<{ ok: true }> {
+  return roep({ actie: "media_ophalen", bericht_id: berichtId });
+}
+
+/** Een tijdelijke link naar een bewaard bestand (een uur geldig). */
+export async function mediaLink(pad: string): Promise<string> {
+  const { data, error } = await supabase.storage.from("whatsapp-media").createSignedUrl(pad, 3600);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+/** Mag er nog vrije tekst naar dit nummer? Tot 24 uur na het laatste bericht van de klant. */
+export function vensterOpen(berichten: WaBericht[]): boolean {
+  const laatsteIn = [...berichten]
+    .reverse()
+    .find((b) => b.richting === "in" && b.bron !== "geschiedenis");
+  return (
+    !!laatsteIn && Date.now() - new Date(laatsteIn.ontvangen_op).getTime() < 24 * 60 * 60 * 1000
+  );
+}
+
+/** De nummers waarmee een klant appte, meest recente gesprek eerst. */
+export async function fetchKlantNummers(klantId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("berichten")
+    .select("wa_telefoon,ontvangen_op")
+    .eq("kanaal", "whatsapp")
+    .eq("klant_id", klantId)
+    .is("deleted_at", null)
+    .order("ontvangen_op", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return [...new Set((data ?? []).map((r) => r.wa_telefoon))];
+}

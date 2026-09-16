@@ -278,3 +278,134 @@ export async function tokenVan(db: Db, koppelingId: string, ontsleutel: (v: stri
     return null;
   }
 }
+
+export const MEDIA_BUCKET = "whatsapp-media";
+/** Meta staat tot 16 MB voor foto, spraak en video toe; documenten tot 100 MB houden we buiten. */
+const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+
+const EXTENSIE: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "audio/ogg": "ogg",
+  "audio/mpeg": "mp3",
+  "audio/mp4": "m4a",
+  "audio/aac": "aac",
+  "audio/amr": "amr",
+  "video/mp4": "mp4",
+  "video/3gpp": "3gp",
+  "application/pdf": "pdf",
+};
+
+/**
+ * Alleen bekende types bewaren we met hun eigen type. De rest (een "document"
+ * dat eigenlijk een webpagina of SVG is) krijgt een neutraal type, zodat de
+ * browser het nooit als pagina opent.
+ */
+function veiligType(mime: string): { mime: string; ext: string } {
+  const kaal = mime.split(";")[0].trim().toLowerCase();
+  const ext = EXTENSIE[kaal];
+  return ext ? { mime: kaal, ext } : { mime: "application/octet-stream", ext: "bin" };
+}
+
+/**
+ * Media van een bericht bij Meta ophalen en in de eigen opslag zetten. Meta
+ * bewaart ze 7 dagen en de downloadlink werkt maar 5 minuten, dus dit gebeurt
+ * meteen na binnenkomst. Wat al een pad heeft, blijft staan. Geeft terug of
+ * alles nu binnen is.
+ */
+export async function haalMediaBinnen(
+  db: Db,
+  token: string,
+  companyId: string,
+  berichtId: string,
+  media: WaMedia[],
+): Promise<{ media: WaMedia[]; compleet: boolean }> {
+  let compleet = true;
+  let veranderd = false;
+  const uit: WaMedia[] = [];
+  for (const m of media) {
+    if (m.pad || !/^[\w-]{1,100}$/.test(m.media_id)) {
+      uit.push(m);
+      continue;
+    }
+    const info = await graph<{ url?: string; mime_type?: string; file_size?: number }>(m.media_id, token);
+    if (!info.ok || !info.data.url || Number(info.data.file_size ?? 0) > MAX_MEDIA_BYTES) {
+      if (!info.ok) console.error(`media ${m.media_id} opvragen:`, info.fout);
+      compleet = false;
+      uit.push(m);
+      continue;
+    }
+    // Alleen van Meta zelf downloaden, met het token erbij.
+    let adres: URL;
+    try {
+      adres = new URL(info.data.url);
+    } catch {
+      compleet = false;
+      uit.push(m);
+      continue;
+    }
+    if (adres.protocol !== "https:" || !/(^|\.)(fbsbx|facebook|whatsapp)\.(com|net)$/.test(adres.hostname)) {
+      console.error(`media ${m.media_id}: onverwachte host ${adres.hostname}`);
+      compleet = false;
+      uit.push(m);
+      continue;
+    }
+    try {
+      const res = await fetch(adres, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Eerst naar de opgegeven grootte kijken, dan pas inlezen.
+      const lengte = Number(res.headers.get("content-length") ?? 0);
+      if (lengte > MAX_MEDIA_BYTES) {
+        await res.body?.cancel();
+        throw new Error("te groot");
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (bytes.byteLength > MAX_MEDIA_BYTES) throw new Error("te groot");
+      const { mime, ext } = veiligType(m.mime || String(info.data.mime_type ?? ""));
+      const pad = `${companyId}/${berichtId}/${m.media_id}.${ext}`;
+      const { error } = await db.storage.from(MEDIA_BUCKET).upload(pad, bytes, { contentType: mime, upsert: true });
+      if (error) throw new Error(error.message);
+      uit.push({ ...m, mime, pad });
+      veranderd = true;
+    } catch (e) {
+      console.error(`media ${m.media_id} ophalen:`, e instanceof Error ? e.message : e);
+      compleet = false;
+      uit.push(m);
+    }
+  }
+  if (veranderd) {
+    const { error } = await db.from("berichten").update({ media: uit }).eq("id", berichtId).eq("company_id", companyId);
+    if (error) console.error("media opslaan in bericht:", error.message);
+  }
+  return { media: uit, compleet };
+}
+
+/** Een tekstbericht versturen. Geeft het wamid van WhatsApp terug. */
+export async function verstuurTekst(
+  token: string,
+  phoneNumberId: string,
+  aan: string,
+  tekst: string,
+): Promise<{ ok: true; waId: string } | { ok: false; status: number; fout: string }> {
+  const uit = await graph<{ messages?: { id?: string }[] }>(`${phoneNumberId}/messages`, token, {
+    method: "POST",
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: aan,
+      type: "text",
+      text: { body: tekst, preview_url: false },
+    }),
+  });
+  if (!uit.ok) return uit;
+  const waId = String(uit.data.messages?.[0]?.id ?? "");
+  if (!waId) return { ok: false, status: 502, fout: "WhatsApp gaf geen bericht-id terug." };
+  return { ok: true, waId };
+}
+
+/** Het 24-uursvenster: vrije tekst mag tot 24 uur na het laatste bericht van de klant. */
+export const VENSTER_MS = 24 * 60 * 60 * 1000;

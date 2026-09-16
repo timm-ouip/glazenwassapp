@@ -13,7 +13,20 @@
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-import { handtekeningKlopt, leesWijziging, STATUS, STATUS_RANG } from "../_gedeeld/whatsapp.ts";
+import { ontsleutel } from "../_gedeeld/geheim.ts";
+import {
+  haalMediaBinnen,
+  handtekeningKlopt,
+  leesWijziging,
+  STATUS,
+  STATUS_RANG,
+  tokenVan,
+  type WaMedia,
+} from "../_gedeeld/whatsapp.ts";
+
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
+
+const MAX_MEDIA_PER_AANROEP = 10;
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -86,10 +99,32 @@ async function verwerk(db: Db, field: string, value: Record<string, unknown>) {
   const inhoud = leesWijziging(field, value, koppeling.company_id, koppeling.weergavenummer);
 
   if (inhoud.rijen.length > 0) {
-    const { error: opslaanFout } = await db
+    const { data: nieuw, error: opslaanFout } = await db
       .from("berichten")
-      .upsert(inhoud.rijen, { onConflict: "company_id,wa_id", ignoreDuplicates: true });
+      .upsert(inhoud.rijen, { onConflict: "company_id,wa_id", ignoreDuplicates: true })
+      .select("id,media,bron,ontvangen_op");
     if (opslaanFout) throw new Error(`Berichten opslaan: ${opslaanFout.message}`);
+
+    // Foto's en spraakberichten meteen binnenhalen, maar Meta niet laten
+    // wachten: het antwoord gaat nu terug, het downloaden loopt door.
+    // Oude chats: Meta bewaart media maar 7 dagen, ouder heeft geen zin. En
+    // hooguit een handvol per aanroep; de rest kan later met "Nu ophalen".
+    const grens = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const metMedia = (
+      (nieuw ?? []) as { id: string; media: WaMedia[]; bron: string; ontvangen_op: string }[]
+    )
+      .filter((r) => r.media?.length)
+      .filter((r) => r.bron !== "geschiedenis" || new Date(r.ontvangen_op).getTime() > grens)
+      .slice(0, MAX_MEDIA_PER_AANROEP);
+    if (metMedia.length > 0) {
+      const werk = (async () => {
+        const token = await tokenVan(db, koppeling.id, ontsleutel);
+        if (!token) return;
+        for (const r of metMedia) await haalMediaBinnen(db, token, koppeling.company_id, r.id, r.media);
+      })().catch((e) => console.error("whatsapp-webhook media:", e instanceof Error ? e.message : e));
+      if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(werk);
+      else await werk;
+    }
     const { error: bijwerkFout } = await db
       .from("whatsapp_koppelingen")
       .update({ laatste_bericht_op: new Date().toISOString(), status: "actief", fout: "" })

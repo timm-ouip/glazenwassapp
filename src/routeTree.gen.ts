@@ -20,6 +20,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as MailingRouteImport } from './routes/mailing'
 import { Route as PlanningRouteImport } from './routes/planning'
 import { Route as PrintenRouteImport } from './routes/printen'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PrullenbakRouteImport } from './routes/prullenbak'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as TeamRouteImport } from './routes/team'
@@ -80,6 +81,11 @@ const PrintenRoute = PrintenRouteImport.update({
   path: '/printen',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PrullenbakRoute = PrullenbakRouteImport.update({
   id: '/prullenbak',
   path: '/prullenbak',
@@ -113,6 +119,7 @@ export interface FileRoutesByFullPath {
   '/mailing': typeof MailingRoute
   '/planning': typeof PlanningRoute
   '/printen': typeof PrintenRoute
+  '/privacy': typeof PrivacyRoute
   '/prullenbak': typeof PrullenbakRoute
   '/signup': typeof SignupRoute
   '/team': typeof TeamRoute
@@ -130,6 +137,7 @@ export interface FileRoutesByTo {
   '/mailing': typeof MailingRoute
   '/planning': typeof PlanningRoute
   '/printen': typeof PrintenRoute
+  '/privacy': typeof PrivacyRoute
   '/prullenbak': typeof PrullenbakRoute
   '/signup': typeof SignupRoute
   '/team': typeof TeamRoute
@@ -148,6 +156,7 @@ export interface FileRoutesById {
   '/mailing': typeof MailingRoute
   '/planning': typeof PlanningRoute
   '/printen': typeof PrintenRoute
+  '/privacy': typeof PrivacyRoute
   '/prullenbak': typeof PrullenbakRoute
   '/signup': typeof SignupRoute
   '/team': typeof TeamRoute
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
     | '/mailing'
     | '/planning'
     | '/printen'
+    | '/privacy'
     | '/prullenbak'
     | '/signup'
     | '/team'
@@ -184,6 +194,7 @@ export interface FileRouteTypes {
     | '/mailing'
     | '/planning'
     | '/printen'
+    | '/privacy'
     | '/prullenbak'
     | '/signup'
     | '/team'
@@ -201,6 +212,7 @@ export interface FileRouteTypes {
     | '/mailing'
     | '/planning'
     | '/printen'
+    | '/privacy'
     | '/prullenbak'
     | '/signup'
     | '/team'
@@ -219,6 +231,7 @@ export interface RootRouteChildren {
   MailingRoute: typeof MailingRoute
   PlanningRoute: typeof PlanningRoute
   PrintenRoute: typeof PrintenRoute
+  PrivacyRoute: typeof PrivacyRoute
   PrullenbakRoute: typeof PrullenbakRoute
   SignupRoute: typeof SignupRoute
   TeamRoute: typeof TeamRoute
@@ -304,6 +317,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrintenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/prullenbak': {
       id: '/prullenbak'
       path: '/prullenbak'
@@ -347,6 +367,7 @@ const rootRouteChildren: RootRouteChildren = {
   MailingRoute: MailingRoute,
   PlanningRoute: PlanningRoute,
   PrintenRoute: PrintenRoute,
+  PrivacyRoute: PrivacyRoute,
   PrullenbakRoute: PrullenbakRoute,
   SignupRoute: SignupRoute,
   TeamRoute: TeamRoute,

@@ -8,14 +8,27 @@
  * (Embedded Signup) bij.
  *
  * Koppelen en ontkoppelen: alleen de eigenaar. Een gesprek als gelezen
- * markeren: wie berichten mag lezen.
+ * markeren en media alsnog ophalen: wie berichten mag lezen. Antwoorden: wie
+ * berichten mag versturen.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { antwoord, CORS } from "../_gedeeld/mail.ts";
-import { versleutel } from "../_gedeeld/geheim.ts";
+import { ontsleutel, versleutel } from "../_gedeeld/geheim.ts";
 import { heeftRecht } from "../_gedeeld/rechten.ts";
-import { graph, waNummer } from "../_gedeeld/whatsapp.ts";
+import {
+  graph,
+  haalMediaBinnen,
+  tokenVan,
+  VENSTER_MS,
+  verstuurTekst,
+  waNummer,
+  type WaMedia,
+} from "../_gedeeld/whatsapp.ts";
+
+/** Meer berichten per minuut vanuit Wooshy niet: een knop die blijft hangen. */
+const MAX_PER_MINUUT = 20;
+const MAX_TEKST = 4096;
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -27,7 +40,9 @@ interface Medewerker {
 }
 
 interface Verzoek {
-  actie?: "test_instellen" | "ontkoppelen" | "gelezen";
+  actie?: "test_instellen" | "ontkoppelen" | "gelezen" | "versturen" | "media_ophalen";
+  tekst?: string;
+  bericht_id?: string;
   phone_number_id?: string;
   waba_id?: string;
   token?: string;
@@ -77,6 +92,14 @@ Deno.serve(async (req) => {
       case "gelezen":
         if (!(await heeftRecht(db, m, "mail_lezen"))) return antwoord({ fout: "Je mag geen berichten lezen." }, 403);
         return await markeerGelezen(db, m, String(verzoek.telefoon ?? ""));
+      case "media_ophalen":
+        if (!(await heeftRecht(db, m, "mail_lezen"))) return antwoord({ fout: "Je mag geen berichten lezen." }, 403);
+        return await mediaOphalen(db, m, String(verzoek.bericht_id ?? ""));
+      case "versturen":
+        if (!(await heeftRecht(db, m, "mail_versturen"))) {
+          return antwoord({ fout: "Je mag geen berichten versturen." }, 403);
+        }
+        return await verstuur(db, m, String(verzoek.telefoon ?? ""), String(verzoek.tekst ?? ""));
       default:
         return antwoord({ fout: "Onbekende actie." }, 400);
     }
@@ -183,4 +206,136 @@ async function markeerGelezen(db: Db, m: Medewerker, telefoon: string): Promise<
     .eq("gelezen", false);
   if (error) throw new Error(`Gelezen: ${error.message}`);
   return antwoord({ ok: true });
+}
+
+/** De actieve koppeling van het bedrijf met het token erbij, of een foutantwoord. */
+async function actieveKoppeling(
+  db: Db,
+  m: Medewerker,
+): Promise<{ id: string; phone_number_id: string; token: string } | Response> {
+  const { data: koppeling, error } = await db
+    .from("whatsapp_koppelingen")
+    .select("id,phone_number_id,status")
+    .eq("company_id", m.company_id)
+    .maybeSingle();
+  if (error) throw new Error(`Koppeling ophalen: ${error.message}`);
+  if (!koppeling || koppeling.status === "uit") return antwoord({ fout: "Er is geen WhatsApp gekoppeld." }, 404);
+  const token = await tokenVan(db, koppeling.id, ontsleutel);
+  if (!token) return antwoord({ fout: "Het WhatsApp-token ontbreekt. Koppel het nummer opnieuw." }, 409);
+  return { id: koppeling.id, phone_number_id: koppeling.phone_number_id, token };
+}
+
+async function verstuur(db: Db, m: Medewerker, telefoon: string, invoer: string): Promise<Response> {
+  const nummer = waNummer(telefoon);
+  const tekst = invoer.trim();
+  if (!nummer) return antwoord({ fout: "Geen nummer." }, 400);
+  if (!tekst) return antwoord({ fout: "Het bericht is leeg." }, 400);
+  if (tekst.length > MAX_TEKST) return antwoord({ fout: `Hooguit ${MAX_TEKST} tekens per bericht.` }, 400);
+
+  const koppeling = await actieveKoppeling(db, m);
+  if (koppeling instanceof Response) return koppeling;
+
+  // Vrije tekst mag alleen binnen 24 uur na het laatste bericht van de klant.
+  const { data: laatsteIn, error: inFout } = await db
+    .from("berichten")
+    .select("id,ontvangen_op")
+    .eq("company_id", m.company_id)
+    .eq("kanaal", "whatsapp")
+    .eq("wa_telefoon", nummer)
+    .eq("richting", "in")
+    .neq("bron", "geschiedenis")
+    .order("ontvangen_op", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (inFout) throw new Error(`Laatste bericht: ${inFout.message}`);
+  if (!laatsteIn || Date.now() - new Date(laatsteIn.ontvangen_op).getTime() > VENSTER_MS) {
+    return antwoord(
+      {
+        fout: "Het laatste bericht van deze klant is meer dan 24 uur oud. WhatsApp staat dan alleen een goedgekeurd sjabloon toe.",
+        venster_dicht: true,
+      },
+      409,
+    );
+  }
+
+  const sinds = new Date(Date.now() - 60_000).toISOString();
+  const { count, error: telFout } = await db
+    .from("berichten")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", m.company_id)
+    .eq("kanaal", "whatsapp")
+    .eq("bron", "wooshy")
+    .gte("ontvangen_op", sinds);
+  if (telFout) throw new Error(`Tellen: ${telFout.message}`);
+  if ((count ?? 0) >= MAX_PER_MINUUT) {
+    return antwoord({ fout: "Even rustig aan: te veel berichten in één minuut." }, 429);
+  }
+
+  const uit = await verstuurTekst(koppeling.token, koppeling.phone_number_id, nummer, tekst);
+  if (!uit.ok) {
+    console.error("whatsapp versturen:", uit.status, uit.fout);
+    return antwoord({ fout: `WhatsApp weigerde het bericht: ${uit.fout}` }, 502);
+  }
+
+  const nu = new Date().toISOString();
+  const { data: bericht, error } = await db
+    .from("berichten")
+    .insert({
+      company_id: m.company_id,
+      kanaal: "whatsapp",
+      wa_id: uit.waId,
+      wa_telefoon: nummer,
+      wa_type: "text",
+      wa_status: "verstuurd",
+      richting: "uit",
+      bron: "wooshy",
+      tekst,
+      fragment: tekst.replace(/\s+/g, " ").slice(0, 200),
+      ontvangen_op: nu,
+      gelezen: true,
+      op_server: false,
+      paaltje_status: "overslaan",
+    })
+    .select("id")
+    .single();
+  // Het bericht is al weg; een opslagfout mag dat niet verbergen.
+  if (error) console.error("whatsapp verstuurd bericht opslaan:", error.message);
+  // Meldingen van Meta ("afgeleverd", "gelezen") die binnenkomen vóór dit
+  // opslaan klaar is, vindt de webhook niet; dan blijft het op "verstuurd".
+
+  // Wat nog open stond van deze klant is nu beantwoord.
+  const { error: beantwoordFout } = await db
+    .from("berichten")
+    .update({ beantwoord_op: nu, gelezen: true })
+    .eq("company_id", m.company_id)
+    .eq("kanaal", "whatsapp")
+    .eq("wa_telefoon", nummer)
+    .eq("richting", "in")
+    .is("beantwoord_op", null);
+  if (beantwoordFout) console.error("whatsapp beantwoord zetten:", beantwoordFout.message);
+
+  return antwoord({ ok: true, id: bericht?.id ?? null, bewaard: !error });
+}
+
+async function mediaOphalen(db: Db, m: Medewerker, berichtId: string): Promise<Response> {
+  if (!/^[0-9a-f-]{36}$/i.test(berichtId)) return antwoord({ fout: "Onbekend bericht." }, 400);
+  const { data: bericht, error } = await db
+    .from("berichten")
+    .select("id,media,ontvangen_op")
+    .eq("company_id", m.company_id)
+    .eq("kanaal", "whatsapp")
+    .eq("id", berichtId)
+    .maybeSingle();
+  if (error) throw new Error(`Bericht ophalen: ${error.message}`);
+  if (!bericht) return antwoord({ fout: "Onbekend bericht." }, 404);
+  const media = (bericht.media ?? []) as WaMedia[];
+  if (media.every((x) => x.pad)) return antwoord({ ok: true, media });
+  if (Date.now() - new Date(bericht.ontvangen_op).getTime() > 7 * 24 * 60 * 60 * 1000) {
+    return antwoord({ fout: "Dit bestand is ouder dan 7 dagen; WhatsApp bewaart het niet meer." }, 410);
+  }
+  const koppeling = await actieveKoppeling(db, m);
+  if (koppeling instanceof Response) return koppeling;
+  const uit = await haalMediaBinnen(db, koppeling.token, m.company_id, bericht.id, media);
+  if (!uit.compleet) return antwoord({ fout: "Het bestand kon niet worden opgehaald. Probeer het zo nog eens." }, 502);
+  return antwoord({ ok: true, media: uit.media });
 }

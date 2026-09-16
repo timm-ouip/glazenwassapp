@@ -2,22 +2,22 @@
  * De WhatsApp-tab: links de gesprekken, rechts het gesprek zelf, zoals in
  * WhatsApp. Op een telefoon één van de twee tegelijk.
  *
- * Fase 1: alleen lezen. Antwoorden, foto's bekijken en Paaltje komen later.
+ * Antwoorden kan binnen 24 uur na het laatste bericht van de klant; Paaltje
+ * en sjablonen komen later.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, CheckCheck, MessageCircle, Smartphone } from "lucide-react";
+import { ArrowLeft, MessageCircle } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import { lijstDatum } from "@/lib/berichten";
 import {
   fetchGesprekken,
-  fetchWaBerichten,
   fetchWhatsAppKoppeling,
   markeerGesprekGelezen,
   toonNummer,
-  type WaBericht,
 } from "@/lib/whatsapp";
+import { ChatVenster } from "@/components/whatsapp/Chat";
 import { cn } from "@/lib/utils";
 
 export function WhatsAppGesprekken() {
@@ -141,19 +141,6 @@ function Gesprek({
   naam: string;
   onTerug: () => void;
 }) {
-  const berichten = useQuery({
-    queryKey: ["wa-berichten", telefoon],
-    queryFn: () => fetchWaBerichten(telefoon),
-    refetchInterval: 15_000,
-  });
-  const onderkant = useRef<HTMLDivElement>(null);
-  const aantal = berichten.data?.length ?? 0;
-
-  // Nieuw bericht of ander gesprek: naar beneden, zoals in WhatsApp.
-  useEffect(() => {
-    onderkant.current?.scrollIntoView({ block: "end" });
-  }, [telefoon, aantal]);
-
   return (
     <>
       <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
@@ -170,53 +157,7 @@ function Gesprek({
           {naam && <p className="text-[12px] text-muted-foreground">{toonNummer(telefoon)}</p>}
         </div>
       </div>
-      <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto bg-background/60 px-3 py-3">
-        {berichten.isLoading && <p className="text-[13px] text-muted-foreground">Even kijken…</p>}
-        {(berichten.data ?? []).map((b) => (
-          <Bubbel key={b.id} bericht={b} />
-        ))}
-        <div ref={onderkant} />
-      </div>
-      <p className="border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
-        Antwoorden vanuit Wooshy komt in de volgende stap. Antwoord voor nu op je telefoon.
-      </p>
+      <ChatVenster telefoon={telefoon} className="flex-1" />
     </>
-  );
-}
-
-function Bubbel({ bericht: b }: { bericht: WaBericht }) {
-  const uit = b.richting === "uit";
-  return (
-    <div className={cn("flex", uit ? "justify-end" : "justify-start")}>
-      <div
-        className={cn(
-          "max-w-[80%] rounded-[14px] px-3 py-1.5 text-[13.5px] shadow-sm",
-          uit
-            ? "bg-tint-groen text-tint-groen-ink"
-            : "bg-card text-card-foreground ring-1 ring-inset ring-border",
-        )}
-      >
-        <p className="whitespace-pre-wrap break-words">{b.tekst}</p>
-        <p className="mt-0.5 flex items-center justify-end gap-1 text-[10.5px] opacity-70">
-          {b.bron === "app" && (
-            <span className="inline-flex items-center gap-0.5" title="Verstuurd vanaf je telefoon">
-              <Smartphone className="size-3" />
-            </span>
-          )}
-          {new Date(b.ontvangen_op).toLocaleString("nl-NL", {
-            day: "numeric",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-          {uit && b.wa_status === "gelezen" && (
-            <CheckCheck className="size-3 text-tint-blauw-ink" />
-          )}
-          {uit && b.wa_status === "afgeleverd" && <CheckCheck className="size-3" />}
-          {uit && b.wa_status === "verstuurd" && <Check className="size-3" />}
-          {uit && b.wa_status === "mislukt" && <span className="text-destructive">mislukt</span>}
-        </p>
-      </div>
-    </div>
   );
 }

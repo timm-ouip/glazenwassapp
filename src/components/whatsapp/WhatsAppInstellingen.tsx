@@ -156,9 +156,9 @@ export function WhatsAppInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
       {isEigenaar && (!gekoppeld || formulierOpen) && (
         <form onSubmit={(e) => void koppel(e)} className="space-y-3">
           <p className="text-[12.5px] text-muted-foreground">
-            Voor nu met het testnummer van Meta. Je vindt deze gegevens in de Meta-app van Wooshy onder
-            WhatsApp → API-instellingen. Zet daar bij Webhook dit adres neer, met het controlewoord
-            dat ik je gaf, en vink <em>messages</em> aan:
+            Voor nu met het testnummer van Meta. Je vindt deze gegevens in de Meta-app van Wooshy
+            onder WhatsApp → API-instellingen. Zet daar bij Webhook dit adres neer, met het
+            controlewoord dat ik je gaf, en vink <em>messages</em> aan:
           </p>
           <code className="block break-all rounded-[10px] bg-muted px-2.5 py-1.5 text-[12px]">
             {WEBHOOK_URL}
