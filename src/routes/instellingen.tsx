@@ -33,6 +33,7 @@ import {
   tintNamen,
   tintStip,
   TINTEN,
+  updateQuickNoteOmschrijving,
   verwijderMarkering,
   formatPrice,
   persistDistrictOrder,
@@ -42,6 +43,12 @@ import {
   type QuickNote,
   type Tint,
 } from "@/lib/klanten";
+import {
+  bewaarPaaltjeDaglimiet,
+  fetchPaaltjeDaglimiet,
+  fetchPaaltjeVerbruik,
+  verbruikVandaag,
+} from "@/lib/paaltje-chat";
 import { aanmeldAdres, fetchAanmeldingen } from "@/lib/aanmeldingen";
 import { fetchWasdagen } from "@/lib/wasdag";
 import { bewaarWerkdagen, useWerkdagen, WEEKDAGEN } from "@/lib/werkdagen";
@@ -173,7 +180,10 @@ function Instellingen() {
               </Kaart>
             </div>
             <div className="mt-4">
-              <Kaart titel="Paaltje: vaste afspraken" uitleg="Waar Paaltje zich altijd aan houdt als hij een antwoord schrijft.">
+              <Kaart
+                titel="Paaltje: vaste afspraken"
+                uitleg="Waar Paaltje zich altijd aan houdt als hij een antwoord schrijft."
+              >
                 <PaaltjeAfspraken isEigenaar={isEigenaar} />
               </Kaart>
             </div>
@@ -197,6 +207,14 @@ function Instellingen() {
             >
               <SchrijfstijlInstellingen isEigenaar={isEigenaar} />
             </Kaart>
+            {isEigenaar && (
+              <Kaart
+                titel="Paaltje-assistent"
+                uitleg="Hoeveel berichten Paaltje per dag beantwoordt, en hoeveel dat er de laatste tijd waren."
+              >
+                <PaaltjeAssistentKaart />
+              </Kaart>
+            )}
           </TabsContent>
         </div>
       </Tabs>
@@ -580,7 +598,14 @@ function AccountTab() {
 
 // --- Team -----------------------------------------------------------------
 
-type Collega = { id: string; naam: string; email: string; rol: string; rol_id: string | null; created_at: string };
+type Collega = {
+  id: string;
+  naam: string;
+  email: string;
+  rol: string;
+  rol_id: string | null;
+  created_at: string;
+};
 
 function TeamTab() {
   const { employee } = useAuth();
@@ -725,7 +750,9 @@ function TeamTab() {
                         aria-label={`Rechten van ${c.naam || c.email}`}
                         onChange={(e) => void kiesRol(c, e.target.value || null)}
                       >
-                        <option value="">{rollen.isError ? "Rollen niet geladen" : "Geen rechten"}</option>
+                        <option value="">
+                          {rollen.isError ? "Rollen niet geladen" : "Geen rechten"}
+                        </option>
                         {(rollen.data ?? []).map((r) => (
                           <option key={r.id} value={r.id}>
                             {r.naam}
@@ -736,7 +763,8 @@ function TeamTab() {
                       <span className="text-[13px]">
                         {rollen.isError
                           ? "Onbekend"
-                          : (rollen.data?.find((r) => r.id === c.rol_id)?.naam ?? (c.rol_id ? "…" : "Geen rechten"))}
+                          : (rollen.data?.find((r) => r.id === c.rol_id)?.naam ??
+                            (c.rol_id ? "…" : "Geen rechten"))}
                       </span>
                     )}
                   </td>
@@ -824,7 +852,9 @@ function WerkdagenKaart() {
   const dagen = keuze ?? opgeslagen;
 
   function wissel(nr: number) {
-    setKeuze(dagen.includes(nr) ? dagen.filter((d) => d !== nr) : [...dagen, nr].sort((a, b) => a - b));
+    setKeuze(
+      dagen.includes(nr) ? dagen.filter((d) => d !== nr) : [...dagen, nr].sort((a, b) => a - b),
+    );
   }
 
   async function bewaar() {
@@ -1046,37 +1076,37 @@ function WijkenTab() {
       </Kaart>
 
       {prijzenZien && (
-      <Kaart
-        titel="Wat de app geleerd heeft"
-        uitleg="Hoeveel je op een dag wegwast, afgeleid uit de dagen die je hebt afgevinkt. In geld en niet in adressen: een wijk met rijtjeshuizen en een wijk met villa's leveren heel verschillende aantallen op, maar een dag blijft een dag."
-      >
-        <p className="text-sm text-muted-foreground">
-          {gemeten.algemeen.bron === "aanname" ? (
-            <>
-              {gemeten.algemeen.dagen === 0
-                ? "Er is nog geen enkele gewerkte dag om van te leren"
-                : `Er ${gemeten.algemeen.dagen === 1 ? "is" : "zijn"} ${gemeten.algemeen.dagen} gewerkte ${
-                    gemeten.algemeen.dagen === 1 ? "dag" : "dagen"
-                  }, en dat is te weinig om iets zinnigs uit af te leiden`}
-              . Zolang het er minder dan {MINIMUM_DAGEN} zijn gaat de app uit van{" "}
-              <strong className="font-medium text-foreground">
-                {formatPrice(AANNAME_BEDRAG_PER_DAG)} per dag
-              </strong>
-              . Daarna rekent ze op je eigen tempo.
-            </>
-          ) : (
-            <>
-              Een gewone werkdag is{" "}
-              <strong className="font-medium text-foreground">
-                {formatPrice(gemeten.algemeen.bedragPerDag)}
-              </strong>
-              , gemeten over {gemeten.algemeen.dagen}{" "}
-              {gemeten.algemeen.dagen === 1 ? "gewerkte dag" : "gewerkte dagen"} in het afgelopen
-              half jaar.
-            </>
-          )}
-        </p>
-      </Kaart>
+        <Kaart
+          titel="Wat de app geleerd heeft"
+          uitleg="Hoeveel je op een dag wegwast, afgeleid uit de dagen die je hebt afgevinkt. In geld en niet in adressen: een wijk met rijtjeshuizen en een wijk met villa's leveren heel verschillende aantallen op, maar een dag blijft een dag."
+        >
+          <p className="text-sm text-muted-foreground">
+            {gemeten.algemeen.bron === "aanname" ? (
+              <>
+                {gemeten.algemeen.dagen === 0
+                  ? "Er is nog geen enkele gewerkte dag om van te leren"
+                  : `Er ${gemeten.algemeen.dagen === 1 ? "is" : "zijn"} ${gemeten.algemeen.dagen} gewerkte ${
+                      gemeten.algemeen.dagen === 1 ? "dag" : "dagen"
+                    }, en dat is te weinig om iets zinnigs uit af te leiden`}
+                . Zolang het er minder dan {MINIMUM_DAGEN} zijn gaat de app uit van{" "}
+                <strong className="font-medium text-foreground">
+                  {formatPrice(AANNAME_BEDRAG_PER_DAG)} per dag
+                </strong>
+                . Daarna rekent ze op je eigen tempo.
+              </>
+            ) : (
+              <>
+                Een gewone werkdag is{" "}
+                <strong className="font-medium text-foreground">
+                  {formatPrice(gemeten.algemeen.bedragPerDag)}
+                </strong>
+                , gemeten over {gemeten.algemeen.dagen}{" "}
+                {gemeten.algemeen.dagen === 1 ? "gewerkte dag" : "gewerkte dagen"} in het afgelopen
+                half jaar.
+              </>
+            )}
+          </p>
+        </Kaart>
       )}
     </div>
   );
@@ -1283,6 +1313,20 @@ function NotitiesTab() {
     }
   }
 
+  function zetOmschrijving(id: string, omschrijving: string) {
+    setNotities((prev) => prev.map((q) => (q.id === id ? { ...q, omschrijving } : q)));
+  }
+
+  async function bewaarOmschrijving(q: QuickNote) {
+    try {
+      await updateQuickNoteOmschrijving(q.id, q.omschrijving);
+    } catch (err) {
+      toast.error(
+        "Betekenis opslaan mislukt: " + (err instanceof Error ? err.message : String(err)),
+      );
+    }
+  }
+
   if (laden) return <p className="text-sm text-muted-foreground">Laden…</p>;
 
   return (
@@ -1292,6 +1336,10 @@ function NotitiesTab() {
         uitleg="De knopjes onder het notitieveld, zoals H, T of HD. Nieuwe maak je ook daar aan; weggooien kan alleen hier."
       >
         <div className="space-y-3">
+          <p className="text-[12px] text-muted-foreground">
+            Vul bij elke snelkeuze de betekenis in — daarmee herkent Paaltje een code in een
+            notitie.
+          </p>
           {notities.length === 0 ? (
             <p className="text-[13px] text-muted-foreground">
               Nog geen snelkeuzes. Voeg er hieronder een toe, of maak ze aan terwijl je een notitie
@@ -1300,15 +1348,26 @@ function NotitiesTab() {
           ) : (
             <ul className="divide-y divide-border/60 overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
               {notities.map((q) => (
-                <li key={q.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-                  <span className="flex-1 truncate">{q.label}</span>
-                  <button
-                    className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
-                    onClick={() => void gooiWeg(q)}
-                    aria-label={`Snelkeuze ${q.label} weggooien`}
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                <li key={q.id} className="flex flex-col gap-1.5 px-3 py-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="flex-1 truncate font-medium">{q.label}</span>
+                    <button
+                      className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
+                      onClick={() => void gooiWeg(q)}
+                      aria-label={`Snelkeuze ${q.label} weggooien`}
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                  <Input
+                    value={q.omschrijving}
+                    placeholder="bv. voorkant helemaal"
+                    onChange={(e) => zetOmschrijving(q.id, e.target.value)}
+                    onBlur={() => void bewaarOmschrijving(q)}
+                    maxLength={300}
+                    aria-label={`Betekenis van ${q.label}`}
+                    className="h-8 text-[12.5px]"
+                  />
                 </li>
               ))}
             </ul>
@@ -1336,6 +1395,118 @@ function NotitiesTab() {
           </form>
         </div>
       </Kaart>
+    </div>
+  );
+}
+
+/** Daglimiet instellen en zien hoeveel Paaltje de laatste tijd gebruikt is. */
+function PaaltjeAssistentKaart() {
+  const { employee } = useAuth();
+  const qc = useQueryClient();
+  const companyId = employee?.company_id ?? "";
+  const [daglimiet, setDaglimiet] = useState("");
+  const [bezig, setBezig] = useState(false);
+
+  const limiet = useQuery({
+    queryKey: ["paaltje-daglimiet", companyId],
+    queryFn: () => fetchPaaltjeDaglimiet(companyId),
+    enabled: !!companyId,
+  });
+  const verbruik = useQuery({
+    queryKey: ["paaltje-verbruik", companyId],
+    queryFn: () => fetchPaaltjeVerbruik(7),
+    enabled: !!companyId,
+  });
+
+  useEffect(() => {
+    if (limiet.data !== undefined) setDaglimiet(String(limiet.data));
+  }, [limiet.data]);
+
+  async function bewaar() {
+    const n = Number(daglimiet);
+    if (!companyId || !Number.isFinite(n) || n < 0) return;
+    setBezig(true);
+    try {
+      await bewaarPaaltjeDaglimiet(companyId, n);
+      await qc.invalidateQueries({ queryKey: ["paaltje-daglimiet", companyId] });
+      toast.success("Daglimiet opgeslagen.");
+    } catch (err) {
+      toast.error("Opslaan mislukt: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  const dagen = verbruik.data ?? [];
+  const vandaag = verbruikVandaag(dagen);
+  const totaalBerichten = dagen.reduce((s, d) => s + d.berichten, 0);
+  const totaalTokens = dagen.reduce((s, d) => s + d.invoer_tokens + d.uitvoer_tokens, 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="paaltje-daglimiet" className="text-[12.5px]">
+          Berichten per dag
+        </Label>
+        <div className="flex items-center gap-2">
+          <Input
+            id="paaltje-daglimiet"
+            type="number"
+            min={0}
+            max={5000}
+            value={daglimiet}
+            onChange={(e) => setDaglimiet(e.target.value)}
+            onBlur={() => void bewaar()}
+            disabled={bezig || !limiet.isSuccess}
+            className="max-w-[8rem]"
+          />
+          <span className="text-[12.5px] text-muted-foreground">berichten/dag</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Zit het bedrijf hierboven, dan antwoordt Paaltje de rest van de dag niet meer.
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        <p className="text-[12.5px] font-medium">Vandaag</p>
+        <p className="text-[13px] text-muted-foreground">
+          {vandaag.berichten} {vandaag.berichten === 1 ? "bericht" : "berichten"}
+          {vandaag.invoer_tokens + vandaag.uitvoer_tokens > 0 &&
+            ` · ${(vandaag.invoer_tokens + vandaag.uitvoer_tokens).toLocaleString("nl-NL")} tokens`}
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        <p className="text-[12.5px] font-medium">Laatste 7 dagen</p>
+        {dagen.length === 0 ? (
+          <p className="text-[13px] text-muted-foreground">Nog niets gebruikt.</p>
+        ) : (
+          <ul className="divide-y divide-border/60 overflow-hidden rounded-[14px] border border-border">
+            {dagen.map((d) => (
+              <li
+                key={d.dag}
+                className="flex items-center justify-between px-3 py-1.5 text-[12.5px]"
+              >
+                <span>
+                  {/* T12:00 erbij: anders leest de browser "d.dag" als UTC-middernacht,
+                      en kan de datum in een westelijke tijdzone een dag terugvallen. */}
+                  {new Date(`${d.dag}T12:00:00`).toLocaleDateString("nl-NL", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                  })}
+                </span>
+                <span className="text-muted-foreground">
+                  {d.berichten} {d.berichten === 1 ? "bericht" : "berichten"} ·{" "}
+                  {(d.invoer_tokens + d.uitvoer_tokens).toLocaleString("nl-NL")} tokens
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Totaal: {totaalBerichten} {totaalBerichten === 1 ? "bericht" : "berichten"},{" "}
+          {totaalTokens.toLocaleString("nl-NL")} tokens.
+        </p>
+      </div>
     </div>
   );
 }

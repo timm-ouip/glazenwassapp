@@ -24,7 +24,7 @@ export const ZEKER_AUTOMATISCH = 0.9;
 const MAX_MAANDEN_AUTOMATISCH = 3;
 
 /** "jjjj-mm" in Nederlandse tijd — de server draait in UTC. */
-function maandVan(d: Date): string {
+export function maandVan(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Amsterdam",
     year: "numeric",
@@ -58,8 +58,8 @@ export function veiligVoorAutomatisch(maanden: string[]): boolean {
   return maanden.every((m) => /^\d{4}-(0[1-9]|1[0-2])$/.test(m) && m >= nu && m <= grens);
 }
 
-/** Overslaan erbij, met de startmaand die meeschuift. */
-function metOverslaan(
+/** Overslaan erbij, met de startmaand die meeschuift. Ook voor de assistent in de app (`paaltje-chat.ts`). */
+export function metOverslaan(
   c: { overslaan: string[]; start_maand: string; created_at: string },
   maanden: string[],
 ): { overslaan: string[]; start_maand: string } {
@@ -345,6 +345,25 @@ export async function voerStoppenDoor(
 }
 
 /**
+ * Een overslaan terugnemen: precies weghalen wat erbij kwam, en terugzetten
+ * wat het opschuiven van de startmaand uit de lijst haalde. Wat iemand
+ * intussen zelf nog oversloeg blijft staan; de startmaand gaat alleen terug
+ * als hij nog staat zoals het doorvoeren hem achterliet.
+ */
+export function overslaanTerug(
+  nu: { overslaan: string[]; start_maand: string },
+  voor: { overslaan: string[]; start_maand: string },
+  na: { overslaan: string[]; start_maand: string },
+): { overslaan: string[]; start_maand: string } {
+  const erbij = na.overslaan.filter((m) => !voor.overslaan.includes(m));
+  // Wat de startmaand opschoof haalde maanden uit de lijst; die komen terug.
+  const eraf = voor.overslaan.filter((m) => !na.overslaan.includes(m));
+  const overslaan = [...new Set([...nu.overslaan.filter((m) => !erbij.includes(m)), ...eraf])].sort();
+  const start_maand = nu.start_maand === na.start_maand ? voor.start_maand : nu.start_maand;
+  return { overslaan, start_maand };
+}
+
+/**
  * Draait één aanpassing uit het rapport terug.
  *
  * Niet door de oude lijst terug te zetten, maar door precies weg te halen wat
@@ -418,15 +437,11 @@ export async function draaiTerug(
     .maybeSingle();
   if (!c) return { ok: false, fout: "Het adres bestaat niet meer." };
 
-  const voor: string[] = w.voor_overslaan ?? [];
-  const na: string[] = w.na_overslaan ?? [];
-  const erbij = na.filter((m) => !voor.includes(m));
-  // Wat de startmaand opschoof haalde maanden uit de lijst; die komen terug.
-  const eraf = voor.filter((m) => !na.includes(m));
-  const overslaan = [
-    ...new Set([...(c.overslaan ?? []).filter((m: string) => !erbij.includes(m)), ...eraf]),
-  ].sort();
-  const start_maand = c.start_maand === w.na_start_maand ? w.voor_start_maand : c.start_maand;
+  const { overslaan, start_maand } = overslaanTerug(
+    { overslaan: c.overslaan ?? [], start_maand: c.start_maand },
+    { overslaan: w.voor_overslaan ?? [], start_maand: w.voor_start_maand },
+    { overslaan: w.na_overslaan ?? [], start_maand: w.na_start_maand },
+  );
 
   const { error } = await db
     .from("customers")

@@ -4,6 +4,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { Lock } from "lucide-react";
 
 import { Zijbalk } from "@/components/Zijbalk";
+import { PaaltjeKnop } from "@/components/paaltje/PaaltjeKnop";
 import { useAuth } from "@/lib/auth";
 import { heeftRecht, rechtenVoorPad } from "@/lib/rechten";
 
@@ -128,12 +129,14 @@ export function AppLayout({
               <Lock className="mx-auto mb-3 size-6 text-muted-foreground" />
               <p className="font-display text-lg font-semibold">Geen toegang</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Je rol geeft je geen toegang tot deze pagina. Vraag de eigenaar om je rechten aan te passen.
+                Je rol geeft je geen toegang tot deze pagina. Vraag de eigenaar om je rechten aan te
+                passen.
               </p>
             </div>
           )}
         </main>
       </div>
+      {employee && <PaaltjeKnop />}
     </div>
   );
 }

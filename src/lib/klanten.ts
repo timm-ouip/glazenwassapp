@@ -206,6 +206,9 @@ export interface QuickNote {
   id: string;
   label: string;
   sort_order: number;
+  /** Wat de snelkeuze betekent, bijvoorbeeld "voorkant helemaal" bij VH.
+   *  Paaltje leest dit om een code om te zetten naar wat er echt bedoeld wordt. */
+  omschrijving: string;
 }
 
 /**
@@ -230,7 +233,9 @@ export function leesMaandwerk(waarde: unknown, extras?: unknown): Maandwerk[] {
   if (!Array.isArray(waarde)) return [];
   // De meerprijzen staan apart, bij het id van het stuk werk (adres_prijzen).
   const perId =
-    extras && typeof extras === "object" && !Array.isArray(extras) ? (extras as Record<string, unknown>) : {};
+    extras && typeof extras === "object" && !Array.isArray(extras)
+      ? (extras as Record<string, unknown>)
+      : {};
   return waarde.flatMap((rij) => {
     if (!rij || typeof rij !== "object") return [];
     const r = rij as Record<string, unknown>;
@@ -513,7 +518,8 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
   })) as Customer[];
 }
 
-const KLANT_VELDEN = "id,naam,email,email2,telefoon,telefoon2,straat,huisnummer,postcode,plaats,notitie";
+const KLANT_VELDEN =
+  "id,naam,email,email2,telefoon,telefoon2,straat,huisnummer,postcode,plaats,notitie";
 
 export async function fetchKlanten(): Promise<Klant[]> {
   // In stukken: met echte klanten zijn het er al snel meer dan 1000.
@@ -586,7 +592,9 @@ export async function slaAdresPrijzenOp(
   customerId: string,
   prijzen: { price?: number; maandwerk?: Maandwerk[] },
 ): Promise<void> {
-  const rij: { customer_id: string; prijs?: number; maandwerk_extra?: Json } = { customer_id: customerId };
+  const rij: { customer_id: string; prijs?: number; maandwerk_extra?: Json } = {
+    customer_id: customerId,
+  };
   if (prijzen.price !== undefined) rij.prijs = prijzen.price;
   if (prijzen.maandwerk) {
     rij.maandwerk_extra = Object.fromEntries(
@@ -599,7 +607,9 @@ export async function slaAdresPrijzenOp(
 
 /** Een geweigerde schrijfactie door de regels (RLS): het recht ontbreekt. */
 export function isGeenRecht(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as { code?: string }).code === "42501";
+  return (
+    typeof error === "object" && error !== null && (error as { code?: string }).code === "42501"
+  );
 }
 
 /** Splitst "12a" in het nummer en de toevoeging. Zonder cijfer: niets. */
@@ -735,7 +745,9 @@ export async function patchCustomer(id: string, patch: Partial<Customer>) {
       await slaAdresPrijzenOp(id, { maandwerk: p.maandwerk });
     } catch (e) {
       if (!isGeenRecht(e)) throw e;
-      const { data: magZien, error: rechtFout } = await supabase.rpc("heeft_recht", { recht: "prijzen_zien" });
+      const { data: magZien, error: rechtFout } = await supabase.rpc("heeft_recht", {
+        recht: "prijzen_zien",
+      });
       if (rechtFout || magZien === true) throw e;
     }
   }
@@ -811,17 +823,26 @@ export function klantAdres(k: Pick<Klant, "straat" | "huisnummer" | "postcode" |
 export async function fetchQuickNotes(): Promise<QuickNote[]> {
   const { data, error } = await supabase
     .from("quick_notes")
-    .select("id,label,sort_order")
+    .select("id,label,sort_order,omschrijving")
     .order("sort_order", { ascending: true })
     .order("label", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as QuickNote[];
+  return (data ?? []).map((q) => ({ ...q, omschrijving: q.omschrijving ?? "" })) as QuickNote[];
 }
 
 export async function addQuickNote(label: string) {
   const { error } = await supabase
     .from("quick_notes")
     .insert({ label: label.trim(), sort_order: 100 });
+  if (error) throw error;
+}
+
+/** Betekenis van een snelkeuze, voor Paaltje: "VH" wordt dan "voorkant helemaal". */
+export async function updateQuickNoteOmschrijving(id: string, omschrijving: string) {
+  const { error } = await supabase
+    .from("quick_notes")
+    .update({ omschrijving: omschrijving.trim() })
+    .eq("id", id);
   if (error) throw error;
 }
 

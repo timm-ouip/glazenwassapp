@@ -150,7 +150,7 @@ function maandenSchoon(maanden: string[]): string[] {
   return [...new Set(maanden.filter((m) => /^\d{4}-(0[1-9]|1[0-2])$/.test(m)))].slice(0, 12);
 }
 
-function frequentieVan(interval: number, ritme: number): string {
+export function frequentieVan(interval: number, ritme: number): string {
   if (!interval || interval <= 1) return "elke maand";
   if (interval === 2) return ritme % 2 === 0 ? "even maanden" : "oneven maanden";
   return `om de ${interval} maanden`;

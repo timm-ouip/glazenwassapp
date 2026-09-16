@@ -15,6 +15,11 @@ verify_jwt = true
 [functions.mail-acties]
 verify_jwt = true
 
+# Praten met Paaltje in de app en zijn voorstellen afhandelen: alleen
+# ingelogd, en de functie kijkt zelf wat je rol mag.
+[functions.paaltje-chat]
+verify_jwt = true
+
 # Het dagrapport om half zeven; ook door pg_cron, met dezelfde sleutel.
 [functions.dagrapport]
 verify_jwt = false
