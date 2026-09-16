@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { requireSession, useRequireAuth } from "@/lib/auth";
@@ -20,7 +20,9 @@ import {
   Check,
   Eye,
   FileSpreadsheet,
+  Sparkles,
   Trash2,
+  Undo2,
   Upload,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -57,7 +59,14 @@ import {
   stratenZonderNaam,
   stratenZonderPostcode,
 } from "@/lib/aanvullen";
-import { zoekWoonplaatsen } from "@/lib/postcode";
+import { nummerSleutel, zoekStraatPostcodes, zoekWoonplaatsen } from "@/lib/postcode";
+import {
+  type ImportCel,
+  type ImportStraat,
+  vraagPaaltje,
+  zoekHuisnummers,
+  zoekRegisternamen,
+} from "@/lib/import-paaltje";
 import { isGeenRecht } from "@/lib/klanten";
 
 export const Route = createFileRoute("/importeren")({
@@ -187,13 +196,32 @@ interface SheetGrid {
   breedtes: number[];
 }
 
+/** Wat Paaltje (of jij) over een tekstvakje besloot, op cel-id. */
+type CelKeuze = Record<string, "straat" | "notitie">;
+
+/** Een tekstvakje uit het blad, met waar het staat. */
+interface Kandidaat extends ImportCel {
+  bron: Bron;
+}
+
+function celId(tabIndex: number, r: number, c: number) {
+  return `t${tabIndex}_${r}_${c}`;
+}
+
 function leesTabblad(
   sheet: XLSX.WorkSheet,
   sheetName: string,
-): { rijen: RijPreview[]; bronnen: Record<string, Bron>; grid: SheetGrid } {
+  tabIndex: number,
+  keuze: CelKeuze,
+): {
+  rijen: RijPreview[];
+  bronnen: Record<string, Bron>;
+  grid: SheetGrid;
+  kandidaten: Kandidaat[];
+} {
   const leeg: SheetGrid = { cellen: [], breedtes: [] };
   const ref = sheet["!ref"];
-  if (!ref) return { rijen: [], bronnen: {}, grid: leeg };
+  if (!ref) return { rijen: [], bronnen: {}, grid: leeg, kandidaten: [] };
   const range = XLSX.utils.decode_range(ref);
   const cel = (r: number, c: number) =>
     sheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
@@ -235,11 +263,39 @@ function leesTabblad(
       }
     }
   }
+  const grijsBekend = kopKolommen.size > 0;
+  // Een vakje dat als straat is aangewezen telt mee, ook zonder grijs.
+  const aangewezen = new Set<number>();
+  for (const [id, wordt] of Object.entries(keuze)) {
+    const m = id.match(/^t(\d+)_(\d+)_(\d+)$/);
+    if (wordt === "straat" && m && Number(m[1]) === tabIndex) aangewezen.add(Number(m[3]));
+  }
   // Terugval: geen kleuren gevonden → eerste kolom met tekst + nummers
-  const kolommen = kopKolommen.size > 0 ? [...kopKolommen].sort((a, b) => a - b) : [range.s.c];
+  const kolommen = [
+    ...new Set([...(grijsBekend ? kopKolommen : [range.s.c]), ...aangewezen]),
+  ].sort((a, b) => a - b);
 
   const rijen: RijPreview[] = [];
   const bronnen: Record<string, Bron> = {};
+  const kandidaten: Kandidaat[] = [];
+  const kandidaat = (r: number, c: number, nu: "straat" | "notitie", straatErboven: string) => {
+    const cell = cel(r, c);
+    const s = (cell as { s?: CelStijl } | undefined)?.s;
+    const vul = s?.patternType && s.patternType !== "none" ? s.fgColor?.rgb : undefined;
+    kandidaten.push({
+      id: celId(tabIndex, r, c),
+      tabblad: sheetName,
+      cel: `${XLSX.utils.encode_col(c)}${r + 1}`,
+      tekst: tekst(cell),
+      grijs: isGrijs(cell),
+      vulkleur: vul ?? "",
+      vet: Boolean(s?.font?.bold),
+      nummers_eronder: nummersHieronder(r, c),
+      nu,
+      straat_erboven: straatErboven,
+      bron: { tabblad: sheetName, rij: r, kolom: c },
+    });
+  };
 
   /** Telt hoeveel huisnummers er direct onder deze rij staan (tot de volgende tekstcel). */
   const nummersHieronder = (vanaf: number, c: number) => {
@@ -263,10 +319,16 @@ function leesTabblad(
       const nummer = parseNummer(waarde);
       if (!nummer) {
         const volgt = nummersHieronder(r, c);
-        const grijsBekend = kopKolommen.size > 0;
         // Straatkop: als het bestand grijze koppen heeft, telt alleen grijs.
         // Anders vallen we terug op "er beginnen hieronder huisnummers".
-        const isKop = grijsBekend ? isGrijs(cell) : volgt >= 1 || !laatste;
+        // Wat Paaltje of jij besliste gaat voor.
+        const gekozen = keuze[celId(tabIndex, r, c)];
+        const isKop = gekozen
+          ? gekozen === "straat"
+          : grijsBekend
+            ? isGrijs(cell)
+            : volgt >= 1 || !laatste;
+        kandidaat(r, c, isKop ? "straat" : "notitie", straat);
 
         if (isKop) {
           straat = String(waarde).trim();
@@ -305,7 +367,40 @@ function leesTabblad(
     }
   }
 
-  return { rijen, bronnen, grid };
+  // Tekst met huisnummers eronder in een kolom die we niet lazen: misschien
+  // een straat zonder grijs. Niet in de notitie- en prijskolom ernaast, want
+  // onder een "€" staan ook getallen.
+  const naastKop = new Set(kolommen.flatMap((c) => [c + 1, c + 2]));
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    if (kolommen.includes(c) || naastKop.has(c)) continue;
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      const cell = cel(r, c);
+      if (!tekst(cell) || parseNummer(cell?.v)) continue;
+      if (nummersHieronder(r, c) >= 2) kandidaat(r, c, "notitie", "");
+    }
+  }
+
+  return { rijen, bronnen, grid, kandidaten };
+}
+
+/** Het hele werkboek inlezen, met wat er over losse vakjes besloten is. */
+function leesWerkboek(wb: XLSX.WorkBook, keuze: CelKeuze) {
+  const rijen: RijPreview[] = [];
+  const bronnen: Record<string, Bron> = {};
+  const grids: Record<string, SheetGrid> = {};
+  const kandidaten: Kandidaat[] = [];
+  wb.SheetNames.forEach((naam, i) => {
+    const sheet = wb.Sheets[naam];
+    if (!sheet) return;
+    const res = leesTabblad(sheet, naam, i, keuze);
+    rijen.push(...res.rijen);
+    grids[naam] = res.grid;
+    kandidaten.push(...res.kandidaten);
+    for (const [straat, bron] of Object.entries(res.bronnen)) {
+      if (!bronnen[straat]) bronnen[straat] = bron;
+    }
+  });
+  return { rijen, bronnen, grids, kandidaten };
 }
 
 interface ImportRij {
@@ -409,6 +504,93 @@ function verdachteStraten(lijst: ImportRij[], quickNotes: QuickNote[]) {
   return uitkomst;
 }
 
+/** Iets wat Paaltje voorstelt. Zeker = meteen toegepast (geel), anders jouw keuze. */
+type PaaltjeVoorstel = { id: string; zeker: boolean; reden: string; toegepast: boolean } & (
+  | { soort: "cel"; celId: string; tekst: string; wordt: "straat" | "notitie"; bron: Bron }
+  | { soort: "zelfde"; namen: string[]; naam: string }
+  | { soort: "officieel"; straat: string; naam: string }
+);
+
+/** De officiële naam van een straat, en wie hem koos. Lege naam = bewust geen. */
+interface Officieel {
+  naam: string;
+  hoe: "register" | "paaltje" | "jij";
+}
+
+interface Meekijken {
+  stap: "register" | "paaltje" | "huisnummers" | "klaar";
+  gedaan: number;
+  totaal: number;
+  /** Wat er misging, als zin; het scherm werkt dan gewoon zonder. */
+  fout: string;
+}
+
+/** Iets om na te kijken in de lijst zelf: een rare prijs of een huisnummer dat niet bestaat. */
+interface Nakijkpunt {
+  rijId: string;
+  label: string;
+  reden: string;
+  /** Bij een prijs: wat het waarschijnlijk had moeten zijn. */
+  prijs?: number;
+  bronnen: Bron[];
+}
+
+function mediaan(getallen: number[]): number {
+  const g = [...getallen].sort((a, b) => a - b);
+  if (g.length === 0) return 0;
+  const m = Math.floor(g.length / 2);
+  return g.length % 2 ? g[m]! : (g[m - 1]! + g[m]!) / 2;
+}
+
+function nakijkpunten(
+  lijst: ImportRij[],
+  officieel: Record<string, Officieel>,
+  kaarten: Record<string, Map<string, string>>,
+): Nakijkpunt[] {
+  const uit: Nakijkpunt[] = [];
+  const prijzenPerStraat = new Map<string, number[]>();
+  for (const r of lijst) {
+    if (r.prijs <= 0) continue;
+    const k = straatSleutel(r.straat);
+    prijzenPerStraat.set(k, [...(prijzenPerStraat.get(k) ?? []), r.prijs]);
+  }
+  for (const r of lijst) {
+    const k = straatSleutel(r.straat);
+    const label = `${r.straat} ${r.huisnummer}${r.toevoeging}`;
+    const straatPrijzen = prijzenPerStraat.get(k) ?? [];
+    const midden = mediaan(straatPrijzen);
+    // Een tikfout als 250 voor 25,0 valt pas op tussen genoeg buren.
+    if (straatPrijzen.length >= 4 && r.prijs >= 50 && r.prijs >= midden * 4) {
+      const tiende = Math.round((r.prijs / 10) * 100) / 100;
+      const lijktOp = tiende >= midden / 2 && tiende <= midden * 2;
+      uit.push({
+        rijId: r.id,
+        label,
+        reden: `${formatPrice(r.prijs)} is veel meer dan de rest van de straat (meestal ${formatPrice(midden)}).`,
+        ...(lijktOp ? { prijs: tiende } : {}),
+        bronnen: r.bronnen,
+      });
+    }
+    const naam = officieel[k]?.naam;
+    const kaart = naam ? kaarten[naam] : undefined;
+    // Een lege kaart zegt niets: sommige straten staan er zonder adressen in.
+    if (naam && kaart && kaart.size > 0) {
+      const bestaat =
+        kaart.has(nummerSleutel(r.huisnummer, r.toevoeging)) ||
+        kaart.has(nummerSleutel(r.huisnummer));
+      if (!bestaat) {
+        uit.push({
+          rijId: r.id,
+          label,
+          reden: `Nummer ${r.huisnummer}${r.toevoeging} staat niet in het adressenregister bij ${naam}.`,
+          bronnen: r.bronnen,
+        });
+      }
+    }
+  }
+  return uit;
+}
+
 function ImportPagina() {
   useRequireAuth();
   const navigate = useNavigate();
@@ -433,6 +615,26 @@ function ImportPagina() {
   const [grids, setGrids] = useState<Record<string, SheetGrid>>({});
   const [goedgekeurd, setGoedgekeurd] = useState<Set<string>>(new Set());
   const [bekijk, setBekijk] = useState<{ label: string; bronnen: Bron[] } | null>(null);
+  const [werkboek, setWerkboek] = useState<XLSX.WorkBook | null>(null);
+  // Wat Paaltje of jij over losse vakjes, straatnamen en officiële namen besliste.
+  const [keuze, setKeuze] = useState<CelKeuze>({});
+  const [vervang, setVervang] = useState<Record<string, string>>({});
+  const [officieel, setOfficieel] = useState<Record<string, Officieel>>({});
+  const [register, setRegister] = useState<Record<string, string[]>>({});
+  const [kaarten, setKaarten] = useState<Record<string, Map<string, string>>>({});
+  const [voorstellen, setVoorstellen] = useState<PaaltjeVoorstel[]>([]);
+  const [meekijk, setMeekijk] = useState<Meekijken | null>(null);
+  const [nietMelden, setNietMelden] = useState<Set<string>>(new Set());
+  /** Bij welke plaats de opgezochte namen en postcodes horen. */
+  const [meekijkPlaats, setMeekijkPlaats] = useState("");
+  // Wat je zelf in de lijst veranderde. Apart bewaard, zodat het blijft staan
+  // als het bestand opnieuw ingelezen wordt omdat Paaltje iets aanpaste.
+  const [bewerkt, setBewerkt] = useState<Record<string, Partial<ImportRij>>>({});
+  const [wegRijen, setWegRijen] = useState<Set<string>>(new Set());
+  const [wegStraten, setWegStraten] = useState<Set<string>>(new Set());
+  const [hernoemd, setHernoemd] = useState<Record<string, string>>({});
+  // Laadt iemand intussen een ander bestand, dan hoort een oud antwoord nergens meer bij.
+  const ronde = useRef(0);
 
   const gekozenWijk = wijken.find((w) => w.id === wijkId) ?? null;
   // De plaats van de gekozen wijk als die er al is; anders wat je hier typt.
@@ -487,13 +689,52 @@ function ImportPagina() {
    */
   const samengevoegd = useMemo(() => lijst.filter(uitTweeMaanden).length, [lijst]);
 
+  const nakijken = useMemo(
+    () => nakijkpunten(lijst, officieel, kaarten).filter((p) => !nietMelden.has(`${p.rijId}|${p.reden}`)),
+    [lijst, officieel, kaarten, nietMelden],
+  );
+  const nakijkRijen = useMemo(() => new Set(nakijken.map((p) => p.rijId)), [nakijken]);
+
+  /** Per straat in de lijst: hoeveel adressen, en welke officiële naam. */
+  const straatOverzicht = useMemo(() => {
+    const aantal = new Map<string, { naam: string; adressen: number }>();
+    for (const r of lijst) {
+      const k = straatSleutel(r.straat);
+      const s = aantal.get(k) ?? { naam: r.straat, adressen: 0 };
+      s.adressen++;
+      aantal.set(k, s);
+    }
+    return [...aantal.entries()].map(([k, s]) => ({
+      ...s,
+      sleutel: k,
+      opties: register[k] ?? [],
+      gekozen: officieel[k] ?? null,
+    }));
+  }, [lijst, register, officieel]);
+
+  // Opnieuw inlezen zodra er over een vakje iets besloten is.
+  useEffect(() => {
+    if (!werkboek) {
+      setRijen([]);
+      return;
+    }
+    const res = leesWerkboek(werkboek, keuze);
+    setBronnen(res.bronnen);
+    setGrids(res.grids);
+    setRijen(res.rijen);
+  }, [werkboek, keuze]);
+
   /** Adressen die in meerdere tabbladen staan worden samengevoegd tot "elke maand". */
   useEffect(() => {
     type Verzamel = { rij: ImportRij; delen: { freq: Frequency; notitie: string }[] };
     const map = new Map<string, Verzamel>();
 
-    for (const r of rijen) {
-      if (skipTabbladen.has(r.tabblad)) continue;
+    for (const origineel of rijen) {
+      if (skipTabbladen.has(origineel.tabblad)) continue;
+      // Anders gespelde namen van dezelfde straat onder één naam: eerst wat
+      // Paaltje samenvoegde, dan wat je zelf hernoemde.
+      const naPaaltje = vervang[straatSleutel(origineel.straat)] ?? origineel.straat;
+      const r = { ...origineel, straat: hernoemd[straatSleutel(naPaaltje)] ?? naPaaltje };
       const sleutel = `${r.straat.toLowerCase()}|${r.huisnummer}|${r.toevoeging.toLowerCase()}`;
       const freq = freqPerTabblad[r.tabblad] ?? "elke";
       const bestaand = map.get(sleutel);
@@ -531,26 +772,44 @@ function ImportPagina() {
       };
     }
 
-    setLijst([...map.values()].map(({ rij, delen }) => ({ ...rij, ...verdeelNotities(delen) })));
+    setLijst(
+      [...map.values()]
+        .map(({ rij, delen }) => ({ ...rij, ...verdeelNotities(delen), ...bewerkt[rij.id] }))
+        .filter((r) => !wegRijen.has(r.id) && !wegStraten.has(straatSleutel(r.straat))),
+    );
     setHernoemen({});
-  }, [rijen, freqPerTabblad, skipTabbladen]);
+  }, [rijen, freqPerTabblad, skipTabbladen, vervang, hernoemd, bewerkt, wegRijen, wegStraten]);
 
   function wijzig(id: string, patch: Partial<ImportRij>) {
-    setLijst((l) => l.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    setBewerkt((b) => ({ ...b, [id]: { ...b[id], ...patch } }));
   }
 
   function verwijderRij(id: string) {
-    setLijst((l) => l.filter((r) => r.id !== id));
+    setWegRijen((s) => new Set(s).add(id));
   }
 
   function verwijderStraat(straat: string) {
-    setLijst((l) => l.filter((r) => r.straat !== straat));
+    setWegStraten((s) => new Set(s).add(straatSleutel(straat)));
   }
 
   function hernoemStraat(oud: string, nieuw: string) {
     const naam = nieuw.trim();
     if (!naam) return;
-    setLijst((l) => l.map((r) => (r.straat === oud ? { ...r, straat: naam } : r)));
+    const van = straatSleutel(oud);
+    setHernoemd((h) => {
+      // Wat eerder al naar de oude naam hernoemd was, gaat mee.
+      const uit: Record<string, string> = {};
+      for (const [k, v] of Object.entries(h)) uit[k] = straatSleutel(v) === van ? naam : v;
+      uit[van] = naam;
+      return uit;
+    });
+    // De gekozen officiële naam verhuist mee, tenzij de nieuwe naam er al een heeft.
+    setOfficieel((o) => {
+      const naar = straatSleutel(naam);
+      if (!o[van] || o[naar]) return o;
+      const { [van]: gekozen, ...rest } = o;
+      return { ...rest, [naar]: gekozen! };
+    });
     setHernoemen((h) => ({ ...h, [oud]: "" }));
     toast.success(`"${oud}" heet nu "${naam}"`);
   }
@@ -568,32 +827,220 @@ function ImportPagina() {
     try {
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: "array", cellStyles: true });
-      const gevonden: RijPreview[] = [];
       const freq: Record<string, Frequency> = {};
-      const alleBronnen: Record<string, Bron> = {};
-      const alleGrids: Record<string, SheetGrid> = {};
-      for (const sheetName of wb.SheetNames) {
-        const sheet = wb.Sheets[sheetName];
-        if (!sheet) continue;
-        freq[sheetName] = raadFrequentie(sheetName);
-        const res = leesTabblad(sheet, sheetName);
-        gevonden.push(...res.rijen);
-        alleGrids[sheetName] = res.grid;
-        for (const [naam, bron] of Object.entries(res.bronnen)) {
-          if (!alleBronnen[naam]) alleBronnen[naam] = bron;
-        }
-      }
+      for (const sheetName of wb.SheetNames) freq[sheetName] = raadFrequentie(sheetName);
+      const gevonden = leesWerkboek(wb, {}).rijen;
       setBestandsnaam(file.name);
       setFreqPerTabblad(freq);
-      setBronnen(alleBronnen);
-      setGrids(alleGrids);
+      setSkipTabbladen(new Set());
       setGoedgekeurd(new Set());
-      setRijen(gevonden);
-      if (gevonden.length === 0) toast.error("Geen klanten herkend in dit bestand.");
+      setNietMelden(new Set());
+      setBewerkt({});
+      setWegRijen(new Set());
+      setWegStraten(new Set());
+      setHernoemd({});
+      wisPaaltje();
+      setWerkboek(wb);
+      if (gevonden.length === 0) {
+        toast.error("Geen klanten herkend in dit bestand.");
+        return;
+      }
+      void meekijken(wb);
     } catch (e) {
       toast.error("Bestand kon niet gelezen worden.");
       console.error(e);
     }
+  }
+
+  /** Alles wat Paaltje en het register deden weer weg. */
+  function wisPaaltje() {
+    ronde.current++;
+    setKeuze((k) => (Object.keys(k).length ? {} : k));
+    setVervang((v) => (Object.keys(v).length ? {} : v));
+    setOfficieel({});
+    setRegister({});
+    setKaarten({});
+    setVoorstellen([]);
+    setMeekijk(null);
+  }
+
+  function pasToe(v: PaaltjeVoorstel, aan: boolean) {
+    if (v.soort === "cel") {
+      setKeuze((k) => {
+        const nieuw = { ...k };
+        if (aan) nieuw[v.celId] = v.wordt;
+        else delete nieuw[v.celId];
+        return nieuw;
+      });
+    } else if (v.soort === "zelfde") {
+      setVervang((m) => {
+        const nieuw = { ...m };
+        for (const naam of v.namen) {
+          if (straatSleutel(naam) === straatSleutel(v.naam)) continue;
+          if (aan) nieuw[straatSleutel(naam)] = v.naam;
+          else delete nieuw[straatSleutel(naam)];
+        }
+        return nieuw;
+      });
+    } else {
+      setOfficieel((o) => {
+        const nieuw = { ...o };
+        if (aan) nieuw[straatSleutel(v.straat)] = { naam: v.naam, hoe: "paaltje" };
+        else delete nieuw[straatSleutel(v.straat)];
+        return nieuw;
+      });
+      if (aan) void haalKaart(v.naam);
+    }
+    setVoorstellen((l) => l.map((x) => (x.id === v.id ? { ...x, toegepast: aan } : x)));
+  }
+
+  /** "Klopt niet": weg uit de lijst, en als hij toegepast was ook terugdraaien. */
+  function wijsAf(v: PaaltjeVoorstel) {
+    if (v.toegepast) pasToe(v, false);
+    setVoorstellen((l) => l.filter((x) => x.id !== v.id));
+  }
+
+  /** Zelf een officiële naam kiezen; leeg = deze straat heeft er geen. */
+  function kiesOfficieel(straat: string, naam: string) {
+    setOfficieel((o) => ({ ...o, [straatSleutel(straat)]: { naam, hoe: "jij" } }));
+    if (naam) void haalKaart(naam);
+  }
+
+  async function haalKaart(naam: string) {
+    if (!werkPlaats || werkPlaats !== meekijkPlaats || kaarten[naam]) return;
+    const deze = ronde.current;
+    const kaart = await zoekStraatPostcodes(naam, werkPlaats);
+    if (kaart && ronde.current === deze) setKaarten((k) => ({ ...k, [naam]: kaart }));
+  }
+
+  /**
+   * Paaltje laten meekijken: eerst bij het adressenregister opzoeken welke
+   * straten er in de plaats zijn, dan Paaltje vragen wat er anders moet, en
+   * daarna de huisnummers nakijken. Zekere dingen worden meteen (geel)
+   * toegepast, de rest blijft een voorstel. Gaat er iets mis, dan werkt het
+   * scherm gewoon zoals zonder Paaltje.
+   */
+  async function meekijken(wb: XLSX.WorkBook) {
+    wisPaaltje();
+    const deze = ronde.current;
+    const actueel = () => ronde.current === deze;
+    const plaatsNu = werkPlaats;
+    setMeekijkPlaats(plaatsNu);
+    const basis = leesWerkboek(wb, {});
+
+    // Straten zoals de app ze las, plus teksten met huisnummers eronder die
+    // misschien ook een straat zijn.
+    const perStraat = new Map<string, { naam: string; nummers: number[] }>();
+    for (const r of basis.rijen) {
+      const k = straatSleutel(r.straat);
+      const s = perStraat.get(k) ?? { naam: r.straat, nummers: [] };
+      s.nummers.push(r.huisnummer);
+      perStraat.set(k, s);
+    }
+    const misschien = basis.kandidaten
+      .filter((c) => c.nu === "notitie" && c.nummers_eronder >= 2 && c.tekst.length <= 40)
+      .map((c) => c.tekst);
+    const opTeZoeken = [
+      ...new Map(
+        [...[...perStraat.values()].map((s) => s.naam), ...misschien].map((n) => [straatSleutel(n), n]),
+      ).values(),
+    ];
+
+    let opties = new Map<string, string[]>();
+    let fout = "";
+    if (plaatsNu) {
+      setMeekijk({ stap: "register", gedaan: 0, totaal: opTeZoeken.length, fout: "" });
+      const uitkomst = await zoekRegisternamen(opTeZoeken, plaatsNu, (gedaan, totaal) => {
+        if (actueel()) setMeekijk((m) => (m ? { ...m, gedaan, totaal } : m));
+      });
+      if (!actueel()) return;
+      opties = uitkomst.opties;
+      if (uitkomst.afgebroken) fout = "Het adressenregister deed niet mee; de straatnamen kun je later nog opzoeken.";
+    }
+    const registerNu: Record<string, string[]> = {};
+    for (const [naam, lijst] of opties) registerNu[straatSleutel(naam)] = lijst;
+    setRegister(registerNu);
+
+    // Precies één naam in het register: die vullen we meteen in, zoals na het importeren.
+    const officieelNu: Record<string, Officieel> = {};
+    for (const [k, lijst] of Object.entries(registerNu)) {
+      if (lijst.length === 1) officieelNu[k] = { naam: lijst[0]!, hoe: "register" };
+    }
+
+    setMeekijk({ stap: "paaltje", gedaan: 0, totaal: 0, fout });
+    const straten: ImportStraat[] = [...perStraat.values()].map((s) => {
+      const nummers = [...s.nummers].sort((a, b) => a - b);
+      return {
+        naam: s.naam,
+        adressen: s.nummers.length,
+        huisnummers: nummers.length ? `${nummers[0]} t/m ${nummers[nummers.length - 1]}` : "",
+        register: registerNu[straatSleutel(s.naam)] ?? [],
+      };
+    });
+    const nieuweKeuze: CelKeuze = {};
+    const nieuwVervang: Record<string, string> = {};
+    const nieuw: PaaltjeVoorstel[] = [];
+    try {
+      const antwoord = await vraagPaaltje({
+        plaats: plaatsNu,
+        cellen: basis.kandidaten.slice(0, 800).map(({ bron: _bron, ...c }) => c),
+        straten,
+      });
+      if (!actueel()) return;
+      const kandidaatVan = new Map(basis.kandidaten.map((c) => [c.id, c]));
+      for (const c of antwoord.cellen) {
+        const k = kandidaatVan.get(c.id);
+        if (!k) continue;
+        if (c.zeker) nieuweKeuze[c.id] = c.wordt;
+        nieuw.push({ id: `cel-${c.id}`, soort: "cel", celId: c.id, tekst: k.tekst, wordt: c.wordt, bron: k.bron, zeker: c.zeker, reden: c.reden, toegepast: c.zeker });
+      }
+      antwoord.zelfde_straat.forEach((g, i) => {
+        if (g.zeker) {
+          for (const n of g.namen) {
+            if (straatSleutel(n) !== straatSleutel(g.naam)) nieuwVervang[straatSleutel(n)] = g.naam;
+          }
+        }
+        nieuw.push({ id: `zelfde-${i}`, soort: "zelfde", namen: g.namen, naam: g.naam, zeker: g.zeker, reden: g.reden, toegepast: g.zeker });
+      });
+      antwoord.officieel.forEach((o, i) => {
+        const k = straatSleutel(o.straat);
+        if (o.zeker) officieelNu[k] = { naam: o.naam, hoe: "paaltje" };
+        // Twijfelt Paaltje, dan vullen we ook de enige registernaam niet vanzelf in.
+        else delete officieelNu[k];
+        // "Zwaanwijck heet officieel Zwaanwijck" is geen nieuws.
+        if (o.zeker && straatSleutel(o.naam) === k) return;
+        nieuw.push({ id: `officieel-${i}`, soort: "officieel", straat: o.straat, naam: o.naam, zeker: o.zeker, reden: o.reden, toegepast: o.zeker });
+      });
+    } catch (e) {
+      if (!actueel()) return;
+      fout = [fout, (e as Error).message].filter(Boolean).join(" ");
+    }
+    // Een samengevoegde straat krijgt de officiële naam van de naam die blijft.
+    for (const [van, naar] of Object.entries(nieuwVervang)) {
+      if (!officieelNu[straatSleutel(naar)] && officieelNu[van]) {
+        officieelNu[straatSleutel(naar)] = officieelNu[van]!;
+      }
+    }
+    if (Object.keys(nieuweKeuze).length > 0) setKeuze(nieuweKeuze);
+    if (Object.keys(nieuwVervang).length > 0) setVervang(nieuwVervang);
+    // Wat je intussen zelf koos, blijft staan.
+    setOfficieel((o) => ({
+      ...officieelNu,
+      ...Object.fromEntries(Object.entries(o).filter(([, v]) => v.hoe === "jij")),
+    }));
+    setVoorstellen(nieuw);
+
+    // Tot slot de huisnummers: welke bestaan er, en met welke postcode.
+    const namen = [...new Set(Object.values(officieelNu).map((o) => o.naam).filter(Boolean))];
+    if (plaatsNu && namen.length > 0) {
+      setMeekijk({ stap: "huisnummers", gedaan: 0, totaal: namen.length, fout });
+      const uitkomst = await zoekHuisnummers(namen, plaatsNu, (gedaan, totaal) => {
+        if (actueel()) setMeekijk((m) => (m ? { ...m, gedaan, totaal } : m));
+      });
+      if (!actueel()) return;
+      setKaarten((k) => ({ ...k, ...Object.fromEntries(uitkomst.kaarten) }));
+    }
+    setMeekijk({ stap: "klaar", gedaan: 0, totaal: 0, fout });
   }
 
   /**
@@ -602,9 +1049,9 @@ function ImportPagina() {
    * naamzoekopdracht is fuzzy, en een gok opslaan levert straks een
    * verkeerde postcode op. De rest laten we staan om na te kijken.
    */
-  async function vulAan(districtId: string, woonplaats: string) {
+  async function vulAan(districtId: string, woonplaats: string, overslaan = new Set<string>()) {
     const straten = (await fetchStreets()).filter((s) => s.district_id === districtId);
-    const teDoen = stratenZonderNaam(straten);
+    const teDoen = stratenZonderNaam(straten).filter((s) => !overslaan.has(s.id));
     setNaImport({
       stap: "straten",
       districtId,
@@ -708,13 +1155,16 @@ function ImportPagina() {
       // weggegooide straat — nergens meer te zien.
       const { data: bestaandeStraten, error: straatFout } = await supabase
         .from("streets")
-        .select("id,name")
+        .select("id,name,volledige_naam")
         .eq("district_id", districtId)
         .is("deleted_at", null)
         .order("sort_order", { ascending: true });
       if (straatFout) throw straatFout;
 
       const map = new Map<string, string>();
+      const heeftNaam = new Set(
+        (bestaandeStraten ?? []).filter((s) => s.volledige_naam.trim()).map((s) => s.id),
+      );
       // Eerste treffer wint: staan er al twee straten met dezelfde naam, dan
       // is dat de bovenste in de lijst, en niet een willekeurige.
       for (const s of bestaandeStraten ?? []) {
@@ -761,10 +1211,35 @@ function ImportPagina() {
         );
       }
 
+      // De officiële namen die bij het inlezen gekozen zijn meteen bij de
+      // straat. Een straat die er al een had houdt de zijne.
+      // Alleen als ze bij deze plaats opgezocht zijn.
+      const opgezocht = meekijkPlaats === werkPlaats ? officieel : {};
+      const namen = [...map.entries()].flatMap(([sleutel, id]) => {
+        const naam = opgezocht[sleutel]?.naam.trim();
+        return naam && !heeftNaam.has(id) ? [{ id, volledige_naam: naam }] : [];
+      });
+      if (namen.length > 0) await persistVolledigeNamen(namen);
+
+      // Straten waar je bewust geen officiële naam koos: die niet alsnog invullen.
+      const bewustLeeg = new Set(
+        [...map.entries()]
+          .filter(([sleutel, id]) => opgezocht[sleutel]?.naam === "" && !heeftNaam.has(id))
+          .map(([, id]) => id),
+      );
+
+      const postcodeVan = (r: ImportRij) => {
+        const naam = opgezocht[straatSleutel(r.straat)]?.naam;
+        const kaart = naam ? kaarten[naam] : undefined;
+        return kaart?.get(nummerSleutel(r.huisnummer, r.toevoeging)) ?? "";
+      };
+
       const payload = lijst.map((r) => ({
         street_id: map.get(straatSleutel(r.straat))!,
         house_number: r.huisnummer,
         addition: r.toevoeging,
+        // Al opgezocht bij het inlezen; wat er niet is, zoekt het aanvullen hierna.
+        postcode: postcodeVan(r),
         note: r.notitie,
         // Het tabblad zegt of een notitie in de even of de oneven helft van
         // het jaar meegaat; dat is precies wat maandwerk beschrijft.
@@ -804,7 +1279,7 @@ function ImportPagina() {
         navigate({ to: "/" });
         return;
       }
-      await vulAan(districtId, werkPlaats);
+      await vulAan(districtId, werkPlaats, bewustLeeg);
     } catch (e) {
       toast.error("Importeren mislukt: " + (e as Error).message);
     } finally {
@@ -916,7 +1391,8 @@ function ImportPagina() {
             Straatnamen herkent hij aan de grijze vakjes; andere kleuren (zoals roze) worden
             genegeerd. Onder een straatnaam staan de huisnummers, met daarnaast de notitie en de
             prijs. Meerdere tabellen naast elkaar op één tabblad worden allemaal ingelezen. Staat
-            een adres in beide tabbladen, dan wordt het automatisch "elke maand".
+            een adres in beide tabbladen, dan wordt het automatisch "elke maand". Daarna kijkt
+            Paaltje mee: hij zoekt de echte straatnamen op en ziet wat er verkeerd gelezen is.
           </p>
         </div>
 
@@ -984,6 +1460,24 @@ function ImportPagina() {
                 })}
               </div>
             </div>
+
+            {werkboek && (
+              <PaaltjePaneel
+                stand={meekijk}
+                plaats={werkPlaats}
+                plaatsVeranderd={meekijk !== null && meekijkPlaats !== werkPlaats}
+                voorstellen={voorstellen}
+                straten={straatOverzicht}
+                nakijken={nakijken}
+                onOpnieuw={() => void meekijken(werkboek)}
+                onToepassen={pasToe}
+                onAfwijzen={wijsAf}
+                onKiesNaam={kiesOfficieel}
+                onBekijk={(label, b) => setBekijk({ label, bronnen: b })}
+                onPrijs={(rijId, prijs) => wijzig(rijId, { prijs })}
+                onNietMelden={(p) => setNietMelden((s) => new Set(s).add(`${p.rijId}|${p.reden}`))}
+              />
+            )}
 
             {verdacht.length > 0 && (
               <div className="space-y-3 rounded-[18px] bg-tint-geel p-4 text-tint-geel-ink shadow-card">
@@ -1084,7 +1578,11 @@ function ImportPagina() {
 
                 <tbody className="divide-y divide-border">
                   {lijst.map((r) => (
-                    <tr key={r.id}>
+                    <tr
+                      key={r.id}
+                      className={nakijkRijen.has(r.id) ? "bg-tint-roze/60" : undefined}
+                      title={nakijkRijen.has(r.id) ? "Kijk dit adres even na, zie hierboven" : undefined}
+                    >
                       <td className="px-2 py-1">
                         <InlineCel
                           value={r.straat}
@@ -1206,7 +1704,15 @@ function ImportPagina() {
               <Button onClick={importeer} disabled={bezig}>
                 {bezig ? "Bezig…" : `${lijst.length} klanten importeren`}
               </Button>
-              <Button variant="outline" onClick={() => setRijen([])} disabled={bezig}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  wisPaaltje();
+                  setWerkboek(null);
+                  setBestandsnaam("");
+                }}
+                disabled={bezig}
+              >
                 Annuleren
               </Button>
             </div>
@@ -1224,6 +1730,246 @@ function ImportPagina() {
         />
       </div>
     </AppLayout>
+  );
+}
+
+const GEEL = "bg-tint-amber text-tint-amber-ink ring-1 ring-inset ring-tint-amber-ink/20";
+
+/**
+ * Wat Paaltje zag. Geel = al toegepast, met Ongedaan maken; wit = een
+ * voorstel waar je zelf over beslist. Daaronder de straten met hun officiële
+ * naam en de adressen om na te kijken.
+ */
+function PaaltjePaneel({
+  stand,
+  plaats,
+  plaatsVeranderd,
+  voorstellen,
+  straten,
+  nakijken,
+  onOpnieuw,
+  onToepassen,
+  onAfwijzen,
+  onKiesNaam,
+  onBekijk,
+  onPrijs,
+  onNietMelden,
+}: {
+  stand: Meekijken | null;
+  plaats: string;
+  plaatsVeranderd: boolean;
+  voorstellen: PaaltjeVoorstel[];
+  straten: {
+    naam: string;
+    sleutel: string;
+    adressen: number;
+    opties: string[];
+    gekozen: Officieel | null;
+  }[];
+  nakijken: Nakijkpunt[];
+  onOpnieuw: () => void;
+  onToepassen: (v: PaaltjeVoorstel, aan: boolean) => void;
+  onAfwijzen: (v: PaaltjeVoorstel) => void;
+  onKiesNaam: (straat: string, naam: string) => void;
+  onBekijk: (label: string, bronnen: Bron[]) => void;
+  onPrijs: (rijId: string, prijs: number) => void;
+  onNietMelden: (p: Nakijkpunt) => void;
+}) {
+  const bezig = stand !== null && stand.stap !== "klaar";
+  const toegepast = voorstellen.filter((v) => v.toegepast);
+  const open = voorstellen.filter((v) => !v.toegepast);
+  const zonderNaam = straten.filter((s) => !s.gekozen?.naam).length;
+
+  const zin = (v: PaaltjeVoorstel) => {
+    if (v.soort === "cel") {
+      return v.wordt === "straat"
+        ? `“${v.tekst}” is een straat`
+        : `“${v.tekst}” is geen straat maar een notitie`;
+    }
+    if (v.soort === "zelfde") {
+      return `${v.namen.map((n) => `“${n}”`).join(" en ")} zijn dezelfde straat: “${v.naam}”`;
+    }
+    return `“${v.straat}” heet officieel ${v.naam}`;
+  };
+
+  const kaart = (v: PaaltjeVoorstel) => (
+    <div
+      key={v.id}
+      className={`flex flex-wrap items-center gap-2 rounded-[14px] p-3 text-sm ${
+        v.toegepast ? GEEL : "bg-card/70 text-card-foreground ring-1 ring-inset ring-border"
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="font-medium">{zin(v)}</p>
+        {v.reden && <p className="text-[12.5px] opacity-80">{v.reden}</p>}
+      </div>
+      {v.soort === "cel" && (
+        <Button size="sm" variant="ghost" onClick={() => onBekijk(v.tekst, [v.bron])}>
+          <Eye className="size-4" /> Bekijken
+        </Button>
+      )}
+      {v.toegepast ? (
+        <Button size="sm" variant="outline" onClick={() => onToepassen(v, false)}>
+          <Undo2 className="size-4" /> Ongedaan maken
+        </Button>
+      ) : (
+        <>
+          <Button size="sm" onClick={() => onToepassen(v, true)}>
+            <Check className="size-4" /> Toepassen
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => onAfwijzen(v)}>
+            Klopt niet
+          </Button>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4 rounded-[18px] border border-border bg-card p-4 shadow-card">
+      <div className="flex flex-wrap items-center gap-2">
+        <Sparkles className="size-4 text-tint-paars-ink" />
+        <p className="flex-1 text-sm font-medium">
+          {stand === null
+            ? "Paaltje kijkt mee"
+            : stand.stap === "register"
+              ? `Straatnamen opzoeken in ${plaats} — ${stand.gedaan}/${stand.totaal}`
+              : stand.stap === "paaltje"
+                ? "Paaltje kijkt het bestand na…"
+                : stand.stap === "huisnummers"
+                  ? `Huisnummers nakijken — ${stand.gedaan}/${stand.totaal}`
+                  : toegepast.length + open.length === 0
+                    ? "Paaltje keek mee en zag niets geks in hoe het bestand gelezen is"
+                    : `Paaltje keek mee: ${toegepast.length} al aangepast, ${open.length} om zelf te kiezen`}
+        </p>
+        <Button size="sm" variant="outline" disabled={bezig} onClick={onOpnieuw}>
+          {stand === null ? "Laten meekijken" : "Opnieuw"}
+        </Button>
+      </div>
+
+      {stand?.fout && <p className="text-[12.5px] text-tint-amber-ink">{stand.fout}</p>}
+      {plaats && plaatsVeranderd && !bezig && (
+        <p className="rounded-[12px] bg-tint-amber p-2 text-[12.5px] text-tint-amber-ink">
+          De plaats is veranderd. De straatnamen en postcodes hieronder horen nog bij de vorige
+          plaats en worden niet opgeslagen. Druk op Opnieuw om ze in {plaats} op te zoeken.
+        </p>
+      )}
+      {!plaats && (
+        <p className="text-[12.5px] text-muted-foreground">
+          Vul bovenaan de plaats in en druk op Opnieuw, dan zoekt hij ook de echte straatnamen en
+          postcodes op.
+        </p>
+      )}
+
+      {toegepast.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[12px] font-medium text-muted-foreground">
+            Dit wist Paaltje zeker en heeft hij al aangepast
+          </p>
+          {toegepast.map(kaart)}
+        </div>
+      )}
+      {open.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[12px] font-medium text-muted-foreground">
+            Hier twijfelt hij — kies zelf
+          </p>
+          {open.map(kaart)}
+        </div>
+      )}
+
+      {plaats && straten.some((s) => s.opties.length > 0 || s.gekozen) && (
+        <div className="space-y-2">
+          <p className="text-[12px] font-medium text-muted-foreground">
+            Echte straatnamen — worden bij het importeren meteen opgeslagen
+            {zonderNaam > 0 && `, ${zonderNaam} nog zonder`}
+          </p>
+          <div className="divide-y divide-border rounded-[14px] ring-1 ring-inset ring-border">
+            {straten.map((s) => {
+              const auto = s.gekozen && s.gekozen.hoe !== "jij" && s.gekozen.naam;
+              const opties = [...new Set([...s.opties, ...(s.gekozen?.naam ? [s.gekozen.naam] : [])])];
+              return (
+                <div
+                  key={s.sleutel}
+                  className={`flex flex-wrap items-center gap-2 px-3 py-1.5 text-sm ${auto ? GEEL : ""}`}
+                >
+                  <span className="w-40 truncate font-medium" title={s.naam}>
+                    {s.naam}
+                  </span>
+                  <span className="w-20 text-[12px] opacity-70">
+                    {s.adressen} {s.adressen === 1 ? "adres" : "adressen"}
+                  </span>
+                  {opties.length === 0 ? (
+                    <span className="flex-1 text-[12.5px] text-muted-foreground">
+                      niet gevonden in {plaats}
+                    </span>
+                  ) : (
+                    <Select
+                      value={s.gekozen?.naam || "__geen__"}
+                      onValueChange={(v) => onKiesNaam(s.naam, v === "__geen__" ? "" : v)}
+                    >
+                      <SelectTrigger className="h-8 w-64 bg-background text-foreground">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__geen__">Geen van deze</SelectItem>
+                        {opties.map((o) => (
+                          <SelectItem key={o} value={o}>
+                            {o}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {auto && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7"
+                      onClick={() => onKiesNaam(s.naam, "")}
+                    >
+                      <Undo2 className="size-3.5" /> Ongedaan maken
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {nakijken.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[12px] font-medium text-muted-foreground">
+            Kijk deze {nakijken.length === 1 ? "regel" : `${nakijken.length} regels`} even na
+          </p>
+          {nakijken.map((p) => (
+            <div
+              key={`${p.rijId}|${p.reden}`}
+              className="flex flex-wrap items-center gap-2 rounded-[14px] bg-tint-roze p-3 text-sm text-tint-roze-ink"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">{p.label}</p>
+                <p className="text-[12.5px] opacity-80">{p.reden}</p>
+              </div>
+              {p.bronnen.length > 0 && (
+                <Button size="sm" variant="ghost" onClick={() => onBekijk(p.label, p.bronnen)}>
+                  <Eye className="size-4" /> Bekijken
+                </Button>
+              )}
+              {p.prijs !== undefined && (
+                <Button size="sm" variant="outline" onClick={() => onPrijs(p.rijId, p.prijs!)}>
+                  Maak er {formatPrice(p.prijs)} van
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => onNietMelden(p)}>
+                Klopt wel
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

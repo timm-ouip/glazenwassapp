@@ -20,6 +20,11 @@ verify_jwt = true
 [functions.paaltje-chat]
 verify_jwt = true
 
+# Paaltje kijkt mee bij het importeren van een Excel-lijst: alleen ingelogd,
+# en de functie kijkt zelf of je klanten mag bewerken.
+[functions.paaltje-import]
+verify_jwt = true
+
 # Het dagrapport om half zeven; ook door pg_cron, met dezelfde sleutel.
 [functions.dagrapport]
 verify_jwt = false

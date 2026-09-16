@@ -778,11 +778,13 @@ export async function vulPostcodeAan(customerId: string, postcode: string) {
 
 /** Slaat de officiële straatnamen op voor een groep straten tegelijk. */
 export async function persistVolledigeNamen(namen: { id: string; volledige_naam: string }[]) {
-  await Promise.all(
+  const uitkomsten = await Promise.all(
     namen.map((n) =>
       supabase.from("streets").update({ volledige_naam: n.volledige_naam.trim() }).eq("id", n.id),
     ),
   );
+  const fout = uitkomsten.find((u) => u.error)?.error;
+  if (fout) throw fout;
 }
 
 /**
