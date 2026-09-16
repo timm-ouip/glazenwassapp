@@ -328,6 +328,8 @@ async function voorbeelden(db: Db, companyId: string) {
     .from("berichten")
     .select("concept")
     .eq("company_id", companyId)
+    // Een kort appje is geen voorbeeld voor een mail.
+    .eq("kanaal", "mail")
     .not("beantwoord_op", "is", null)
     .neq("concept", "")
     .order("beantwoord_op", { ascending: false })

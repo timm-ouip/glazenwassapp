@@ -78,6 +78,7 @@ async function leesRonde(db: Db) {
   const { error: vrijFout } = await db
     .from("berichten")
     .update({ paaltje_status: "wacht" })
+    .eq("kanaal", "mail")
     .eq("paaltje_status", "bezig")
     .lt("gelezen_door_paaltje_op", new Date(Date.now() - VASTGELOPEN_MS).toISOString());
   if (vrijFout) console.error("vastgelopen vrijgeven:", vrijFout.message);
@@ -85,6 +86,8 @@ async function leesRonde(db: Db) {
   const { data: wachtend, error } = await db
     .from("berichten")
     .select("id,paaltje_pogingen")
+    // WhatsApp heeft zijn eigen lezer.
+    .eq("kanaal", "mail")
     .eq("paaltje_status", "wacht")
     .eq("op_server", true)
     .is("deleted_at", null)

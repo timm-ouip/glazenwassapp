@@ -217,6 +217,7 @@ export async function fetchBerichten(
   let query = supabase
     .from("berichten")
     .select(kolommen)
+    .eq("kanaal", "mail")
     .eq("op_server", true)
     .is("deleted_at", null)
     .order("ontvangen_op", { ascending: false })
@@ -279,6 +280,7 @@ export async function telVlag(prullenbakId: string | null): Promise<number> {
   let query = supabase
     .from("berichten")
     .select("id", { count: "exact", head: true })
+    .eq("kanaal", "mail")
     .eq("op_server", true)
     .is("deleted_at", null)
     .eq("gemarkeerd", true);
@@ -421,6 +423,8 @@ export async function fetchDossierMails(klantId: string): Promise<DossierMail[]>
     const { data, error } = await supabase
       .from("berichten")
       .select(`${REGEL_KOLOMMEN},op_server`)
+      // WhatsApp krijgt een eigen weergave in het dossier.
+      .eq("kanaal", "mail")
       .eq("klant_id", klantId)
       .is("deleted_at", null)
       .is("uit_dossier_op", null)

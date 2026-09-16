@@ -25,6 +25,16 @@ verify_jwt = true
 [functions.paaltje-import]
 verify_jwt = true
 
+# WhatsApp koppelen en beheren: alleen ingelogd, de functie kijkt zelf naar
+# de rol en de rechten.
+[functions.whatsapp]
+verify_jwt = true
+
+# Hier stuurt Meta de WhatsApp-berichten heen. Geen gebruiker; het slot is de
+# handtekening met het app-geheim.
+[functions.whatsapp-webhook]
+verify_jwt = false
+
 # Het dagrapport om half zeven; ook door pg_cron, met dezelfde sleutel.
 [functions.dagrapport]
 verify_jwt = false

@@ -1076,6 +1076,13 @@ export type Database = {
       };
       berichten: {
         Row: {
+          kanaal: string;
+          wa_id: string | null;
+          wa_telefoon: string;
+          wa_type: string;
+          wa_status: string;
+          media: Json;
+          bron: string;
           afgehandeld_door_paaltje: boolean;
           afgehandeld_op: string | null;
           indeling_door_mens: boolean;
@@ -1119,16 +1126,23 @@ export type Database = {
           referenties: string[];
           richting: string;
           tekst: string;
-          uid: number;
+          uid: number | null;
           uit_dossier_op: string | null;
           herinner_op: string | null;
-          uidvalidity: number;
+          uidvalidity: number | null;
           van_email: string;
           van_naam: string;
           vorige_map_id: string | null;
           weg_sinds: string | null;
         };
         Insert: {
+          kanaal?: string;
+          wa_id?: string | null;
+          wa_telefoon?: string;
+          wa_type?: string;
+          wa_status?: string;
+          media?: Json;
+          bron?: string;
           afgehandeld_door_paaltje?: boolean;
           afgehandeld_op?: string | null;
           indeling_door_mens?: boolean;
@@ -1172,16 +1186,23 @@ export type Database = {
           referenties?: string[];
           richting?: string;
           tekst?: string;
-          uid: number;
+          uid?: number | null;
           uit_dossier_op?: string | null;
           herinner_op?: string | null;
-          uidvalidity: number;
+          uidvalidity?: number | null;
           van_email?: string;
           van_naam?: string;
           vorige_map_id?: string | null;
           weg_sinds?: string | null;
         };
         Update: {
+          kanaal?: string;
+          wa_id?: string | null;
+          wa_telefoon?: string;
+          wa_type?: string;
+          wa_status?: string;
+          media?: Json;
+          bron?: string;
           afgehandeld_door_paaltje?: boolean;
           afgehandeld_op?: string | null;
           indeling_door_mens?: boolean;
@@ -1225,10 +1246,10 @@ export type Database = {
           referenties?: string[];
           richting?: string;
           tekst?: string;
-          uid?: number;
+          uid?: number | null;
           uit_dossier_op?: string | null;
           herinner_op?: string | null;
-          uidvalidity?: number;
+          uidvalidity?: number | null;
           van_email?: string;
           van_naam?: string;
           vorige_map_id?: string | null;
@@ -1410,6 +1431,78 @@ export type Database = {
           status?: string;
           verstuurd_op?: string | null;
           versturen_op?: string;
+        };
+        Relationships: [];
+      };
+      klant_telefoons: {
+        Row: {
+          bron: string;
+          company_id: string;
+          created_at: string;
+          id: string;
+          klant_id: string;
+          telefoon: string;
+        };
+        Insert: {
+          bron?: string;
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          klant_id: string;
+          telefoon: string;
+        };
+        Update: {
+          bron?: string;
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          klant_id?: string;
+          telefoon?: string;
+        };
+        Relationships: [];
+      };
+      whatsapp_koppelingen: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          fout: string;
+          id: string;
+          laatste_bericht_op: string | null;
+          paaltje_vanaf: string;
+          phone_number_id: string;
+          soort: string;
+          status: string;
+          updated_at: string;
+          waba_id: string;
+          weergavenummer: string;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          fout?: string;
+          id?: string;
+          laatste_bericht_op?: string | null;
+          paaltje_vanaf?: string;
+          phone_number_id: string;
+          soort?: string;
+          status?: string;
+          updated_at?: string;
+          waba_id?: string;
+          weergavenummer?: string;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          fout?: string;
+          id?: string;
+          laatste_bericht_op?: string | null;
+          paaltje_vanaf?: string;
+          phone_number_id?: string;
+          soort?: string;
+          status?: string;
+          updated_at?: string;
+          waba_id?: string;
+          weergavenummer?: string;
         };
         Relationships: [];
       };
@@ -1778,6 +1871,19 @@ export type Database = {
         Returns: {
           aantal: number;
           map_id: string;
+        }[];
+      };
+      whatsapp_gesprekken: {
+        Args: { ouder_dan?: string | null; aantal?: number };
+        Returns: {
+          wa_telefoon: string;
+          laatste_op: string;
+          fragment: string;
+          richting: string;
+          wa_status: string;
+          naam: string;
+          klant_id: string | null;
+          ongelezen: number;
         }[];
       };
     };

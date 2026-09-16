@@ -57,6 +57,7 @@ export async function stelAfsprakenVoor(db: Db): Promise<number> {
   const { data: kandidaten, error } = await db
     .from("berichten")
     .select("id")
+    .eq("kanaal", "mail")
     .not("beantwoord_op", "is", null)
     .is("afspraak_bekeken_op", null)
     .neq("concept_paaltje", "")

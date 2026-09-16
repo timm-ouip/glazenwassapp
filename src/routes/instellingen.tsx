@@ -66,6 +66,7 @@ import { AanmeldInstellingen } from "@/components/AanmeldInstellingen";
 import { RollenBeheer } from "@/components/RollenBeheer";
 import { fetchRollen } from "@/lib/rechten";
 import { MailboxInstellingen } from "@/components/MailboxInstellingen";
+import { WhatsAppInstellingen } from "@/components/whatsapp/WhatsAppInstellingen";
 import { PaaltjeAfspraken, PaaltjeCategorieen } from "@/components/PaaltjeInstellingen";
 import { SchrijfstijlInstellingen } from "@/components/SchrijfstijlInstellingen";
 import { AppLayout } from "@/components/AppLayout";
@@ -171,6 +172,14 @@ function Instellingen() {
             >
               <MailboxInstellingen isEigenaar={isEigenaar} />
             </Kaart>
+            <div className="mt-4">
+              <Kaart
+                titel="WhatsApp"
+                uitleg="Je zakelijke WhatsApp in Wooshy. Je nummer blijft gewoon werken in de app op je telefoon."
+              >
+                <WhatsAppInstellingen isEigenaar={isEigenaar} />
+              </Kaart>
+            </div>
             <div className="mt-4">
               <Kaart
                 titel="Paaltje: categorieën"

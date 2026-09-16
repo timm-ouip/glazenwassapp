@@ -229,6 +229,7 @@ export async function aantalVerstuurdeAntwoorden(): Promise<number> {
   const { count, error } = await supabase
     .from("berichten")
     .select("id", { count: "exact", head: true })
+    .eq("kanaal", "mail")
     .not("beantwoord_op", "is", null)
     .neq("concept", "");
   if (error) throw error;

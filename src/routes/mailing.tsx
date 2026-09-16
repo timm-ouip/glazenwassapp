@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { WhatsAppGesprekken } from "@/components/whatsapp/WhatsAppGesprekken";
 import { toonMaand } from "@/lib/klanten";
 import { datumSleutel, fetchWasdagen, toonDatum, vandaag } from "@/lib/wasdag";
 import {
@@ -97,9 +98,10 @@ function Mailing() {
   const toonPostvak = heeftRecht(employee, "mail_lezen");
   const toonVersturen = heeftRecht(employee, "mail_versturen");
   const toonRapport = employee?.rol === "eigenaar";
-  type Blad = "postvak" | "opstellen" | "verstuurd" | "rapport" | "dagrapport";
+  type Blad = "postvak" | "whatsapp" | "opstellen" | "verstuurd" | "rapport" | "dagrapport";
   const mag: Record<Blad, boolean> = {
     postvak: toonPostvak,
+    whatsapp: toonPostvak,
     opstellen: toonVersturen,
     verstuurd: toonVersturen,
     rapport: toonRapport,
@@ -132,6 +134,7 @@ function Mailing() {
       <Tabs value={blad} onValueChange={(v) => setBlad(v as typeof blad)}>
         <TabsList className="mb-4">
           {toonPostvak && <TabsTrigger value="postvak">Postvak</TabsTrigger>}
+          {toonPostvak && <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>}
           {toonVersturen && <TabsTrigger value="opstellen">Opstellen</TabsTrigger>}
           {toonVersturen && <TabsTrigger value="verstuurd">Verstuurd</TabsTrigger>}
           {/* Het rapport ziet alleen de eigenaar (RLS); een medewerker zou hier
@@ -143,6 +146,11 @@ function Mailing() {
         {toonPostvak && (
           <TabsContent value="postvak">
             <Postvak onAankondigen={toonVersturen ? () => setBlad("opstellen") : undefined} />
+          </TabsContent>
+        )}
+        {toonPostvak && (
+          <TabsContent value="whatsapp">
+            <WhatsAppGesprekken />
           </TabsContent>
         )}
         {toonVersturen && (
