@@ -130,21 +130,88 @@ export interface NieuweMail {
   antwoordOp?: string;
   /** Vanuit een dossier: de mail komt bij deze klant. */
   klantId?: string;
+  /** Doorsturen: de bijlagen van deze mail gaan mee. */
+  bijlagenVan?: string;
+  /** Zelf toegevoegde bestanden. */
+  bijlagen?: NieuweBijlage[];
 }
 
-/** Zo lang mag een mail zijn; de server weigert langer. */
-export const MAX_MAILTEKST = 50_000;
+export interface NieuweBijlage {
+  naam: string;
+  type: string;
+  /** base64 */
+  inhoud: string;
+}
 
-export function verstuurMail(m: NieuweMail): Promise<{ ok: true; kopieFout: string }> {
-  return roep({
-    actie: "versturen",
+function verstuurVelden(m: NieuweMail) {
+  return {
     aan: m.aan,
     cc: m.cc ?? [],
     onderwerp: m.onderwerp,
     tekst: m.tekst,
     ...(m.antwoordOp ? { antwoord_op: m.antwoordOp } : {}),
     ...(m.klantId ? { klant_id: m.klantId } : {}),
-  });
+    ...(m.bijlagenVan ? { bijlagen_van: m.bijlagenVan } : {}),
+    ...(m.bijlagen?.length ? { bijlagen: m.bijlagen } : {}),
+  };
+}
+
+/** Later versturen: de planner stuurt hem op `op`. */
+export function planMail(m: NieuweMail, op: Date): Promise<{ ok: true; id: string }> {
+  return roep({ actie: "inplannen", ...verstuurVelden(m), op: op.toISOString() });
+}
+
+export function annuleerGepland(id: string): Promise<{ ok: true }> {
+  return roep({ actie: "gepland-annuleren", gepland_id: id });
+}
+
+export type BulkDoe = "gelezen" | "ongelezen" | "vlag" | "vlag-eraf" | "afhandelen" | "weggooien" | "verplaatsen";
+
+/** Hetzelfde met meerdere mails tegelijk. */
+export function bulkActie(
+  ids: string[],
+  doe: BulkDoe,
+  mapId?: string,
+): Promise<{ ok: true; gelukt: number; mislukt: string[] }> {
+  return roep({ actie: "bulk", bericht_ids: ids, doe, ...(mapId ? { map_id: mapId } : {}) });
+}
+
+/** Een bijlage van de server halen, om te openen of te bewaren. */
+export async function haalBijlage(berichtId: string, index: number): Promise<{ naam: string; type: string; blob: Blob }> {
+  const uit = await roep<{ bijlage: NieuweBijlage }>({ actie: "bijlage", bericht_id: berichtId, index });
+  const binair = atob(uit.bijlage.inhoud);
+  const bytes = new Uint8Array(binair.length);
+  for (let i = 0; i < binair.length; i++) bytes[i] = binair.charCodeAt(i);
+  return { naam: uit.bijlage.naam, type: uit.bijlage.type, blob: new Blob([bytes], { type: uit.bijlage.type }) };
+}
+
+/** Deze afzender voortaan altijd naar spam (en deze mail er nu heen). */
+export function altijdSpam(berichtId: string): Promise<{ ok: true; email: string }> {
+  return roep({ actie: "altijd-spam", bericht_id: berichtId });
+}
+
+export function spamregelWeg(email: string): Promise<{ ok: true }> {
+  return roep({ actie: "spamregel-weg", email });
+}
+
+/** Herinnering: op dat moment staat de mail in "Wacht op jou". Null haalt hem weg. */
+export function herinner(berichtId: string, op: Date | null): Promise<{ ok: true }> {
+  return roep({ actie: "herinneren", bericht_id: berichtId, op: op ? op.toISOString() : null });
+}
+
+export function hernoemMap(mapId: string, naam: string): Promise<{ ok: true }> {
+  return roep({ actie: "map-hernoemen", map_id: mapId, naam });
+}
+
+export function verwijderMap(mapId: string): Promise<{ ok: true }> {
+  return roep({ actie: "map-verwijderen", map_id: mapId });
+}
+
+/** Zo lang mag een mail zijn; de server weigert langer. */
+export const MAX_MAILTEKST = 50_000;
+
+export function verstuurMail(m: NieuweMail): Promise<{ ok: true; kopieFout: string }> {
+  return roep({ actie: "versturen", ...verstuurVelden(m) });
 }
 
 /**

@@ -36,8 +36,10 @@ export interface BerichtRegel {
   heeft_bijlagen: boolean;
   /** De categorieën van Paaltje (of die je zelf koos). */
   categorie_ids: string[];
-  /** Staat er een antwoord of voorstel klaar dat nog op jou wacht? */
+  /** Staat er een antwoord of voorstel klaar dat nog op jou wacht, of ging de herinnering af? */
   wacht: boolean;
+  /** Herinnering: op dit moment komt de mail in "Wacht op jou". */
+  herinner_op: string | null;
 }
 
 export interface Voorstel {
@@ -117,7 +119,9 @@ export type Bron =
   | { soort: "map"; mapId: string }
   | { soort: "wacht"; postvakId: string }
   | { soort: "overige"; postvakId: string }
-  | { soort: "categorie"; postvakId: string; categorieId: string };
+  | { soort: "categorie"; postvakId: string; categorieId: string }
+  /** Mail die later verstuurd wordt; geen echte lijst met berichten. */
+  | { soort: "gepland" };
 
 export function bronSleutel(bron: Bron): string {
   switch (bron.soort) {
@@ -133,7 +137,7 @@ export function bronSleutel(bron: Bron): string {
 type Rij = Tables<"berichten">;
 
 const REGEL_KOLOMMEN =
-  "id,map_id,richting,van_naam,van_email,aan,onderwerp,fragment,ontvangen_op,gelezen,gemarkeerd,bijlagen,is_klantmail,afgehandeld_op,concept,voorstel,bericht_categorieen(categorie_id)";
+  "id,map_id,richting,van_naam,van_email,aan,onderwerp,fragment,ontvangen_op,gelezen,gemarkeerd,bijlagen,is_klantmail,afgehandeld_op,concept,voorstel,herinner_op,bericht_categorieen(categorie_id)";
 
 /** Zoveel mails per keer in de lijst; verder scrollen haalt de volgende op. */
 export const PER_PAGINA = 50;
@@ -156,6 +160,7 @@ type RegelRij = Pick<
   | "afgehandeld_op"
   | "concept"
   | "voorstel"
+  | "herinner_op"
 > & { bericht_categorieen: { categorie_id: string }[] | null };
 
 function heeftIets(voorstel: unknown): boolean {
@@ -178,8 +183,10 @@ function alsRegel(r: RegelRij): BerichtRegel {
     gemarkeerd: r.gemarkeerd,
     heeft_bijlagen: Array.isArray(r.bijlagen) && r.bijlagen.length > 0,
     categorie_ids: (r.bericht_categorieen ?? []).map((c) => c.categorie_id),
+    herinner_op: r.herinner_op,
     wacht:
-      r.is_klantmail === true && !r.afgehandeld_op && (r.concept !== "" || heeftIets(r.voorstel)),
+      (r.is_klantmail === true && !r.afgehandeld_op && (r.concept !== "" || heeftIets(r.voorstel))) ||
+      (!!r.herinner_op && new Date(r.herinner_op) <= new Date()),
   };
 }
 
@@ -218,11 +225,7 @@ export async function fetchBerichten(
       query = query.eq("map_id", bron.mapId);
       break;
     case "wacht":
-      query = query
-        .eq("map_id", bron.postvakId)
-        .eq("is_klantmail", true)
-        .is("afgehandeld_op", null)
-        .or(WACHT_FILTER);
+      query = query.eq("map_id", bron.postvakId).or(wachtFilter());
       break;
     case "overige":
       query = query.eq("map_id", bron.postvakId).eq("is_klantmail", false);
@@ -256,7 +259,14 @@ export async function fetchBerichten(
  * niet in de browser: anders telt een pagina minder dan 50 en stopt het laden
  * van oudere mail te vroeg.
  */
-const WACHT_FILTER = 'concept.neq."",voorstel.neq.{}';
+/**
+ * Wacht op jou: een klantmail met iets klaar dat nog niet afgehandeld is, of
+ * een mail waarvan de herinnering is afgegaan.
+ */
+function wachtFilter(): string {
+  const nu = new Date().toISOString();
+  return `and(is_klantmail.eq.true,afgehandeld_op.is.null,or(concept.neq."",voorstel.neq.{})),herinner_op.lte.${nu}`;
+}
 
 /** Hoeveel mails er op je wachten (voor het telletje bij "Wacht op jou"). */
 export async function telWachtend(postvakId: string): Promise<number> {
@@ -266,9 +276,7 @@ export async function telWachtend(postvakId: string): Promise<number> {
     .eq("map_id", postvakId)
     .eq("op_server", true)
     .is("deleted_at", null)
-    .eq("is_klantmail", true)
-    .is("afgehandeld_op", null)
-    .or(WACHT_FILTER);
+    .or(wachtFilter());
   if (error) throw error;
   return count ?? 0;
 }
@@ -330,6 +338,55 @@ export async function fetchBericht(id: string, ookUitMailbox = false): Promise<B
     beantwoord_op: r.beantwoord_op,
     afgehandeld_op: r.afgehandeld_op,
   };
+}
+
+/** Een mail uit hetzelfde gesprek (zelfde draad). */
+export interface GesprekMail {
+  id: string;
+  richting: "in" | "uit";
+  van_naam: string;
+  van_email: string;
+  onderwerp: string;
+  fragment: string;
+  ontvangen_op: string;
+  op_server: boolean;
+}
+
+/** Alle mail uit hetzelfde gesprek als deze, oudste eerst (inclusief deze). */
+export async function fetchGesprek(id: string): Promise<GesprekMail[]> {
+  const { data, error } = await supabase.rpc("gesprek_van", { bericht: id });
+  if (error) throw error;
+  return (data ?? []) as GesprekMail[];
+}
+
+/** Een mail die later verstuurd wordt. */
+export interface GeplandeMail {
+  id: string;
+  onderwerp: string;
+  aan_tekst: string;
+  versturen_op: string;
+  status: "wacht" | "bezig" | "verstuurd" | "mislukt" | "geannuleerd";
+  fout: string;
+}
+
+/** Wat nog weg moet, en wat de afgelopen week misging. */
+export async function fetchGepland(): Promise<GeplandeMail[]> {
+  const week = new Date(Date.now() - 7 * 24 * 3600_000).toISOString();
+  const { data, error } = await supabase
+    .from("geplande_mails")
+    .select("id,onderwerp,aan_tekst,versturen_op,status,fout")
+    .or(`status.in.(wacht,bezig),and(status.eq.mislukt,versturen_op.gte.${week})`)
+    .order("versturen_op", { ascending: true })
+    .limit(200);
+  if (error) throw error;
+  return (data ?? []) as GeplandeMail[];
+}
+
+/** De afzenders die altijd naar spam gaan. */
+export async function fetchSpamRegels(): Promise<string[]> {
+  const { data, error } = await supabase.from("mail_regels").select("van_email").eq("actie", "spam").order("van_email");
+  if (error) throw error;
+  return (data ?? []).map((r) => r.van_email);
 }
 
 /** Een mail in het dossier van een klant: ook als hij uit de mailbox weg is. */

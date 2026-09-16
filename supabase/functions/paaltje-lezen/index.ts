@@ -128,6 +128,18 @@ async function leesRonde(db: Db) {
     const mail = gepakt?.[0] as Gepakt | undefined;
     if (!mail) continue;
 
+    // "Altijd naar spam": niet lezen; de planner zet hem zo in de spammap.
+    const { data: regel } = await db
+      .from("mail_regels")
+      .select("id")
+      .eq("mailbox_id", mail.mailbox_id)
+      .eq("van_email", mail.van_email.trim().toLowerCase())
+      .maybeSingle();
+    if (regel) {
+      await db.from("berichten").update({ paaltje_status: "overslaan" }).eq("id", mail.id);
+      continue;
+    }
+
     try {
       if (!prijzenPerBedrijf.has(mail.company_id)) {
         prijzenPerBedrijf.set(mail.company_id, await richtprijzen(db, mail.company_id));

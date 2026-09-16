@@ -22,6 +22,8 @@ export interface Opmaak {
   antwoordOp?: { messageId: string; referenties: string[] };
   /** Door Paaltje zelf verstuurd: dan antwoorden afwezigheidsmelders er niet op. */
   automatisch?: boolean;
+  /** Bijlagen, met de inhoud als base64. */
+  bijlagen?: { naam: string; type: string; inhoud: string }[];
 }
 
 export interface Opgemaakt {
@@ -55,6 +57,16 @@ export async function maakOp(m: Opmaak): Promise<Opgemaakt> {
       ? { inReplyTo: m.antwoordOp.messageId, references: referenties }
       : {}),
     ...(m.automatisch ? { headers: { "Auto-Submitted": "auto-replied" } } : {}),
+    ...(m.bijlagen?.length
+      ? {
+          attachments: m.bijlagen.map((b) => ({
+            filename: b.naam,
+            content: b.inhoud,
+            encoding: "base64",
+            contentType: b.type || "application/octet-stream",
+          })),
+        }
+      : {}),
   });
 
   const buffer = await new Promise<Uint8Array>((ok, nee) =>

@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Send, SquarePen } from "lucide-react";
+import { ChevronDown, Clock, Loader2, Paperclip, Send, SquarePen, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -15,8 +15,11 @@ import {
   leesAdressen,
   MAX_MAILTEKST,
   MogelijkVerstuurdFout,
+  planMail,
   verstuurMail,
+  type NieuweBijlage,
 } from "@/lib/mailacties";
+import { MomentKiezer, toonMoment } from "@/components/mail/MomentKiezer";
 import { useBevestig } from "@/components/Bevestig";
 import { Dialog, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -34,8 +37,24 @@ export interface Opzet {
   klantId?: string;
   /** Al ingevuld Cc-vak, bijvoorbeeld bij allen beantwoorden. */
   cc?: string;
-  /** Een opmerking boven het formulier, bijvoorbeeld dat bijlagen niet meegaan. */
+  /** Een opmerking boven het formulier. */
   opmerking?: string;
+  /** Doorsturen: de bijlagen van deze mail gaan mee. */
+  bijlagenVan?: string;
+  /** De namen daarvan, om te laten zien. */
+  bijlagenNamen?: string[];
+}
+
+/** Samen hooguit zoveel; de server weigert meer. */
+const MAX_BIJLAGEN_BYTES = 15_000_000;
+
+function naarBase64(bestand: File): Promise<string> {
+  return new Promise((ok, nee) => {
+    const lezer = new FileReader();
+    lezer.onload = () => ok(String(lezer.result).split(",")[1] ?? "");
+    lezer.onerror = () => nee(new Error(`${bestand.name} kon niet gelezen worden.`));
+    lezer.readAsDataURL(bestand);
+  });
 }
 
 const UITLEG = "Gaat weg vanaf je eigen mailadres en komt in Verzonden.";
@@ -57,6 +76,8 @@ export function MailOpstellen({
   const [onderwerp, setOnderwerp] = useState("");
   const [tekst, setTekst] = useState("");
   const [bezig, setBezig] = useState(false);
+  const [bijlagen, setBijlagen] = useState<(NieuweBijlage & { grootte: number })[]>([]);
+  const [meeVan, setMeeVan] = useState<string[]>([]);
 
   // Elke keer dat het venster opengaat, beginnen met wat er klaargezet is.
   useEffect(() => {
@@ -66,7 +87,33 @@ export function MailOpstellen({
     setToonCc(!!opzet?.cc);
     setOnderwerp(opzet?.onderwerp ?? "");
     setTekst(opzet?.tekst ?? "");
+    setBijlagen([]);
+    setMeeVan(opzet?.bijlagenNamen ?? []);
   }, [open, opzet]);
+
+  async function voegToe(lijst: FileList | null) {
+    if (!lijst?.length) return;
+    const nieuw = [...bijlagen];
+    for (const bestand of Array.from(lijst)) {
+      const totaal = nieuw.reduce((som, b) => som + b.grootte, 0) + bestand.size;
+      if (totaal > MAX_BIJLAGEN_BYTES) {
+        toast.error("Samen mogen de bijlagen hooguit 15 MB zijn.");
+        break;
+      }
+      try {
+        nieuw.push({
+          naam: bestand.name,
+          type: bestand.type || "application/octet-stream",
+          inhoud: await naarBase64(bestand),
+          grootte: bestand.size,
+        });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+      }
+    }
+    if (nieuw.length > 10) toast.error("Hooguit 10 bijlagen per mail; de rest is niet toegevoegd.");
+    setBijlagen(nieuw.slice(0, 10));
+  }
 
   const isAntwoord = !!opzet?.antwoordOp;
   const isDoorsturen = !isAntwoord && /^fwd:/i.test(opzet?.onderwerp ?? "") && !opzet?.aan;
@@ -77,7 +124,8 @@ export function MailOpstellen({
     aan !== (opzet?.aan ?? "") ||
     cc !== (opzet?.cc ?? "") ||
     onderwerp !== (opzet?.onderwerp ?? "") ||
-    tekst !== (opzet?.tekst ?? "");
+    tekst !== (opzet?.tekst ?? "") ||
+    bijlagen.length > 0;
 
   // Een per ongeluk ingedrukte Escape mag geen half antwoord kosten.
   async function probeerSluiten() {
@@ -94,8 +142,8 @@ export function MailOpstellen({
     onSluit();
   }
 
-  async function verstuur(e: React.FormEvent) {
-    e.preventDefault();
+  async function verstuur(e: React.FormEvent | null, later?: Date) {
+    e?.preventDefault();
     const aanLijst = leesAdressen(aan);
     const ccLijst = toonCc ? leesAdressen(cc) : [];
     const fout = [...aanLijst, ...ccLijst].find((a) => !geldigAdres(a.email));
@@ -105,15 +153,25 @@ export function MailOpstellen({
     if (teLang) return void toast.error("De mail is te lang. Haal een deel van het citaat weg.");
 
     setBezig(true);
+    const mail = {
+      aan: aanLijst,
+      cc: ccLijst,
+      onderwerp: onderwerp.trim(),
+      tekst,
+      ...(opzet?.antwoordOp ? { antwoordOp: opzet.antwoordOp } : {}),
+      ...(opzet?.klantId ? { klantId: opzet.klantId } : {}),
+      ...(opzet?.bijlagenVan && meeVan.length > 0 ? { bijlagenVan: opzet.bijlagenVan } : {}),
+      ...(bijlagen.length ? { bijlagen: bijlagen.map(({ naam, type, inhoud }) => ({ naam, type, inhoud })) } : {}),
+    };
     try {
-      const uit = await verstuurMail({
-        aan: aanLijst,
-        cc: ccLijst,
-        onderwerp: onderwerp.trim(),
-        tekst,
-        ...(opzet?.antwoordOp ? { antwoordOp: opzet.antwoordOp } : {}),
-        ...(opzet?.klantId ? { klantId: opzet.klantId } : {}),
-      });
+      if (later) {
+        await planMail(mail, later);
+        toast.success(`Gaat weg ${toonMoment(later)}. Staat in "Gepland".`);
+        void qc.invalidateQueries({ queryKey: ["gepland"] });
+        onSluit();
+        return;
+      }
+      const uit = await verstuurMail(mail);
       if (uit.kopieFout) toast.warning(uit.kopieFout);
       else toast.success("Verstuurd.");
       void qc.invalidateQueries({ queryKey: ["berichten"] });
@@ -202,6 +260,46 @@ export function MailOpstellen({
                 }
               }}
             />
+            {(meeVan.length > 0 || bijlagen.length > 0) && (
+              <div className="flex flex-wrap gap-1.5">
+                {meeVan.map((naam, i) => (
+                  <span
+                    key={`mee-${naam}-${i}`}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-[12px]"
+                    title="Gaat mee uit de oude mail"
+                  >
+                    <Paperclip className="size-3 text-muted-foreground" />
+                    <span className="max-w-[180px] truncate">{naam}</span>
+                  </span>
+                ))}
+                {meeVan.length > 0 && (
+                  <button
+                    type="button"
+                    className="text-[12px] text-muted-foreground underline-offset-2 hover:underline"
+                    onClick={() => setMeeVan([])}
+                  >
+                    niet meesturen
+                  </button>
+                )}
+                {bijlagen.map((b, i) => (
+                  <span
+                    key={`${b.naam}-${i}`}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-[12px]"
+                  >
+                    <Paperclip className="size-3 text-muted-foreground" />
+                    <span className="max-w-[180px] truncate">{b.naam}</span>
+                    <button
+                      type="button"
+                      aria-label={`${b.naam} weghalen`}
+                      onClick={() => setBijlagen((l) => l.filter((_, j) => j !== i))}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             {teLang && (
               <p className="text-[12px] text-tint-rood-ink">
                 De mail is te lang om te versturen. Haal een deel van het citaat onderaan weg.
@@ -209,6 +307,19 @@ export function MailOpstellen({
             )}
           </PopupBody>
           <PopupVoet>
+            <label className="mr-auto inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground">
+              <Paperclip className="size-4" /> Bijlage
+              <input
+                type="file"
+                multiple
+                className="sr-only"
+                disabled={bezig}
+                onChange={(e) => {
+                  void voegToe(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
             <Button
               type="button"
               variant="ghost"
@@ -218,10 +329,28 @@ export function MailOpstellen({
             >
               Annuleren
             </Button>
-            <Button type="submit" className="rounded-full" disabled={bezig || teLang}>
-              {bezig ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-              {bezig ? "Versturen…" : "Versturen"}
-            </Button>
+            <div className="flex">
+              <Button type="submit" className="rounded-l-full rounded-r-none" disabled={bezig || teLang}>
+                {bezig ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                {bezig ? "Bezig…" : "Versturen"}
+              </Button>
+              <MomentKiezer
+                titel="Later versturen"
+                onKies={(moment) => void verstuur(null, moment)}
+                trigger={
+                  <Button
+                    type="button"
+                    className="rounded-l-none rounded-r-full border-l border-primary-foreground/20 px-2"
+                    disabled={bezig || teLang}
+                    aria-label="Later versturen"
+                    title="Later versturen"
+                  >
+                    <Clock className="size-3.5" />
+                    <ChevronDown className="size-3" />
+                  </Button>
+                }
+              />
+            </div>
           </PopupVoet>
         </form>
       </PopupKader>

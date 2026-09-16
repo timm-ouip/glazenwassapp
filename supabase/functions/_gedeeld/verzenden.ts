@@ -161,7 +161,7 @@ export async function stuurAntwoord(db: Db, mail: AntwoordOp, tekst: string): Pr
   // Verstuurd. Mislukt de kopie in Verzonden, dan haalt de ophaalronde die later op.
   const { error: markeerFout } = await db
     .from("berichten")
-    .update({ afgehandeld_op: tijd, concept: knip(eigenTekst(tekst), 20_000) })
+    .update({ afgehandeld_op: tijd, herinner_op: null, concept: knip(eigenTekst(tekst), 20_000) })
     .eq("id", mail.id);
   if (markeerFout) console.error("antwoord markeren:", markeerFout.message);
 

@@ -17,7 +17,13 @@ import { Link } from "@tanstack/react-router";
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  Bell,
+  BellOff,
   CircleCheck,
+  Clock,
+  Keyboard,
+  Loader2,
+  Pencil,
   FileText,
   Flag,
   FlagOff,
@@ -53,6 +59,8 @@ import {
   bronSleutel,
   fetchBericht,
   fetchBerichten,
+  fetchGepland,
+  fetchSpamRegels,
   lijstDatum,
   PER_PAGINA,
   telWachtend,
@@ -62,13 +70,21 @@ import {
   type Bron,
 } from "@/lib/berichten";
 import {
+  altijdSpam,
+  bulkActie,
   gooiWeg,
+  haalBijlage,
   handelAf,
+  herinner,
+  hernoemMap,
   maakMap,
+  spamregelWeg,
+  verwijderMap,
   verplaatsNaar,
   zetGelezen,
   zetGemarkeerd,
   zetTerug,
+  type BulkDoe,
 } from "@/lib/mailacties";
 import {
   ContextMenu,
@@ -84,8 +100,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useBevestig } from "@/components/Bevestig";
+import { Gesprek } from "@/components/mail/Gesprek";
+import { GeplandLijst } from "@/components/mail/GeplandLijst";
+import { MomentKiezer, toonMoment } from "@/components/mail/MomentKiezer";
+import { SneltoetsenHulp } from "@/components/mail/Sneltoetsen";
+import { SpamAfzenders } from "@/components/mail/SpamAfzenders";
 import { fetchMailbox, fetchMappen, mapNaam, type MailMap, type MapRol } from "@/lib/mailbox";
 import { categorieTint, fetchCategorieen, type MailCategorie } from "@/lib/paaltje";
 import { MailOpstellen, type Opzet } from "@/components/mail/MailOpstellen";
@@ -112,6 +136,9 @@ const MAX_CITAAT = 20_000;
 const VERVERS_MS = 120_000;
 
 type Scherm = "mappen" | "lijst" | "lezen";
+
+/** Zoveel mails kun je tegelijk selecteren; de server doet er niet meer in één keer. */
+const MAX_SELECTIE = 50;
 
 const PANEEL = "min-h-0 flex-col overflow-hidden rounded-[18px] border border-border bg-card shadow-card";
 
@@ -146,6 +173,7 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
   const [berichtId, setBerichtId] = useState<string | null>(null);
   const [scherm, setScherm] = useState<Scherm>("lijst");
   const [opzet, setOpzet] = useState<Opzet | null>(null);
+  const [hulpOpen, setHulpOpen] = useState(false);
   // Welke mail er nú open is, voor acties die pas later klaar zijn.
   const openRef = useRef<string | null>(null);
   openRef.current = berichtId;
@@ -231,7 +259,16 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
         </div>
 
         <div className={cn(PANEEL, scherm === "lijst" ? "flex" : "hidden", "lg:flex")}>
-          {bron ? (
+          {bron?.soort === "gepland" ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <KopMetTerug onTerug={() => setScherm("mappen")}>
+                <span className="text-[13.5px] font-semibold">Gepland</span>
+              </KopMetTerug>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <GeplandLijst kanSchrijven={kanSchrijven} />
+              </div>
+            </div>
+          ) : bron ? (
             // Een eigen sleutel per lijst: dan begint het zoekveld leeg als je
             // van map wisselt, zonder dat het hele postvak dat hoeft te weten.
             <BerichtLijst
@@ -243,6 +280,8 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
               kanSchrijven={kanSchrijven}
               eigenAdres={mailbox.data?.adres ?? ""}
               onOpstellen={setOpzet}
+              onNieuweMail={() => setOpzet({ aan: "", onderwerp: "", tekst: "" })}
+              onHulp={() => setHulpOpen(true)}
               onWeg={(id) => {
                 if (openRef.current !== id) return;
                 setBerichtId(null);
@@ -278,12 +317,14 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
             }}
             onBeantwoord={(b, begin) => setOpzet(antwoordOpzet(b, begin))}
             onOpstellen={setOpzet}
+            onOpen={(id) => setBerichtId(id)}
             eigenAdres={mailbox.data?.adres ?? ""}
           />
         </div>
       </div>
 
       <MailOpstellen open={opzet !== null} opzet={opzet} onSluit={() => setOpzet(null)} />
+      <SneltoetsenHulp open={hulpOpen} onSluit={() => setHulpOpen(false)} />
     </>
   );
 }
@@ -297,6 +338,8 @@ function bronTitel(bron: Bron | null, mappen: MailMap[], categorieen: MailCatego
     }
     case "wacht":
       return "Wacht op jou";
+    case "gepland":
+      return "Gepland";
     case "overige":
       return "Overige post";
     case "categorie":
@@ -349,9 +392,7 @@ export function doorstuurOpzet(b: Bericht): Opzet {
     aan: "",
     onderwerp,
     tekst: `\n\n\n${kop.join("\n")}\n\n${bron}`,
-    ...(b.bijlagen.length > 0
-      ? { opmerking: "Bijlagen gaan niet mee met doorsturen; die staan alleen in je mailbox." }
-      : {}),
+    ...(b.bijlagen.length > 0 ? { bijlagenVan: b.id, bijlagenNamen: b.bijlagen.map((a) => a.naam) } : {}),
   };
 }
 
@@ -428,6 +469,7 @@ function MapKolom({
   const postvak = mappen.find((m) => m.id === postvakId);
   // Een map maken verandert de echte mailbox; dat vraagt hetzelfde recht als versturen.
   const magMappenMaken = useRecht("mail_versturen");
+  const gepland = useQuery({ queryKey: ["gepland"], queryFn: fetchGepland, refetchInterval: 60_000 });
   const overigeMappen = mappen.filter((m) => m.id !== postvakId);
 
   return (
@@ -491,20 +533,43 @@ function MapKolom({
           </>
         )}
 
-        {overigeMappen.map((m) => (
-          <MapKnop
-            key={m.id}
-            icoon={MAP_ICOON[m.rol]}
-            naam={mapNaam(m)}
-            // Ongelezen in Verzonden of de prullenbak zegt niets.
-            telletje={m.rol === "overig" || m.rol === "spam" ? m.ongelezen : 0}
-            actief={zelfdeBron(actief, { soort: "map", mapId: m.id })}
-            onClick={() => onKies({ soort: "map", mapId: m.id })}
-          />
-        ))}
+        {overigeMappen.map((m) =>
+          m.rol === "overig" && magMappenMaken && kanSchrijven ? (
+            <EigenMapKnop
+              key={m.id}
+              map={m}
+              actief={zelfdeBron(actief, { soort: "map", mapId: m.id })}
+              onClick={() => onKies({ soort: "map", mapId: m.id })}
+              onWeg={() => {
+                if (zelfdeBron(actief, { soort: "map", mapId: m.id }) && postvakId) {
+                  onKies({ soort: "map", mapId: postvakId });
+                }
+              }}
+            />
+          ) : (
+            <MapKnop
+              key={m.id}
+              icoon={MAP_ICOON[m.rol]}
+              naam={mapNaam(m)}
+              // Ongelezen in Verzonden of de prullenbak zegt niets.
+              telletje={m.rol === "overig" || m.rol === "spam" ? m.ongelezen : 0}
+              actief={zelfdeBron(actief, { soort: "map", mapId: m.id })}
+              onClick={() => onKies({ soort: "map", mapId: m.id })}
+            />
+          ),
+        )}
+        <MapKnop
+          icoon={Clock}
+          naam="Gepland"
+          telletje={(gepland.data ?? []).filter((g) => g.status === "wacht" || g.status === "mislukt").length}
+          tint="amber"
+          actief={zelfdeBron(actief, { soort: "gepland" })}
+          onClick={() => onKies({ soort: "gepland" })}
+        />
         {kanSchrijven && magMappenMaken && <NieuweMap onGemaakt={(id) => onKies({ soort: "map", mapId: id })} />}
       </nav>
 
+      <SpamAfzenders kanSchrijven={kanSchrijven} />
       <p className="px-1 text-[11.5px] leading-snug text-muted-foreground">
         {laatsteSync
           ? `Bijgewerkt ${lijstDatum(laatsteSync)}`
@@ -580,6 +645,112 @@ function NieuweMap({ onGemaakt }: { onGemaakt: (mapId: string) => void }) {
   );
 }
 
+/** Een eigen map: met de rechtermuisknop hernoemen of (als hij leeg is) verwijderen. */
+function EigenMapKnop({
+  map,
+  actief,
+  onClick,
+  onWeg,
+}: {
+  map: MailMap;
+  actief: boolean;
+  onClick: () => void;
+  onWeg: () => void;
+}) {
+  const qc = useQueryClient();
+  const bevestig = useBevestig();
+  const [bewerk, setBewerk] = useState(false);
+  const [naam, setNaam] = useState(mapNaam(map));
+  const [bezig, setBezig] = useState(false);
+
+  async function bewaar() {
+    if (!naam.trim() || naam.trim() === mapNaam(map)) return void setBewerk(false);
+    setBezig(true);
+    try {
+      await hernoemMap(map.id, naam);
+      await qc.invalidateQueries({ queryKey: ["mail-mappen"] });
+      toast.success("Map hernoemd.");
+      setBewerk(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  async function weg() {
+    const ja = await bevestig({
+      titel: `Map "${mapNaam(map)}" verwijderen?`,
+      tekst: "Dat kan alleen als hij leeg is. Hij verdwijnt ook op je telefoon.",
+      bevestigLabel: "Verwijderen",
+      gevaarlijk: true,
+    });
+    if (!ja) return;
+    try {
+      await verwijderMap(map.id);
+      onWeg();
+      await qc.invalidateQueries({ queryKey: ["mail-mappen"] });
+      toast.success("Map verwijderd.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  if (bewerk) {
+    return (
+      <form
+        className="flex items-center gap-1 px-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void bewaar();
+        }}
+      >
+        <Input
+          autoFocus
+          value={naam}
+          maxLength={60}
+          disabled={bezig}
+          aria-label="Nieuwe naam van de map"
+          onChange={(e) => setNaam(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && setBewerk(false)}
+          className="h-8 rounded-full text-[12.5px]"
+        />
+        <Button type="submit" size="sm" className="h-8 rounded-full px-3" disabled={bezig}>
+          OK
+        </Button>
+      </form>
+    );
+  }
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div className="flex flex-col">
+          <MapKnop
+            icoon={MAP_ICOON[map.rol]}
+            naam={mapNaam(map)}
+            telletje={map.ongelezen}
+            actief={actief}
+            onClick={onClick}
+          />
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-48">
+        <ContextMenuItem
+          onSelect={() => {
+            setNaam(mapNaam(map));
+            setBewerk(true);
+          }}
+        >
+          <Pencil className="size-4" /> Hernoemen
+        </ContextMenuItem>
+        <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={() => void weg()}>
+          <Trash2 className="size-4" /> Verwijderen
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
 function MapKnop({
   icoon: Icoon,
   naam,
@@ -637,6 +808,8 @@ function BerichtLijst({
   kanSchrijven,
   eigenAdres,
   onOpstellen,
+  onNieuweMail,
+  onHulp,
   onWeg,
   actief,
   onOpen,
@@ -649,11 +822,18 @@ function BerichtLijst({
   kanSchrijven: boolean;
   eigenAdres: string;
   onOpstellen: (o: Opzet) => void;
+  onNieuweMail: () => void;
+  onHulp: () => void;
   onWeg: (id: string) => void;
   actief: string | null;
   onOpen: (id: string) => void;
   onTerug: () => void;
 }) {
+  const qc = useQueryClient();
+  const zoekVeld = useRef<HTMLInputElement>(null);
+  /** Aangevinkte mails, om er in één keer iets mee te doen. */
+  const [gekozen, setGekozen] = useState<Set<string>>(new Set());
+  const [bulkBezig, setBulkBezig] = useState(false);
   // Het zoekveld woont hier en niet in het postvak: elke letter die je typt
   // tekent dan alleen de lijst opnieuw, niet ook de mappen en de open mail.
   const [zoek, setZoek] = useState("");
@@ -684,6 +864,145 @@ function BerichtLijst({
   }, [lijst.data]);
 
   const acties = useMailActies(onWeg);
+  const spamRegels = useQuery({ queryKey: ["spam-regels"], queryFn: fetchSpamRegels });
+
+  // Wat niet meer in de lijst staat, hoort ook niet meer bij de selectie.
+  useEffect(() => {
+    setGekozen((oud) => {
+      const ids = new Set(berichten.map((b) => b.id));
+      const nieuw = new Set([...oud].filter((id) => ids.has(id)));
+      return nieuw.size === oud.size ? oud : nieuw;
+    });
+  }, [berichten]);
+
+  function kies(id: string) {
+    setGekozen((oud) => {
+      const nieuw = new Set(oud);
+      if (nieuw.has(id)) nieuw.delete(id);
+      else if (nieuw.size >= MAX_SELECTIE) toast.info(`Hooguit ${MAX_SELECTIE} mails tegelijk.`);
+      else nieuw.add(id);
+      return nieuw;
+    });
+  }
+
+  async function voorAlle(doe: BulkDoe, map?: MailMap) {
+    const ids = [...gekozen];
+    if (ids.length === 0) return;
+    setBulkBezig(true);
+    try {
+      const uit = await bulkActie(ids, doe, map?.id);
+      if (ids.includes(actief ?? "") && (doe === "weggooien" || doe === "verplaatsen")) onWeg(actief!);
+      setGekozen(new Set());
+      const wat: Record<BulkDoe, string> = {
+        gelezen: "gelezen",
+        ongelezen: "ongelezen",
+        vlag: "gemarkeerd",
+        "vlag-eraf": "zonder vlag",
+        afhandelen: "afgehandeld",
+        weggooien: "naar de prullenbak",
+        verplaatsen: map ? `verplaatst naar ${mapNaam(map)}` : "verplaatst",
+      };
+      if (uit.mislukt.length > 0) toast.warning(`${uit.gelukt} ${wat[doe]}; ${uit.mislukt.length} lukte niet.`);
+      else toast.success(`${uit.gelukt} ${uit.gelukt === 1 ? "mail" : "mails"} ${wat[doe]}.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBulkBezig(false);
+      void qc.invalidateQueries({ queryKey: ["berichten"] });
+      void qc.invalidateQueries({ queryKey: ["mail-mappen"] });
+      void qc.invalidateQueries({ queryKey: ["mail-wacht"] });
+    }
+  }
+
+  // Sneltoetsen, zoals in een mailprogramma. Niet als je in een tekstvak typt
+  // of er een venster open is.
+  const sneltoets = useRef<(e: KeyboardEvent) => void>(() => {});
+  sneltoets.current = (e: KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const doel = e.target as HTMLElement | null;
+    if (doel?.closest("input, textarea, select, [contenteditable='true']")) return;
+    if (document.querySelector("[role='dialog'], [role='alertdialog'], [role='menu']")) return;
+    // Enter op een knop of link hoort bij die knop.
+    if (e.key === "Enter" && doel?.closest("button, a, [role='button'], [role='checkbox']")) return;
+
+    const plek = berichten.findIndex((b) => b.id === actief);
+    const huidig = plek >= 0 ? berichten[plek] : undefined;
+    const naar = (i: number) => {
+      const b = berichten[Math.max(0, Math.min(berichten.length - 1, i))];
+      if (b) onOpen(b.id);
+    };
+    const volledig = async (maak: (v: Bericht) => Opzet) => {
+      if (!huidig || !kanSchrijven) return;
+      const v = await qc.fetchQuery({ queryKey: ["bericht", huidig.id], queryFn: () => fetchBericht(huidig.id) });
+      if (v) onOpstellen(maak(v));
+    };
+    const rol = mappen.find((m) => m.id === huidig?.map_id)?.rol;
+
+    let gedaan = true;
+    switch (e.key) {
+      case "j":
+      case "ArrowDown":
+        naar(plek + 1);
+        break;
+      case "k":
+      case "ArrowUp":
+        naar(plek < 0 ? 0 : plek - 1);
+        break;
+      case "Enter":
+      case "o":
+        if (huidig) onOpen(huidig.id);
+        else naar(0);
+        break;
+      case "e":
+        if (huidig && kanSchrijven) void acties.afhandelen(huidig.id, true);
+        break;
+      case "r":
+        void volledig((v) => antwoordOpzet(v));
+        break;
+      case "a":
+        void volledig((v) => allenAntwoordOpzet(v, eigenAdres));
+        break;
+      case "f":
+        void volledig(doorstuurOpzet);
+        break;
+      case "#":
+      case "Delete":
+        if (huidig && kanSchrijven && rol !== "prullenbak") {
+          naar(plek + 1 < berichten.length ? plek + 1 : plek - 1);
+          void acties.weggooien(huidig.id);
+        }
+        break;
+      case "u":
+        if (huidig && kanSchrijven) void acties.gelezen(huidig.id, !huidig.gelezen);
+        break;
+      case "s":
+        if (huidig && kanSchrijven) void acties.markeer(huidig.id, !huidig.gemarkeerd);
+        break;
+      case "x":
+        if (huidig) kies(huidig.id);
+        break;
+      case "c":
+        if (kanSchrijven) onNieuweMail();
+        break;
+      case "/":
+        zoekVeld.current?.focus();
+        break;
+      case "Escape":
+        setGekozen(new Set());
+        break;
+      case "?":
+        onHulp();
+        break;
+      default:
+        gedaan = false;
+    }
+    if (gedaan) e.preventDefault();
+  };
+  useEffect(() => {
+    const luister = (e: KeyboardEvent) => sneltoets.current(e);
+    window.addEventListener("keydown", luister);
+    return () => window.removeEventListener("keydown", luister);
+  }, []);
 
   const leeg =
     bron.soort === "wacht"
@@ -697,15 +1016,91 @@ function BerichtLijst({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <KopMetTerug onTerug={onTerug}>
-        <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={zoek}
-            onChange={(e) => setZoek(e.target.value)}
-            placeholder={titel ? `Zoeken in ${titel}` : "Zoeken"}
-            className="h-9 rounded-full pl-8 text-[13px]"
-          />
-        </div>
+        {gekozen.size > 0 ? (
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+            <Checkbox
+              checked={gekozen.size === Math.min(berichten.length, MAX_SELECTIE) ? true : "indeterminate"}
+              onCheckedChange={() => {
+                if (gekozen.size === Math.min(berichten.length, MAX_SELECTIE)) return void setGekozen(new Set());
+                if (berichten.length > MAX_SELECTIE) {
+                  toast.info(`De eerste ${MAX_SELECTIE} mails zijn geselecteerd; meer tegelijk kan niet.`);
+                }
+                setGekozen(new Set(berichten.slice(0, MAX_SELECTIE).map((b) => b.id)));
+              }}
+              aria-label="Alles selecteren"
+              className="mx-1"
+            />
+            <span className="mr-1 text-[12.5px] font-medium tabular-nums">{gekozen.size}</span>
+            <SnelKnop label="Afgehandeld" onClick={() => void voorAlle("afhandelen")} uit={bulkBezig || !kanSchrijven}>
+              <CircleCheck className="size-3.5" />
+            </SnelKnop>
+            <SnelKnop label="Markeren als gelezen" onClick={() => void voorAlle("gelezen")} uit={bulkBezig || !kanSchrijven}>
+              <MailOpen className="size-3.5" />
+            </SnelKnop>
+            <SnelKnop label="Markeren als ongelezen" onClick={() => void voorAlle("ongelezen")} uit={bulkBezig || !kanSchrijven}>
+              <Mail className="size-3.5" />
+            </SnelKnop>
+            <SnelKnop label="Vlag erop" onClick={() => void voorAlle("vlag")} uit={bulkBezig || !kanSchrijven}>
+              <Flag className="size-3.5" />
+            </SnelKnop>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Verplaatsen naar"
+                  title="Verplaatsen naar"
+                  disabled={bulkBezig || !kanSchrijven}
+                  className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                >
+                  <FolderInput className="size-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="max-h-80 w-52 overflow-y-auto">
+                {mappen.map((m) => {
+                  const Icoon = MAP_ICOON[m.rol];
+                  return (
+                    <DropdownMenuItem key={m.id} onSelect={() => void voorAlle("verplaatsen", m)}>
+                      <Icoon className="size-4" /> {mapNaam(m)}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <SnelKnop label="Weggooien" gevaarlijk onClick={() => void voorAlle("weggooien")} uit={bulkBezig || !kanSchrijven}>
+              <Trash2 className="size-3.5" />
+            </SnelKnop>
+            <button
+              type="button"
+              onClick={() => setGekozen(new Set())}
+              className="ml-auto px-1 text-[12px] text-muted-foreground hover:text-foreground"
+            >
+              {bulkBezig ? "Bezig…" : "Wissen"}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                ref={zoekVeld}
+                value={zoek}
+                onChange={(e) => setZoek(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && e.currentTarget.blur()}
+                placeholder={titel ? `Zoeken in ${titel}` : "Zoeken"}
+                className="h-9 rounded-full pl-8 text-[13px]"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={onHulp}
+              aria-label="Sneltoetsen"
+              title="Sneltoetsen (?)"
+              className="hidden size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
+            >
+              <Keyboard className="size-4" />
+            </button>
+          </>
+        )}
       </KopMetTerug>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -729,6 +1124,10 @@ function BerichtLijst({
                 kanSchrijven={kanSchrijven}
                 eigenAdres={eigenAdres}
                 onOpstellen={onOpstellen}
+                gekozen={gekozen.has(b.id)}
+                kiesModus={gekozen.size > 0}
+                onKies={() => kies(b.id)}
+                spamAfzender={(spamRegels.data ?? []).includes(b.van_email.toLowerCase())}
               />
             ))}
             {lijst.hasNextPage && (
@@ -761,6 +1160,10 @@ function BerichtRij({
   kanSchrijven,
   eigenAdres,
   onOpstellen,
+  gekozen,
+  kiesModus,
+  onKies,
+  spamAfzender,
 }: {
   b: BerichtRegel;
   categorieen: MailCategorie[];
@@ -771,9 +1174,16 @@ function BerichtRij({
   kanSchrijven: boolean;
   eigenAdres: string;
   onOpstellen: (o: Opzet) => void;
+  gekozen: boolean;
+  /** Er is al iets aangevinkt: dan staan alle vinkjes in beeld. */
+  kiesModus: boolean;
+  onKies: () => void;
+  /** Deze afzender gaat altijd naar spam. */
+  spamAfzender: boolean;
 }) {
   const rol = mappen.find((m) => m.id === b.map_id)?.rol;
   const inPrullenbak = rol === "prullenbak";
+  const herinnerd = !!b.herinner_op && new Date(b.herinner_op) <= new Date();
   const qc = useQueryClient();
 
   /** Beantwoorden en doorsturen hebben de hele mail nodig, niet alleen de regel. */
@@ -797,6 +1207,9 @@ function BerichtRij({
     <>
       <ContextMenuItem onSelect={onOpen}>
         <MailOpen className="size-4" /> Openen
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={onKies}>
+        <CircleCheck className="size-4" /> {gekozen ? "Niet meer selecteren" : "Selecteren"}
       </ContextMenuItem>
       <ContextMenuSeparator />
       {b.richting === "in" && (
@@ -848,14 +1261,22 @@ function BerichtRij({
         </ContextMenuSubContent>
       </ContextMenuSub>
       {b.richting === "in" && rol === "spam" && (
-        <ContextMenuItem disabled={!kanSchrijven} onSelect={() => void acties.geenSpam(b.id, b.map_id, mappen)}>
+        <ContextMenuItem
+          disabled={!kanSchrijven}
+          onSelect={() => void acties.geenSpam(b.id, b.map_id, mappen, spamAfzender ? b.van_email : undefined)}
+        >
           <ShieldCheck className="size-4" /> Geen spam
         </ContextMenuItem>
       )}
       {b.richting === "in" && rol !== "spam" && (
-        <ContextMenuItem disabled={!kanSchrijven} onSelect={() => void acties.spam(b.id, b.map_id, mappen)}>
-          <ShieldAlert className="size-4" /> Spam melden
-        </ContextMenuItem>
+        <>
+          <ContextMenuItem disabled={!kanSchrijven} onSelect={() => void acties.spam(b.id, b.map_id, mappen)}>
+            <ShieldAlert className="size-4" /> Spam melden
+          </ContextMenuItem>
+          <ContextMenuItem disabled={!kanSchrijven} onSelect={() => void acties.altijdSpam(b.id, b.van_email, b.map_id)}>
+            <ShieldAlert className="size-4" /> Altijd naar spam: {b.van_email}
+          </ContextMenuItem>
+        </>
       )}
       <ContextMenuSeparator />
       {inPrullenbak ? (
@@ -878,12 +1299,21 @@ function BerichtRij({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div className="group relative border-b border-border/60">
+          {/* Vinkje om te selecteren: bij de muis, of altijd als er al iets gekozen is. */}
+          <div
+            className={cn(
+              "absolute left-1.5 top-3 z-10 items-center",
+              kiesModus || gekozen ? "flex" : "hidden group-hover:flex",
+            )}
+          >
+            <Checkbox checked={gekozen} onCheckedChange={onKies} aria-label="Selecteren" className="bg-card" />
+          </div>
           <button
             type="button"
-            onClick={onOpen}
+            onClick={kiesModus ? onKies : onOpen}
             className={cn(
-              "block w-full px-3.5 py-2.5 text-left transition-colors",
-              actief ? "bg-accent/70" : "group-hover:bg-muted/40",
+              "block w-full py-2.5 pl-7 pr-3.5 text-left transition-colors",
+              gekozen ? "bg-tint-blauw/50" : actief ? "bg-accent/70" : "group-hover:bg-muted/40",
             )}
           >
             <div className="flex items-center gap-2">
@@ -901,11 +1331,22 @@ function BerichtRij({
               {b.gemarkeerd && <Flag className="size-3 shrink-0 text-tint-rood-ink" />}
             </div>
             <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">{b.fragment}</p>
-            {(labels.length > 0 || b.wacht) && (
+            {(labels.length > 0 || b.wacht || b.herinner_op) && (
               <div className="mt-1 flex flex-wrap items-center gap-1">
-                {b.wacht && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full bg-tint-paars px-1.5 py-px text-[10.5px] font-medium text-tint-paars-ink">
-                    <Sparkles className="size-2.5" /> klaar voor jou
+                {herinnerd ? (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-tint-amber px-1.5 py-px text-[10.5px] font-medium text-tint-amber-ink">
+                    <Bell className="size-2.5" /> herinnering
+                  </span>
+                ) : (
+                  b.wacht && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-tint-paars px-1.5 py-px text-[10.5px] font-medium text-tint-paars-ink">
+                      <Sparkles className="size-2.5" /> klaar voor jou
+                    </span>
+                  )
+                )}
+                {b.herinner_op && !herinnerd && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-muted px-1.5 py-px text-[10.5px] text-muted-foreground">
+                    <Clock className="size-2.5" /> {toonMoment(b.herinner_op)}
                   </span>
                 )}
                 {labels.map(({ c, i }) => (
@@ -955,11 +1396,13 @@ function BerichtRij({
 function SnelKnop({
   label,
   gevaarlijk,
+  uit,
   onClick,
   children,
 }: {
   label: string;
   gevaarlijk?: boolean;
+  uit?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -968,12 +1411,13 @@ function SnelKnop({
       type="button"
       aria-label={label}
       title={label}
+      disabled={uit}
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
       className={cn(
-        "flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        "flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50",
         gevaarlijk && "hover:text-destructive",
       )}
     >
@@ -1054,10 +1498,39 @@ function useMailActies(onWeg: (id: string) => void) {
       if (!spam) return void toast.error("Er is geen spammap in deze mailbox.");
       await acties.verplaats(id, van, spam, mappen, "Als spam gemeld: naar de spammap.");
     },
-    async geenSpam(id: string, van: string, mappen: MailMap[]) {
+    /** `regelVan`: deze afzender stond op "altijd naar spam"; die regel gaat ook weg. */
+    async geenSpam(id: string, van: string, mappen: MailMap[], regelVan?: string) {
       const postvak = mappen.find((m) => m.rol === "postvak");
       if (!postvak) return void toast.error("Er is geen postvak gevonden.");
-      await acties.verplaats(id, van, postvak, mappen, "Geen spam: terug in je postvak.");
+      if (regelVan && !(await doe(() => spamregelWeg(regelVan)))) return;
+      void qc.invalidateQueries({ queryKey: ["spam-regels"] });
+      await acties.verplaats(
+        id,
+        van,
+        postvak,
+        mappen,
+        regelVan ? `Geen spam: terug in je postvak, en ${regelVan} gaat niet meer vanzelf naar spam.` : "Geen spam: terug in je postvak.",
+      );
+    },
+    /** `van`: waar de mail stond; Ongedaan maken zet hem daar terug én haalt de regel weg. */
+    async altijdSpam(id: string, email: string, van: string) {
+      if (!(await doe(() => altijdSpam(id)))) return;
+      onWeg(id);
+      void qc.invalidateQueries({ queryKey: ["spam-regels"] });
+      toast.success(`Mail van ${email} gaat voortaan altijd naar spam.`, {
+        action: {
+          label: "Ongedaan maken",
+          onClick: () =>
+            void doe(async () => {
+              await spamregelWeg(email);
+              await verplaatsNaar(id, van);
+            }).then(() => void qc.invalidateQueries({ queryKey: ["spam-regels"] })),
+        },
+      });
+    },
+    async herinner(id: string, op: Date | null) {
+      if (!(await doe(() => herinner(id, op)))) return;
+      toast.success(op ? `Herinnering ${toonMoment(op)}: dan staat hij in "Wacht op jou".` : "Herinnering weggehaald.");
     },
   };
   return acties;
@@ -1073,6 +1546,7 @@ function Leesvenster({
   onWeg,
   onBeantwoord,
   onOpstellen,
+  onOpen,
   eigenAdres,
 }: {
   berichtId: string | null;
@@ -1082,6 +1556,8 @@ function Leesvenster({
   onWeg: (id: string) => void;
   onBeantwoord: (b: Bericht, begin?: string) => void;
   onOpstellen: (o: Opzet) => void;
+  /** Een andere mail openen, bijvoorbeeld uit hetzelfde gesprek. */
+  onOpen: (id: string) => void;
   /** Het eigen mailadres: dat hoort niet in Cc bij allen beantwoorden. */
   eigenAdres: string;
 }) {
@@ -1245,6 +1721,32 @@ function Leesvenster({
             <ShieldAlert className="size-3.5" />
           </IcoonKnop>
         ))}
+      <MomentKiezer
+        titel="Herinner me"
+        onKies={(moment) => void lijstActies.herinner(b.id, moment)}
+        extra={
+          b.herinner_op ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => void lijstActies.herinner(b.id, null)}>
+                <BellOff className="size-4" /> Herinnering weghalen
+              </DropdownMenuItem>
+            </>
+          ) : undefined
+        }
+        trigger={
+          <Button
+            size="icon"
+            variant="outline"
+            className={cn("size-8 rounded-full", b.herinner_op && "border-tint-amber-ink/40 text-tint-amber-ink")}
+            aria-label={b.herinner_op ? `Herinnering ${toonMoment(b.herinner_op)}` : "Herinner me"}
+            title={b.herinner_op ? `Herinnering ${toonMoment(b.herinner_op)}` : "Herinner me"}
+            disabled={!kanSchrijven}
+          >
+            <Bell className="size-3.5" />
+          </Button>
+        }
+      />
       <IcoonKnop
         label={b.gemarkeerd ? "Vlag eraf" : "Vlag erop"}
         disabled={!kanSchrijven}
@@ -1325,6 +1827,7 @@ function Leesvenster({
     <Mailweergave
       b={b}
       acties={acties}
+      gesprek={<Gesprek berichtId={b.id} onOpen={onOpen} />}
       paaltje={<PaaltjeKaart b={b} kanSchrijven={kanSchrijven} onBeantwoord={(begin) => onBeantwoord(b, begin)} />}
       klant={<KlantKaart b={b} kanSchrijven={kanSchrijven} />}
       onTerug={onTerug}
@@ -1361,12 +1864,15 @@ function IcoonKnop({
 function Mailweergave({
   b,
   acties,
+  gesprek,
   paaltje,
   klant,
   onTerug,
 }: {
   b: Bericht;
   acties: React.ReactNode;
+  /** De andere mails uit hetzelfde gesprek. */
+  gesprek: React.ReactNode;
   paaltje: React.ReactNode;
   /** Rechts naast een binnengekomen mail: wie het is. */
   klant: React.ReactNode;
@@ -1415,15 +1921,7 @@ function Mailweergave({
         {b.bijlagen.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {b.bijlagen.map((a, i) => (
-              <span
-                key={`${a.naam}-${i}`}
-                title="De bijlage staat in je mailbox"
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-[12px]"
-              >
-                <Paperclip className="size-3 text-muted-foreground" />
-                <span className="max-w-[180px] truncate">{a.naam}</span>
-                <span className="text-muted-foreground">{grootte(a.grootte)}</span>
-              </span>
+              <BijlageKnop key={`${a.naam}-${i}`} berichtId={b.id} index={i} naam={a.naam} grootte={a.grootte} />
             ))}
           </div>
         )}
@@ -1431,7 +1929,10 @@ function Mailweergave({
 
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] xl:grid-cols-[minmax(0,1fr)_250px] xl:grid-rows-1">
         <div className="flex min-h-0 flex-col">
-          <div className="max-h-[45%] shrink-0 overflow-y-auto pb-1">{paaltje}</div>
+          <div className="max-h-[45%] shrink-0 overflow-y-auto pb-1">
+            {gesprek}
+            {paaltje}
+          </div>
           {b.afgekapt && (
             <p className="mx-5 mt-3 rounded-[10px] bg-tint-geel px-3 py-1.5 text-[12px] text-tint-geel-ink">
               Deze mail is groot; Wooshy toont alleen het begin. De hele mail staat in je mailbox.
@@ -1452,6 +1953,64 @@ function Mailweergave({
         )}
       </div>
     </div>
+  );
+}
+
+/** Een bijlage: klikken haalt hem van de server en opent hem (of bewaart hem). */
+function BijlageKnop({
+  berichtId,
+  index,
+  naam,
+  grootte: bytes,
+}: {
+  berichtId: string;
+  index: number;
+  naam: string;
+  grootte: number;
+}) {
+  const [bezig, setBezig] = useState(false);
+  async function open() {
+    setBezig(true);
+    // Het venster meteen openen (anders houdt de browser het tegen als pop-up)
+    // en pas vullen als de bijlage er is.
+    const venster = window.open("", "_blank");
+    try {
+      const b = await haalBijlage(berichtId, index);
+      const url = URL.createObjectURL(b.blob);
+      // Alleen typen die geen script kunnen draaien. Een SVG ("image/svg+xml")
+      // of html zou in een eigen tabblad als Wooshy zelf meedoen: die downloaden.
+      const bekijkbaar = ["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "text/plain"].includes(
+        b.type.toLowerCase(),
+      );
+      if (bekijkbaar && venster) {
+        venster.location.href = url;
+      } else {
+        venster?.close();
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = b.naam;
+        a.click();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      venster?.close();
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBezig(false);
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => void open()}
+      disabled={bezig}
+      title="Openen"
+      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-[12px] hover:border-ring disabled:opacity-60"
+    >
+      {bezig ? <Loader2 className="size-3 animate-spin" /> : <Paperclip className="size-3 text-muted-foreground" />}
+      <span className="max-w-[180px] truncate">{naam}</span>
+      <span className="text-muted-foreground">{grootte(bytes)}</span>
+    </button>
   );
 }
 

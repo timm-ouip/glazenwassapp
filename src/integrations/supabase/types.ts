@@ -1121,6 +1121,7 @@ export type Database = {
           tekst: string;
           uid: number;
           uit_dossier_op: string | null;
+          herinner_op: string | null;
           uidvalidity: number;
           van_email: string;
           van_naam: string;
@@ -1173,6 +1174,7 @@ export type Database = {
           tekst?: string;
           uid: number;
           uit_dossier_op?: string | null;
+          herinner_op?: string | null;
           uidvalidity: number;
           van_email?: string;
           van_naam?: string;
@@ -1225,6 +1227,7 @@ export type Database = {
           tekst?: string;
           uid?: number;
           uit_dossier_op?: string | null;
+          herinner_op?: string | null;
           uidvalidity?: number;
           van_email?: string;
           van_naam?: string;
@@ -1365,6 +1368,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      geplande_mails: {
+        Row: {
+          aan_tekst: string;
+          company_id: string;
+          created_at: string;
+          door: string | null;
+          fout: string;
+          id: string;
+          inhoud: Json;
+          mailbox_id: string;
+          onderwerp: string;
+          status: string;
+          verstuurd_op: string | null;
+          versturen_op: string;
+        };
+        Insert: {
+          aan_tekst?: string;
+          company_id?: string;
+          created_at?: string;
+          door?: string | null;
+          fout?: string;
+          id?: string;
+          inhoud: Json;
+          mailbox_id: string;
+          onderwerp?: string;
+          status?: string;
+          verstuurd_op?: string | null;
+          versturen_op: string;
+        };
+        Update: {
+          aan_tekst?: string;
+          company_id?: string;
+          created_at?: string;
+          door?: string | null;
+          fout?: string;
+          id?: string;
+          inhoud?: Json;
+          mailbox_id?: string;
+          onderwerp?: string;
+          status?: string;
+          verstuurd_op?: string | null;
+          versturen_op?: string;
+        };
+        Relationships: [];
+      };
       klant_emails: {
         Row: {
           bron: string;
@@ -1389,6 +1437,33 @@ export type Database = {
           email?: string;
           id?: string;
           klant_id?: string;
+        };
+        Relationships: [];
+      };
+      mail_regels: {
+        Row: {
+          actie: string;
+          company_id: string;
+          created_at: string;
+          id: string;
+          mailbox_id: string;
+          van_email: string;
+        };
+        Insert: {
+          actie?: string;
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          mailbox_id: string;
+          van_email: string;
+        };
+        Update: {
+          actie?: string;
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          mailbox_id?: string;
+          van_email?: string;
         };
         Relationships: [];
       };
@@ -1633,6 +1708,19 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      gesprek_van: {
+        Args: { bericht: string };
+        Returns: {
+          id: string;
+          richting: string;
+          van_naam: string;
+          van_email: string;
+          onderwerp: string;
+          fragment: string;
+          ontvangen_op: string;
+          op_server: boolean;
+        }[];
+      };
       bericht_uit_dossier: {
         Args: { bericht: string; weg: boolean };
         Returns: undefined;

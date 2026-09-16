@@ -32,3 +32,8 @@ verify_jwt = false
 # kop x-cron-sleutel (MAIL_CRON_SLEUTEL), zie supabase/functions/mail-ophalen.
 [functions.mail-ophalen]
 verify_jwt = false
+
+# Elke minuut door pg_cron: geplande mail versturen en "altijd naar spam"
+# toepassen. Zelfde slot als mail-ophalen (x-cron-sleutel).
+[functions.mail-planner]
+verify_jwt = false

@@ -619,12 +619,24 @@ interface Structuur {
   disposition?: string;
   dispositionParameters?: Record<string, string>;
   size?: number;
+  /** Het deelnummer ("2.1"): daarmee haal je precies dit stuk op. */
+  part?: string;
   childNodes?: Structuur[];
 }
 
 /** Welke bijlagen erbij zaten, uit de structuur die de server al gaf. */
 export function bijlagenUit(structuur: Structuur | undefined): { naam: string; type: string; grootte: number }[] {
-  const uit: { naam: string; type: string; grootte: number }[] = [];
+  return bijlageDelen(structuur).map(({ naam, type, grootte }) => ({ naam, type, grootte }));
+}
+
+/**
+ * De bijlagen mét hun deelnummer. Altijd in dezelfde volgorde als
+ * `bijlagenUit`: bijlage 3 in Wooshy is bijlage 3 hier.
+ */
+export function bijlageDelen(
+  structuur: Structuur | undefined,
+): { naam: string; type: string; grootte: number; part: string }[] {
+  const uit: { naam: string; type: string; grootte: number; part: string }[] = [];
   const loop = (deel: Structuur | undefined) => {
     if (!deel) return;
     if (deel.childNodes?.length) {
@@ -635,7 +647,12 @@ export function bijlagenUit(structuur: Structuur | undefined): { naam: string; t
     const type = (deel.type ?? "").toLowerCase();
     const isTekst = type === "text/plain" || type === "text/html";
     if (deel.disposition === "attachment" || (naam && !isTekst)) {
-      uit.push({ naam: knip(schoon(naam), 300) || "bijlage", type: knip(type, 100), grootte: deel.size ?? 0 });
+      uit.push({
+        naam: knip(schoon(naam), 300) || "bijlage",
+        type: knip(type, 100),
+        grootte: deel.size ?? 0,
+        part: deel.part ?? "",
+      });
     }
   };
   loop(structuur);
