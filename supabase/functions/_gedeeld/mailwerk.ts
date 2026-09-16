@@ -76,7 +76,9 @@ export async function plekVan(db: Db, box: Box, id: string): Promise<BerichtPlek
   if (!UUID.test(id)) return null;
   const { data, error } = await db
     .from("berichten")
-    .select("id,uid,uidvalidity,map_id,op_server,mail_mappen(pad,rol)")
+    // Expliciet via map_id: er is ook een koppeling via vorige_map_id, en zonder
+    // deze aanwijzing weigert de database te kiezen.
+    .select("id,uid,uidvalidity,map_id,op_server,mail_mappen!berichten_map_id_fkey(pad,rol)")
     .eq("id", id)
     .eq("mailbox_id", box.id)
     .maybeSingle();
