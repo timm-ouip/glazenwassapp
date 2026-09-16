@@ -371,10 +371,13 @@ async function bewaarMappen(
       .eq("op_server", true);
     if (wegFout) throw new Error(`Verdwenen map: ${wegFout.message}`);
 
+    // Klantmail die nog in de map hing blijft bestaan zonder map (archief in
+    // het dossier); de map zelf mag dus weg zodra er niets meer op de server staat.
     const { count, error: telFout } = await db
       .from("berichten")
       .select("id", { count: "exact", head: true })
-      .eq("map_id", map.id);
+      .eq("map_id", map.id)
+      .eq("op_server", true);
     if (telFout) throw new Error(`Verdwenen map: ${telFout.message}`);
     if ((count ?? 0) === 0) {
       const { error: mapFout } = await db.from("mail_mappen").delete().eq("id", map.id);
@@ -785,13 +788,15 @@ async function bewaarBericht(db: Db, box: MailboxRij, rij: BerichtRij) {
   if (error) throw new Error(`Bericht bewaren: ${error.message}`);
 }
 
-/** Wat al een paar dagen nergens meer opdook, is echt weg. */
+/** Wat al een paar dagen nergens meer opdook, is echt weg — behalve mail van een klant. */
 async function ruimOp(db: Db, mailboxId: string) {
   const { error } = await db
     .from("berichten")
     .delete()
     .eq("mailbox_id", mailboxId)
     .eq("op_server", false)
+    // Mail van een klant blijft in zijn dossier, ook als hij uit de mailbox is.
+    .is("klant_id", null)
     .lt("weg_sinds", new Date(Date.now() - WEG_NA_MS).toISOString());
   // Opruimen mag een keer mislukken; de volgende ronde probeert het weer.
   if (error) console.error(`Opruimen: ${error.message}`);

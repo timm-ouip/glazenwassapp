@@ -55,6 +55,12 @@ export function zetTerug(berichtId: string): Promise<{ ok: true; verplaatst: boo
   return roep({ actie: "terugzetten", bericht_id: berichtId });
 }
 
+/** Een mail uit het dossier halen (naar de prullenbak), of terugzetten. Alleen de eigenaar. */
+export async function zetUitDossier(berichtId: string, weg: boolean): Promise<void> {
+  const { error } = await supabase.rpc("bericht_uit_dossier", { bericht: berichtId, weg });
+  if (error) throw new Error(error.message);
+}
+
 /** Klaar met deze mail, of toch weer open. */
 export function handelAf(berichtId: string, klaar: boolean): Promise<{ ok: true }> {
   return roep({ actie: "afhandelen", bericht_id: berichtId, klaar });
@@ -107,6 +113,8 @@ export interface NieuweMail {
   tekst: string;
   /** Het bericht waarop je antwoordt, zodat het in dezelfde draad valt. */
   antwoordOp?: string;
+  /** Vanuit een dossier: de mail komt bij deze klant. */
+  klantId?: string;
 }
 
 /** Zo lang mag een mail zijn; de server weigert langer. */
@@ -120,6 +128,7 @@ export function verstuurMail(m: NieuweMail): Promise<{ ok: true; kopieFout: stri
     onderwerp: m.onderwerp,
     tekst: m.tekst,
     ...(m.antwoordOp ? { antwoord_op: m.antwoordOp } : {}),
+    ...(m.klantId ? { klant_id: m.klantId } : {}),
   });
 }
 

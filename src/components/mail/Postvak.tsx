@@ -262,7 +262,7 @@ function bronTitel(bron: Bron | null, mappen: MailMap[], categorieen: MailCatego
 }
 
 /** Een antwoord klaarzetten: "Re:", naar de afzender, de oude mail eronder. */
-function antwoordOpzet(b: Bericht, begin = ""): Opzet {
+export function antwoordOpzet(b: Bericht, begin = ""): Opzet {
   const onderwerp = /^re:/i.test(b.onderwerp) ? b.onderwerp : `Re: ${b.onderwerp}`;
   const naar = b.antwoord_naar || b.van_email;
   const wie = b.van_naam || b.van_email;
@@ -937,7 +937,7 @@ function grootte(bytes: number): string {
  * opent. Links zijn eerst nagelopen (veiligeMailHtml) en gaan open zonder
  * lijntje terug naar Wooshy en zonder te verraden waar je vandaan komt.
  */
-function MailHtml({ html }: { html: string }) {
+export function MailHtml({ html, className }: { html: string; className?: string }) {
   const doc = useMemo(
     () =>
       `<!doctype html><html><head><meta charset="utf-8">` +
@@ -954,7 +954,7 @@ function MailHtml({ html }: { html: string }) {
       srcDoc={doc}
       sandbox="allow-popups allow-popups-to-escape-sandbox"
       referrerPolicy="no-referrer"
-      className="min-h-0 w-full flex-1 bg-white"
+      className={cn("min-h-0 w-full flex-1 bg-white", className)}
     />
   );
 }

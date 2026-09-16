@@ -1108,8 +1108,8 @@ export type Database = {
           id: string;
           in_reply_to: string;
           klant_id: string | null;
-          mailbox_id: string;
-          map_id: string;
+          mailbox_id: string | null;
+          map_id: string | null;
           message_id: string;
           onderwerp: string;
           ontvangen_op: string;
@@ -1120,6 +1120,7 @@ export type Database = {
           richting: string;
           tekst: string;
           uid: number;
+          uit_dossier_op: string | null;
           uidvalidity: number;
           van_email: string;
           van_naam: string;
@@ -1159,8 +1160,8 @@ export type Database = {
           id?: string;
           in_reply_to?: string;
           klant_id?: string | null;
-          mailbox_id: string;
-          map_id: string;
+          mailbox_id?: string | null;
+          map_id?: string | null;
           message_id?: string;
           onderwerp?: string;
           ontvangen_op: string;
@@ -1171,6 +1172,7 @@ export type Database = {
           richting?: string;
           tekst?: string;
           uid: number;
+          uit_dossier_op?: string | null;
           uidvalidity: number;
           van_email?: string;
           van_naam?: string;
@@ -1210,8 +1212,8 @@ export type Database = {
           id?: string;
           in_reply_to?: string;
           klant_id?: string | null;
-          mailbox_id?: string;
-          map_id?: string;
+          mailbox_id?: string | null;
+          map_id?: string | null;
           message_id?: string;
           onderwerp?: string;
           ontvangen_op?: string;
@@ -1222,6 +1224,7 @@ export type Database = {
           richting?: string;
           tekst?: string;
           uid?: number;
+          uit_dossier_op?: string | null;
           uidvalidity?: number;
           van_email?: string;
           van_naam?: string;
@@ -1290,6 +1293,75 @@ export type Database = {
           created_at?: string;
           door?: string;
           zekerheid?: number | null;
+        };
+        Relationships: [];
+      };
+      klacht_berichten: {
+        Row: {
+          bericht_id: string;
+          company_id: string;
+          created_at: string;
+          klacht_id: string;
+        };
+        Insert: {
+          bericht_id: string;
+          company_id?: string;
+          created_at?: string;
+          klacht_id: string;
+        };
+        Update: {
+          bericht_id?: string;
+          company_id?: string;
+          created_at?: string;
+          klacht_id?: string;
+        };
+        Relationships: [];
+      };
+      klachten: {
+        Row: {
+          afgehandeld_op: string | null;
+          bron: string;
+          company_id: string;
+          created_at: string;
+          customer_id: string | null;
+          deleted_at: string | null;
+          door_paaltje: boolean;
+          gemaakt_door: string | null;
+          id: string;
+          klant_id: string;
+          omschrijving: string;
+          ontvangen_op: string;
+          status: string;
+        };
+        Insert: {
+          afgehandeld_op?: string | null;
+          bron?: string;
+          company_id?: string;
+          created_at?: string;
+          customer_id?: string | null;
+          deleted_at?: string | null;
+          door_paaltje?: boolean;
+          gemaakt_door?: string | null;
+          id?: string;
+          klant_id: string;
+          omschrijving: string;
+          ontvangen_op?: string;
+          status?: string;
+        };
+        Update: {
+          afgehandeld_op?: string | null;
+          bron?: string;
+          company_id?: string;
+          created_at?: string;
+          customer_id?: string | null;
+          deleted_at?: string | null;
+          door_paaltje?: boolean;
+          gemaakt_door?: string | null;
+          id?: string;
+          klant_id?: string;
+          omschrijving?: string;
+          ontvangen_op?: string;
+          status?: string;
         };
         Relationships: [];
       };
@@ -1561,6 +1633,14 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      bericht_uit_dossier: {
+        Args: { bericht: string; weg: boolean };
+        Returns: undefined;
+      };
+      bericht_echt_wissen: {
+        Args: { bericht: string };
+        Returns: undefined;
+      };
       paaltje_verbruik_tellen: {
         Args: { bedrijf: string; invoer: number; uitvoer: number; extra_bericht?: number };
         Returns: number;

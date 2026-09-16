@@ -10,6 +10,9 @@ import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { formatNumber, gooiEchtWeg, haalTerug, klantAdres, type Customer } from "@/lib/klanten";
 import { useRecht } from "@/lib/rechten";
+import { useAuth } from "@/lib/auth";
+import { legKlachtWeg } from "@/lib/klachten";
+import { zetUitDossier } from "@/lib/mailacties";
 import { haalAllePaginas } from "@/lib/pagineren";
 
 export const Route = createFileRoute("/prullenbak")({
@@ -20,7 +23,7 @@ export const Route = createFileRoute("/prullenbak")({
   component: Prullenbak,
 });
 
-type Soort = "districts" | "streets" | "customers" | "klanten";
+type Soort = "districts" | "streets" | "customers" | "klanten" | "klachten" | "berichten";
 
 type Weggelegd = {
   soort: Soort;
@@ -34,7 +37,7 @@ async function haalPrullenbak(): Promise<Weggelegd[]> {
   // Adressen en klanten in stukken: gooi je een wijk met ruim 1000 adressen
   // weg, dan gaf één opvraging er maar 1000 terug en kon je de rest niet
   // terugzetten.
-  const [wijken, straten, adressenData, personenData] = await Promise.all([
+  const [wijken, straten, adressenData, personenData, klachten, mails] = await Promise.all([
     supabase.from("districts").select("id,name,deleted_at").not("deleted_at", "is", null),
     supabase.from("streets").select("id,name,deleted_at").not("deleted_at", "is", null),
     haalAllePaginas((van, tot) =>
@@ -53,8 +56,20 @@ async function haalPrullenbak(): Promise<Weggelegd[]> {
         .order("id", { ascending: true })
         .range(van, tot),
     ),
+    supabase
+      .from("klachten")
+      .select("id,omschrijving,deleted_at,klanten(naam)")
+      .not("deleted_at", "is", null)
+      .limit(1000),
+    // Mail die de eigenaar uit een dossier haalde. Wie geen mail mag lezen,
+    // krijgt hier niets terug.
+    supabase
+      .from("berichten")
+      .select("id,onderwerp,van_naam,van_email,richting,uit_dossier_op")
+      .not("uit_dossier_op", "is", null)
+      .limit(1000),
   ]);
-  for (const r of [wijken, straten]) if (r.error) throw r.error;
+  for (const r of [wijken, straten, klachten, mails]) if (r.error) throw r.error;
   const adressen = { data: adressenData };
   const personen = { data: personenData };
 
@@ -97,6 +112,23 @@ async function haalPrullenbak(): Promise<Weggelegd[]> {
       extra: klantAdres(k) || "Geen adres",
       deleted_at: k.deleted_at as string,
     })),
+    ...(klachten.data ?? []).map((k) => ({
+      soort: "klachten" as const,
+      id: k.id,
+      omschrijving: k.omschrijving,
+      extra: (k.klanten as unknown as { naam: string } | null)?.naam?.trim() || "Klant zonder naam",
+      deleted_at: k.deleted_at as string,
+    })),
+    ...(mails.data ?? []).map((m) => ({
+      soort: "berichten" as const,
+      id: m.id,
+      omschrijving: m.onderwerp.trim() || "(geen onderwerp)",
+      extra:
+        m.richting === "uit"
+          ? "Verstuurde mail uit een dossier"
+          : `Mail van ${m.van_naam || m.van_email}`,
+      deleted_at: m.uit_dossier_op as string,
+    })),
   ];
 
   return uit.sort((a, b) => b.deleted_at.localeCompare(a.deleted_at));
@@ -107,6 +139,8 @@ const SOORT_LABEL: Record<Soort, string> = {
   streets: "Straat",
   customers: "Adres",
   klanten: "Klantgegevens",
+  klachten: "Klacht",
+  berichten: "Mail",
 };
 
 function datum(iso: string) {
@@ -127,9 +161,16 @@ function Prullenbak() {
   // wie klanten bewerkt. Ieder ziet alleen wat hij ook terug mag zetten.
   const magPlannen = useRecht("planning");
   const magKlanten = useRecht("klanten_bewerken");
+  // Mail uit een dossier halen en terugzetten doet alleen de eigenaar; echt
+  // wissen van een klacht ook.
+  const isEigenaar = useAuth().employee?.rol === "eigenaar";
   const vraag = useQuery({ queryKey: ["prullenbak"], queryFn: haalPrullenbak });
   const rijen = (vraag.data ?? []).filter((r) =>
-    r.soort === "districts" || r.soort === "streets" ? magPlannen : magKlanten,
+    r.soort === "districts" || r.soort === "streets"
+      ? magPlannen
+      : r.soort === "berichten"
+        ? isEigenaar
+        : magKlanten,
   );
 
   function herlaad() {
@@ -138,11 +179,16 @@ function Prullenbak() {
     qc.invalidateQueries({ queryKey: ["streets"] });
     qc.invalidateQueries({ queryKey: ["customers"] });
     qc.invalidateQueries({ queryKey: ["klanten"] });
+    qc.invalidateQueries({ queryKey: ["klachten"] });
+    qc.invalidateQueries({ queryKey: ["open-klachten"] });
+    qc.invalidateQueries({ queryKey: ["dossier-mail"] });
   }
 
   async function terug(r: Weggelegd) {
     try {
-      await haalTerug(r.soort, [r.id]);
+      if (r.soort === "klachten") await legKlachtWeg(r.id, false);
+      else if (r.soort === "berichten") await zetUitDossier(r.id, false);
+      else await haalTerug(r.soort, [r.id]);
       herlaad();
       toast.success(`${r.omschrijving} teruggezet`);
     } catch (e) {
@@ -154,7 +200,10 @@ function Prullenbak() {
     const ja = await bevestig({
       titel: `${r.omschrijving} definitief verwijderen?`,
       tekst:
-        r.soort === "customers" || r.soort === "klanten"
+        r.soort === "customers" ||
+        r.soort === "klanten" ||
+        r.soort === "klachten" ||
+        r.soort === "berichten"
           ? "Dit is hierna echt weg en niet meer terug te halen."
           : "Alles wat hieronder valt gaat mee en is hierna echt weg. Dit kan niet ongedaan gemaakt worden.",
       bevestigLabel: "Definitief verwijderen",
@@ -162,7 +211,15 @@ function Prullenbak() {
     });
     if (!ja) return;
     try {
-      await gooiEchtWeg(r.soort, [r.id]);
+      if (r.soort === "klachten") {
+        const { error } = await supabase.from("klachten").delete().eq("id", r.id);
+        if (error) throw new Error(error.message);
+      } else if (r.soort === "berichten") {
+        const { error } = await supabase.rpc("bericht_echt_wissen", { bericht: r.id });
+        if (error) throw new Error(error.message);
+      } else {
+        await gooiEchtWeg(r.soort, [r.id]);
+      }
       herlaad();
       toast.success(`${r.omschrijving} definitief verwijderd`);
     } catch (e) {
@@ -174,7 +231,7 @@ function Prullenbak() {
     <AppLayout
       titel="Geschiedenis"
       kruimel="Overzicht / Geschiedenis"
-      onderschrift="Verwijderde wijken, straten, adressen en klantgegevens staan hier tot je ze definitief weggooit"
+      onderschrift="Verwijderde wijken, straten, adressen, klantgegevens, klachten en mails staan hier tot je ze definitief weggooit"
     >
       {vraag.isLoading ? (
         <p className="text-sm text-muted-foreground">Laden…</p>
@@ -222,16 +279,18 @@ function Prullenbak() {
                 >
                   <RotateCcw className="size-3.5" /> Terugzetten
                 </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="size-8 rounded-full text-muted-foreground hover:text-destructive"
-                  onClick={() => void echtWeg(r)}
-                  aria-label={`${r.omschrijving} definitief verwijderen`}
-                  title="Definitief verwijderen"
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
+                {(isEigenaar || (r.soort !== "klachten" && r.soort !== "berichten")) && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 rounded-full text-muted-foreground hover:text-destructive"
+                    onClick={() => void echtWeg(r)}
+                    aria-label={`${r.omschrijving} definitief verwijderen`}
+                    title="Definitief verwijderen"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                )}
               </span>
             </div>
           ))}

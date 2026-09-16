@@ -28,6 +28,8 @@ export interface AntwoordOp {
   message_id: string;
   referenties: string[];
   antwoord_naar: string;
+  /** De klant van de mail: het antwoord komt dan ook in zijn dossier. */
+  klant_id?: string | null;
 }
 
 /** Leeg als het verstuurd is; anders de reden waarom niet. */
@@ -198,6 +200,8 @@ export async function stuurAntwoord(db: Db, mail: AntwoordOp, tekst: string): Pr
               ontvangen_op: tijd,
               gelezen: true,
               paaltje_status: "overslaan",
+              // Leeg: dan zoekt de database de klant op het aan-adres.
+              klant_id: mail.klant_id ?? null,
             },
             { onConflict: "map_id,uidvalidity,uid", ignoreDuplicates: true },
           );

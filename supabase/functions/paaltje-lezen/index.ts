@@ -16,6 +16,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { antwoord } from "../_gedeeld/mail.ts";
 import { cronSleutelKlopt } from "../_gedeeld/cron.ts";
 import { categorieenVan, leesMail, richtprijzen, type TeLezen } from "../_gedeeld/paaltje.ts";
+import { klachtUitMail } from "../_gedeeld/klachten.ts";
 import { voerActiesUit, type MailStand, type Voorstel } from "../_gedeeld/acties.ts";
 import { stuurAntwoord } from "../_gedeeld/verzenden.ts";
 import { stelAfsprakenVoor } from "../_gedeeld/afspraken.ts";
@@ -390,6 +391,18 @@ async function leesEen(
   // tussendoor de indeling wijzigen.
   const { error } = await db.from("berichten").update(bijwerken).eq("id", mail.id);
   if (error) throw new Error(`Uitkomst bewaren: ${error.message}`);
+
+  // Een klacht van een bekende klant komt in zijn dossier. Een fout hier maakt
+  // de gelezen mail niet "fout": de indeling als klacht staat er al.
+  const klachtCategorie = categorieen.find((c) => c.sleutel === "klachten")?.id;
+  const klantVanKlacht = mail.klant_id ?? uit.klant_id;
+  if (isKlantmail && klantVanKlacht && indeling.some((c) => c.id === klachtCategorie)) {
+    try {
+      await klachtUitMail(db, mail, klantVanKlacht, uit.samenvatting, uit.aanmelding);
+    } catch (e) {
+      console.error(`klacht ${mail.id}:`, e instanceof Error ? e.message : e);
+    }
+  }
 
   // Voerde Paaltje overslaan zelf door (alleen bij "zelf doorvoeren"), dan
   // stuurt hij ook zelf de bevestiging: dat hoort bij dezelfde keuze. Lukt het

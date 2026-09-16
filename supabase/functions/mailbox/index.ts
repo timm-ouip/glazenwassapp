@@ -157,7 +157,8 @@ async function koppel(
   });
 
   // 2. Bewaren. Een ander adres dan eerst is een andere mailbox: de spiegel van
-  //    de oude gaat weg, anders lopen twee mailboxen door elkaar.
+  //    de oude gaat weg, anders lopen twee mailboxen door elkaar. Klantmail
+  //    blijft als archief in de dossiers (trigger mailboxen_mail_opruimen).
   const { data: bestaand } = await db
     .from("mailboxen")
     .select("id,adres")

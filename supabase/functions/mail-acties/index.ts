@@ -48,7 +48,7 @@ interface Verzoek {
   reden?: string;
   /** Bij stoppen-doorvoeren: ook de wasdagen vanaf morgen van de planning halen (vandaag blijft staan). */
   planning_weg?: boolean;
-  /** Bij klant-koppelen: welke klant. */
+  /** Bij klant-koppelen: welke klant. Bij versturen: in wiens dossier de mail komt. */
   klant_id?: string;
   /** Bij afhandelen: klaar (true) of toch weer open (false). */
   klaar?: boolean;
@@ -938,6 +938,25 @@ async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Verzoek):
   if (!tekst.trim()) return antwoord({ fout: "De mail is nog leeg." }, 400);
   if (tekst.length > MAX_TEKST) return antwoord({ fout: "De mail is te lang." }, 400);
 
+  // De klant van deze mail, zodat hij in diens dossier komt: van de mail waar
+  // dit een antwoord op is, of gekozen vanuit het dossier.
+  // Vóór de poging: een geweigerde klant hoort niet mee te tellen voor de rem.
+  let klantId: string | null = null;
+  if (verzoek.klant_id) {
+    const gekozen = String(verzoek.klant_id);
+    if (!UUID.test(gekozen)) return antwoord({ fout: "Die klant bestaat niet (meer)." }, 400);
+    const { data: klant, error } = await db
+      .from("klanten")
+      .select("id")
+      .eq("id", gekozen)
+      .eq("company_id", box.company_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (error) throw new Error(`Klant opzoeken: ${error.message}`);
+    if (!klant) return antwoord({ fout: "Die klant bestaat niet (meer)." }, 400);
+    klantId = klant.id;
+  }
+
   // Eerst de poging vastleggen, dan pas tellen — mét deze poging erbij. Andersom
   // zien twintig verzoeken die tegelijk binnenkomen allemaal nog ruimte, en
   // gaan ze allemaal door. De poging telt mee, ook als versturen mislukt.
@@ -969,7 +988,7 @@ async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Verzoek):
     if (!UUID.test(id)) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 400);
     const { data: origineel, error } = await db
       .from("berichten")
-      .select("message_id,referenties")
+      .select("message_id,referenties,klant_id")
       .eq("id", id)
       .eq("mailbox_id", box.id)
       .maybeSingle();
@@ -977,6 +996,7 @@ async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Verzoek):
     if (origineel?.message_id) {
       antwoordOp = { messageId: origineel.message_id, referenties: origineel.referenties ?? [] };
     }
+    klantId = klantId ?? origineel?.klant_id ?? null;
   }
 
   const { data: bedrijf } = await db
@@ -1040,6 +1060,8 @@ async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Verzoek):
           ontvangen_op: new Date().toISOString(),
           gelezen: true,
           paaltje_status: "overslaan",
+          // Leeg: dan zoekt de database de klant op het aan-adres.
+          klant_id: klantId,
         },
         { onConflict: "map_id,uidvalidity,uid", ignoreDuplicates: true },
       );

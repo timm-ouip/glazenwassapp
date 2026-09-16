@@ -2,7 +2,7 @@
  * De dagrapporten teruglezen: wat Wooshy elke ochtend mailde.
  */
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CalendarDays, CheckCircle2, Hand, Inbox, Sparkles } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, Hand, Inbox, MessageSquareWarning, Sparkles } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toonMaand } from "@/lib/klanten";
@@ -20,6 +20,8 @@ interface RapportInhoud {
   zelfGedaan: { soort: string; klant: string; adres: string; maanden: string[]; tijd: string }[];
   verstuurd: number;
   wacht: { aantal: number; voorbeelden: { van: string; onderwerp: string; samenvatting: string }[] };
+  /** Pas sinds de klachten in het dossier; oudere rapporten hebben het niet. */
+  klachten?: { nieuw: { klant: string; omschrijving: string; door_paaltje: boolean }[]; open: number };
   problemen: string[];
   opmerkingen?: string[];
 }
@@ -113,6 +115,25 @@ function RapportKaart({ r }: { r: Rapport }) {
           stand van die ochtend
         </Tegel>
       </div>
+
+      {i.klachten && (i.klachten.nieuw.length > 0 || i.klachten.open > 0) && (
+        <div className="mt-3 rounded-[12px] bg-tint-rood px-3 py-2 text-[13px] text-tint-rood-ink">
+          <p className="flex items-center gap-1.5 font-medium">
+            <MessageSquareWarning className="size-3.5 shrink-0" />
+            Klachten: {i.klachten.nieuw.length} nieuw · {i.klachten.open} nog open
+          </p>
+          {i.klachten.nieuw.length > 0 && (
+            <ul className="mt-1 space-y-0.5">
+              {i.klachten.nieuw.map((k, n) => (
+                <li key={`${k.klant}-${n}`}>
+                  {k.klant}: {k.omschrijving}
+                  {k.door_paaltje && <span className="opacity-70"> (door Paaltje)</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {i.binnen.perCategorie.length > 0 && (
         <p className="mt-3 text-[12.5px] text-muted-foreground">

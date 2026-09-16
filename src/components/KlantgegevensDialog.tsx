@@ -38,6 +38,7 @@ import {
   CalendarOff,
   Flag,
   Hammer,
+  MessageSquareWarning,
   Hash,
   House,
   Link2,
@@ -87,6 +88,9 @@ import { opslaanBijEnter } from "@/lib/dialoog";
 import { blijvenLiggen, fetchKlussen, nieuweKlus, staatOpen } from "@/lib/klussen";
 import { toonDatum } from "@/lib/wasdag";
 import { KlusDialog } from "@/components/KlusDialog";
+import { DossierMail } from "@/components/dossier/DossierMail";
+import { DossierKlachten } from "@/components/dossier/DossierKlachten";
+import { fetchKlachtenVanKlant } from "@/lib/klachten";
 
 interface Props {
   open: boolean;
@@ -193,9 +197,19 @@ export function KlantgegevensDialog({
   // niet aan een maand gebonden, dus er is geen periode om op te vragen.
   const klussen = useQuery({ queryKey: ["klussen"], queryFn: () => fetchKlussen() }).data ?? [];
   const [klusOpen, setKlusOpen] = useState(false);
-  /** Welk tabblad je bekijkt: de persoon, het adres, of het losse werk. Drie
-   *  korte schermen in plaats van één lange lap om doorheen te scrollen. */
-  const [tab, setTab] = useState<"klant" | "adres" | "werk">("klant");
+  /** Welk tabblad je bekijkt: de persoon, het adres, het losse werk, de mail
+   *  of de klachten. Korte schermen in plaats van één lange lap om doorheen te
+   *  scrollen. Mail en klachten horen bij de persoon, dus die zijn er alleen
+   *  als er een klant is. */
+  const [tab, setTab] = useState<"klant" | "adres" | "werk" | "mail" | "klachten">("klant");
+  // Mail kan privé zijn: alleen wie mail mag lezen ziet dat tabblad.
+  const magMailLezen = useRecht("mail_lezen");
+  const klachten = useQuery({
+    queryKey: ["klachten", klant?.id],
+    queryFn: () => fetchKlachtenVanKlant(klant!.id),
+    enabled: open && !!klant,
+  });
+  const openKlachten = (klachten.data ?? []).filter((k) => k.status === "open").length;
   const [velden, setVelden] = useState(LEEG);
   const [pand, setPand] = useState<Pand>(LEEG_PAND);
   /** Ids van de overige adressen van deze klant — de uitzondering. */
@@ -517,6 +531,25 @@ export function KlantgegevensDialog({
               >
                 Werk
               </PopupTab>
+              {klant && magMailLezen && (
+                <PopupTab
+                  actief={tab === "mail"}
+                  onClick={() => setTab("mail")}
+                  icoon={<Mail className="size-[15px]" />}
+                >
+                  Mail
+                </PopupTab>
+              )}
+              {klant && (
+                <PopupTab
+                  actief={tab === "klachten"}
+                  onClick={() => setTab("klachten")}
+                  icoon={<MessageSquareWarning className="size-[15px]" />}
+                  telletje={openKlachten}
+                >
+                  Klachten
+                </PopupTab>
+              )}
             </>
           }
         />
@@ -1004,6 +1037,17 @@ export function KlantgegevensDialog({
             </PopupBlok>
           )}
           </fieldset>
+          {/* Buiten het formulier: mail en klachten hebben hun eigen rechten en slaan zelf op. */}
+          {tab === "mail" && klant && magMailLezen && <DossierMail klant={klant} />}
+          {tab === "klachten" && klant && (
+            <DossierKlachten
+              klantId={klant.id}
+              adressen={customers
+                .filter((c) => c.klant_id === klant.id)
+                .map((c) => ({ id: c.id, label: adresTekst(c) }))}
+              onToonMail={magMailLezen ? () => setTab("mail") : undefined}
+            />
+          )}
         </PopupBody>
 
         <PopupVoet>

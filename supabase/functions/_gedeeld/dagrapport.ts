@@ -25,6 +25,8 @@ export interface RapportInhoud {
   zelfGedaan: { soort: string; klant: string; adres: string; maanden: string[]; tijd: string }[];
   verstuurd: number;
   wacht: { aantal: number; voorbeelden: { van: string; onderwerp: string; samenvatting: string }[] };
+  /** Klachten: wat er in deze periode bijkwam, en hoeveel er nu nog openstaan. */
+  klachten: { nieuw: { klant: string; omschrijving: string; door_paaltje: boolean }[]; open: number };
   /** Nieuw in deze periode: dit bepaalt mee of er een rapport komt. */
   problemen: string[];
   /** Al langer zo (bijv. oude fouten): wel in het rapport, maar geen reden voor een rapport. */
@@ -33,7 +35,13 @@ export interface RapportInhoud {
 
 /** Gebeurde er in deze periode iets? Een mail die al dagen wacht is geen nieuws. */
 export function heeftIets(r: RapportInhoud): boolean {
-  return r.binnen.totaal > 0 || r.zelfGedaan.length > 0 || r.verstuurd > 0 || r.problemen.length > 0;
+  return (
+    r.binnen.totaal > 0 ||
+    r.zelfGedaan.length > 0 ||
+    r.verstuurd > 0 ||
+    r.problemen.length > 0 ||
+    r.klachten.nieuw.length > 0
+  );
 }
 
 const MAX_MAILS = 2000;
@@ -173,7 +181,28 @@ export async function stelSamen(db: Db, companyId: string, vanaf: Date, tot: Dat
     ) ?? []) as typeof wachtRijen;
   }
 
-  // 5. Problemen: nieuw in de periode telt, wat al langer zo is staat erbij.
+  // 5. Klachten: nieuw in de periode (ook zelf ingevoerd), en wat nog openstaat.
+  const nieuweKlachten = (check(
+    await db
+      .from("klachten")
+      .select("omschrijving,door_paaltje,klanten(naam)")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .gte("created_at", van)
+      .lt("created_at", t)
+      .order("created_at", { ascending: true })
+      .limit(50),
+    "Nieuwe klachten",
+  ) ?? []) as { omschrijving: string; door_paaltje: boolean; klanten: { naam: string } | null }[];
+  const openKlachten = await db
+    .from("klachten")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", companyId)
+    .eq("status", "open")
+    .is("deleted_at", null);
+  if (openKlachten.error) throw new Error(`Open klachten: ${openKlachten.error.message}`);
+
+  // 6. Problemen: nieuw in de periode telt, wat al langer zo is staat erbij.
   const box = check(
     await db.from("mailboxen").select("status,fout,laatste_sync").eq("company_id", companyId).maybeSingle(),
     "Mailbox",
@@ -229,6 +258,14 @@ export async function stelSamen(db: Db, companyId: string, vanaf: Date, tot: Dat
         samenvatting: eenRegel(r.samenvatting, 160),
       })),
     },
+    klachten: {
+      nieuw: nieuweKlachten.map((k) => ({
+        klant: eenRegel(k.klanten?.naam || "Klant zonder naam", 80),
+        omschrijving: eenRegel(k.omschrijving, 160),
+        door_paaltje: k.door_paaltje,
+      })),
+      open: openKlachten.count ?? 0,
+    },
     problemen,
     opmerkingen,
   };
@@ -275,6 +312,16 @@ export function alsTekst(r: RapportInhoud, appUrl: string): string {
   if (r.zelfGedaan.length > 0) {
     regels.push("Paaltje deed zelf:", ...r.zelfGedaan.map((w) => `- ${wijzigingZin(w)}`));
     regels.push("  (Terugdraaien kan in Wooshy onder Mailing → Rapport.)", "");
+  }
+
+  // Een ouder rapport dat nog gemaild moet worden, heeft nog geen klachten.
+  const klachten = r.klachten ?? { nieuw: [], open: 0 };
+  if (klachten.nieuw.length > 0 || klachten.open > 0) {
+    regels.push(
+      `Klachten: ${klachten.nieuw.length} nieuw, ${klachten.open} nog open`,
+      ...klachten.nieuw.map((k) => `- ${k.klant}: ${k.omschrijving}${k.door_paaltje ? " (door Paaltje)" : ""}`),
+      "",
+    );
   }
 
   if (r.verstuurd > 0) {

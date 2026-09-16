@@ -165,7 +165,8 @@ function heeftIets(voorstel: unknown): boolean {
 function alsRegel(r: RegelRij): BerichtRegel {
   return {
     id: r.id,
-    map_id: r.map_id,
+    // Klantmail uit een verdwenen map heeft geen map meer; die staat alleen in het dossier.
+    map_id: r.map_id ?? "",
     richting: r.richting === "uit" ? "uit" : "in",
     van_naam: r.van_naam,
     van_email: r.van_email,
@@ -274,15 +275,15 @@ export async function telWachtend(postvakId: string): Promise<number> {
 
 const BERICHT_KOLOMMEN = `${REGEL_KOLOMMEN},cc,antwoord_naar,tekst,html,afgekapt,message_id,klant_id,paaltje_status,samenvatting,zekerheid,ai_fout,klant_gok_id,klantgegevens,doorgevoerd_op,doorgevoerd_automatisch,beantwoord_op`;
 
-/** Eén mail, zolang hij nog op de server staat en niet weggelegd is. */
-export async function fetchBericht(id: string): Promise<Bericht | null> {
-  const { data, error } = await supabase
-    .from("berichten")
-    .select(BERICHT_KOLOMMEN)
-    .eq("id", id)
-    .eq("op_server", true)
-    .is("deleted_at", null)
-    .maybeSingle();
+/**
+ * Eén mail, zolang hij nog op de server staat en niet weggelegd is. Het
+ * dossier vraagt ook mail die uit de mailbox weg is (`ookUitMailbox`): die
+ * bewaart Wooshy voor de klant.
+ */
+export async function fetchBericht(id: string, ookUitMailbox = false): Promise<Bericht | null> {
+  let query = supabase.from("berichten").select(BERICHT_KOLOMMEN).eq("id", id).is("deleted_at", null);
+  if (!ookUitMailbox) query = query.eq("op_server", true);
+  const { data, error } = await query.maybeSingle();
   if (error) throw error;
   if (!data) return null;
   const r = data as unknown as RegelRij &
@@ -329,6 +330,31 @@ export async function fetchBericht(id: string): Promise<Bericht | null> {
     beantwoord_op: r.beantwoord_op,
     afgehandeld_op: r.afgehandeld_op,
   };
+}
+
+/** Een mail in het dossier van een klant: ook als hij uit de mailbox weg is. */
+export interface DossierMail extends BerichtRegel {
+  op_server: boolean;
+}
+
+/** Alle mail van en aan een klant, nieuwste eerst. In stukken van 1000. */
+export async function fetchDossierMails(klantId: string): Promise<DossierMail[]> {
+  const uit: DossierMail[] = [];
+  for (let vanaf = 0; ; vanaf += 1000) {
+    const { data, error } = await supabase
+      .from("berichten")
+      .select(`${REGEL_KOLOMMEN},op_server`)
+      .eq("klant_id", klantId)
+      .is("deleted_at", null)
+      .is("uit_dossier_op", null)
+      .order("ontvangen_op", { ascending: false })
+      .order("id", { ascending: false })
+      .range(vanaf, vanaf + 999);
+    if (error) throw error;
+    const rijen = (data ?? []) as unknown as (RegelRij & { op_server: boolean })[];
+    uit.push(...rijen.map((r) => ({ ...alsRegel(r), op_server: r.op_server })));
+    if (rijen.length < 1000) return uit;
+  }
 }
 
 /** Wat de klantkaart naast een mail laat zien. */

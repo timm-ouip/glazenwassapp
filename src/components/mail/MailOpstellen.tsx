@@ -30,6 +30,8 @@ export interface Opzet {
   tekst: string;
   /** Het bericht waarop dit een antwoord is. */
   antwoordOp?: string;
+  /** Vanuit een dossier: de mail komt bij deze klant. */
+  klantId?: string;
 }
 
 const UITLEG = "Gaat weg vanaf je eigen mailadres en komt in Verzonden.";
@@ -105,11 +107,13 @@ export function MailOpstellen({
         onderwerp: onderwerp.trim(),
         tekst,
         ...(opzet?.antwoordOp ? { antwoordOp: opzet.antwoordOp } : {}),
+        ...(opzet?.klantId ? { klantId: opzet.klantId } : {}),
       });
       if (uit.kopieFout) toast.warning(uit.kopieFout);
       else toast.success("Verstuurd.");
       void qc.invalidateQueries({ queryKey: ["berichten"] });
       void qc.invalidateQueries({ queryKey: ["mail-mappen"] });
+      void qc.invalidateQueries({ queryKey: ["dossier-mail"] });
       onSluit();
     } catch (err) {
       if (err instanceof MogelijkVerstuurdFout) {

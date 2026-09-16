@@ -40,6 +40,7 @@ import {
   type Customer,
 } from "@/lib/klanten";
 import { useRecht } from "@/lib/rechten";
+import { useKlachtenBijAdres } from "@/lib/klachten";
 import {
   datumSleutel,
   fetchWasdag,
@@ -1292,6 +1293,7 @@ function StraatRij({
   onAdres: (keuze: { customer: Customer; straat: string }) => void;
 }) {
   const prijzenZien = useRecht("prijzen_zien");
+  const klachtenBij = useKlachtenBijAdres();
   const erop = straat.klantIds.filter((id) => keuze.has(id)).length;
   const { className: kopKnop, ...kopRest } = vakKnop(`s:${straat.id}`);
   return (
@@ -1330,6 +1332,7 @@ function StraatRij({
           const anders = regel?.notitie?.trim() ?? "";
           const aangepast = anders !== "" || (regel && regel.prijs !== prijsVoorMaand(c, maand));
           const gekozen = keuze.has(c.id);
+          const klachten = klachtenBij(c);
           const { className: rijKnop, ...rijRest } = selecteren
             ? vakKnop(`c:${c.id}`)
             : {
@@ -1357,6 +1360,15 @@ function StraatRij({
                 />
               )}
               <span className="w-9 shrink-0 font-medium tabular-nums">{formatNumber(c)}</span>
+              {/* Een open klacht: extra opletten bij dit adres. */}
+              {klachten.length > 0 && (
+                <span
+                  role="img"
+                  aria-label={`Open klacht: ${klachten.map((k) => k.omschrijving).join("; ")}`}
+                  title={`Open klacht: ${klachten.map((k) => k.omschrijving).join("\n")}`}
+                  className="size-2 shrink-0 rounded-full bg-tint-rood-ink"
+                />
+              )}
               {/* Gestopt of verhuisd na het inplannen: de regel staat er nog,
                   maar je moet het wel zien voor je aanbelt. */}
               {c.inactief_op && (
