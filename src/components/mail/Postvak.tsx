@@ -940,11 +940,11 @@ function BerichtLijst({
 
     let gedaan = true;
     switch (e.key) {
-      case "j":
+      case "k":
       case "ArrowDown":
         naar(plek + 1);
         break;
-      case "k":
+      case "j":
       case "ArrowUp":
         naar(plek < 0 ? 0 : plek - 1);
         break;

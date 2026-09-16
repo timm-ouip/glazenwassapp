@@ -4,8 +4,8 @@ import { PopupBody, PopupKader, PopupKop } from "@/components/Popup";
 import { Keyboard } from "lucide-react";
 
 export const SNELTOETSEN: [string, string][] = [
-  ["j / ↓", "Volgende mail"],
-  ["k / ↑", "Vorige mail"],
+  ["k / ↓", "Volgende mail"],
+  ["j / ↑", "Vorige mail"],
   ["Enter / o", "Mail openen"],
   ["e", "Afgehandeld"],
   ["r", "Beantwoorden"],
