@@ -50,10 +50,9 @@ interface Props {
   onKlus?: (() => void) | undefined;
   /** Klant laat stoppen: gestopt of verhuisd. Laat weg waar dat niet kan. */
   onStoppen?: (() => void) | undefined;
-  /** De selectie waar dit adres bij hoort uit de straat lichten, in een
-   *  nieuwe straat ernaast. Laat weg waar dat niet mag, of waar er niet meer
-   *  dan één regel geselecteerd staat: één adres verplaats je door het te
-   *  verslepen. */
+  /** De aangevinkte adressen van deze straat eruit lichten, in een nieuwe
+   *  straat ernaast. Alleen in de selecteermodus, op een aangevinkt adres;
+   *  laat het verder weg. */
   onSplitsen?: (() => void) | undefined;
   /** De kleuren die dit bedrijf zelf gemaakt heeft, uit Instellingen. */
   markeringen: MarkeringRij[];
@@ -149,9 +148,9 @@ export function KlantMenu({
         <ContextMenuItem onSelect={onDossier}>
           <FileText className="size-4" /> Dossier
         </ContextMenuItem>
-        {/* Alleen als je meerdere regels tegelijk geselecteerd hebt: dan gaat
-            dit menu niet meer over dit ene adres, maar over het stuk straat
-            dat je vasthebt. De tegenhanger van straten samenvoegen. */}
+        {/* Alleen in de selecteermodus op een aangevinkt adres: dan gaat dit
+            menu niet meer over dit ene adres, maar over wat je in deze straat
+            aangevinkt hebt. De tegenhanger van straten samenvoegen. */}
         {onSplitsen && (
           <>
             <ContextMenuSeparator />

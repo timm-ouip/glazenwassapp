@@ -260,8 +260,8 @@ function Index() {
     open: false,
     street: null,
   });
-  /** Een stuk straat afsplitsen: de regels die je geselecteerd hebt gaan naar
-   *  een nieuwe straat. Het schermpje vraagt alleen nog de naam. */
+  /** Een stuk straat afsplitsen: wat je in de selecteermodus aangevinkt hebt
+   *  gaat naar een nieuwe straat. Het schermpje vraagt alleen nog de naam. */
   const [splits, setSplits] = useState<{
     open: boolean;
     street: Street | null;
@@ -1124,9 +1124,8 @@ function Index() {
         herlaad();
       },
     });
-    // De regels staan nu in een andere straat; die selectie slaat nergens
-    // meer op.
-    setSelectie([]);
+    // Wat aangevinkt was blijft aangevinkt: dezelfde adressen, alleen in een
+    // andere straat. Zo kun je ze daarna meteen inplannen.
     herlaad();
     meldUndo(
       `${adressen.length} ${adressen.length === 1 ? "adres staat" : "adressen staan"} nu in "${naam}"`,
@@ -1356,18 +1355,18 @@ function Index() {
     pasKeuzeAan(aan ? [c.id] : [], aan ? [] : [c.id]);
   });
   const opNieuweRegel = useStabiel(nieuweRegel);
-  /** Rechtermuisknop op een regel die bij een selectie hoort: die selectie
-   *  uit de straat lichten. Wat er precies meegaat, zoekt hij hier op — de
-   *  regel zelf weet alleen dát hij geselecteerd is. */
+  /** In de selecteermodus, rechtermuisknop op een aangevinkt adres: wat er in
+   *  díe straat aangevinkt staat uit de straat lichten. Wat er precies
+   *  meegaat, zoekt hij hier op — de regel zelf weet alleen dát hij
+   *  aangevinkt is. */
   const opSplitsen = useStabiel((c: Customer) => {
     const street = streets.find((s) => s.id === c.street_id);
     if (!street) return;
-    // Een selectie loopt nooit over twee straten heen (zie klikSelectie),
-    // maar wat er toch buiten valt gaat niet mee.
+    // Aanvinken mag over meerdere straten heen; alleen deze straat gaat mee.
     const adressen = sortCustomers(
-      customers.filter((x) => selectie.includes(x.id) && x.street_id === street.id),
+      customers.filter((x) => keuze.has(x.id) && x.street_id === street.id),
     );
-    if (adressen.length < 2) return;
+    if (adressen.length === 0) return;
     setSplits({ open: true, street, adressen });
   });
   const opEditStreet = useStabiel((street: Street) => setStraatDialog({ open: true, street }));
@@ -1915,8 +1914,7 @@ function Index() {
 
         {selectie.length > 1 && (
           <p className="text-xs text-muted-foreground">
-            {selectie.length} regels geselecteerd — sleep er één om ze samen te verplaatsen, of klik
-            er met rechts op om ze in een eigen straat te zetten.{" "}
+            {selectie.length} regels geselecteerd — sleep er één om ze samen te verplaatsen.{" "}
             <button className="underline" onClick={() => setSelectie([])}>
               selectie wissen
             </button>
@@ -2192,7 +2190,8 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
                 if (bruikbaar) p.onGroepOpDag(p.groep.id, vink !== true);
               },
               onPointerDown: (e: React.PointerEvent) => {
-                if (e.pointerType !== "touch" && bruikbaar) {
+                // Alleen de linkerknop zonder Ctrl: rechts (of Ctrl-klik op de Mac) opent het menu, en vinkt niets om.
+                if (e.pointerType !== "touch" && e.button === 0 && !e.ctrlKey && bruikbaar) {
                   p.onVerfStart(vink !== true, e.clientX, e.clientY);
                 }
               },
@@ -2224,7 +2223,7 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => {
               e.stopPropagation();
-              p.onVerfStart(vink !== true, e.clientX, e.clientY);
+              if (e.button === 0 && !e.ctrlKey) p.onVerfStart(vink !== true, e.clientX, e.clientY);
             }}
             aria-label={`Hele groep ${p.groep.naam} op de dag`}
           />
@@ -2332,8 +2331,9 @@ interface BlokProps {
   rowPad: string;
   selectie: string[];
   onSelect: (c: Customer, shift: boolean) => void;
-  /** De geselecteerde regels uit deze straat lichten, in een nieuwe straat
-   *  ernaast. Staat alleen in het menu zodra er meer dan één regel staat. */
+  /** De aangevinkte adressen uit deze straat lichten, in een nieuwe straat
+   *  ernaast. Staat alleen in het menu in de selecteermodus, op een
+   *  aangevinkt adres. */
   onSplitsen: (c: Customer) => void;
   onPatch: (c: Customer, patch: Partial<Customer>) => void;
   onAddQuickNote: (label: string) => void;
@@ -2438,7 +2438,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
                   onPointerDown: (e: React.PointerEvent) => {
                     // Bij aanraken niet: dan is een veeg over de kop bedoeld om te
                     // scrollen. Op de telefoon begin je een streek op het vinkje.
-                    if (e.pointerType !== "touch" && zichtbaar.length > 0 && p.dagKlaar) {
+                    if (e.pointerType !== "touch" && e.button === 0 && !e.ctrlKey && zichtbaar.length > 0 && p.dagKlaar) {
                       p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
                     }
                   },
@@ -2470,7 +2470,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => {
                   e.stopPropagation();
-                  p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
+                  if (e.button === 0 && !e.ctrlKey) p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
                 }}
                 aria-label={`Hele ${p.street.name} op de dag`}
               />
@@ -2684,7 +2684,7 @@ const StraatKolom = memo(function StraatKolom({
             rowText={p.rowText}
             rowPad={p.rowPad}
             geselecteerd={p.selectie.includes(c.id)}
-            magSplitsen={p.selectie.length > 1 && p.selectie.includes(c.id)}
+            magSplitsen={p.planmodus && p.opDeDag.has(c.id)}
             ronde={p.ronde}
             planmodus={p.planmodus}
             opDeDag={p.opDeDag.has(c.id)}
@@ -2721,9 +2721,8 @@ interface RijProps {
   rowText: string;
   rowPad: string;
   geselecteerd: boolean;
-  /** Hoort deze regel bij een selectie van meer dan één regel? Bewust een
-   *  ja/nee en geen aantal: dat aantal loopt bij elke shift-klik op, en dan
-   *  zou `memo` elke al geselecteerde regel opnieuw laten tekenen. */
+  /** Selecteermodus aan en dit adres aangevinkt? Dan kan het menu de
+   *  aangevinkte adressen van deze straat afsplitsen. */
   magSplitsen: boolean;
   /** De maand die je bekijkt: die bepaalt de kleur van de regel. */
   ronde: string;
@@ -2867,7 +2866,9 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
             className={`absolute inset-0 z-10 ${dagKlaar ? "cursor-pointer" : "cursor-not-allowed"}`}
             aria-hidden="true"
             onPointerDown={(e) => {
-              if (dagKlaar) onVerfStart(!opDeDag, e.clientX, e.clientY);
+              // Alleen de linkerknop zonder Ctrl: met rechts of Ctrl-klik open je het menu (en kun je
+              // splitsen), dan hoort het vinkje te blijven staan.
+              if (dagKlaar && e.button === 0 && !e.ctrlKey) onVerfStart(!opDeDag, e.clientX, e.clientY);
             }}
             onClick={() => {
               // Kwam je hier via een streek, dan is het vakje al om.
