@@ -10,7 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, MessageCircle, MoreVertical, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { PaaltjeIcoon } from "@/components/paaltje/PaaltjeIcoon";
+import { PaaltjeLui } from "@/components/paaltje/PaaltjeLui";
 
 import { useRecht } from "@/lib/rechten";
 import {
@@ -218,9 +218,7 @@ export function PaaltjePaneel({
     >
       {/* Kop */}
       <div className="flex shrink-0 items-start gap-3 bg-accent px-4 pt-4 text-accent-foreground">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-[12px] bg-accent-foreground/15">
-          <PaaltjeIcoon className="size-7" />
-        </span>
+        <PaaltjeLui className="size-10 shrink-0 overflow-hidden rounded-[12px]" />
         <div className="min-w-0 flex-1 pb-3">
           <p className="font-display text-[17px] font-semibold leading-tight tracking-[-0.02em]">
             Paaltje
@@ -400,9 +398,7 @@ function Bubbel({ rol, children }: { rol: "gebruiker" | "paaltje"; children: Rea
 function LegeStaat({ onKies }: { onKies: (tekst: string) => void }) {
   return (
     <div className="flex flex-col items-center gap-4 px-2 py-8 text-center">
-      <span className="flex size-12 items-center justify-center rounded-full bg-tint-paars/60 text-tint-paars-ink">
-        <PaaltjeIcoon className="size-10" />
-      </span>
+      <PaaltjeLui className="size-14 overflow-hidden rounded-full" />
       <div>
         <p className="text-[14px] font-medium">Vraag het Paaltje</p>
         <p className="mt-1 text-[12.5px] text-muted-foreground">
