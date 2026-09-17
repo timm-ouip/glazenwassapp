@@ -15,7 +15,7 @@
  */
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, User } from "lucide-react";
+import { IconLoader2 as Loader2, IconUser as User } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";

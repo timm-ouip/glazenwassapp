@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { RotateCcw, Trash2 } from "lucide-react";
+import { IconRotate as RotateCcw, IconTrash as Trash2 } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { requireSession, useRequireAuth } from "@/lib/auth";

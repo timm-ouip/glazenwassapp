@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, MessageCircle } from "lucide-react";
+import { IconArrowLeft as ArrowLeft, IconMessageCircle as MessageCircle } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 
 import { lijstDatum } from "@/lib/berichten";

@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut, Menu } from "lucide-react";
+import { IconLogout as LogOut, IconMenu2 as Menu } from "@tabler/icons-react";
 
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { useMenu, type Pagina } from "@/components/Zijbalk";
+import { useQuery } from "@tanstack/react-query";
+
 import { signOut } from "@/lib/auth";
-import { rolLabel } from "@/lib/rechten";
+import { fetchMappen } from "@/lib/mailbox";
+import { heeftRecht, rolLabel } from "@/lib/rechten";
 
 /** Wat je op de telefoon het vaakst opent, staat los in de balk. De rest zit
  *  achter "Meer" — net als in een bank- of fotoapp. */
-const VAST = ["/", "/planning", "/klanten"];
+const VAST = ["/", "/planning", "/klanten", "/mailing"];
+/** Korter op een tab dan in het menu. */
+const TABNAAM: Record<string, string> = { "/mailing": "Mail" };
 
 /**
  * De navigatie op de telefoon: een balk onderin, waar je duim al is. Op een
@@ -19,6 +24,14 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
   const { employee, company, werk, beheer, teDoen, isActief } = useMenu();
   const navigate = useNavigate();
   const [meerOpen, setMeerOpen] = useState(false);
+  // Ongelezen mail in het postvak, als getal op de Mail-tab. Dezelfde vraag
+  // als het postvak zelf stelt, dus die delen de cache.
+  const mappen = useQuery({
+    queryKey: ["mail-mappen"],
+    queryFn: fetchMappen,
+    enabled: heeftRecht(employee, "mail_lezen"),
+  });
+  const ongelezen = mappen.data?.find((m) => m.rol === "postvak")?.ongelezen ?? 0;
 
   // Hoe hoog alles onderin samen is, als --onderrand op de pagina: de inhoud
   // houdt daar onderaan ruimte voor, en de Paaltje-knop zweeft erboven.
@@ -91,7 +104,12 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
                 className={`size-[21px] ${isActief(p) ? "text-tint-oranje-ink" : ""}`}
                 strokeWidth={isActief(p) ? 2.2 : 1.8}
               />
-              <span className="truncate">{p.label}</span>
+              <span className="truncate">{TABNAAM[p.to] ?? p.label}</span>
+              {p.to === "/mailing" && ongelezen > 0 && (
+                <span className="absolute left-[calc(50%+4px)] top-1 min-w-4 rounded-full bg-tint-amber-ink px-1 text-center text-[10px] font-semibold leading-4 tabular-nums text-card">
+                  {ongelezen > 99 ? "99+" : ongelezen}
+                </span>
+              )}
             </Link>
           ))}
           {/* Ook zonder extra pagina's blijft "Meer" staan: daar zit Uitloggen. */}

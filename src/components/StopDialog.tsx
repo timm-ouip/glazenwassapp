@@ -6,7 +6,13 @@
  * het er overal hetzelfde uitziet en dezelfde vragen stelt.
  */
 import { useEffect, useState } from "react";
-import { AlertTriangle, CalendarDays, Loader2, Trash2, UserMinus } from "lucide-react";
+import {
+  IconAlertTriangle as AlertTriangle,
+  IconCalendar as CalendarDays,
+  IconLoader2 as Loader2,
+  IconTrash as Trash2,
+  IconUserMinus as UserMinus,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { PopupBody, PopupKader, PopupKop, PopupVoet } from "@/components/Popup";

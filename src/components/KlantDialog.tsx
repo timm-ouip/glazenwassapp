@@ -21,7 +21,14 @@ import {
   type QuickNote,
   type Street,
 } from "@/lib/klanten";
-import { CalendarDays, Hash, House, MessageSquare, Plus, User } from "lucide-react";
+import {
+  IconCalendar as CalendarDays,
+  IconHash as Hash,
+  IconHome as House,
+  IconMessage as MessageSquare,
+  IconPlus as Plus,
+  IconUser as User,
+} from "@tabler/icons-react";
 import { opslaanBijEnter } from "@/lib/dialoog";
 import { eersteBeurtVanaf, maandSleutel } from "@/lib/klanten";
 import {

@@ -2,20 +2,20 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowRight,
-  CalendarDays,
-  CheckSquare,
-  ChevronLeft,
-  ChevronRight,
-  Folder,
-  Euro,
-  Hammer,
-  MapPin,
-  Printer,
-  Square,
-  Undo2,
-  Users,
-} from "lucide-react";
+  IconArrowRight as ArrowRight,
+  IconCalendar as CalendarDays,
+  IconSquareCheck as CheckSquare,
+  IconChevronLeft as ChevronLeft,
+  IconChevronRight as ChevronRight,
+  IconFolder as Folder,
+  IconCurrencyEuro as Euro,
+  IconHammer as Hammer,
+  IconMapPin as MapPin,
+  IconPrinter as Printer,
+  IconSquare as Square,
+  IconArrowBackUp as Undo2,
+  IconUsers as Users,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { requireSession, useRequireAuth } from "@/lib/auth";
@@ -85,15 +85,16 @@ export const Route = createFileRoute("/dag")({
 
 /**
  * De banen van het staafje "waar het geld zit". Uit hetzelfde palet als de
- * kaarten, maar dieper: een baan van drie pixels moet je nog zien liggen.
+ * kaarten, in de middentint: donker genoeg om een baan van drie pixels te
+ * zien, licht genoeg om de kleuren uit elkaar te houden.
  */
 const GELDKLEUREN = [
-  "bg-tint-paars-ink/60",
-  "bg-tint-oranje-ink/60",
-  "bg-tint-groen-ink/60",
-  "bg-brand-ink/60",
-  "bg-tint-roze-ink/60",
-  "bg-tint-turkoois-ink/60",
+  "bg-tint-paars-mid",
+  "bg-tint-oranje-mid",
+  "bg-tint-groen-mid",
+  "bg-tint-blauw-mid",
+  "bg-tint-roze-mid",
+  "bg-tint-turkoois-mid",
 ];
 
 /** Aan, uit, of half — een kop waarvan maar een deel aanstaat. */
@@ -1318,7 +1319,9 @@ function StraatRij({
           {straat.klanten.length}×
         </span>
         {prijzenZien && (
-          <span className="text-[12px] font-semibold tabular-nums">{formatPrice(straat.bedrag)}</span>
+          <span className="text-[12px] font-semibold tabular-nums">
+            {formatPrice(straat.bedrag)}
+          </span>
         )}
       </div>
       <ul className="mt-0.5">

@@ -9,7 +9,12 @@
  */
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, ExternalLink, RefreshCw } from "lucide-react";
+import {
+  IconCopy as Copy,
+  IconDownload as Download,
+  IconExternalLink as ExternalLink,
+  IconRefresh as RefreshCw,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/lib/auth";

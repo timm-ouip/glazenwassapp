@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { nl } from "date-fns/locale";
-import { CalendarArrowUp } from "lucide-react";
+import { IconCalendarUp as CalendarArrowUp } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";

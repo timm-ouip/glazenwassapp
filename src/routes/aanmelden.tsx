@@ -12,7 +12,12 @@
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
-import { Check, Droplets, Loader2, MapPin } from "lucide-react";
+import {
+  IconCheck as Check,
+  IconDroplets as Droplets,
+  IconLoader2 as Loader2,
+  IconMapPin as MapPin,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 import { dienGegevensIn, haalAanmeldPagina } from "@/lib/aanmelden.functions";
 import { zoekOpPostcode } from "@/lib/postcode";

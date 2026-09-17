@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, Merge } from "lucide-react";
+import { IconAlertTriangle as AlertTriangle, IconArrowMerge as Merge } from "@tabler/icons-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";

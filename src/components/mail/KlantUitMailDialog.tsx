@@ -10,7 +10,16 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CircleDollarSign, Hash, House, Mail, MapPin, Phone, User, UserPlus } from "lucide-react";
+import {
+  IconCoinEuro as CircleDollarSign,
+  IconHash as Hash,
+  IconHome as House,
+  IconMail as Mail,
+  IconMapPin as MapPin,
+  IconPhone as Phone,
+  IconUser as User,
+  IconUserPlus as UserPlus,
+} from "@tabler/icons-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

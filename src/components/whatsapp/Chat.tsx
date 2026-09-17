@@ -6,15 +6,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Check,
-  CheckCheck,
-  FileText,
-  Loader2,
-  Send,
-  Smartphone,
-  Sparkles,
-  Undo2,
-} from "lucide-react";
+  IconCheck as Check,
+  IconChecks as CheckCheck,
+  IconFileText as FileText,
+  IconLoader2 as Loader2,
+  IconSend as Send,
+  IconDeviceMobile as Smartphone,
+  IconSparkles as Sparkles,
+  IconArrowBackUp as Undo2,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";

@@ -15,16 +15,16 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  AlertTriangle,
-  ArrowLeft,
-  Check,
-  Eye,
-  FileSpreadsheet,
-  Sparkles,
-  Trash2,
-  Undo2,
-  Upload,
-} from "lucide-react";
+  IconAlertTriangle as AlertTriangle,
+  IconArrowLeft as ArrowLeft,
+  IconCheck as Check,
+  IconEye as Eye,
+  IconFileSpreadsheet as FileSpreadsheet,
+  IconSparkles as Sparkles,
+  IconTrash as Trash2,
+  IconArrowBackUp as Undo2,
+  IconUpload as Upload,
+} from "@tabler/icons-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { PopupBody, PopupHint, PopupKader, PopupKop } from "@/components/Popup";

@@ -2,19 +2,19 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Building2,
-  ChevronDown,
-  ChevronUp,
-  KeyRound,
-  Mail,
-  Monitor,
-  Moon,
-  Plus,
-  Sun,
-  Trash2,
-  User,
-  UserPlus,
-} from "lucide-react";
+  IconBuilding as Building2,
+  IconChevronDown as ChevronDown,
+  IconChevronUp as ChevronUp,
+  IconKey as KeyRound,
+  IconMail as Mail,
+  IconDeviceDesktop as Monitor,
+  IconMoon as Moon,
+  IconPlus as Plus,
+  IconSun as Sun,
+  IconTrash as Trash2,
+  IconUser as User,
+  IconUserPlus as UserPlus,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { requireSession, useAuth, useRequireAuth, type Rol } from "@/lib/auth";

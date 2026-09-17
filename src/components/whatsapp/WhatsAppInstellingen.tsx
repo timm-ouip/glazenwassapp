@@ -9,7 +9,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, MessageCircle } from "lucide-react";
+import {
+  IconAlertTriangle as AlertTriangle,
+  IconCircleCheck as CheckCircle2,
+  IconMessageCircle as MessageCircle,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { useBevestig } from "@/components/Bevestig";

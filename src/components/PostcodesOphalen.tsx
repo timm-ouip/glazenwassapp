@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { MapPin } from "lucide-react";
+import { IconMapPin as MapPin } from "@tabler/icons-react";
 import { persistPostcodes, type Customer, type Street } from "@/lib/klanten";
 import { haalPostcodesOp, stratenZonderPostcode } from "@/lib/aanvullen";
 import { pushUndo, undoLaatste } from "@/lib/undo";

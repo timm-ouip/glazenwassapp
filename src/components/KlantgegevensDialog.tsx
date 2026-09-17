@@ -34,23 +34,23 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  CalendarDays,
-  CalendarOff,
-  Flag,
-  Hammer,
-  MessageSquareWarning,
-  Hash,
-  House,
-  Link2,
-  Mail,
-  MapPin,
-  MessageSquare,
-  Palette,
-  Phone,
-  Signpost,
-  User,
-  X,
-} from "lucide-react";
+  IconCalendar as CalendarDays,
+  IconCalendarOff as CalendarOff,
+  IconFlag as Flag,
+  IconHammer as Hammer,
+  IconMessageExclamation as MessageSquareWarning,
+  IconHash as Hash,
+  IconHome as House,
+  IconLink as Link2,
+  IconMail as Mail,
+  IconMapPin as MapPin,
+  IconMessage as MessageSquare,
+  IconPalette as Palette,
+  IconPhone as Phone,
+  IconSignRight as Signpost,
+  IconUser as User,
+  IconX as X,
+} from "@tabler/icons-react";
 import { NotitieCel } from "@/components/NotitieCel";
 import { useRecht } from "@/lib/rechten";
 import {

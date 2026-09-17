@@ -10,7 +10,13 @@
  */
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, RefreshCw, Send, Trash2, Undo2 } from "lucide-react";
+import {
+  IconLoader2 as Loader2,
+  IconRefresh as RefreshCw,
+  IconSend as Send,
+  IconTrash as Trash2,
+  IconArrowBackUp as Undo2,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { useBevestig } from "@/components/Bevestig";

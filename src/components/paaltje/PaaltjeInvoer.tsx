@@ -11,7 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ArrowUp, Loader2 } from "lucide-react";
+import { IconArrowUp as ArrowUp, IconLoader2 as Loader2 } from "@tabler/icons-react";
 
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";

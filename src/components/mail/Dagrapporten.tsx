@@ -3,14 +3,14 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import {
-  AlertTriangle,
-  CalendarDays,
-  CheckCircle2,
-  Hand,
-  Inbox,
-  MessageSquareWarning,
-  Sparkles,
-} from "lucide-react";
+  IconAlertTriangle as AlertTriangle,
+  IconCalendar as CalendarDays,
+  IconCircleCheck as CheckCircle2,
+  IconHandStop as Hand,
+  IconInbox as Inbox,
+  IconMessageExclamation as MessageSquareWarning,
+  IconSparkles as Sparkles,
+} from "@tabler/icons-react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toonMaand } from "@/lib/klanten";

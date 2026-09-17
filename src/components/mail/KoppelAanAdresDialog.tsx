@@ -8,7 +8,13 @@
  */
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link2, Loader2, MapPin, Search, UserRound } from "lucide-react";
+import {
+  IconLink as Link2,
+  IconLoader2 as Loader2,
+  IconMapPin as MapPin,
+  IconSearch as Search,
+  IconUser as UserRound,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { Dialog } from "@/components/ui/dialog";

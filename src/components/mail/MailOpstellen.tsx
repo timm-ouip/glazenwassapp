@@ -7,7 +7,15 @@
  */
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Clock, Loader2, Paperclip, Send, SquarePen, X } from "lucide-react";
+import {
+  IconChevronDown as ChevronDown,
+  IconClock as Clock,
+  IconLoader2 as Loader2,
+  IconPaperclip as Paperclip,
+  IconSend as Send,
+  IconEdit as SquarePen,
+  IconX as X,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import {

@@ -1,7 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CornerDownRight, Mail, Plus, SquarePen, Trash2, User, Users } from "lucide-react";
+import {
+  IconChevronRight as ChevronRight,
+  IconCornerDownRight as CornerDownRight,
+  IconMail as Mail,
+  IconBrandWhatsapp as WhatsApp,
+  IconPlus as Plus,
+  IconEdit as SquarePen,
+  IconTrash as Trash2,
+  IconUser as User,
+  IconUsers as Users,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { requireSession, useRequireAuth } from "@/lib/auth";
@@ -26,6 +36,8 @@ import { pushUndo, undoLaatste } from "@/lib/undo";
 import { nieuweKlus, verwijderKlus } from "@/lib/klussen";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
 import { useStabiel } from "@/hooks/use-stabiel";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { telefoonSleutel } from "@/lib/whatsapp";
 import {
   addQuickNote,
   adresVanRegel,
@@ -311,6 +323,319 @@ const KlantRegel = memo(function KlantRegel({
   );
 });
 
+/** Een WhatsApp-link voor dit nummer, of null als het geen bruikbaar nummer
+ *  is. Nederlandse nummers gaan naar +31; een buitenlands nummer moet met +
+ *  of 00 beginnen. */
+function whatsAppLink(nummer: string | undefined): string | null {
+  if (!nummer?.trim()) return null;
+  // "+31 (0)6 1234 5678" en "+31 06…": de 0 na het landnummer hoort er niet.
+  const opgeschoond = nummer
+    .replace(/\(0\)/g, "")
+    .trim()
+    .replace(/^(\+|00)\s*31[\s-]*0/, "$131");
+  const nl = telefoonSleutel(opgeschoond);
+  if (nl) return `https://wa.me/31${nl.slice(1)}`;
+  const kaal = opgeschoond;
+  const cijfers = kaal.replace(/\D/g, "");
+  if (kaal.startsWith("+") && cijfers.length >= 8) return `https://wa.me/${cijfers}`;
+  if (cijfers.startsWith("00") && cijfers.length >= 10) return `https://wa.me/${cijfers.slice(2)}`;
+  return null;
+}
+
+/** Hoe ver een regel opzij schuift om de twee knoppen te tonen. */
+const KNOPPEN_BREEDTE = 128;
+
+/**
+ * Eén adres in de lijst op de telefoon. Tik opent het dossier; veeg naar
+ * links en WhatsApp en mail komen tevoorschijn. Lang indrukken opent
+ * hetzelfde menu als rechts klikken op de computer.
+ */
+const KlantRegelMobiel = memo(function KlantRegelMobiel({
+  regel: r,
+  open,
+  onOpen,
+  onSluitAndere,
+  onDossier,
+  onMail,
+  magMail,
+  onPatch,
+  onHoekadres,
+  onKlus,
+  onStoppen,
+  markeringen,
+  magKlanten,
+  magPlannen,
+  prijzenZien,
+}: {
+  regel: Regel;
+  open: boolean;
+  onOpen: (id: string | null) => void;
+  /** Sluit een andere regel die nog opengeveegd staat. */
+  onSluitAndere: (id: string) => void;
+  onDossier: (r: Regel) => void;
+  /** Opent het dossier meteen bij de berichten van deze klant. */
+  onMail: (r: Regel) => void;
+  /** Mag je mail lezen? Anders valt de knop terug op je eigen mailapp. */
+  magMail: boolean;
+  onPatch: (c: Customer, patch: Partial<Customer>) => void;
+  onHoekadres: (c: Customer) => void;
+  onKlus: (c: Customer) => void;
+  onStoppen: (r: Regel) => void;
+  markeringen: MarkeringRij[];
+  magKlanten: boolean;
+  magPlannen: boolean;
+  prijzenZien: boolean;
+}) {
+  const adres = adresTekst(r);
+  const naam = r.klant?.naam.trim() ?? "";
+  const whatsApp = whatsAppLink(r.klant?.telefoon) ?? whatsAppLink(r.klant?.telefoon2);
+  const mail = r.klant?.email.trim() || r.klant?.email2.trim() || "";
+  // Alleen met een klant is er een mailgeschiedenis om te openen.
+  const mailInApp = magMail && !!r.klant;
+  const start = useRef<{ x: number; y: number; opzij: boolean } | null>(null);
+  const [schuif, setSchuif] = useState<number | null>(null);
+  /** Een veeg eindigt soms nog met een klik; die mag het dossier niet openen. */
+  const netGeveegd = useRef(false);
+  const verschoven = schuif ?? (open ? -KNOPPEN_BREEDTE : 0);
+
+  return (
+    <div className="relative overflow-hidden border-b border-border/60 last:border-b-0">
+      {/* Achter de regel: de twee knoppen die het vegen onthult. */}
+      <div className="absolute inset-y-0 right-0 flex" style={{ width: KNOPPEN_BREEDTE }}>
+        <a
+          href={whatsApp ?? undefined}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-disabled={!whatsApp}
+          tabIndex={open ? 0 : -1}
+          onClick={(e) => {
+            if (!whatsApp) {
+              e.preventDefault();
+              toast("Geen telefoonnummer bekend. Vul het in het dossier in.");
+            }
+            onOpen(null);
+          }}
+          className={`flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${
+            whatsApp ? "bg-tint-groen text-tint-groen-ink" : "bg-muted text-muted-foreground/60"
+          }`}
+        >
+          <WhatsApp className="size-5" /> WhatsApp
+        </a>
+        <a
+          // Het mailcontact met deze klant in Wooshy zelf: de berichten in
+          // het dossier, waar je ook meteen een nieuwe mail schrijft. Zonder
+          // recht op mail je eigen mailapp.
+          href={!mailInApp && mail ? `mailto:${mail}` : undefined}
+          aria-disabled={!mailInApp && !mail}
+          tabIndex={open ? 0 : -1}
+          onClick={(e) => {
+            onOpen(null);
+            if (mailInApp) {
+              e.preventDefault();
+              onMail(r);
+            } else if (!mail) {
+              e.preventDefault();
+              toast(
+                r.klant
+                  ? "Geen e-mailadres bekend. Vul het in het dossier in."
+                  : "Nog geen klant op dit adres. Open het dossier om er een te maken.",
+              );
+            }
+          }}
+          className={`flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${
+            mailInApp || mail
+              ? "bg-accent text-accent-foreground"
+              : "bg-muted text-muted-foreground/60"
+          }`}
+        >
+          <Mail className="size-5" /> Mail
+        </a>
+      </div>
+
+      <KlantMenu
+        customer={r.customer}
+        onPatch={(patch) => onPatch(r.customer, patch)}
+        onDossier={() => onDossier(r)}
+        onHoekadres={() => onHoekadres(r.customer)}
+        onKlus={magPlannen || magKlanten ? () => onKlus(r.customer) : undefined}
+        onStoppen={magKlanten ? () => onStoppen(r) : undefined}
+        alleenLezen={!magPlannen && !magKlanten}
+        markeringen={markeringen}
+      >
+        <button
+          type="button"
+          className={`relative flex w-full touch-pan-y select-none items-center gap-3 bg-card px-3 py-2.5 text-left [-webkit-touch-callout:none] ${
+            schuif === null ? "transition-transform duration-200" : ""
+          }`}
+          style={{ transform: `translateX(${verschoven}px)` }}
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            if (t) start.current = { x: t.clientX, y: t.clientY, opzij: false };
+            netGeveegd.current = false;
+            onSluitAndere(r.id);
+          }}
+          onTouchMove={(e) => {
+            const s = start.current;
+            const t = e.touches[0];
+            if (!s || !t) return;
+            const dx = t.clientX - s.x;
+            const dy = t.clientY - s.y;
+            // Pas opzij schuiven als het duidelijk een veeg opzij is, anders
+            // ben je gewoon aan het scrollen.
+            if (!s.opzij && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) s.opzij = true;
+            if (!s.opzij) return;
+            const basis = open ? -KNOPPEN_BREEDTE : 0;
+            setSchuif(Math.max(-KNOPPEN_BREEDTE, Math.min(0, basis + dx)));
+          }}
+          onTouchEnd={() => {
+            const s = start.current;
+            start.current = null;
+            if (s?.opzij && schuif !== null) {
+              netGeveegd.current = true;
+              onOpen(schuif < -KNOPPEN_BREEDTE / 2 ? r.id : null);
+            }
+            setSchuif(null);
+          }}
+          // Onderbroken door de telefoon (een melding, een randgebaar): terug
+          // naar waar hij stond, niet half opzij blijven hangen.
+          onTouchCancel={() => {
+            start.current = null;
+            setSchuif(null);
+          }}
+          onClick={() => {
+            if (netGeveegd.current) {
+              netGeveegd.current = false;
+              return;
+            }
+            // Een open regel sluit eerst.
+            if (open) onOpen(null);
+            else onDossier(r);
+          }}
+        >
+          <span
+            className={`flex size-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold tabular-nums ${
+              naam ? "bg-tint-blauw text-tint-blauw-ink" : "bg-surface text-muted-foreground"
+            }`}
+          >
+            {formatNumber(r.customer)}
+          </span>
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className="flex items-center gap-1.5 truncate text-[15px] font-medium">
+              {isHoekadres(r.customer) && (
+                <CornerDownRight className="size-3 shrink-0 text-muted-foreground" />
+              )}
+              <span className="truncate">{adres}</span>
+            </span>
+            <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
+              {naam || <span className="italic">nog geen naam</span>}
+              {prijzenZien && r.customer.price ? ` · ${formatPrice(r.customer.price)}` : ""}
+            </span>
+          </span>
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground/60" />
+        </button>
+      </KlantMenu>
+    </div>
+  );
+});
+
+/**
+ * De klantenlijst op de telefoon: per straat een kopje dat blijft plakken,
+ * en rechts een rij letters om naar een straat te springen.
+ */
+function KlantenLijstMobiel({
+  regels,
+  ...rest
+}: {
+  regels: Regel[];
+} & Omit<Parameters<typeof KlantRegelMobiel>[0], "regel" | "open" | "onOpen" | "onSluitAndere">) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const sluitAndere = useCallback(
+    (id: string) => setOpenId((was) => (was && was !== id ? null : was)),
+    [],
+  );
+  // Ga je scrollen, dan klapt een opengeveegde regel weer dicht.
+  useEffect(() => {
+    if (!openId) return;
+    const dicht = () => setOpenId(null);
+    window.addEventListener("scroll", dicht, { passive: true, once: true });
+    return () => window.removeEventListener("scroll", dicht);
+  }, [openId]);
+
+  const groepen = useMemo(() => {
+    const uit: { street: Street; regels: Regel[] }[] = [];
+    for (const r of regels) {
+      const laatste = uit[uit.length - 1];
+      if (laatste && laatste.street.id === r.street.id) laatste.regels.push(r);
+      else uit.push({ street: r.street, regels: [r] });
+    }
+    return uit;
+  }, [regels]);
+
+  // Per beginletter de eerste straat die ermee begint, op alfabet.
+  const letters = useMemo(() => {
+    const eerste = new Map<string, string>();
+    for (const g of groepen) {
+      // Dezelfde naam als in het kopje, zodat de letter klopt met wat je ziet.
+      const letter = (g.street.volledige_naam.trim() || g.street.name)
+        .trim()
+        .charAt(0)
+        .toUpperCase();
+      if (letter && !eerste.has(letter)) eerste.set(letter, g.street.id);
+    }
+    return [...eerste].sort((a, b) => a[0].localeCompare(b[0], "nl"));
+  }, [groepen]);
+
+  function springNaar(straatId: string) {
+    document.getElementById(`straat-${straatId}`)?.scrollIntoView({ block: "start" });
+  }
+
+  return (
+    <div className="relative pr-5">
+      {/* overflow-clip en niet -hidden: anders plakken de straatkopjes niet. */}
+      <div className="overflow-clip rounded-[18px] border border-border bg-card shadow-card">
+        {groepen.map((g) => (
+          <section key={g.street.id}>
+            <h2
+              id={`straat-${g.street.id}`}
+              className="sticky top-[var(--plakrand)] z-[5] scroll-mt-[var(--plakrand)] border-b border-border/60 bg-surface/95 px-3 py-1.5 text-[12px] font-semibold text-muted-foreground backdrop-blur"
+            >
+              {g.street.volledige_naam.trim() || g.street.name}
+              <span className="ml-1.5 font-normal tabular-nums">· {g.regels.length}</span>
+            </h2>
+            {g.regels.map((r) => (
+              <KlantRegelMobiel
+                key={r.id}
+                regel={r}
+                open={openId === r.id}
+                onOpen={setOpenId}
+                onSluitAndere={sluitAndere}
+                {...rest}
+              />
+            ))}
+          </section>
+        ))}
+      </div>
+      {letters.length > 1 && (
+        <nav
+          aria-label="Naar een straat springen"
+          className="fixed right-0.5 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center"
+        >
+          {letters.map(([letter, id]) => (
+            <button
+              key={letter}
+              type="button"
+              onClick={() => springNaar(id)}
+              className="px-1.5 py-[1px] text-[11px] font-semibold leading-tight text-brand-ink"
+            >
+              {letter}
+            </button>
+          ))}
+        </nav>
+      )}
+    </div>
+  );
+}
+
 function Klanten() {
   useRequireAuth();
   const qc = useQueryClient();
@@ -321,9 +646,16 @@ function Klanten() {
   // geen velden of knoppen staan die toch niets opslaan.
   const magKlanten = useRecht("klanten_bewerken");
   const magPlannen = useRecht("planning");
+  const magMail = useRecht("mail_lezen");
   const prijzenZien = useRecht("prijzen_zien");
 
   const [zoektermen, setZoektermen] = useState<string[]>([]);
+  const mobiel = useIsMobile();
+  // Telefoon en computer hebben elk hun eigen zoekbalk; wissel je, dan
+  // begint de nieuwe leeg en hoort de lijst dat ook te doen.
+  useEffect(() => {
+    setZoektermen([]);
+  }, [mobiel]);
   const [alleenLeeg, setAlleenLeeg] = useState(false);
   const [toonInactief, setToonInactief] = useState(false);
   const [stop, setStop] = useState<{ open: boolean; regel: Regel | null }>({
@@ -751,6 +1083,11 @@ function Klanten() {
   const opDossier = useStabiel((r: Regel) =>
     setDossier({ open: true, klant: r.klant, customer: r.customer }),
   );
+  // Naar de berichtenpagina van deze klant: mail en WhatsApp als gesprek,
+  // groot genoeg om te lezen, in plaats van het tabblad in de popup.
+  const opMail = useStabiel((r: Regel) => {
+    if (r.klant) void navigate({ to: "/berichten", search: { klant: r.klant.id } });
+  });
   const opHoekadres = useStabiel((c: Customer) => setHoek({ open: true, customer: c }));
   const opKlus = useStabiel((c: Customer) => setKlus({ open: true, customer: c }));
   const opStoppen = useStabiel((r: Regel) => setStop({ open: true, regel: r }));
@@ -806,27 +1143,60 @@ function Klanten() {
             : undefined
           : "Kies een wijk om zijn klanten te zien."
       }
-      acties={
-        <>
-          <ZoekBalk placeholder="Zoek adres of naam" onTermen={setZoektermen} />
-          {magKlanten && (
-            <>
-              <PostcodesOphalen
-                streets={streets.filter((s) => s.district_id === actieveWijk)}
-                customers={customers}
-                plaats={wijkVanNu?.plaats ?? ""}
-                onSaved={herlaad}
-              />
+      // Op de telefoon staan zoeken en "+" onderin, bij je duim.
+      onderbalk={
+        mobiel ? (
+          <div className="flex items-center gap-2">
+            <ZoekBalk
+              placeholder="Zoek adres of naam"
+              onTermen={setZoektermen}
+              className="w-0 flex-1 shadow-[0_4px_20px_oklch(0.3_0.02_70/18%)]"
+            />
+            {magKlanten && (
               <Button
-                size="sm"
-                className="rounded-full"
+                size="icon"
+                className="size-11 shrink-0 rounded-full shadow-[0_4px_20px_oklch(0.3_0.02_70/18%)]"
                 onClick={() => setDossier({ open: true, klant: null, customer: null })}
+                aria-label="Klant toevoegen"
               >
-                <Plus className="size-4" /> Klant
+                <Plus className="size-5" />
               </Button>
-            </>
-          )}
-        </>
+            )}
+          </div>
+        ) : undefined
+      }
+      acties={
+        mobiel ? (
+          magKlanten && (
+            <PostcodesOphalen
+              streets={streets.filter((s) => s.district_id === actieveWijk)}
+              customers={customers}
+              plaats={wijkVanNu?.plaats ?? ""}
+              onSaved={herlaad}
+            />
+          )
+        ) : (
+          <>
+            <ZoekBalk placeholder="Zoek adres of naam" onTermen={setZoektermen} />
+            {magKlanten && (
+              <>
+                <PostcodesOphalen
+                  streets={streets.filter((s) => s.district_id === actieveWijk)}
+                  customers={customers}
+                  plaats={wijkVanNu?.plaats ?? ""}
+                  onSaved={herlaad}
+                />
+                <Button
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setDossier({ open: true, klant: null, customer: null })}
+                >
+                  <Plus className="size-4" /> Klant
+                </Button>
+              </>
+            )}
+          </>
+        )
       }
       kop={
         <Cijferkaarten
@@ -903,6 +1273,21 @@ function Klanten() {
                   : "Pas je zoekopdracht aan."}
             </p>
           </div>
+        ) : mobiel ? (
+          <KlantenLijstMobiel
+            regels={zichtbaar}
+            onDossier={opDossier}
+            onMail={opMail}
+            magMail={magMail}
+            onPatch={opPatch}
+            onHoekadres={opHoekadres}
+            onKlus={opKlus}
+            onStoppen={opStoppen}
+            markeringen={markeringen}
+            magKlanten={magKlanten}
+            magPlannen={magPlannen}
+            prijzenZien={prijzenZien}
+          />
         ) : (
           <div className="overflow-x-auto rounded-[18px] border border-border bg-card shadow-card">
             <table className="w-full min-w-[64rem] text-[13px]">
@@ -965,60 +1350,86 @@ function Klanten() {
                 zelf in de wijklijst aangemaakt.
               </p>
             </div>
-            <div className="overflow-x-auto rounded-[18px] border border-dashed border-border bg-card">
-              <table className="w-full min-w-[52rem] text-[13px]">
-                <tbody>
-                  {zichtbareLos.map((k) => (
-                    <tr
-                      key={k.id}
-                      className="group border-b border-border/60 last:border-b-0 hover:bg-accent/30"
-                    >
-                      <td className="w-9 px-2 py-1">
-                        <button
-                          className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                          aria-label={`Dossier van ${k.naam || "naamloze klant"}`}
-                          title="Dossier openen"
-                          onClick={() => setDossier({ open: true, klant: k, customer: null })}
-                        >
-                          <User className="size-4" />
-                        </button>
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">
-                        {klantAdres(k) || "geen adres"}
-                      </td>
-                      {KOLOMMEN.map((kol) => (
-                        <td key={kol.veld} className={`px-2 py-1 ${kol.breed}`}>
-                          <InlineCel
-                            value={k[kol.veld]}
-                            placeholder="—"
-                            alleenLezen={!magKlanten}
-                            onCommit={(v) =>
-                              void zetKlantVeld(k.id, kol.veld, v, k[kol.veld]).catch((e) =>
-                                toast.error("Opslaan mislukt: " + (e as Error).message),
-                              )
-                            }
-                          />
-                        </td>
-                      ))}
-                      <td className="w-9 px-2 py-1">
-                        {magKlanten && (
+            {mobiel ? (
+              <div className="overflow-hidden rounded-[18px] border border-dashed border-border bg-card">
+                {zichtbareLos.map((k) => (
+                  <button
+                    key={k.id}
+                    type="button"
+                    onClick={() => setDossier({ open: true, klant: k, customer: null })}
+                    className="flex w-full items-center gap-3 border-b border-border/60 px-3 py-2.5 text-left last:border-b-0"
+                  >
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface text-muted-foreground">
+                      <User className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1 leading-tight">
+                      <span className="block truncate text-[15px] font-medium">
+                        {klantAdres(k) || <span className="italic">geen adres</span>}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
+                        {k.naam || "nog geen naam"}
+                      </span>
+                    </span>
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground/60" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-[18px] border border-dashed border-border bg-card">
+                <table className="w-full min-w-[52rem] text-[13px]">
+                  <tbody>
+                    {zichtbareLos.map((k) => (
+                      <tr
+                        key={k.id}
+                        className="group border-b border-border/60 last:border-b-0 hover:bg-accent/30"
+                      >
+                        <td className="w-9 px-2 py-1">
                           <button
-                            className="flex size-7 items-center justify-center rounded-full text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:bg-destructive/10 hover:!text-destructive"
-                            aria-label={`Klant ${k.naam || "zonder naam"} verwijderen`}
-                            title="Klant verwijderen"
-                            onClick={() =>
-                              void verwijderRegel(null, k, `Klant "${k.naam || "zonder naam"}"`)
-                            }
+                            className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            aria-label={`Dossier van ${k.naam || "naamloze klant"}`}
+                            title="Dossier openen"
+                            onClick={() => setDossier({ open: true, klant: k, customer: null })}
                           >
-                            <Trash2 className="size-4" />
+                            <User className="size-4" />
                           </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">
+                          {klantAdres(k) || "geen adres"}
+                        </td>
+                        {KOLOMMEN.map((kol) => (
+                          <td key={kol.veld} className={`px-2 py-1 ${kol.breed}`}>
+                            <InlineCel
+                              value={k[kol.veld]}
+                              placeholder="—"
+                              alleenLezen={!magKlanten}
+                              onCommit={(v) =>
+                                void zetKlantVeld(k.id, kol.veld, v, k[kol.veld]).catch((e) =>
+                                  toast.error("Opslaan mislukt: " + (e as Error).message),
+                                )
+                              }
+                            />
+                          </td>
+                        ))}
+                        <td className="w-9 px-2 py-1">
+                          {magKlanten && (
+                            <button
+                              className="flex size-7 items-center justify-center rounded-full text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:bg-destructive/10 hover:!text-destructive"
+                              aria-label={`Klant ${k.naam || "zonder naam"} verwijderen`}
+                              title="Klant verwijderen"
+                              onClick={() =>
+                                void verwijderRegel(null, k, `Klant "${k.naam || "zonder naam"}"`)
+                              }
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

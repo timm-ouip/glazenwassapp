@@ -4,7 +4,7 @@
  * en sinds wanneer, en zet je ze met één knop weer actief.
  */
 import { useState } from "react";
-import { Loader2, RotateCcw } from "lucide-react";
+import { IconLoader2 as Loader2, IconRotate as RotateCcw } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";

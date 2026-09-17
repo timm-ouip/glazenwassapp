@@ -11,7 +11,18 @@
  */
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Check, Link2, Loader2, Mail, Phone, Sparkles, Undo2, UserPlus, UserRound } from "lucide-react";
+import {
+  IconCalendar as CalendarDays,
+  IconCheck as Check,
+  IconLink as Link2,
+  IconLoader2 as Loader2,
+  IconMail as Mail,
+  IconPhone as Phone,
+  IconSparkles as Sparkles,
+  IconArrowBackUp as Undo2,
+  IconUserPlus as UserPlus,
+  IconUser as UserRound,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { fetchKlantBijEmail, type Bericht, type KlantBijMail, type KlantVeld } from "@/lib/berichten";

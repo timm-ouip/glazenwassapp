@@ -7,7 +7,13 @@
  */
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Loader2, Mail, RefreshCw } from "lucide-react";
+import {
+  IconAlertTriangle as AlertTriangle,
+  IconCircleCheck as CheckCircle2,
+  IconLoader2 as Loader2,
+  IconMail as Mail,
+  IconRefresh as RefreshCw,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import {

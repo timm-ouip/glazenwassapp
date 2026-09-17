@@ -1,14 +1,14 @@
 import {
-  CalendarOff,
-  Check,
-  CircleSlash,
-  CornerDownRight,
-  FileText,
-  Flag,
-  Hammer,
-  Scissors,
-  UserMinus,
-} from "lucide-react";
+  IconCalendarOff as CalendarOff,
+  IconCheck as Check,
+  IconCircleOff as CircleSlash,
+  IconCornerDownRight as CornerDownRight,
+  IconFileText as FileText,
+  IconFlag as Flag,
+  IconHammer as Hammer,
+  IconScissors as Scissors,
+  IconUserMinus as UserMinus,
+} from "@tabler/icons-react";
 import { Fragment, useRef, useState, type ReactNode } from "react";
 
 import {

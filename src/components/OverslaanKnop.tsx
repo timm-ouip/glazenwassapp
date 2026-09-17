@@ -1,5 +1,9 @@
 import { Fragment } from "react";
-import { CalendarOff, ChevronDown, CircleSlash } from "lucide-react";
+import {
+  IconCalendarOff as CalendarOff,
+  IconChevronDown as ChevronDown,
+  IconCircleOff as CircleSlash,
+} from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
 import {

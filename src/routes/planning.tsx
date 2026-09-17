@@ -26,23 +26,23 @@ import {
 } from "date-fns";
 import { nl } from "date-fns/locale";
 import {
-  CalendarCheck,
-  CalendarPlus,
-  ChevronLeft,
-  ChevronsRight,
-  ChevronRight,
-  Droplet,
-  Eraser,
-  Euro,
-  Hammer,
-  ListChecks,
-  MoreHorizontal,
-  Mail,
-  Milestone as Route2,
-  Check,
-  Plus,
-  Trash2,
-} from "lucide-react";
+  IconCalendarCheck as CalendarCheck,
+  IconCalendarPlus as CalendarPlus,
+  IconChevronLeft as ChevronLeft,
+  IconChevronsRight as ChevronsRight,
+  IconChevronRight as ChevronRight,
+  IconDroplet as Droplet,
+  IconEraser as Eraser,
+  IconCurrencyEuro as Euro,
+  IconHammer as Hammer,
+  IconListCheck as ListChecks,
+  IconDots as MoreHorizontal,
+  IconMail as Mail,
+  IconRoute as Route2,
+  IconCheck as Check,
+  IconPlus as Plus,
+  IconTrash as Trash2,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { requireSession, useRequireAuth } from "@/lib/auth";

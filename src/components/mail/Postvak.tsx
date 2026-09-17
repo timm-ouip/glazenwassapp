@@ -16,42 +16,43 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
-  ArrowLeft,
-  Bell,
-  BellOff,
-  CircleCheck,
-  Clock,
-  Keyboard,
-  Loader2,
-  Pencil,
-  FileText,
-  Flag,
-  FlagOff,
-  Forward,
-  Folder,
-  FolderInput,
-  FolderPlus,
-  Hand,
-  Inbox,
-  Mail,
-  MailOpen,
-  Megaphone,
-  Newspaper,
-  Paperclip,
-  Reply,
-  ReplyAll,
-  RotateCcw,
-  Search,
-  Send,
-  ShieldAlert,
-  ShieldCheck,
-  Sparkles,
-  SquarePen,
-  Tag,
-  Trash2,
-  Undo2,
-  type LucideIcon,
-} from "lucide-react";
+  IconArrowLeft as ArrowLeft,
+  IconMenu2 as Menu,
+  IconBell as Bell,
+  IconBellOff as BellOff,
+  IconCircleCheck as CircleCheck,
+  IconClock as Clock,
+  IconKeyboard as Keyboard,
+  IconLoader2 as Loader2,
+  IconPencil as Pencil,
+  IconFileText as FileText,
+  IconFlag as Flag,
+  IconFlagOff as FlagOff,
+  IconArrowForwardUp as Forward,
+  IconFolder as Folder,
+  IconFolderShare as FolderInput,
+  IconFolderPlus as FolderPlus,
+  IconHandStop as Hand,
+  IconInbox as Inbox,
+  IconMail as Mail,
+  IconMailOpened as MailOpen,
+  IconSpeakerphone as Megaphone,
+  IconNews as Newspaper,
+  IconPaperclip as Paperclip,
+  IconCornerUpLeft as Reply,
+  IconCornerUpLeftDouble as ReplyAll,
+  IconRotate as RotateCcw,
+  IconSearch as Search,
+  IconSend as Send,
+  IconShieldExclamation as ShieldAlert,
+  IconShieldCheck as ShieldCheck,
+  IconSparkles as Sparkles,
+  IconEdit as SquarePen,
+  IconTag as Tag,
+  IconTrash as Trash2,
+  IconArrowBackUp as Undo2,
+  type TablerIcon as LucideIcon,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import {
@@ -141,7 +142,24 @@ type Scherm = "mappen" | "lijst" | "lezen";
 /** Zoveel mails kun je tegelijk selecteren; de server doet er niet meer in één keer. */
 const MAX_SELECTIE = 50;
 
-const PANEEL = "min-h-0 flex-col overflow-hidden rounded-[18px] border border-border bg-card shadow-card";
+// Op de telefoon zonder kaart eromheen, zoals in Gmail: de lijst loopt tot de rand.
+const PANEEL =
+  "min-h-0 flex-col overflow-hidden rounded-[18px] border border-border bg-card shadow-card max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:shadow-none";
+
+/** Een vaste kleur per afzender voor het rondje met zijn letter. */
+const AFZENDER_KLEUREN = [
+  "bg-tint-blauw text-tint-blauw-ink",
+  "bg-tint-groen text-tint-groen-ink",
+  "bg-tint-paars text-tint-paars-ink",
+  "bg-tint-amber text-tint-amber-ink",
+  "bg-tint-roze text-tint-roze-ink",
+  "bg-tint-turkoois text-tint-turkoois-ink",
+];
+function afzenderKleur(sleutel: string): string {
+  let h = 0;
+  for (const teken of sleutel) h = (h * 31 + teken.charCodeAt(0)) >>> 0;
+  return AFZENDER_KLEUREN[h % AFZENDER_KLEUREN.length]!;
+}
 
 function zelfdeBron(a: Bron | null, b: Bron | null) {
   return !!a && !!b && bronSleutel(a) === bronSleutel(b);
@@ -235,6 +253,22 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
   const kanSchrijven = mailbox.data?.status === "actief";
   const titel = bronTitel(bron, mappen.data ?? [], categorieen.data ?? []);
 
+  // De chips boven de lijst op de telefoon: wat je het vaakst opent, zonder
+  // eerst naar de mappen te gaan. Dezelfde bronnen als in de mappenkolom.
+  const snelKeuzes: { bron: Bron; naam: string; telletje?: number; stip?: string }[] = postvak
+    ? [
+        { bron: { soort: "map", mapId: postvak.id }, naam: "Postvak", telletje: postvak.ongelezen },
+        { bron: { soort: "wacht", postvakId: postvak.id }, naam: "Wacht op jou", telletje: wacht.data ?? 0 },
+        ...(categorieen.data ?? []).map((c, i) => ({
+          bron: { soort: "categorie" as const, postvakId: postvak.id, categorieId: c.id },
+          naam: c.naam,
+          stip: categorieTint(c, i),
+        })),
+        { bron: { soort: "overige", postvakId: postvak.id }, naam: "Overige post" },
+        { bron: { soort: "vlag", prullenbakId: prullenbak?.id ?? null }, naam: "Met vlag", telletje: vlag.data ?? 0 },
+      ]
+    : [];
+
   return (
     <>
       {mailbox.data?.status === "fout" && (
@@ -246,7 +280,7 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
           .
         </p>
       )}
-      <div className="grid h-[calc(100dvh-var(--plakrand)-5.5rem)] min-h-[520px] gap-3 lg:grid-cols-[210px_minmax(280px,360px)_minmax(0,1fr)]">
+      <div className="grid h-[calc(100dvh-var(--plakrand)-5.5rem)] min-h-[520px] gap-3 max-md:-mx-3 max-md:h-[calc(100dvh-var(--plakrand)-var(--onderrand,0px)-4.5rem)] max-md:min-h-[420px] lg:grid-cols-[210px_minmax(280px,360px)_minmax(0,1fr)]">
         <div className={cn(PANEEL, scherm === "mappen" ? "flex" : "hidden", "lg:flex")}>
           <MapKolom
             mappen={mappen.data ?? []}
@@ -303,6 +337,11 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
                 setScherm("lezen");
               }}
               onTerug={() => setScherm("mappen")}
+              snelKeuzes={snelKeuzes}
+              onKiesBron={(nieuw) => {
+                setBron(nieuw);
+                setBerichtId(null);
+              }}
             />
           ) : (
             <div className="flex min-h-0 flex-1 flex-col">
@@ -436,16 +475,32 @@ export function antwoordOpzet(b: Bericht, begin = ""): Opzet {
   };
 }
 
-function KopMetTerug({ onTerug, children }: { onTerug: () => void; children?: React.ReactNode }) {
+function KopMetTerug({
+  onTerug,
+  menu = false,
+  children,
+}: {
+  onTerug: () => void;
+  /** In de lijst is het de knop naar de mappen: dan de drie streepjes, zoals in Gmail. */
+  menu?: boolean;
+  children?: React.ReactNode;
+}) {
   return (
-    <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+    <div className="flex items-center gap-2 border-b border-border px-3 py-2.5 max-md:border-0">
       <button
         type="button"
         onClick={onTerug}
         aria-label="Naar de mappen"
         className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted lg:hidden"
       >
-        <ArrowLeft className="size-4" />
+        {menu ? (
+          <>
+            <Menu className="size-5 text-foreground md:hidden" />
+            <ArrowLeft className="size-4 max-md:hidden" />
+          </>
+        ) : (
+          <ArrowLeft className="size-4" />
+        )}
       </button>
       {children}
     </div>
@@ -838,7 +893,12 @@ function BerichtLijst({
   actief,
   onOpen,
   onTerug,
+  snelKeuzes,
+  onKiesBron,
 }: {
+  /** Op de telefoon een rij chips boven de lijst: postvak, Paaltje-categorieën en meer. */
+  snelKeuzes: { bron: Bron; naam: string; telletje?: number; stip?: string }[];
+  onKiesBron: (bron: Bron) => void;
   bron: Bron;
   titel: string;
   categorieen: MailCategorie[];
@@ -1041,7 +1101,7 @@ function BerichtLijst({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <KopMetTerug onTerug={onTerug}>
+      <KopMetTerug onTerug={onTerug} menu>
         {gekozen.size > 0 ? (
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             <Checkbox
@@ -1119,7 +1179,7 @@ function BerichtLijst({
                 onChange={(e) => setZoek(e.target.value)}
                 onKeyDown={(e) => e.key === "Escape" && e.currentTarget.blur()}
                 placeholder={titel ? `Zoeken in ${titel}` : "Zoeken"}
-                className="h-9 rounded-full pl-8 text-[13px]"
+                className="h-9 rounded-full pl-8 text-[13px] max-md:h-10 max-md:border-0 max-md:bg-card max-md:text-[14px] max-md:shadow-card"
               />
             </div>
             <button
@@ -1135,6 +1195,32 @@ function BerichtLijst({
         )}
       </KopMetTerug>
 
+      {snelKeuzes.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto px-3 pb-2 [scrollbar-width:none] lg:hidden">
+          {snelKeuzes.map((k) => {
+            const aan = zelfdeBron(k.bron, bron);
+            return (
+              <button
+                key={bronSleutel(k.bron)}
+                type="button"
+                onClick={() => !aan && onKiesBron(k.bron)}
+                // De lijst wordt per map opnieuw opgebouwd, en de rij begint dan
+                // weer links: schuif de gekozen chip terug in beeld.
+                ref={aan ? (el) => el?.scrollIntoView({ inline: "center", block: "nearest" }) : undefined}
+                aria-pressed={aan}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-[13px]",
+                  aan ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground",
+                )}
+              >
+                {k.stip && <span className={cn("size-2.5 rounded-full ring-1 ring-inset ring-foreground/20", k.stip)} />}
+                {k.naam}
+                {!!k.telletje && <span className="tabular-nums opacity-80">{k.telletje}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {lijst.isLoading ? (
           <p className="p-4 text-[13px] text-muted-foreground">Mail ophalen…</p>
@@ -1175,9 +1261,20 @@ function BerichtLijst({
                 </Button>
               </div>
             )}
+            {/* Ruimte onderaan, zodat de laatste mail niet onder Opstellen valt. */}
+            <div className="h-16 md:hidden" />
           </>
         )}
       </div>
+      {kanSchrijven && (
+        <button
+          type="button"
+          onClick={onNieuweMail}
+          className="fixed bottom-[calc(var(--onderrand,0px)+0.75rem)] left-4 z-30 flex items-center gap-2 rounded-[16px] bg-tint-blauw px-4 py-3 text-[14px] font-medium text-tint-blauw-ink shadow-[0_4px_20px_oklch(0.3_0.02_70/22%)] md:hidden"
+        >
+          <Pencil className="size-5" /> Opstellen
+        </button>
+      )}
     </div>
   );
 }
@@ -1330,12 +1427,12 @@ function BerichtRij({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <div className="group relative border-b border-border/60">
+        <div className="group relative border-b border-border/60 max-md:border-0">
           {/* Vinkje om te selecteren: bij de muis, of altijd als er al iets gekozen is. */}
           <div
             className={cn(
               "absolute left-1.5 top-3 z-10 items-center",
-              kiesModus || gekozen ? "flex" : "hidden group-hover:flex",
+              kiesModus || gekozen ? "flex" : "hidden md:group-hover:flex",
             )}
           >
             <Checkbox checked={gekozen} onCheckedChange={onKies} aria-label="Selecteren" className="bg-card" />
@@ -1344,12 +1441,24 @@ function BerichtRij({
             type="button"
             onClick={kiesModus ? onKies : onOpen}
             className={cn(
-              "block w-full py-2.5 pl-7 pr-3.5 text-left transition-colors",
+              "block w-full py-2.5 pl-7 pr-3.5 text-left transition-colors max-md:flex max-md:items-start max-md:gap-3 max-md:rounded-[14px] max-md:pl-3",
               gekozen ? "bg-tint-blauw/50" : actief ? "bg-accent/70" : "group-hover:bg-muted/40",
             )}
           >
+            {/* Op de telefoon een rondje met de eerste letter, zoals in Gmail. */}
+            <span
+              aria-hidden="true"
+              className={cn(
+                "mt-0.5 hidden size-10 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold max-md:flex",
+                afzenderKleur(b.richting === "uit" ? "ik" : b.van_email),
+                (kiesModus || gekozen) && "invisible",
+              )}
+            >
+              {(afzenderNaam(b).replace(/^Aan: /, "").trim().charAt(0) || "?").toUpperCase()}
+            </span>
+            <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              {!b.gelezen && <span className="size-2 shrink-0 rounded-full bg-tint-blauw-ink" aria-label="Ongelezen" />}
+              {!b.gelezen && <span className="size-2 shrink-0 rounded-full bg-tint-blauw-ink max-md:hidden" aria-label="Ongelezen" />}
               <span className={cn("truncate text-[13.5px]", !b.gelezen && "font-semibold")}>{afzenderNaam(b)}</span>
               <span className="ml-auto shrink-0 text-[11.5px] tabular-nums text-muted-foreground">
                 {lijstDatum(b.ontvangen_op)}
@@ -1388,6 +1497,7 @@ function BerichtRij({
                 ))}
               </div>
             )}
+            </div>
           </button>
           {/* Snelle knoppen als je met de muis op de mail staat, zoals in een
             mailprogramma. Ze liggen over de datum heen, op de achtergrond van de regel. */}

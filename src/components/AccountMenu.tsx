@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut, Users } from "lucide-react";
+import { IconLogout as LogOut, IconUsers as Users } from "@tabler/icons-react";
 import { useAuth, signOut } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { heeftRecht, rolLabel } from "@/lib/rechten";

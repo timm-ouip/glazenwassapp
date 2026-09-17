@@ -10,8 +10,10 @@
  * The @theme inline block maps CSS custom properties to Tailwind utility
  * classes (e.g. --color-primary -> bg-primary, text-primary).
  *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
+ * The :root and .dark blocks define the actual color values. De neutrale
+ * kleuren staan in oklch; de gekleurde tinten (tint-*, accent, brand) zijn
+ * hexwaarden uit het palet van de voorbeelden en blijven dat, zodat ze er
+ * precies zo uitzien.
  *
  * To add a new semantic color:
  * 1. Add the variable to :root (light value) and .dark (dark value)
@@ -51,6 +53,13 @@
   --color-tint-turkoois-ink: var(--tint-turkoois-ink);
   --color-tint-limoen: var(--tint-limoen);
   --color-tint-limoen-ink: var(--tint-limoen-ink);
+  --color-tint-blauw-mid: var(--tint-blauw-mid);
+  --color-tint-groen-mid: var(--tint-groen-mid);
+  --color-tint-rood-mid: var(--tint-rood-mid);
+  --color-tint-paars-mid: var(--tint-paars-mid);
+  --color-tint-oranje-mid: var(--tint-oranje-mid);
+  --color-tint-roze-mid: var(--tint-roze-mid);
+  --color-tint-turkoois-mid: var(--tint-turkoois-mid);
   --color-tint-geel: var(--tint-geel);
   --color-tint-geel-ink: var(--tint-geel-ink);
   --shadow-card: var(--shadow-card);
@@ -116,54 +125,65 @@
   --primary-foreground: oklch(0.985 0.005 80);
   /* --brand is de VULLING (licht); --brand-foreground de tekst daarop (donker).
      Voor blauwe tekst op een witte ondergrond is --brand-ink bedoeld. */
-  /* Frisser en lichter dan het oude zeeblauw, uit dezelfde pastelfamilie als
+  /* De kleuren komen uit dezelfde palet als de voorbeelden die Timmie
+     uitkoos: per kleur een lichte vulling met de donkerste tint als tekst.
+     Frisser en lichter dan het oude zeeblauw, uit dezelfde pastelfamilie als
      de kaarten: een vulling om tekst op te zetten, niet een vlak dat schreeuwt. */
-  --brand: oklch(0.906 0.04 250);
-  --brand-foreground: oklch(0.44 0.115 250);
-  --brand-ink: oklch(0.5 0.12 250);
+  --brand: #B5D4F4;
+  --brand-foreground: #0C447C;
+  --brand-ink: #185FA5;
   /* Betekeniskleuren, los van het merk: amber voor even maanden en het
      aantal straten, groen voor bedragen. */
-  --tint-amber: oklch(0.936 0.05 68);
-  --tint-amber-ink: oklch(0.5 0.115 62);
-  --tint-groen: oklch(0.934 0.056 155);
-  --tint-groen-ink: oklch(0.46 0.115 156);
+  --tint-amber: #FAEEDA;
+  --tint-amber-ink: #633806;
+  --tint-groen: #EAF3DE;
+  --tint-groen-ink: #27500A;
   /* Paars: al ingepland op een andere dag. Bewust geen blauw, want dat is
      het merk, en geen amber, want dat is al gewassen. */
-  --tint-paars: oklch(0.936 0.045 305);
-  --tint-paars-ink: oklch(0.48 0.125 302);
+  --tint-paars: #EEEDFE;
+  --tint-paars-ink: #3C3489;
   /* Rood: deze maand overgeslagen, dus hij staat niet op de printlijst. */
-  --tint-rood: oklch(0.936 0.045 25);
-  --tint-rood-ink: oklch(0.5 0.145 27);
+  --tint-rood: #FCEBEB;
+  --tint-rood-ink: #791F1F;
   /* Blauw: alleen om zelf een markering mee te maken. Lichter dan het merk,
      zodat een gekleurde regel geen knop lijkt. */
-  --tint-blauw: oklch(0.934 0.045 235);
-  --tint-blauw-ink: oklch(0.47 0.115 245);
+  --tint-blauw: #E6F1FB;
+  --tint-blauw-ink: #0C447C;
   /* En deze vier ook: kleuren om zelf een betekenis aan te geven. De tinten
      liggen ver genoeg uit elkaar op de kleurencirkel om ze náást elkaar in
      één lijst nog uit elkaar te houden — dat is waar het hier om gaat. */
-  --tint-oranje: oklch(0.936 0.055 48);
-  --tint-oranje-ink: oklch(0.51 0.13 42);
-  --tint-roze: oklch(0.934 0.045 350);
-  --tint-roze-ink: oklch(0.5 0.13 352);
-  --tint-turkoois: oklch(0.932 0.05 195);
-  --tint-turkoois-ink: oklch(0.46 0.09 197);
-  --tint-limoen: oklch(0.934 0.058 128);
-  --tint-limoen-ink: oklch(0.47 0.11 130);
+  --tint-oranje: #FAECE7;
+  --tint-oranje-ink: #712B13;
+  --tint-roze: #FBEAF0;
+  --tint-roze-ink: #72243E;
+  --tint-turkoois: #E1F5EE;
+  --tint-turkoois-ink: #085041;
+  --tint-limoen: #F0F6E4;
+  --tint-limoen-ink: #3B6D11;
+  /* Middentinten voor een icoon of een dun balkje los op de pagina, zonder
+     vlak eronder: lichter dan -ink, zodat ze nog van elkaar te onderscheiden zijn. */
+  --tint-blauw-mid: #185FA5;
+  --tint-groen-mid: #3B6D11;
+  --tint-rood-mid: #A32D2D;
+  --tint-paars-mid: #534AB7;
+  --tint-oranje-mid: #993C1D;
+  --tint-roze-mid: #993556;
+  --tint-turkoois-mid: #0F6E56;
   /* Boter: hoort bij de extra opdrachten. Warmer dan amber en verder van de
      betekeniskleuren af, zodat het opvalt zonder te waarschuwen. */
-  --tint-geel: oklch(0.945 0.068 95);
-  --tint-geel-ink: oklch(0.47 0.095 88);
+  --tint-geel: #FBF3D0;
+  --tint-geel-ink: #6B4E07;
   --secondary: oklch(0.955 0.007 78);
   --secondary-foreground: oklch(0.3 0.008 70);
   --muted: oklch(0.957 0.007 78);
   --muted-foreground: oklch(0.545 0.012 72);
-  --accent: oklch(0.936 0.042 250);
-  --accent-foreground: oklch(0.44 0.115 250);
+  --accent: #E6F1FB;
+  --accent-foreground: #0C447C;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.902 0.008 78);
   --input: oklch(0.902 0.008 78);
-  --ring: oklch(0.78 0.085 250);
+  --ring: #85B7EB;
   --shadow-card: 0 1px 2px oklch(0.4 0.02 70 / 5%), 0 4px 12px oklch(0.4 0.02 70 / 5%);
   --chart-1: oklch(0.58 0.11 245);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -173,12 +193,12 @@
 
   --sidebar: oklch(0.944 0.012 78);
   --sidebar-foreground: oklch(0.245 0.008 70);
-  --sidebar-primary: oklch(0.906 0.04 250);
-  --sidebar-primary-foreground: oklch(0.44 0.115 250);
-  --sidebar-accent: oklch(0.936 0.042 250);
-  --sidebar-accent-foreground: oklch(0.44 0.115 250);
+  --sidebar-primary: #B5D4F4;
+  --sidebar-primary-foreground: #0C447C;
+  --sidebar-accent: #E6F1FB;
+  --sidebar-accent-foreground: #0C447C;
   --sidebar-border: oklch(0.902 0.008 78);
-  --sidebar-ring: oklch(0.78 0.085 250);
+  --sidebar-ring: #85B7EB;
 
   /* Hoe zacht een wijkkleur is als vlak. De code kent alleen de kleurhoek en
      bouwt daar `oklch(var(--wijk-l) var(--wijk-c) <hoek>)` mee; of dat licht
@@ -202,40 +222,47 @@
   --popover-foreground: oklch(0.955 0.004 80);
   --primary: oklch(0.94 0.006 80);
   --primary-foreground: oklch(0.22 0.008 70);
-  --brand: oklch(0.7 0.09 250);
-  --brand-ink: oklch(0.8 0.08 250);
-  --tint-amber: oklch(0.315 0.05 68);
-  --tint-amber-ink: oklch(0.82 0.1 68);
-  --tint-groen: oklch(0.305 0.055 155);
-  --tint-groen-ink: oklch(0.8 0.11 156);
-  --tint-paars: oklch(0.315 0.055 305);
-  --tint-paars-ink: oklch(0.82 0.105 302);
-  --tint-rood: oklch(0.315 0.055 25);
-  --tint-rood-ink: oklch(0.82 0.105 25);
-  --tint-blauw: oklch(0.315 0.055 250);
-  --tint-blauw-ink: oklch(0.83 0.09 250);
-  --tint-oranje: oklch(0.315 0.055 48);
-  --tint-oranje-ink: oklch(0.82 0.105 48);
-  --tint-roze: oklch(0.315 0.055 350);
-  --tint-roze-ink: oklch(0.82 0.105 352);
-  --tint-turkoois: oklch(0.305 0.05 195);
-  --tint-turkoois-ink: oklch(0.8 0.09 197);
-  --tint-limoen: oklch(0.305 0.058 128);
-  --tint-limoen-ink: oklch(0.8 0.11 130);
-  --tint-geel: oklch(0.315 0.06 95);
-  --tint-geel-ink: oklch(0.83 0.1 95);
-  --brand-foreground: oklch(0.22 0.04 250);
+  --brand: #185FA5;
+  --brand-ink: #85B7EB;
+  --tint-amber: #633806;
+  --tint-amber-ink: #FAC775;
+  --tint-groen: #27500A;
+  --tint-groen-ink: #C0DD97;
+  --tint-paars: #3C3489;
+  --tint-paars-ink: #CECBF6;
+  --tint-rood: #791F1F;
+  --tint-rood-ink: #F7C1C1;
+  --tint-blauw: #0C447C;
+  --tint-blauw-ink: #B5D4F4;
+  --tint-oranje: #712B13;
+  --tint-oranje-ink: #F5C4B3;
+  --tint-roze: #72243E;
+  --tint-roze-ink: #F4C0D1;
+  --tint-turkoois: #085041;
+  --tint-turkoois-ink: #9FE1CB;
+  --tint-limoen: #2C4A0E;
+  --tint-limoen-ink: #C0DD97;
+  --tint-blauw-mid: #85B7EB;
+  --tint-groen-mid: #97C459;
+  --tint-rood-mid: #F09595;
+  --tint-paars-mid: #AFA9EC;
+  --tint-oranje-mid: #F0997B;
+  --tint-roze-mid: #ED93B1;
+  --tint-turkoois-mid: #5DCAA5;
+  --tint-geel: #4A3A06;
+  --tint-geel-ink: #FAC775;
+  --brand-foreground: #E6F1FB;
   --secondary: oklch(0.265 0.008 75);
   --secondary-foreground: oklch(0.955 0.004 80);
   --muted: oklch(0.265 0.008 75);
   --muted-foreground: oklch(0.72 0.01 75);
-  --accent: oklch(0.325 0.05 250);
-  --accent-foreground: oklch(0.86 0.07 250);
+  --accent: #0C447C;
+  --accent-foreground: #B5D4F4;
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.7 0.09 250);
+  --ring: #378ADD;
   /* Schaduw doet in het donker niets; een dun randje licht wel. */
   --shadow-card: 0 0 0 1px oklch(1 0 0 / 10%);
 
@@ -248,12 +275,12 @@
      zijbalk maakt er een eigen wereld van naast de pagina. */
   --sidebar: oklch(0.205 0.008 75);
   --sidebar-foreground: oklch(0.955 0.004 80);
-  --sidebar-primary: oklch(0.7 0.09 250);
-  --sidebar-primary-foreground: oklch(0.22 0.04 250);
-  --sidebar-accent: oklch(0.325 0.05 250);
-  --sidebar-accent-foreground: oklch(0.86 0.07 250);
+  --sidebar-primary: #185FA5;
+  --sidebar-primary-foreground: #E6F1FB;
+  --sidebar-accent: #0C447C;
+  --sidebar-accent-foreground: #B5D4F4;
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.7 0.09 250);
+  --sidebar-ring: #378ADD;
   --wijk-l: 0.305;
   --wijk-c: 0.048;
   --wijk-ink-l: 0.87;

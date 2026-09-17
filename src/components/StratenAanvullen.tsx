@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Wand2 } from "lucide-react";
+import { IconWand as Wand2 } from "@tabler/icons-react";
 import { persistVolledigeNamen, type Street } from "@/lib/klanten";
 import {
   haalStraatnamenOp,

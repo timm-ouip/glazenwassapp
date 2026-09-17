@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import type { TablerIcon as LucideIcon } from "@tabler/icons-react";
 
 /**
  * De rij cijfers boven aan een pagina.

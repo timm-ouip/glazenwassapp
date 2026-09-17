@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { Check, CircleSlash } from "lucide-react";
+import { IconCheck as Check, IconCircleOff as CircleSlash } from "@tabler/icons-react";
 
 import {
   DropdownMenu,

@@ -20,7 +20,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Check, Map, MapPin, MoreHorizontal, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
+import {
+  IconCheck as Check,
+  IconMap as Map,
+  IconMapPin as MapPin,
+  IconDots as MoreHorizontal,
+  IconPencil as Pencil,
+  IconPlus as Plus,
+  IconTrash as Trash2,
+  IconWand as Wand2,
+} from "@tabler/icons-react";
 import {
   DropdownMenu,
   DropdownMenuContent,

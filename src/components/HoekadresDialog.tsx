@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { CornerDownRight, Signpost, Type } from "lucide-react";
+import {
+  IconCornerDownRight as CornerDownRight,
+  IconSignRight as Signpost,
+  IconTypography as Type,
+} from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";

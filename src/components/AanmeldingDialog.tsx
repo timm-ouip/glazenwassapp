@@ -9,7 +9,13 @@
  */
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { CircleDollarSign, Hash, House, MapPin, UserPlus } from "lucide-react";
+import {
+  IconCoinEuro as CircleDollarSign,
+  IconHash as Hash,
+  IconHome as House,
+  IconMapPin as MapPin,
+  IconUserPlus as UserPlus,
+} from "@tabler/icons-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

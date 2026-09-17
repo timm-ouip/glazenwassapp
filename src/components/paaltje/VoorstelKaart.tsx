@@ -9,18 +9,18 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle,
-  Check,
-  CalendarClock,
-  ChevronDown,
-  CircleCheck,
-  CircleSlash,
-  Clock,
-  Loader2,
-  Send,
-  Undo2,
-  X,
-} from "lucide-react";
+  IconAlertTriangle as AlertTriangle,
+  IconCheck as Check,
+  IconCalendarTime as CalendarClock,
+  IconChevronDown as ChevronDown,
+  IconCircleCheck as CircleCheck,
+  IconCircleOff as CircleSlash,
+  IconClock as Clock,
+  IconLoader2 as Loader2,
+  IconSend as Send,
+  IconArrowBackUp as Undo2,
+  IconX as X,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/lib/auth";

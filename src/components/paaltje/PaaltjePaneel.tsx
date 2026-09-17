@@ -7,7 +7,12 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, MessageCircle, MoreVertical, X } from "lucide-react";
+import {
+  IconLoader2 as Loader2,
+  IconMessageCircle as MessageCircle,
+  IconDotsVertical as MoreVertical,
+  IconX as X,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { PaaltjeLui } from "@/components/paaltje/PaaltjeLui";

@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { CalendarCheck, MessageSquare, RotateCcw } from "lucide-react";
+import {
+  IconCalendarCheck as CalendarCheck,
+  IconMessage as MessageSquare,
+  IconRotate as RotateCcw,
+} from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";

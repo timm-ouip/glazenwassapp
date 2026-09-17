@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { useRouterState } from "@tanstack/react-router";
-import { Lock } from "lucide-react";
+import { IconLock as Lock } from "@tabler/icons-react";
 
 import { Tabbalk } from "@/components/Tabbalk";
 import { Zijbalk } from "@/components/Zijbalk";

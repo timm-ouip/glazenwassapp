@@ -1,6 +1,11 @@
 /** Mail die later verstuurd wordt, met Annuleren. */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Clock, Loader2, X } from "lucide-react";
+import {
+  IconAlertTriangle as AlertTriangle,
+  IconClock as Clock,
+  IconLoader2 as Loader2,
+  IconX as X,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";

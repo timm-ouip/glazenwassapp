@@ -14,21 +14,33 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle,
-  Check,
-  Mail,
-  MailCheck,
-  Send,
-  ShieldCheck,
-  Undo2,
-  Users,
-  X,
-} from "lucide-react";
+  IconAlertTriangle as AlertTriangle,
+  IconCheck as Check,
+  IconMail as Mail,
+  IconMailCheck as MailCheck,
+  IconSend as Send,
+  IconShieldCheck as ShieldCheck,
+  IconArrowBackUp as Undo2,
+  IconUsers as Users,
+  IconX as X,
+  IconArrowLeft as ArrowLeft,
+  IconDots as MoreHorizontal,
+  IconInbox as Inbox,
+  IconMessages as Messages,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
 import { Postvak } from "@/components/mail/Postvak";
+import { Gesprekken } from "@/components/mail/Gesprekken";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Dagrapporten } from "@/components/mail/Dagrapporten";
 import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
@@ -89,6 +101,8 @@ Komt het niet uit? Antwoord dan gewoon even op deze mail, dan slaan we deze keer
 Met vriendelijke groet,
 De Ramensopperij`;
 
+const WEERGAVE_OPSLAG = "wooshy.mail-weergave";
+
 function Mailing() {
   useRequireAuth();
   const { dag } = Route.useSearch();
@@ -126,6 +140,137 @@ function Mailing() {
     if (!mag[blad]) setBlad(startBlad);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee, toonPostvak, toonVersturen, toonRapport, blad]);
+
+  // Op de telefoon: bovenin wissel je tussen gesprekken per klant en het hele
+  // postvak. Die keuze onthouden we, want wie per klant werkt, wil dat morgen weer.
+  const mobiel = useIsMobile();
+  // Gesprekken zijn per klant; wie geen klanten mag zien, heeft daar niets aan.
+  const toonGesprekken = ["klanten_bekijken", "klanten_bewerken", "planning"].some((r) =>
+    heeftRecht(employee, r as Parameters<typeof heeftRecht>[1]),
+  );
+  // Meteen bij het aanmaken lezen: anders haalt Gesprekken eerst al zijn lijsten op
+  // en springt hij daarna pas naar het postvak. De telefoonweergave tekent de
+  // server niet, dus localStorage is er hier altijd.
+  const [gekozenWeergave, setWeergave] = useState<"gesprekken" | "postvak">(() => {
+    try {
+      return typeof window !== "undefined" && localStorage.getItem(WEERGAVE_OPSLAG) === "postvak"
+        ? "postvak"
+        : "gesprekken";
+    } catch {
+      return "gesprekken";
+    }
+  });
+  const weergave = toonGesprekken ? gekozenWeergave : "postvak";
+  function kiesWeergave(w: "gesprekken" | "postvak") {
+    setWeergave(w);
+    setBlad("postvak");
+    try {
+      localStorage.setItem(WEERGAVE_OPSLAG, w);
+    } catch {
+      // Niet kunnen onthouden is geen reden om niet te wisselen.
+    }
+  }
+
+  if (mobiel && toonPostvak) {
+    const extra = blad !== "postvak" && blad !== "whatsapp";
+    const extraNaam: Record<Blad, string> = {
+      postvak: "",
+      whatsapp: "",
+      opstellen: "Aankondigen",
+      verstuurd: "Verstuurd",
+      rapport: "Rapport",
+      dagrapport: "Dagrapport",
+    };
+    return (
+      <AppLayout titel="Mail">
+        {extra ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setBlad("postvak")}
+              className="mb-3 flex items-center gap-1.5 text-[14px] font-medium"
+            >
+              <ArrowLeft className="size-5" /> {extraNaam[blad]}
+            </button>
+            {blad === "opstellen" && <Opstellen beginDag={dag} />}
+            {blad === "verstuurd" && <Verstuurd />}
+            {blad === "dagrapport" && <Dagrapporten />}
+            {blad === "rapport" && <Rapport />}
+          </>
+        ) : (
+          <>
+            <div className="mb-3 flex items-center gap-2">
+              {toonGesprekken ? (
+              <div className="flex flex-1 rounded-full bg-card p-[3px] shadow-card">
+                {(
+                  [
+                    ["gesprekken", Messages, "Gesprekken"],
+                    ["postvak", Inbox, "Postvak"],
+                  ] as const
+                ).map(([w, Icoon, label]) => (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => kiesWeergave(w)}
+                    aria-pressed={weergave === w}
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-[14px] ${
+                      weergave === w ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    <Icoon className="size-4" /> {label}
+                  </button>
+                ))}
+              </div>
+              ) : (
+                <div className="flex-1" />
+              )}
+              {(toonVersturen || toonRapport) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-9 shrink-0 rounded-full bg-card"
+                      aria-label="Meer mail"
+                    >
+                      <MoreHorizontal className="size-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    {toonVersturen && (
+                      <>
+                        <DropdownMenuItem onSelect={() => setBlad("opstellen")}>
+                          <Send className="size-4" /> Aankondigen
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setBlad("verstuurd")}>
+                          <MailCheck className="size-4" /> Verstuurd
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {toonRapport && (
+                      <>
+                        <DropdownMenuItem onSelect={() => setBlad("dagrapport")}>
+                          <Check className="size-4" /> Dagrapport
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setBlad("rapport")}>
+                          <Users className="size-4" /> Rapport
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+            {weergave === "gesprekken" ? (
+              <Gesprekken />
+            ) : (
+              <Postvak onAankondigen={toonVersturen ? () => setBlad("opstellen") : undefined} />
+            )}
+          </>
+        )}
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout

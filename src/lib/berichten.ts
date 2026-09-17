@@ -411,6 +411,40 @@ export async function fetchSpamRegels(): Promise<string[]> {
   return (data ?? []).map((r) => r.van_email);
 }
 
+/** De laatste mail per klant, voor de gesprekkenlijst op de telefoon. */
+export interface MailGesprekRegel {
+  id: string;
+  klant_id: string;
+  richting: "in" | "uit";
+  van_naam: string;
+  onderwerp: string;
+  fragment: string;
+  ontvangen_op: string;
+  gelezen: boolean;
+}
+
+/**
+ * De recente klantmail, nieuwste eerst. De lijst groepeert zelf per klant;
+ * 500 mails is ruim genoeg om van de laatste weken iedereen te zien.
+ */
+export async function fetchMailGesprekken(): Promise<MailGesprekRegel[]> {
+  const { data, error } = await supabase
+    .from("berichten")
+    .select("id,klant_id,richting,van_naam,onderwerp,fragment,ontvangen_op,gelezen")
+    .eq("kanaal", "mail")
+    .not("klant_id", "is", null)
+    .is("deleted_at", null)
+    .is("uit_dossier_op", null)
+    .order("ontvangen_op", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    ...r,
+    klant_id: r.klant_id!,
+    richting: r.richting === "uit" ? "uit" : "in",
+  })) as MailGesprekRegel[];
+}
+
 /** Een mail in het dossier van een klant: ook als hij uit de mailbox weg is. */
 export interface DossierMail extends BerichtRegel {
   op_server: boolean;

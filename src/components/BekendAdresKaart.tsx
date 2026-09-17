@@ -8,7 +8,7 @@
  * ontstaat of een adres van een collega overschreven wordt.
  */
 import { useState } from "react";
-import { Home, Loader2, X } from "lucide-react";
+import { IconHome as Home, IconLoader2 as Loader2, IconX as X } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";

@@ -1,4 +1,4 @@
-import { Check, ChevronDown } from "lucide-react";
+import { IconCheck as Check, IconChevronDown as ChevronDown } from "@tabler/icons-react";
 
 import { cn } from "@/lib/utils";
 import {

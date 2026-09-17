@@ -1,5 +1,8 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, HelpCircle } from "lucide-react";
+import {
+  IconAlertTriangle as AlertTriangle,
+  IconHelpCircle as HelpCircle,
+} from "@tabler/icons-react";
 
 import {
   AlertDialog,

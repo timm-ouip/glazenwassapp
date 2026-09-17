@@ -10,7 +10,15 @@
  */
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Mail, Plus, RotateCcw, Sparkles, Trash2, Undo2 } from "lucide-react";
+import {
+  IconCheck as Check,
+  IconMail as Mail,
+  IconPlus as Plus,
+  IconRotate as RotateCcw,
+  IconSparkles as Sparkles,
+  IconTrash as Trash2,
+  IconArrowBackUp as Undo2,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";

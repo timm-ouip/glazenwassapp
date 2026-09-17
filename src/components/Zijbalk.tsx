@@ -2,19 +2,19 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  LogOut,
-  CalendarDays,
-  Map,
-  History,
-  Inbox,
-  Mail,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Settings,
-  Upload,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+  IconLogout as LogOut,
+  IconCalendar as CalendarDays,
+  IconMap as Map,
+  IconHistory as History,
+  IconInbox as Inbox,
+  IconMail as Mail,
+  IconLayoutSidebarLeftCollapse as PanelLeftClose,
+  IconLayoutSidebarLeftExpand as PanelLeftOpen,
+  IconSettings as Settings,
+  IconUpload as Upload,
+  IconUsers as Users,
+  type TablerIcon as LucideIcon,
+} from "@tabler/icons-react";
 
 import { Druppel } from "@/components/Merk";
 import { useAuth, signOut } from "@/lib/auth";

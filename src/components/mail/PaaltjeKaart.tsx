@@ -10,16 +10,16 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle,
-  Check,
-  CircleCheck,
-  Loader2,
-  Pencil,
-  RefreshCw,
-  Sparkles,
-  UserRound,
-  Wand2,
-} from "lucide-react";
+  IconAlertTriangle as AlertTriangle,
+  IconCheck as Check,
+  IconCircleCheck as CircleCheck,
+  IconLoader2 as Loader2,
+  IconPencil as Pencil,
+  IconRefresh as RefreshCw,
+  IconSparkles as Sparkles,
+  IconUser as UserRound,
+  IconWand as Wand2,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { adresNamen, klantenMetAdressen, type Bericht } from "@/lib/berichten";

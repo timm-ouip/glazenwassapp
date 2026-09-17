@@ -15,7 +15,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Inbox, Link2, MapPin, Phone, Mail, UserPlus, X } from "lucide-react";
+import {
+  IconArrowRight as ArrowRight,
+  IconCheck as Check,
+  IconInbox as Inbox,
+  IconLink as Link2,
+  IconMapPin as MapPin,
+  IconPhone as Phone,
+  IconMail as Mail,
+  IconUserPlus as UserPlus,
+  IconX as X,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";

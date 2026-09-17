@@ -1,7 +1,7 @@
 /** Het overzicht van de sneltoetsen in het postvak (toets ?). */
 import { Dialog, DialogDescription } from "@/components/ui/dialog";
 import { PopupBody, PopupKader, PopupKop } from "@/components/Popup";
-import { Keyboard } from "lucide-react";
+import { IconKeyboard as Keyboard } from "@tabler/icons-react";
 
 export const SNELTOETSEN: [string, string][] = [
   ["k / ↓", "Volgende mail"],

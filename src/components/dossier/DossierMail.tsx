@@ -9,14 +9,14 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  Loader2,
-  Paperclip,
-  Reply,
-  SquarePen,
-  Trash2,
-} from "lucide-react";
+  IconArrowDownLeft as ArrowDownLeft,
+  IconArrowUpRight as ArrowUpRight,
+  IconLoader2 as Loader2,
+  IconPaperclip as Paperclip,
+  IconCornerUpLeft as Reply,
+  IconEdit as SquarePen,
+  IconTrash as Trash2,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";

@@ -1,7 +1,7 @@
 /** De afzenders die altijd naar spam gaan, met een knop om dat terug te draaien. */
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldAlert, X } from "lucide-react";
+import { IconShieldExclamation as ShieldAlert, IconX as X } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { Dialog, DialogDescription } from "@/components/ui/dialog";

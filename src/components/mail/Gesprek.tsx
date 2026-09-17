@@ -5,7 +5,12 @@
  */
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownLeft, ArrowUpRight, ChevronDown, MessagesSquare } from "lucide-react";
+import {
+  IconArrowDownLeft as ArrowDownLeft,
+  IconArrowUpRight as ArrowUpRight,
+  IconChevronDown as ChevronDown,
+  IconMessages as MessagesSquare,
+} from "@tabler/icons-react";
 
 import { fetchGesprek, lijstDatum } from "@/lib/berichten";
 import { cn } from "@/lib/utils";

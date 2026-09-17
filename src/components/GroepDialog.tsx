@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Folder, Type } from "lucide-react";
+import { IconFolder as Folder, IconTypography as Type } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";

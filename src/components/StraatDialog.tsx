@@ -13,7 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Folder, ListOrdered, Signpost, Type } from "lucide-react";
+import {
+  IconFolder as Folder,
+  IconListNumbers as ListOrdered,
+  IconSignRight as Signpost,
+  IconTypography as Type,
+} from "@tabler/icons-react";
 import { nieuweStraatGroep, type StraatGroep, type Street } from "@/lib/klanten";
 import { zoekStraten } from "@/lib/postcode";
 import { opslaanBijEnter } from "@/lib/dialoog";

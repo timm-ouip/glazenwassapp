@@ -45,6 +45,7 @@ export function rechtenVoorPad(pad: string): Recht[] | null {
     return ["klanten_bewerken"];
   }
   if (pad.startsWith("/mailing")) return ["mail_lezen", "mail_versturen"];
+  if (pad.startsWith("/berichten")) return ["mail_lezen"];
   return null;
 }
 

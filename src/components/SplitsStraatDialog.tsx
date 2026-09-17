@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Scissors, Signpost, Type } from "lucide-react";
+import {
+  IconScissors as Scissors,
+  IconSignRight as Signpost,
+  IconTypography as Type,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";

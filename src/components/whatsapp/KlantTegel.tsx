@@ -7,7 +7,7 @@
  * maken. Wat niet in een leeg vak paste staat in "Anders in het appje".
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { UserRound } from "lucide-react";
+import { IconUser as UserRound } from "@tabler/icons-react";
 
 import {
   AndersVakje,

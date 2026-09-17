@@ -26,15 +26,15 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { AccountMenu } from "@/components/AccountMenu";
 import {
-  ArrowLeft,
-  ArrowUpToLine,
-  CalendarDays,
-  ChevronDown,
-  CornerDownRight,
-  GripVertical,
-  Printer,
-  X,
-} from "lucide-react";
+  IconArrowLeft as ArrowLeft,
+  IconArrowBarToUp as ArrowUpToLine,
+  IconCalendar as CalendarDays,
+  IconChevronDown as ChevronDown,
+  IconCornerDownRight as CornerDownRight,
+  IconGripVertical as GripVertical,
+  IconPrinter as Printer,
+  IconX as X,
+} from "@tabler/icons-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
