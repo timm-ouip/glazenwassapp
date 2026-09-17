@@ -3,6 +3,11 @@
  * functies gebruikt wordt: de handtekening van een webhook controleren, een
  * webhook omzetten in rijen voor `berichten`, en de Graph API aanroepen.
  *
+ * Een koppeling loopt rechtstreeks via Meta (het testnummer, met een token
+ * per bedrijf) of via Kapso (een Meta-partner, met één sleutel voor alle
+ * bedrijven). Kapso volgt de paden en berichten van Meta, dus alleen het
+ * adres en de sleutel verschillen; dat regelt `graph()`.
+ *
  * Wat hier binnenkomt is van buiten: elk veld wordt nagekeken en ingekort
  * voordat het de database in gaat.
  */
@@ -11,12 +16,30 @@
 type Db = any;
 
 export const GRAPH = "https://graph.facebook.com/v23.0";
+/** Kapso's doorgeefluik naar Meta: dezelfde paden, eigen sleutel. */
+export const KAPSO_GRAPH = "https://api.kapso.ai/meta/whatsapp/v24.0";
+export const KAPSO_PLATFORM = "https://api.kapso.ai/platform/v1";
+
+/** Hoe we bij WhatsApp binnenkomen voor één koppeling. */
+export type Toegang =
+  | { aanbieder: "meta"; token: string }
+  | { aanbieder: "kapso"; sleutel: string; phoneNumberId: string };
 
 const MAX_TEKST = 20_000;
 
-/** Klopt `X-Hub-Signature-256` bij deze body? Vergelijkt in vaste tijd. */
-export async function handtekeningKlopt(body: string, kop: string | null, geheim: string): Promise<boolean> {
-  if (!geheim || !kop?.startsWith("sha256=")) return false;
+/** Klopt `X-Hub-Signature-256` (Meta) bij deze body? Vergelijkt in vaste tijd. */
+export function handtekeningKlopt(body: string, kop: string | null, geheim: string): Promise<boolean> {
+  if (!kop?.startsWith("sha256=")) return Promise.resolve(false);
+  return hmacKlopt(body, kop.slice("sha256=".length), geheim);
+}
+
+/** Klopt `X-Webhook-Signature` (Kapso, kaal hex) bij deze body? */
+export function kapsoHandtekeningKlopt(body: string, kop: string | null, geheim: string): Promise<boolean> {
+  return hmacKlopt(body, kop ?? "", geheim);
+}
+
+async function hmacKlopt(body: string, hex: string, geheim: string): Promise<boolean> {
+  if (!geheim || !hex) return false;
   const sleutel = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(geheim),
@@ -26,7 +49,7 @@ export async function handtekeningKlopt(body: string, kop: string | null, geheim
   );
   const handtekening = new Uint8Array(await crypto.subtle.sign("HMAC", sleutel, new TextEncoder().encode(body)));
   const verwacht = [...handtekening].map((b) => b.toString(16).padStart(2, "0")).join("");
-  const gekregen = kop.slice("sha256=".length).toLowerCase();
+  const gekregen = hex.trim().toLowerCase();
   if (gekregen.length !== verwacht.length) return false;
   let verschil = 0;
   for (let i = 0; i < verwacht.length; i++) verschil |= verwacht.charCodeAt(i) ^ gekregen.charCodeAt(i);
@@ -234,6 +257,48 @@ export function leesWijziging(
   return uit;
 }
 
+/**
+ * Eén gebeurtenis uit een Kapso-webhook (`whatsapp.message.*`, vorm v2):
+ * `{ message, conversation, phone_number_id }`. Het bericht zelf heeft de
+ * vorm van Meta, met een extra blok `kapso` (richting, herkomst, status).
+ *
+ * - binnengekomen: een rij van de klant (of uit de geschiedenis);
+ * - verstuurd vanuit de WhatsApp Business-app (herkomst business_app): een
+ *   rij met bron app, net als Meta's echo;
+ * - verstuurd vanuit Wooshy zelf (herkomst cloud_api): die rij schreven we
+ *   al bij het versturen, dus alleen de status.
+ */
+export function leesKapsoGebeurtenis(item: Record<string, unknown>, companyId: string): Webhookinhoud {
+  const bericht = obj(item.message);
+  const kapso = obj(bericht.kapso);
+  const gesprek = obj(item.conversation);
+  const uit: Webhookinhoud = {
+    phoneNumberId: String(item.phone_number_id ?? gesprek.phone_number_id ?? ""),
+    eigenNummer: "",
+    rijen: [],
+    statussen: [],
+  };
+  const richting = kapso.direction === "outbound" ? "uit" : "in";
+  const herkomst = String(kapso.origin ?? "");
+  const ander = waNummer(richting === "in" ? bericht.from : bericht.to) || waNummer(gesprek.phone_number);
+  const naam = richting === "in" ? String(gesprek.contact_name ?? "") : "";
+
+  let r: WaRij | null = null;
+  if (herkomst === "history_sync") r = rij(companyId, bericht, ander, richting, "geschiedenis", naam);
+  else if (richting === "in") r = rij(companyId, bericht, ander, "in", "klant", naam);
+  else if (herkomst === "business_app") r = rij(companyId, bericht, ander, "uit", "app", "");
+  if (r) uit.rijen.push(r);
+
+  if (richting === "uit") {
+    const waId = String(bericht.id ?? "");
+    const status = String(kapso.status ?? "");
+    const meta = lijst(kapso.statuses).map(obj).find((x) => String(x.status ?? "") === status);
+    const fout = lijst(meta?.errors).map((e) => String(obj(e).title ?? obj(e).message ?? "")).join("; ");
+    if (waId && STATUS[status]) uit.statussen.push({ wa_id: waId, status, fout: knip(fout, 500) });
+  }
+  return uit;
+}
+
 /** WhatsApp-status → wat wij bewaren. Een status gaat nooit terug. */
 export const STATUS: Record<string, { waarde: string; rang: number }> = {
   sent: { waarde: "verstuurd", rang: 1 },
@@ -244,17 +309,14 @@ export const STATUS: Record<string, { waarde: string; rang: number }> = {
 
 export const STATUS_RANG: Record<string, number> = { "": 0, verstuurd: 1, afgeleverd: 2, gelezen: 3, mislukt: 4 };
 
-/** Een Graph API-aanroep met het token van het bedrijf. */
-export async function graph<T>(
-  pad: string,
-  token: string,
-  init: RequestInit = {},
-): Promise<{ ok: true; data: T } | { ok: false; status: number; fout: string }> {
+type Uitkomst<T> = { ok: true; data: T } | { ok: false; status: number; fout: string };
+
+async function haal<T>(adres: string, koppen: Record<string, string>, init: RequestInit): Promise<Uitkomst<T>> {
   let res: Response;
   try {
-    res = await fetch(`${GRAPH}/${pad}`, {
+    res = await fetch(adres, {
       ...init,
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
+      headers: { ...koppen, "Content-Type": "application/json", ...(init.headers ?? {}) },
       signal: AbortSignal.timeout(15_000),
     });
   } catch (e) {
@@ -262,18 +324,63 @@ export async function graph<T>(
   }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const fout = obj(obj(json).error);
-    return { ok: false, status: res.status, fout: String(fout.error_user_msg ?? fout.message ?? res.statusText) };
+    // Meta: {error: {message}}. Kapso: soms {error: "tekst"} of {errors: [...]}.
+    const j = obj(json);
+    const fout = obj(j.error);
+    const tekst =
+      fout.error_user_msg ??
+      fout.message ??
+      (typeof j.error === "string" ? j.error : undefined) ??
+      (Array.isArray(j.errors) ? j.errors.map((e) => (typeof e === "string" ? e : String(obj(e).message ?? obj(e).detail ?? ""))).join("; ") : undefined) ??
+      res.statusText;
+    return { ok: false, status: res.status, fout: String(tekst).slice(0, 500) };
   }
   return { ok: true, data: json as T };
 }
 
-/** Het (ontsleutelde) token van een koppeling, of null. */
-export async function tokenVan(db: Db, koppelingId: string, ontsleutel: (v: string, iv: string) => Promise<string>) {
-  const { data } = await db.from("whatsapp_geheimen").select("versleuteld,iv").eq("koppeling_id", koppelingId).maybeSingle();
+/** Een Graph API-aanroep voor een koppeling, via Meta of via Kapso. */
+export function graph<T>(pad: string, toegang: Toegang, init: RequestInit = {}): Promise<Uitkomst<T>> {
+  if (toegang.aanbieder === "kapso") {
+    return haal<T>(`${KAPSO_GRAPH}/${pad}`, { "X-API-Key": toegang.sleutel }, init);
+  }
+  return haal<T>(`${GRAPH}/${pad}`, { Authorization: `Bearer ${toegang.token}` }, init);
+}
+
+/** Een aanroep van Kapso's eigen API (klanten, koppellinks, webhooks). */
+export function kapsoPlatform<T>(pad: string, sleutel: string, init: RequestInit = {}): Promise<Uitkomst<T>> {
+  return haal<T>(`${KAPSO_PLATFORM}/${pad}`, { "X-API-Key": sleutel }, init);
+}
+
+/**
+ * Hoe we bij WhatsApp binnenkomen voor deze koppeling, of null als dat niet
+ * kan (token weg, of de Kapso-sleutel staat niet op de server).
+ */
+export async function toegangVan(
+  db: Db,
+  koppelingId: string,
+  ontsleutel: (v: string, iv: string) => Promise<string>,
+): Promise<Toegang | null> {
+  const { data: koppeling, error } = await db
+    .from("whatsapp_koppelingen")
+    .select("aanbieder,phone_number_id")
+    .eq("id", koppelingId)
+    .maybeSingle();
+  // Een storing is iets anders dan "geen toegang": niet laten opnieuw koppelen.
+  if (error) throw new Error(`Koppeling ophalen: ${error.message}`);
+  if (!koppeling) return null;
+  if (koppeling.aanbieder === "kapso") {
+    const sleutel = Deno.env.get("KAPSO_API_KEY") ?? "";
+    return sleutel ? { aanbieder: "kapso", sleutel, phoneNumberId: String(koppeling.phone_number_id) } : null;
+  }
+  const { data, error: geheimFout } = await db
+    .from("whatsapp_geheimen")
+    .select("versleuteld,iv")
+    .eq("koppeling_id", koppelingId)
+    .maybeSingle();
+  if (geheimFout) throw new Error(`Token ophalen: ${geheimFout.message}`);
   if (!data) return null;
   try {
-    return await ontsleutel(data.versleuteld, data.iv);
+    return { aanbieder: "meta", token: await ontsleutel(data.versleuteld, data.iv) };
   } catch {
     return null;
   }
@@ -316,7 +423,7 @@ function veiligType(mime: string): { mime: string; ext: string } {
  */
 export async function haalMediaBinnen(
   db: Db,
-  token: string,
+  toegang: Toegang,
   companyId: string,
   berichtId: string,
   media: WaMedia[],
@@ -329,23 +436,34 @@ export async function haalMediaBinnen(
       uit.push(m);
       continue;
     }
-    const info = await graph<{ url?: string; mime_type?: string; file_size?: number }>(m.media_id, token);
-    if (!info.ok || !info.data.url || Number(info.data.file_size ?? 0) > MAX_MEDIA_BYTES) {
+    // Via Kapso: het nummer moet erbij, en Kapso geeft een eigen downloadlink
+    // waar de toegang al in zit (4 minuten geldig). Meta's eigen link vraagt
+    // een Meta-token, en dat hebben we dan niet.
+    const kapso = toegang.aanbieder === "kapso";
+    const info = await graph<{ url?: string; download_url?: string; mime_type?: string; file_size?: number | string }>(
+      kapso ? `${m.media_id}?phone_number_id=${encodeURIComponent(toegang.phoneNumberId)}` : m.media_id,
+      toegang,
+    );
+    const link = info.ok ? (kapso ? info.data.download_url : info.data.url) : undefined;
+    if (!info.ok || !link || Number(info.data.file_size ?? 0) > MAX_MEDIA_BYTES) {
       if (!info.ok) console.error(`media ${m.media_id} opvragen:`, info.fout);
       compleet = false;
       uit.push(m);
       continue;
     }
-    // Alleen van Meta zelf downloaden, met het token erbij.
+    // Alleen van Meta of Kapso zelf downloaden; het token alleen naar Meta.
     let adres: URL;
     try {
-      adres = new URL(info.data.url);
+      adres = new URL(link);
     } catch {
       compleet = false;
       uit.push(m);
       continue;
     }
-    if (adres.protocol !== "https:" || !/(^|\.)(fbsbx|facebook|whatsapp)\.(com|net)$/.test(adres.hostname)) {
+    const hostKlopt = kapso
+      ? adres.hostname === "api.kapso.ai"
+      : /(^|\.)(fbsbx|facebook|whatsapp)\.(com|net)$/.test(adres.hostname);
+    if (adres.protocol !== "https:" || !hostKlopt) {
       console.error(`media ${m.media_id}: onverwachte host ${adres.hostname}`);
       compleet = false;
       uit.push(m);
@@ -353,7 +471,7 @@ export async function haalMediaBinnen(
     }
     try {
       const res = await fetch(adres, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: toegang.aanbieder === "meta" ? { Authorization: `Bearer ${toegang.token}` } : {},
         signal: AbortSignal.timeout(60_000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -386,12 +504,12 @@ export async function haalMediaBinnen(
 
 /** Een tekstbericht versturen. Geeft het wamid van WhatsApp terug. */
 export async function verstuurTekst(
-  token: string,
+  toegang: Toegang,
   phoneNumberId: string,
   aan: string,
   tekst: string,
 ): Promise<{ ok: true; waId: string } | { ok: false; status: number; fout: string }> {
-  const uit = await graph<{ messages?: { id?: string }[] }>(`${phoneNumberId}/messages`, token, {
+  const uit = await graph<{ messages?: { id?: string }[] }>(`${phoneNumberId}/messages`, toegang, {
     method: "POST",
     body: JSON.stringify({
       messaging_product: "whatsapp",
@@ -540,15 +658,49 @@ export const SJABLOON_STATUS: Record<string, string> = {
   LIMIT_EXCEEDED: "gepauzeerd",
 };
 
+/**
+ * De status van de sjablonen van dit bedrijf bij Meta ophalen en bijwerken.
+ * Kapso stuurt geen melding als Meta een sjabloon goed- of afkeurt, dus dit
+ * gebeurt ook af en toe vanzelf (whatsapp-planner). Geeft het aantal
+ * bijgewerkte sjablonen terug.
+ */
+export async function ververSjablonen(db: Db, companyId: string, toegang: Toegang, wabaId: string): Promise<Uitkomst<number>> {
+  const uit = await graph<{ data?: { id?: string; name?: string; status?: string; category?: string; rejected_reason?: string }[] }>(
+    `${wabaId}/message_templates?fields=id,name,status,category,rejected_reason&limit=200`,
+    toegang,
+  );
+  if (!uit.ok) return uit;
+  let bijgewerkt = 0;
+  for (const t of uit.data.data ?? []) {
+    if (!t.name) continue;
+    const reden = String(t.rejected_reason ?? "");
+    const { data, error } = await db
+      .from("wa_sjablonen")
+      .update({
+        status: SJABLOON_STATUS[String(t.status ?? "").toUpperCase()] ?? "ingediend",
+        categorie: String(t.category ?? "").toUpperCase() === "MARKETING" ? "marketing" : "utility",
+        afwijsreden: reden && reden !== "NONE" ? reden.slice(0, 300) : "",
+        ...(t.id ? { meta_id: t.id } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("company_id", companyId)
+      .eq("meta_naam", t.name)
+      .select("id");
+    if (error) throw new Error(`Sjabloon bijwerken: ${error.message}`);
+    bijgewerkt += (data ?? []).length;
+  }
+  return { ok: true, data: bijgewerkt };
+}
+
 /** Een goedgekeurd sjabloon versturen. Geeft het wamid terug. */
 export async function verstuurSjabloon(
-  token: string,
+  toegang: Toegang,
   phoneNumberId: string,
   aan: string,
   metaNaam: string,
   parameters: string[],
 ): Promise<{ ok: true; waId: string } | { ok: false; status: number; fout: string }> {
-  const uit = await graph<{ messages?: { id?: string }[] }>(`${phoneNumberId}/messages`, token, {
+  const uit = await graph<{ messages?: { id?: string }[] }>(`${phoneNumberId}/messages`, toegang, {
     method: "POST",
     body: JSON.stringify({
       messaging_product: "whatsapp",

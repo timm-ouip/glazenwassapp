@@ -8,6 +8,9 @@
  *  - valt het binnen de antwoordtijden? Anders schuift het door.
  *  - is het 24-uursvenster van WhatsApp nog open?
  *
+ * Daarnaast om de tien minuten: de status van ingediende sjablonen nakijken
+ * bij koppelingen via Kapso, want Kapso meldt een goedkeuring niet.
+ *
  * pg_cron roept dit aan met de sleutel in `x-cron-sleutel`.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -15,7 +18,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { antwoord } from "../_gedeeld/mail.ts";
 import { cronSleutelKlopt } from "../_gedeeld/cron.ts";
 import { ontsleutel } from "../_gedeeld/geheim.ts";
-import { binnenAntwoordtijd, tokenVan, VENSTER_MS, verstuurTekst } from "../_gedeeld/whatsapp.ts";
+import { binnenAntwoordtijd, toegangVan, VENSTER_MS, verstuurTekst, ververSjablonen } from "../_gedeeld/whatsapp.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -29,14 +32,47 @@ Deno.serve(async (req) => {
   const db = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "", {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  // Vóór de ronde kijken: die kan langer dan een minuut duren.
+  const sjablonenBeurt = new Date().getUTCMinutes() % 10 === 0;
   try {
     const n = await ronde(db);
     return antwoord({ ok: true, verstuurd: n });
   } catch (e) {
     console.error("whatsapp-planner:", e instanceof Error ? e.message : e);
     return antwoord({ ok: false }, 500);
+  } finally {
+    if (sjablonenBeurt) {
+      await sjablonenNakijken(db).catch((e) => console.error("sjablonen nakijken:", e instanceof Error ? e.message : e));
+    }
   }
 });
+
+/** Bij Kapso-koppelingen met een ingediend sjabloon: de status bij Meta ophalen. */
+async function sjablonenNakijken(db: Db) {
+  const { data: wachtend, error } = await db
+    .from("wa_sjablonen")
+    .select("company_id")
+    .eq("status", "ingediend")
+    .is("deleted_at", null)
+    .limit(500);
+  if (error) throw new Error(`Ingediende sjablonen: ${error.message}`);
+  const bedrijven = [...new Set((wachtend ?? []).map((s: { company_id: string }) => s.company_id))];
+  if (bedrijven.length === 0) return;
+  const { data: koppelingen, error: koppelFout } = await db
+    .from("whatsapp_koppelingen")
+    .select("id,company_id,waba_id")
+    .in("company_id", bedrijven)
+    .eq("aanbieder", "kapso")
+    .neq("status", "uit");
+  if (koppelFout) throw new Error(`Koppelingen: ${koppelFout.message}`);
+  for (const k of (koppelingen ?? []) as { id: string; company_id: string; waba_id: string }[]) {
+    if (!k.waba_id) continue;
+    const toegang = await toegangVan(db, k.id, ontsleutel);
+    if (!toegang) continue;
+    const uit = await ververSjablonen(db, k.company_id, toegang, k.waba_id);
+    if (!uit.ok) console.error(`sjablonen ${k.company_id}:`, uit.fout);
+  }
+}
 
 interface Gepland {
   id: string;
@@ -152,9 +188,9 @@ async function verstuurEen(db: Db, b: Gepland, tijden: Map<string, { van: string
     await zet(db, b.id, "geannuleerd", "WhatsApp is niet meer gekoppeld.");
     return false;
   }
-  const token = await tokenVan(db, koppeling.id, ontsleutel);
-  if (!token) {
-    await zet(db, b.id, "mislukt", "Het WhatsApp-token ontbreekt.");
+  const toegang = await toegangVan(db, koppeling.id, ontsleutel);
+  if (!toegang) {
+    await zet(db, b.id, "mislukt", "De toegang tot WhatsApp ontbreekt.");
     return false;
   }
 
@@ -163,7 +199,7 @@ async function verstuurEen(db: Db, b: Gepland, tijden: Map<string, { van: string
   if (nogGepakt?.wa_antwoord_status !== "bezig" || nogGepakt?.beantwoord_op) return false;
   if (!(await gesprekStil(db, b))) return false;
 
-  const uit = await verstuurTekst(token, koppeling.phone_number_id, b.wa_telefoon, tekst);
+  const uit = await verstuurTekst(toegang, koppeling.phone_number_id, b.wa_telefoon, tekst);
   if (!uit.ok) {
     await zet(db, b.id, "mislukt", `WhatsApp weigerde het bericht: ${uit.fout}`.slice(0, 300));
     return false;

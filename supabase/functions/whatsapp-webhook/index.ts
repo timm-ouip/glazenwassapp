@@ -8,6 +8,11 @@
  * (WHATSAPP_APP_SECRET). Klopt die niet, dan doen we niets. Dat is het geheim
  * van de Meta-app van Wooshy: alle bedrijven koppelen via die ene app.
  *
+ * Via Kapso komt hetzelfde binnen op `?aanbieder=kapso`, in Kapso's eigen
+ * vorm en ondertekend met KAPSO_WEBHOOK_SECRET (kop X-Webhook-Signature).
+ * Dat geheim geven we aan Kapso mee bij het koppelen van een nummer. Kapso
+ * wil binnen 10 seconden antwoord en probeert het nog twee keer.
+ *
  * Meta probeert het opnieuw als we geen 200 geven. Wat al binnen is, slaat
  * de unieke index op wa_id over, dus dubbel binnenkomen kan geen kwaad.
  */
@@ -19,11 +24,14 @@ import {
   annuleerGeplandeAntwoorden,
   haalMediaBinnen,
   handtekeningKlopt,
+  kapsoHandtekeningKlopt,
+  leesKapsoGebeurtenis,
   leesWijziging,
   STATUS,
   STATUS_RANG,
-  tokenVan,
+  toegangVan,
   type WaMedia,
+  type Webhookinhoud,
 } from "../_gedeeld/whatsapp.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
@@ -55,6 +63,8 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return tekst("Niet toegestaan", 405);
 
   const body = await req.text();
+  if (url.searchParams.get("aanbieder") === "kapso") return await vanKapso(req, body);
+
   const geheim = Deno.env.get("WHATSAPP_APP_SECRET") ?? "";
   if (!(await handtekeningKlopt(body, req.headers.get("x-hub-signature-256"), geheim))) {
     return tekst("Handtekening klopt niet", 401);
@@ -68,9 +78,7 @@ Deno.serve(async (req) => {
   }
   if (json.object !== "whatsapp_business_account") return tekst("ok");
 
-  const db = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "", {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const db = beheerder();
 
   try {
     for (const entry of json.entry ?? []) {
@@ -79,7 +87,9 @@ Deno.serve(async (req) => {
         if (field === "message_template_status_update" || field === "template_category_update") {
           await sjabloonBijwerken(db, String(entry.id ?? ""), field, change.value ?? {});
         } else {
-          await verwerk(db, field, change.value ?? {});
+          const value = change.value ?? {};
+          const phoneNumberId = String((value.metadata as Record<string, unknown> | undefined)?.phone_number_id ?? "");
+          await verwerk(db, phoneNumberId, "meta", (k) => leesWijziging(field, value, k.company_id, k.weergavenummer));
         }
       }
     }
@@ -91,19 +101,71 @@ Deno.serve(async (req) => {
   return tekst("ok");
 });
 
-async function verwerk(db: Db, field: string, value: Record<string, unknown>) {
-  const phoneNumberId = String((value.metadata as Record<string, unknown> | undefined)?.phone_number_id ?? "");
+function beheerder(): Db {
+  return createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "", {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/** Wat Kapso stuurt: één gebeurtenis, of een bundel als bufferen aan staat. */
+async function vanKapso(req: Request, body: string): Promise<Response> {
+  const geheim = Deno.env.get("KAPSO_WEBHOOK_SECRET") ?? "";
+  if (!(await kapsoHandtekeningKlopt(body, req.headers.get("x-webhook-signature"), geheim))) {
+    return tekst("Handtekening klopt niet", 401);
+  }
+  let json: Record<string, unknown>;
+  try {
+    json = JSON.parse(body);
+  } catch {
+    return tekst("Onleesbaar", 400);
+  }
+  const soort = String(req.headers.get("x-webhook-event") ?? json.type ?? "");
+  // Alleen berichten en hun status; de rest (gesprek begonnen, …) negeren we.
+  if (!soort.startsWith("whatsapp.message.")) return tekst("ok");
+  const items = json.batch === true && Array.isArray(json.data) ? json.data : [json];
+
+  const db = beheerder();
+  try {
+    for (const i of items) {
+      const item = i && typeof i === "object" ? (i as Record<string, unknown>) : {};
+      const gesprek = (item.conversation ?? {}) as Record<string, unknown>;
+      const phoneNumberId = String(item.phone_number_id ?? gesprek.phone_number_id ?? "");
+      await verwerk(db, phoneNumberId, "kapso", (k) => leesKapsoGebeurtenis(item, k.company_id));
+    }
+  } catch (e) {
+    console.error("whatsapp-webhook kapso:", e instanceof Error ? e.message : e);
+    return tekst("Fout", 500);
+  }
+  return tekst("ok");
+}
+
+interface Koppeling {
+  id: string;
+  company_id: string;
+  status: string;
+  weergavenummer: string;
+  paaltje_vanaf: string;
+}
+
+async function verwerk(
+  db: Db,
+  phoneNumberId: string,
+  aanbieder: "meta" | "kapso",
+  lees: (koppeling: Koppeling) => Webhookinhoud,
+) {
   if (!phoneNumberId) return;
   const { data: koppeling, error } = await db
     .from("whatsapp_koppelingen")
     .select("id,company_id,status,weergavenummer,paaltje_vanaf")
     .eq("phone_number_id", phoneNumberId)
+    // Een ondertekend bericht van Kapso mag alleen een Kapso-koppeling vullen, en andersom.
+    .eq("aanbieder", aanbieder)
     .maybeSingle();
   if (error) throw new Error(`Koppeling ophalen: ${error.message}`);
   // Een nummer dat we niet (meer) kennen: niets mee doen, wel 200 geven.
   if (!koppeling || koppeling.status === "uit") return;
 
-  const inhoud = leesWijziging(field, value, koppeling.company_id, koppeling.weergavenummer);
+  const inhoud = lees(koppeling as Koppeling);
 
   // Paaltje leest wat een klant stuurt, vanaf het koppelen (niet de oude chats).
   const vanaf = new Date(koppeling.paaltje_vanaf).getTime();
@@ -115,7 +177,7 @@ async function verwerk(db: Db, field: string, value: Record<string, unknown>) {
     const { data: nieuw, error: opslaanFout } = await db
       .from("berichten")
       .upsert(inhoud.rijen, { onConflict: "company_id,wa_id", ignoreDuplicates: true })
-      .select("id,media,bron,ontvangen_op");
+      .select("id,media,bron,ontvangen_op,wa_telefoon");
     if (opslaanFout) throw new Error(`Berichten opslaan: ${opslaanFout.message}`);
 
     // Foto's en spraakberichten meteen binnenhalen, maar Meta niet laten
@@ -131,9 +193,9 @@ async function verwerk(db: Db, field: string, value: Record<string, unknown>) {
       .slice(0, MAX_MEDIA_PER_AANROEP);
     if (metMedia.length > 0) {
       const werk = (async () => {
-        const token = await tokenVan(db, koppeling.id, ontsleutel);
-        if (!token) return;
-        for (const r of metMedia) await haalMediaBinnen(db, token, koppeling.company_id, r.id, r.media);
+        const toegang = await toegangVan(db, koppeling.id, ontsleutel);
+        if (!toegang) return;
+        for (const r of metMedia) await haalMediaBinnen(db, toegang, koppeling.company_id, r.id, r.media);
       })().catch((e) => console.error("whatsapp-webhook media:", e instanceof Error ? e.message : e));
       if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(werk);
       else await werk;
@@ -145,9 +207,11 @@ async function verwerk(db: Db, field: string, value: Record<string, unknown>) {
     if (bijwerkFout) console.error("whatsapp-webhook laatste bericht:", bijwerkFout.message);
 
     // Je antwoordde zelf op je telefoon: wat Paaltje voor dat gesprek had
-    // ingepland gaat niet meer, en wat openstond is beantwoord.
+    // ingepland gaat niet meer, en wat openstond is beantwoord. Alleen voor
+    // rijen die nu echt nieuw zijn: Kapso kan hetzelfde appje nog eens sturen
+    // bij "afgeleverd" of "gelezen", en dat is geen nieuw antwoord.
     const zelfGeantwoord = new Map<string, string>();
-    for (const r of inhoud.rijen) {
+    for (const r of (nieuw ?? []) as { bron: string; wa_telefoon: string; ontvangen_op: string }[]) {
       if (r.bron !== "app") continue;
       const eerder = zelfGeantwoord.get(r.wa_telefoon);
       if (!eerder || r.ontvangen_op > eerder) zelfGeantwoord.set(r.wa_telefoon, r.ontvangen_op);

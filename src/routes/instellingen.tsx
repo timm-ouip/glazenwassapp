@@ -90,6 +90,10 @@ const OUDE_TABS: Record<string, Tab> = {
 
 interface InstellingenSearch {
   tab: Tab;
+  /** Terug van Kapso na het koppelen van WhatsApp. */
+  kapso?: "klaar" | "mislukt";
+  phone_number_id?: string;
+  error_code?: string;
 }
 
 export const Route = createFileRoute("/instellingen")({
@@ -98,8 +102,18 @@ export const Route = createFileRoute("/instellingen")({
   },
   validateSearch: (search: Record<string, unknown>): InstellingenSearch => {
     const tab = String(search["tab"] ?? "");
-    if ((TABBLADEN as readonly string[]).includes(tab)) return { tab: tab as Tab };
-    return { tab: OUDE_TABS[tab] ?? "account" };
+    const uit: InstellingenSearch = {
+      tab: (TABBLADEN as readonly string[]).includes(tab) ? (tab as Tab) : (OUDE_TABS[tab] ?? "account"),
+    };
+    const kapso = search["kapso"];
+    if (kapso === "klaar" || kapso === "mislukt") {
+      uit.kapso = kapso;
+      const nummer = String(search["phone_number_id"] ?? "");
+      if (/^\d{5,30}$/.test(nummer)) uit.phone_number_id = nummer;
+      const code = String(search["error_code"] ?? "");
+      if (/^[a-z_]{1,40}$/.test(code)) uit.error_code = code;
+    }
+    return uit;
   },
   head: () => ({ meta: [{ title: "Instellingen — Wooshy" }] }),
   component: Instellingen,
@@ -107,7 +121,7 @@ export const Route = createFileRoute("/instellingen")({
 
 function Instellingen() {
   useRequireAuth();
-  const { tab } = Route.useSearch();
+  const { tab, kapso, phone_number_id, error_code } = Route.useSearch();
   const navigate = useNavigate();
   const { employee } = useAuth();
   const isEigenaar = employee?.rol === "eigenaar";
@@ -177,7 +191,18 @@ function Instellingen() {
                 titel="WhatsApp"
                 uitleg="Je zakelijke WhatsApp in Wooshy. Je nummer blijft gewoon werken in de app op je telefoon."
               >
-                <WhatsAppInstellingen isEigenaar={isEigenaar} />
+                <WhatsAppInstellingen
+                  isEigenaar={isEigenaar}
+                  {...(kapso
+                    ? {
+                        kapsoTerug: {
+                          status: kapso,
+                          ...(phone_number_id ? { phoneNumberId: phone_number_id } : {}),
+                          ...(error_code ? { foutcode: error_code } : {}),
+                        },
+                      }
+                    : {})}
+                />
               </Kaart>
             </div>
             <div className="mt-4">

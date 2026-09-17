@@ -13,6 +13,7 @@ export interface WhatsAppKoppeling {
   waba_id: string;
   weergavenummer: string;
   soort: "test" | "app";
+  aanbieder: "meta" | "kapso";
   status: "actief" | "fout" | "uit";
   fout: string;
   laatste_bericht_op: string | null;
@@ -76,7 +77,7 @@ export async function fetchWhatsAppKoppeling(): Promise<WhatsAppKoppeling | null
   const { data, error } = await supabase
     .from("whatsapp_koppelingen")
     .select(
-      "id,phone_number_id,waba_id,weergavenummer,soort,status,fout,laatste_bericht_op,created_at",
+      "id,phone_number_id,waba_id,weergavenummer,soort,aanbieder,status,fout,laatste_bericht_op,created_at",
     )
     .maybeSingle();
   if (error) throw error;
@@ -89,6 +90,21 @@ export function stelTestnummerIn(invoer: {
   token: string;
 }): Promise<{ ok: true; weergavenummer: string; naam: string }> {
   return roep({ actie: "test_instellen", ...invoer });
+}
+
+/** Een koppellink van Kapso; daarna komt de eigenaar terug op Instellingen. */
+export function maakKapsoLink(): Promise<{ ok: true; url: string }> {
+  return roep({ actie: "kapso_link", terug_url: window.location.origin });
+}
+
+/** Na de koppellink: het nummer bij Kapso opzoeken en de koppeling opslaan. */
+export function rondKapsoAf(phoneNumberId?: string): Promise<{
+  ok: true;
+  weergavenummer: string;
+  naam: string;
+  coexistence: boolean;
+}> {
+  return roep({ actie: "kapso_afronden", phone_number_id: phoneNumberId ?? "" });
 }
 
 export function ontkoppelWhatsApp(): Promise<{ ok: true }> {

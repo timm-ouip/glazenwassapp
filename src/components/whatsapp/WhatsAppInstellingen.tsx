@@ -1,12 +1,13 @@
 /**
  * Het WhatsApp-nummer van het bedrijf koppelen aan Wooshy.
  *
- * Nu nog met Meta's testnummer: drie gegevens uit de API-instellingen van je
- * Meta-app overnemen. Het echte nummer, dat ook in de WhatsApp Business-app
- * op je telefoon blijft, komt later via een knop die je bij Meta laat
- * inloggen.
+ * Het echte nummer, dat ook in de WhatsApp Business-app op je telefoon
+ * blijft, koppel je via Kapso: een knop opent Kapso, daar log je in bij Meta
+ * en kies je je nummer, en daarna kom je hier terug. Voor het bouwen kan ook
+ * nog Meta's testnummer, met drie gegevens uit de Meta-app.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -18,7 +19,9 @@ import { Label } from "@/components/ui/label";
 import {
   fetchAntwoordTijden,
   fetchWhatsAppKoppeling,
+  maakKapsoLink,
   ontkoppelWhatsApp,
+  rondKapsoAf,
   stelTestnummerIn,
   zetAntwoordTijden,
 } from "@/lib/whatsapp";
@@ -28,9 +31,26 @@ import { SjablonenBeheer, ToestemmingBestaandeKlanten } from "@/components/whats
 /** Het adres waar Meta de berichten heen moet sturen. */
 const WEBHOOK_URL = `${import.meta.env["VITE_SUPABASE_URL"]}/functions/v1/whatsapp-webhook`;
 
-export function WhatsAppInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
+/** Waarom het koppelen bij Kapso misging, in gewone taal. */
+const KAPSO_FOUT: Record<string, string> = {
+  facebook_auth_failed: "Inloggen bij Facebook lukte niet.",
+  phone_verification_failed: "Het nummer kon niet worden bevestigd.",
+  waba_limit_reached: "Je Facebook-bedrijf heeft al het maximale aantal WhatsApp-accounts.",
+  token_exchange_failed: "Meta gaf geen toegang terug. Probeer het nog eens.",
+  link_expired: "De koppellink was verlopen. Begin opnieuw.",
+  already_used: "Deze koppellink was al gebruikt. Begin opnieuw.",
+};
+
+export interface KapsoTerug {
+  status: "klaar" | "mislukt";
+  phoneNumberId?: string;
+  foutcode?: string;
+}
+
+export function WhatsAppInstellingen({ isEigenaar, kapsoTerug }: { isEigenaar: boolean; kapsoTerug?: KapsoTerug }) {
   const qc = useQueryClient();
   const bevestig = useBevestig();
+  const navigate = useNavigate();
   const koppeling = useQuery({
     queryKey: ["whatsapp-koppeling"],
     queryFn: fetchWhatsAppKoppeling,
@@ -47,6 +67,57 @@ export function WhatsAppInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
 
   function ververs() {
     void qc.invalidateQueries({ queryKey: ["whatsapp-koppeling"] });
+  }
+
+  // Terug van Kapso: de koppeling afronden (één keer), en het adres opschonen.
+  const afgehandeld = useRef(false);
+  useEffect(() => {
+    if (!kapsoTerug || !isEigenaar || afgehandeld.current) return;
+    afgehandeld.current = true;
+    void navigate({ to: "/instellingen", search: { tab: "mail" }, replace: true });
+    if (kapsoTerug.status === "mislukt") {
+      toast.error(
+        `Koppelen via Kapso is niet gelukt. ${KAPSO_FOUT[kapsoTerug.foutcode ?? ""] ?? "Probeer het nog eens."}`,
+      );
+      return;
+    }
+    void rondAf(kapsoTerug.phoneNumberId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kapsoTerug, isEigenaar]);
+
+  async function rondAf(phoneNumberId?: string) {
+    setBezig(true);
+    try {
+      const uit = await rondKapsoAf(phoneNumberId);
+      toast.success(
+        uit.coexistence
+          ? `Gekoppeld: ${uit.weergavenummer}. Je nummer werkt ook nog gewoon in de app.`
+          : `Gekoppeld: ${uit.weergavenummer || "je nummer"}.`,
+      );
+      ververs();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  async function naarKapso() {
+    const ja = await bevestig({
+      titel: "WhatsApp koppelen via Kapso?",
+      tekst:
+        "Je gaat naar Kapso. Daar log je in bij Facebook en kies je je nummer uit de WhatsApp Business-app. Let op: na het koppelen kun je je uitzendlijsten in de app alleen nog lezen, niet meer versturen.",
+      bevestigLabel: "Naar Kapso",
+    });
+    if (!ja) return;
+    setBezig(true);
+    try {
+      const { url } = await maakKapsoLink();
+      window.location.assign(url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+      setBezig(false);
+    }
   }
 
   async function koppel(e: React.FormEvent) {
@@ -73,7 +144,9 @@ export function WhatsAppInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
     const ja = await bevestig({
       titel: "WhatsApp ontkoppelen?",
       tekst:
-        "Wooshy ontvangt dan geen nieuwe berichten meer en vergeet het token. De berichten die al binnen zijn blijven staan.",
+        k?.aanbieder === "kapso"
+          ? "Wooshy ontvangt dan geen nieuwe berichten meer. De berichten die al binnen zijn blijven staan. Je nummer blijft bij Kapso staan; daar haal je het weg als je wilt."
+          : "Wooshy ontvangt dan geen nieuwe berichten meer en vergeet het token. De berichten die al binnen zijn blijven staan.",
       bevestigLabel: "Ontkoppelen",
       gevaarlijk: true,
     });
@@ -102,6 +175,11 @@ export function WhatsAppInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
             {k.soort === "test" && (
               <span className="rounded-full bg-tint-blauw px-2 py-0.5 text-[11.5px] font-medium text-tint-blauw-ink">
                 Testnummer
+              </span>
+            )}
+            {k.aanbieder === "kapso" && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[11.5px] font-medium text-muted-foreground">
+                Via Kapso
               </span>
             )}
             {k.status === "actief" && !k.fout ? (
@@ -133,14 +211,26 @@ export function WhatsAppInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
           </p>
           {isEigenaar && (
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="rounded-full"
-                onClick={() => setFormulierOpen((o) => !o)}
-              >
-                Gegevens wijzigen
-              </Button>
+              {k.aanbieder === "kapso" ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full"
+                  disabled={bezig}
+                  onClick={() => void rondAf(k.phone_number_id)}
+                >
+                  Koppeling controleren
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() => setFormulierOpen((o) => !o)}
+                >
+                  Gegevens wijzigen
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"
@@ -161,10 +251,42 @@ export function WhatsAppInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
         </p>
       )}
 
-      {isEigenaar && (!gekoppeld || formulierOpen) && (
+      {isEigenaar && !gekoppeld && (
+        <div className="space-y-3">
+          <p className="text-[13px] text-muted-foreground">
+            Koppel het nummer van je WhatsApp Business-app. Het blijft gewoon werken op je telefoon;
+            Wooshy leest mee en je kunt vanuit hier antwoorden. Na het koppelen kun je uitzendlijsten
+            in de app niet meer versturen.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" className="rounded-full" disabled={bezig} onClick={() => void naarKapso()}>
+              {bezig ? "Bezig…" : "Koppelen via Kapso"}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rounded-full"
+              disabled={bezig}
+              onClick={() => void rondAf()}
+            >
+              Ik heb al gekoppeld
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rounded-full text-muted-foreground"
+              onClick={() => setFormulierOpen((o) => !o)}
+            >
+              Testnummer van Meta
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {isEigenaar && formulierOpen && (!gekoppeld || k?.aanbieder !== "kapso") && (
         <form onSubmit={(e) => void koppel(e)} className="space-y-3">
           <p className="text-[12.5px] text-muted-foreground">
-            Voor nu met het testnummer van Meta. Je vindt deze gegevens in de Meta-app van Wooshy
+            Voor het testnummer van Meta. Je vindt deze gegevens in de Meta-app van Wooshy
             onder WhatsApp → API-instellingen. Zet daar bij Webhook dit adres neer, met het
             controlewoord dat ik je gaf, en vink <em>messages</em> aan:
           </p>

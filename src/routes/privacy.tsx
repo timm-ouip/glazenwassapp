@@ -87,7 +87,8 @@ function Privacy() {
 
         <Blok titel="WhatsApp">
           <p>
-            Berichten via WhatsApp lopen via het WhatsApp Business Platform van Meta. Stuur je ons
+            Berichten via WhatsApp lopen via het WhatsApp Business Platform van Meta, en via Kapso,
+            een partner van Meta die ons nummer aan Wooshy koppelt. Stuur je ons
             een bericht, dan gebruiken we je nummer om je te antwoorden. Foto's en spraakberichten
             die je meestuurt, bewaren we bij je berichten. Wil je geen WhatsApp-berichten meer van
             ons, laat het ons weten (bijvoorbeeld door <strong>stop</strong> te sturen); dan
@@ -101,6 +102,10 @@ function Privacy() {
             <li>Supabase — de database en opslag van Wooshy.</li>
             <li>Cloudflare — het online zetten van de app.</li>
             <li>Meta (WhatsApp Business Platform) — WhatsApp-berichten.</li>
+            <li>
+              Kapso — de koppeling tussen WhatsApp en Wooshy. Kapso zit in de Verenigde Staten; je
+              WhatsApp-berichten gaan daarom ook via servers daar.
+            </li>
             <li>Anthropic — de AI achter Paaltje.</li>
             <li>Brevo en onze mailprovider — het versturen en ontvangen van mail.</li>
             <li>

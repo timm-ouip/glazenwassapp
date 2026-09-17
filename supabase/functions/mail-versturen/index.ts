@@ -29,7 +29,8 @@ import { ontsleutel } from "../_gedeeld/geheim.ts";
 import {
   datumVoluit,
   mobielAlsWa,
-  tokenVan,
+  toegangVan,
+  type Toegang,
   verstuurSjabloon,
   vulSjabloonIn,
 } from "../_gedeeld/whatsapp.ts";
@@ -260,18 +261,18 @@ Deno.serve(async (req) => {
   }
 
   // En WhatsApp: gekoppeld, met token.
-  let wa: { phoneNumberId: string; token: string } | null = null;
+  let wa: { phoneNumberId: string; toegang: Toegang } | null = null;
   if (metWhatsApp) {
     const { data: koppeling } = await beheerder
       .from("whatsapp_koppelingen")
       .select("id,phone_number_id,status")
       .eq("company_id", bedrijf.id)
       .maybeSingle();
-    const token = koppeling && koppeling.status !== "uit" ? await tokenVan(beheerder, koppeling.id, ontsleutel) : null;
-    if (!koppeling || !token) {
+    const toegang = koppeling && koppeling.status !== "uit" ? await toegangVan(beheerder, koppeling.id, ontsleutel) : null;
+    if (!koppeling || !toegang) {
       return antwoord({ fout: "WhatsApp is niet (meer) gekoppeld. Koppel het nummer opnieuw bij Instellingen." }, 400);
     }
-    wa = { phoneNumberId: koppeling.phone_number_id, token };
+    wa = { phoneNumberId: koppeling.phone_number_id, toegang };
   }
 
   // 4. Vanaf hier gaat er echt iets de deur uit.
@@ -419,7 +420,7 @@ Deno.serve(async (req) => {
     // Zelfde als in de mail: zonder naam "buurtbewoner", en dat staat dan ook in het gesprek.
     const waarden = { naam: o.naam || "buurtbewoner", adres: o.adressen.join(" en "), datum: datumTekst };
     const parameters = (sjabloon!.variabelen ?? []).map((v) => waarden[v as keyof typeof waarden] ?? "");
-    const res = await verstuurSjabloon(wa!.token, wa!.phoneNumberId, o.wa, sjabloon!.meta_naam, parameters);
+    const res = await verstuurSjabloon(wa!.toegang, wa!.phoneNumberId, o.wa, sjabloon!.meta_naam, parameters);
     return { o, res, tekst: vulSjabloonIn(sjabloon!.tekst, waarden) };
   });
   for (const { o, res } of waUitslag) {

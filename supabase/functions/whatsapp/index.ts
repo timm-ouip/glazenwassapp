@@ -1,11 +1,16 @@
 /**
  * Het WhatsApp-nummer van het bedrijf koppelen en beheren, de kant van de app.
  *
- * Fase 1: Meta's testnummer handmatig instellen (phone_number_id, id van het
- * WhatsApp Business-account en een toegangstoken). Het token gaat hier één
- * keer binnen, wordt bij Meta getest en gaat versleuteld de database in; het
- * gaat nooit terug naar de app. Later komt hier het koppelen via de app
- * (Embedded Signup) bij.
+ * Twee manieren van koppelen:
+ * - Meta's testnummer handmatig (phone_number_id, id van het WhatsApp
+ *   Business-account en een toegangstoken). Het token gaat hier één keer
+ *   binnen, wordt bij Meta getest en gaat versleuteld de database in; het gaat
+ *   nooit terug naar de app.
+ * - Het echte nummer via Kapso: `kapso_link` maakt een koppellink waarmee de
+ *   eigenaar bij Meta inlogt en zijn nummer uit de WhatsApp Business-app
+ *   kiest; `kapso_afronden` zoekt daarna bij Kapso op welk nummer dat werd,
+ *   meldt onze webhook aan en slaat de koppeling op. Eén Kapso-sleutel
+ *   (KAPSO_API_KEY) voor alle bedrijven; elk bedrijf is een eigen "customer".
  *
  * Koppelen en ontkoppelen: alleen de eigenaar. Een gesprek als gelezen
  * markeren en media alsnog ophalen: wie berichten mag lezen. Antwoorden: wie
@@ -21,6 +26,7 @@ import {
   annuleerGeplandeAntwoorden,
   datumVoluit,
   graph,
+  kapsoPlatform,
   SJABLOON_STATUS,
   sjabloonVoorMeta,
   verstuurSjabloon,
@@ -28,8 +34,10 @@ import {
   vulSjabloonIn,
   type Plaatshouder,
   haalMediaBinnen,
-  tokenVan,
+  toegangVan,
+  type Toegang,
   VENSTER_MS,
+  ververSjablonen,
   verstuurTekst,
   waNummer,
   type WaMedia,
@@ -51,6 +59,8 @@ interface Medewerker {
 interface Verzoek {
   actie?:
     | "test_instellen"
+    | "kapso_link"
+    | "kapso_afronden"
     | "ontkoppelen"
     | "gelezen"
     | "versturen"
@@ -72,6 +82,7 @@ interface Verzoek {
   waba_id?: string;
   token?: string;
   telefoon?: string;
+  terug_url?: string;
 }
 
 Deno.serve(async (req) => {
@@ -111,6 +122,12 @@ Deno.serve(async (req) => {
       case "test_instellen":
         if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan WhatsApp koppelen." }, 403);
         return await testInstellen(db, m, verzoek);
+      case "kapso_link":
+        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan WhatsApp koppelen." }, 403);
+        return await kapsoLink(db, m, String(verzoek.terug_url ?? ""));
+      case "kapso_afronden":
+        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan WhatsApp koppelen." }, 403);
+        return await kapsoAfronden(db, m, String(verzoek.phone_number_id ?? ""));
       case "ontkoppelen":
         if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan WhatsApp ontkoppelen." }, 403);
         return await ontkoppel(db, m);
@@ -166,31 +183,20 @@ async function testInstellen(db: Db, m: Medewerker, verzoek: Verzoek): Promise<R
   if (token.length < 20 || token.length > 1000) return antwoord({ fout: "Dat lijkt geen toegangstoken." }, 400);
 
   // Eerst bij Meta proberen: klopt het token bij dit nummer?
+  const toegang: Toegang = { aanbieder: "meta", token };
   const nummer = await graph<{ display_phone_number?: string; verified_name?: string }>(
     `${phoneNumberId}?fields=display_phone_number,verified_name`,
-    token,
+    toegang,
   );
   if (!nummer.ok) {
     return antwoord({ fout: `Meta accepteerde dit niet: ${nummer.fout}` }, 400);
   }
 
-  // Hoort dit nummer al bij een ander bedrijf, dan niet overnemen. Was dat
-  // bedrijf al ontkoppeld, dan ruimen we die oude koppeling op.
-  const { data: bestaand } = await db
-    .from("whatsapp_koppelingen")
-    .select("id,company_id,status")
-    .eq("phone_number_id", phoneNumberId)
-    .maybeSingle();
-  if (bestaand && bestaand.company_id !== m.company_id) {
-    if (bestaand.status !== "uit") {
-      return antwoord({ fout: "Dit nummer is al gekoppeld aan een ander bedrijf." }, 409);
-    }
-    const { error: opruimFout } = await db.from("whatsapp_koppelingen").delete().eq("id", bestaand.id);
-    if (opruimFout) throw new Error(`Oude koppeling opruimen: ${opruimFout.message}`);
-  }
+  const bezet = await nummerVanAnder(db, m, phoneNumberId);
+  if (bezet) return bezet;
 
   // Zonder dit abonnement stuurt Meta geen berichten naar onze webhook.
-  const abonnement = await graph<{ success?: boolean }>(`${wabaId}/subscribed_apps`, token, { method: "POST" });
+  const abonnement = await graph<{ success?: boolean }>(`${wabaId}/subscribed_apps`, toegang, { method: "POST" });
   if (!abonnement.ok) {
     return antwoord({ fout: `Het nummer klopt, maar aanmelden voor berichten mislukte: ${abonnement.fout}` }, 400);
   }
@@ -204,6 +210,8 @@ async function testInstellen(db: Db, m: Medewerker, verzoek: Verzoek): Promise<R
         waba_id: wabaId,
         weergavenummer: String(nummer.data.display_phone_number ?? ""),
         soort: "test",
+        aanbieder: "meta",
+        kapso_webhook_id: "",
         status: "actief",
         fout: "",
         paaltje_vanaf: new Date().toISOString(),
@@ -226,13 +234,269 @@ async function testInstellen(db: Db, m: Medewerker, verzoek: Verzoek): Promise<R
   return antwoord({ ok: true, weergavenummer: nummer.data.display_phone_number ?? "", naam: nummer.data.verified_name ?? "" });
 }
 
+/**
+ * Hoort dit nummer al bij een ander bedrijf, dan niet overnemen (foutantwoord).
+ * Was dat bedrijf al ontkoppeld, dan ruimen we die oude koppeling op.
+ */
+async function nummerVanAnder(db: Db, m: Medewerker, phoneNumberId: string): Promise<Response | null> {
+  const { data: bestaand } = await db
+    .from("whatsapp_koppelingen")
+    .select("id,company_id,status")
+    .eq("phone_number_id", phoneNumberId)
+    .maybeSingle();
+  if (!bestaand || bestaand.company_id === m.company_id) return null;
+  if (bestaand.status !== "uit") {
+    return antwoord({ fout: "Dit nummer is al gekoppeld aan een ander bedrijf." }, 409);
+  }
+  const { error: opruimFout } = await db.from("whatsapp_koppelingen").delete().eq("id", bestaand.id);
+  if (opruimFout) throw new Error(`Oude koppeling opruimen: ${opruimFout.message}`);
+  return null;
+}
+
+// ---------------------------------------------------------------------
+// Koppelen via Kapso
+// ---------------------------------------------------------------------
+
+/** Waar Kapso na het koppelen naar terugstuurt: alleen de eigen app. */
+const TOEGESTANE_HOSTS = ["timm-ouip-glazenwassapp.wasapp.workers.dev", "localhost", "127.0.0.1"];
+
+function kapsoSleutel(): string | Response {
+  const sleutel = Deno.env.get("KAPSO_API_KEY") ?? "";
+  if (!sleutel) return antwoord({ fout: "De Kapso-sleutel staat nog niet op de server (KAPSO_API_KEY)." }, 500);
+  return sleutel;
+}
+
+/** Het adres van onze webhook voor Kapso. */
+function kapsoWebhookUrl(): string {
+  return `${Deno.env.get("SUPABASE_URL") ?? ""}/functions/v1/whatsapp-webhook?aanbieder=kapso`;
+}
+
+/** De customer van dit bedrijf bij Kapso; maakt hem aan als hij er nog niet is. */
+async function kapsoCustomer(db: Db, m: Medewerker, sleutel: string): Promise<string> {
+  const { data: bekend, error } = await db
+    .from("kapso_klanten")
+    .select("customer_id")
+    .eq("company_id", m.company_id)
+    .maybeSingle();
+  if (error) throw new Error(`Kapso-klant ophalen: ${error.message}`);
+  if (bekend?.customer_id) return String(bekend.customer_id);
+
+  const { data: bedrijf } = await db.from("companies").select("name").eq("id", m.company_id).maybeSingle();
+  const naam = String(bedrijf?.name ?? "").trim().slice(0, 100) || "Wooshy-bedrijf";
+  const extern = `wooshy-${m.company_id}`;
+  let customerId = "";
+  const nieuw = await kapsoPlatform<{ data?: { id?: string } }>("customers", sleutel, {
+    method: "POST",
+    body: JSON.stringify({ customer: { name: naam, external_customer_id: extern } }),
+  });
+  if (nieuw.ok) {
+    customerId = String(nieuw.data.data?.id ?? "");
+  } else {
+    // Bestond hij al (een eerdere poging die hier niet werd opgeslagen)? Opzoeken, alle pagina's.
+    for (let pagina = 1; pagina <= 50 && !customerId; pagina++) {
+      const lijst = await kapsoPlatform<{
+        data?: { id?: string; external_customer_id?: string }[];
+        meta?: { total_pages?: number };
+      }>(`customers?per_page=100&page=${pagina}`, sleutel);
+      if (!lijst.ok) break;
+      customerId = String(lijst.data.data?.find((c) => c.external_customer_id === extern)?.id ?? "");
+      if (pagina >= Number(lijst.data.meta?.total_pages ?? 1)) break;
+    }
+    if (!customerId) throw new Error(`Kapso-klant aanmaken: ${nieuw.fout}`);
+  }
+  if (!customerId) throw new Error("Kapso gaf geen klant-id terug.");
+  const { error: opslaanFout } = await db
+    .from("kapso_klanten")
+    .upsert({ company_id: m.company_id, customer_id: customerId }, { onConflict: "company_id" });
+  if (opslaanFout) throw new Error(`Kapso-klant opslaan: ${opslaanFout.message}`);
+  return customerId;
+}
+
+/** Een koppellink van Kapso: daar log je in bij Meta en kies je je nummer. */
+async function kapsoLink(db: Db, m: Medewerker, terugUrl: string): Promise<Response> {
+  const sleutel = kapsoSleutel();
+  if (sleutel instanceof Response) return sleutel;
+
+  let terug: URL;
+  try {
+    terug = new URL(terugUrl);
+  } catch {
+    return antwoord({ fout: "Onbekend terugkeeradres." }, 400);
+  }
+  const lokaal = terug.hostname === "localhost" || terug.hostname === "127.0.0.1";
+  if (!TOEGESTANE_HOSTS.includes(terug.hostname) || (!lokaal && terug.protocol !== "https:")) {
+    return antwoord({ fout: "Onbekend terugkeeradres." }, 400);
+  }
+  const klaar = new URL("/instellingen", terug.origin);
+  klaar.searchParams.set("tab", "mail");
+  klaar.searchParams.set("kapso", "klaar");
+  const mislukt = new URL(klaar);
+  mislukt.searchParams.set("kapso", "mislukt");
+
+  const customerId = await kapsoCustomer(db, m, sleutel);
+  const link = await kapsoPlatform<{ data?: { url?: string; expires_at?: string } }>(
+    `customers/${encodeURIComponent(customerId)}/setup_links`,
+    sleutel,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        setup_link: {
+          // Alleen coexistence: het nummer blijft in de WhatsApp Business-app.
+          allowed_connection_types: ["coexistence"],
+          // Meta schrijft de kosten zelf af bij het bedrijf, niet via Kapso.
+          meta_billing_mode: "customer_managed",
+          // Geen nieuw (Amerikaans) nummer laten aanmaken.
+          provision_phone_number: false,
+          success_redirect_url: klaar.toString(),
+          failure_redirect_url: mislukt.toString(),
+        },
+      }),
+    },
+  );
+  if (!link.ok) return antwoord({ fout: `Kapso maakte geen koppellink: ${link.fout}` }, 502);
+  const url = String(link.data.data?.url ?? "");
+  if (!url.startsWith("https://")) return antwoord({ fout: "Kapso gaf geen bruikbare koppellink terug." }, 502);
+  return antwoord({ ok: true, url });
+}
+
+interface KapsoNummer {
+  phone_number_id?: string;
+  business_account_id?: string;
+  display_phone_number?: string;
+  verified_name?: string;
+  is_coexistence?: boolean;
+  customer_id?: string | null;
+}
+
+/**
+ * Na de koppellink: bij Kapso nakijken welk nummer bij dit bedrijf hoort (niet
+ * blind het nummer uit de terugkeerlink geloven), onze webhook aanmelden en de
+ * koppeling opslaan. Kan ook later nog eens, met "Koppeling controleren".
+ */
+async function kapsoAfronden(db: Db, m: Medewerker, gevraagd: string): Promise<Response> {
+  const sleutel = kapsoSleutel();
+  if (sleutel instanceof Response) return sleutel;
+  const geheim = Deno.env.get("KAPSO_WEBHOOK_SECRET") ?? "";
+  if (!geheim) return antwoord({ fout: "Het webhookgeheim voor Kapso staat nog niet op de server." }, 500);
+  if (gevraagd && !/^\d{5,30}$/.test(gevraagd)) return antwoord({ fout: "Onbekend nummer." }, 400);
+
+  const { data: bekend } = await db.from("kapso_klanten").select("customer_id").eq("company_id", m.company_id).maybeSingle();
+  if (!bekend?.customer_id) return antwoord({ fout: "Begin eerst met koppelen via Kapso." }, 409);
+  const customerId = String(bekend.customer_id);
+
+  const lijst = await kapsoPlatform<{ data?: KapsoNummer[] }>(
+    `whatsapp/phone_numbers?customer_id=${encodeURIComponent(customerId)}`,
+    sleutel,
+  );
+  if (!lijst.ok) return antwoord({ fout: `Kapso gaf de nummers niet: ${lijst.fout}` }, 502);
+  // Het filter nog eens zelf nakijken: nooit een nummer van een andere customer.
+  const nummers = (lijst.data.data ?? []).filter((n) => n.customer_id === customerId && n.phone_number_id);
+  const nummer = gevraagd ? nummers.find((n) => n.phone_number_id === gevraagd) : nummers[0];
+  if (!nummer?.phone_number_id) {
+    return antwoord({ fout: "Bij Kapso is nog geen nummer gekoppeld. Maak de koppeling eerst af via de link." }, 409);
+  }
+  if (!gevraagd && nummers.length > 1) {
+    return antwoord({ fout: "Bij Kapso staan meer nummers voor dit bedrijf. Koppel opnieuw via de link." }, 409);
+  }
+  const phoneNumberId = nummer.phone_number_id;
+
+  const bezet = await nummerVanAnder(db, m, phoneNumberId);
+  if (bezet) return bezet;
+
+  // Onze webhook aanmelden. Eerst oude aanmeldingen op ons adres weghalen,
+  // anders komt alles dubbel binnen.
+  const adres = kapsoWebhookUrl();
+  const pad = `whatsapp/phone_numbers/${encodeURIComponent(phoneNumberId)}/webhooks`;
+  const oud = await kapsoPlatform<{ data?: { id?: string; url?: string }[] }>(pad, sleutel);
+  if (!oud.ok) return antwoord({ fout: `Kapso gaf de webhooks niet: ${oud.fout}` }, 502);
+  for (const w of oud.data.data ?? []) {
+    if (w.id && w.url === adres) {
+      const weg = await kapsoPlatform(`${pad}/${encodeURIComponent(w.id)}`, sleutel, { method: "DELETE" });
+      if (!weg.ok && weg.status !== 404) console.error("kapso oude webhook weghalen:", weg.fout);
+    }
+  }
+  const webhook = await kapsoPlatform<{ data?: { id?: string } }>(pad, sleutel, {
+    method: "POST",
+    body: JSON.stringify({
+      whatsapp_webhook: {
+        kind: "kapso",
+        url: adres,
+        events: [
+          "whatsapp.message.received",
+          "whatsapp.message.sent",
+          "whatsapp.message.delivered",
+          "whatsapp.message.read",
+          "whatsapp.message.failed",
+        ],
+        secret_key: geheim,
+        active: true,
+        payload_version: "v2",
+        // Paaltje wacht zelf al even; bundelen hoeft niet.
+        buffer_enabled: false,
+      },
+    }),
+  });
+  if (!webhook.ok) return antwoord({ fout: `Kapso nam de webhook niet aan: ${webhook.fout}` }, 502);
+
+  const { data: huidig } = await db
+    .from("whatsapp_koppelingen")
+    .select("phone_number_id,paaltje_vanaf")
+    .eq("company_id", m.company_id)
+    .maybeSingle();
+  const nu = new Date().toISOString();
+  const { data: koppeling, error } = await db
+    .from("whatsapp_koppelingen")
+    .upsert(
+      {
+        company_id: m.company_id,
+        phone_number_id: phoneNumberId,
+        waba_id: String(nummer.business_account_id ?? ""),
+        weergavenummer: String(nummer.display_phone_number ?? ""),
+        soort: "app",
+        aanbieder: "kapso",
+        kapso_webhook_id: String(webhook.data.data?.id ?? ""),
+        status: "actief",
+        fout: "",
+        // Hetzelfde nummer opnieuw nakijken: Paaltje begint niet opnieuw.
+        paaltje_vanaf: huidig?.phone_number_id === phoneNumberId ? huidig.paaltje_vanaf : nu,
+        updated_at: nu,
+      },
+      { onConflict: "company_id" },
+    )
+    .select("id")
+    .single();
+  if (error?.code === "23505") return antwoord({ fout: "Dit nummer is al gekoppeld aan een ander bedrijf." }, 409);
+  if (error) throw new Error(`Koppeling opslaan: ${error.message}`);
+  // Een oud Meta-token hoort niet meer bij deze koppeling.
+  const { error: geheimFout } = await db.from("whatsapp_geheimen").delete().eq("koppeling_id", koppeling.id);
+  if (geheimFout) console.error("oud token weghalen:", geheimFout.message);
+
+  return antwoord({
+    ok: true,
+    weergavenummer: nummer.display_phone_number ?? "",
+    naam: nummer.verified_name ?? "",
+    coexistence: nummer.is_coexistence === true,
+  });
+}
+
 async function ontkoppel(db: Db, m: Medewerker): Promise<Response> {
   const { data: koppeling } = await db
     .from("whatsapp_koppelingen")
-    .select("id")
+    .select("id,aanbieder,phone_number_id,kapso_webhook_id")
     .eq("company_id", m.company_id)
     .maybeSingle();
   if (!koppeling) return antwoord({ fout: "Er is geen WhatsApp gekoppeld." }, 404);
+  // Via Kapso: onze webhook afmelden, zodat er niets meer binnenkomt. Het
+  // nummer zelf blijft bij Kapso staan; dat haal je daar weg.
+  const sleutel = Deno.env.get("KAPSO_API_KEY") ?? "";
+  if (koppeling.aanbieder === "kapso" && koppeling.kapso_webhook_id && sleutel) {
+    const weg = await kapsoPlatform(
+      `whatsapp/phone_numbers/${encodeURIComponent(koppeling.phone_number_id)}/webhooks/${encodeURIComponent(koppeling.kapso_webhook_id)}`,
+      sleutel,
+      { method: "DELETE" },
+    );
+    if (!weg.ok && weg.status !== 404) console.error("kapso webhook afmelden:", weg.fout);
+  }
   const { error: geheimFout } = await db.from("whatsapp_geheimen").delete().eq("koppeling_id", koppeling.id);
   const { error } = await db
     .from("whatsapp_koppelingen")
@@ -260,7 +524,7 @@ async function markeerGelezen(db: Db, m: Medewerker, telefoon: string): Promise<
 async function actieveKoppeling(
   db: Db,
   m: Medewerker,
-): Promise<{ id: string; phone_number_id: string; token: string } | Response> {
+): Promise<{ id: string; phone_number_id: string; toegang: Toegang } | Response> {
   const { data: koppeling, error } = await db
     .from("whatsapp_koppelingen")
     .select("id,phone_number_id,status")
@@ -268,9 +532,9 @@ async function actieveKoppeling(
     .maybeSingle();
   if (error) throw new Error(`Koppeling ophalen: ${error.message}`);
   if (!koppeling || koppeling.status === "uit") return antwoord({ fout: "Er is geen WhatsApp gekoppeld." }, 404);
-  const token = await tokenVan(db, koppeling.id, ontsleutel);
-  if (!token) return antwoord({ fout: "Het WhatsApp-token ontbreekt. Koppel het nummer opnieuw." }, 409);
-  return { id: koppeling.id, phone_number_id: koppeling.phone_number_id, token };
+  const toegang = await toegangVan(db, koppeling.id, ontsleutel);
+  if (!toegang) return antwoord({ fout: "De toegang tot WhatsApp ontbreekt. Koppel het nummer opnieuw." }, 409);
+  return { id: koppeling.id, phone_number_id: koppeling.phone_number_id, toegang };
 }
 
 async function verstuur(db: Db, m: Medewerker, telefoon: string, invoer: string): Promise<Response> {
@@ -322,7 +586,7 @@ async function verstuur(db: Db, m: Medewerker, telefoon: string, invoer: string)
   // Eerst Paaltjes ingeplande antwoord tegenhouden, dan pas zelf versturen:
   // anders kunnen ze tegelijk weggaan.
   await annuleerGeplandeAntwoorden(db, m.company_id, nummer, "Er is vanuit Wooshy geantwoord.");
-  const uit = await verstuurTekst(koppeling.token, koppeling.phone_number_id, nummer, tekst);
+  const uit = await verstuurTekst(koppeling.toegang, koppeling.phone_number_id, nummer, tekst);
   if (!uit.ok) {
     console.error("whatsapp versturen:", uit.status, uit.fout);
     return antwoord({ fout: `WhatsApp weigerde het bericht: ${uit.fout}` }, 502);
@@ -386,7 +650,7 @@ async function mediaOphalen(db: Db, m: Medewerker, berichtId: string): Promise<R
   }
   const koppeling = await actieveKoppeling(db, m);
   if (koppeling instanceof Response) return koppeling;
-  const uit = await haalMediaBinnen(db, koppeling.token, m.company_id, bericht.id, media);
+  const uit = await haalMediaBinnen(db, koppeling.toegang, m.company_id, bericht.id, media);
   if (!uit.compleet) return antwoord({ fout: "Het bestand kon niet worden opgehaald. Probeer het zo nog eens." }, 502);
   return antwoord({ ok: true, media: uit.media });
 }
@@ -451,7 +715,7 @@ async function sjabloonMaken(db: Db, m: Medewerker, verzoek: Verzoek): Promise<R
     .slice(0, 40) || "sjabloon";
   const metaNaam = `${basis}_${crypto.randomUUID().slice(0, 6)}`;
 
-  const uit = await graph<{ id?: string; status?: string; category?: string }>(`${k.waba_id}/message_templates`, k.token, {
+  const uit = await graph<{ id?: string; status?: string; category?: string }>(`${k.waba_id}/message_templates`, k.toegang, {
     method: "POST",
     body: JSON.stringify({
       name: metaNaam,
@@ -492,31 +756,9 @@ async function sjabloonMaken(db: Db, m: Medewerker, verzoek: Verzoek): Promise<R
 async function sjablonenVerversen(db: Db, m: Medewerker): Promise<Response> {
   const k = await koppelingMetAccount(db, m);
   if (k instanceof Response) return k;
-  const uit = await graph<{ data?: { id?: string; name?: string; status?: string; category?: string; rejected_reason?: string }[] }>(
-    `${k.waba_id}/message_templates?fields=id,name,status,category,rejected_reason&limit=200`,
-    k.token,
-  );
+  const uit = await ververSjablonen(db, m.company_id, k.toegang, k.waba_id);
   if (!uit.ok) return antwoord({ fout: `Meta gaf de sjablonen niet: ${uit.fout}` }, 502);
-  let bijgewerkt = 0;
-  for (const t of uit.data.data ?? []) {
-    if (!t.name) continue;
-    const reden = String(t.rejected_reason ?? "");
-    const { data, error } = await db
-      .from("wa_sjablonen")
-      .update({
-        status: SJABLOON_STATUS[String(t.status ?? "").toUpperCase()] ?? "ingediend",
-        categorie: String(t.category ?? "").toUpperCase() === "MARKETING" ? "marketing" : "utility",
-        afwijsreden: reden && reden !== "NONE" ? reden.slice(0, 300) : "",
-        ...(t.id ? { meta_id: t.id } : {}),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("company_id", m.company_id)
-      .eq("meta_naam", t.name)
-      .select("id");
-    if (error) throw new Error(`Sjabloon bijwerken: ${error.message}`);
-    bijgewerkt += (data ?? []).length;
-  }
-  return antwoord({ ok: true, bijgewerkt });
+  return antwoord({ ok: true, bijgewerkt: uit.data });
 }
 
 async function sjabloonWeg(db: Db, m: Medewerker, id: string): Promise<Response> {
@@ -533,7 +775,7 @@ async function sjabloonWeg(db: Db, m: Medewerker, id: string): Promise<Response>
   // denk je dat hij weg is terwijl hij bij Meta nog bestaat.
   const k = await koppelingMetAccount(db, m);
   if (k instanceof Response) return k;
-  const uit = await graph(`${k.waba_id}/message_templates?name=${encodeURIComponent(sjabloon.meta_naam)}`, k.token, {
+  const uit = await graph(`${k.waba_id}/message_templates?name=${encodeURIComponent(sjabloon.meta_naam)}`, k.toegang, {
     method: "DELETE",
   });
   // Bestaat hij bij Meta al niet meer, dan is dat prima.
@@ -623,7 +865,7 @@ async function sjabloonNaarKlant(db: Db, m: Medewerker, verzoek: Verzoek, verstu
 
   const k = await actieveKoppeling(db, m);
   if (k instanceof Response) return k;
-  const uit = await verstuurSjabloon(k.token, k.phone_number_id, nummer, sjabloon.meta_naam, variabelen.map((v) => waarden[v]));
+  const uit = await verstuurSjabloon(k.toegang, k.phone_number_id, nummer, sjabloon.meta_naam, variabelen.map((v) => waarden[v]));
   if (!uit.ok) return antwoord({ fout: `WhatsApp weigerde het bericht: ${uit.fout}` }, 502);
 
   const nu = new Date().toISOString();

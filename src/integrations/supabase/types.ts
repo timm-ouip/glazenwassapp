@@ -1565,10 +1565,12 @@ export type Database = {
       };
       whatsapp_koppelingen: {
         Row: {
+          aanbieder: string;
           company_id: string;
           created_at: string;
           fout: string;
           id: string;
+          kapso_webhook_id: string;
           laatste_bericht_op: string | null;
           paaltje_vanaf: string;
           phone_number_id: string;
@@ -1579,10 +1581,12 @@ export type Database = {
           weergavenummer: string;
         };
         Insert: {
+          aanbieder?: string;
           company_id?: string;
           created_at?: string;
           fout?: string;
           id?: string;
+          kapso_webhook_id?: string;
           laatste_bericht_op?: string | null;
           paaltje_vanaf?: string;
           phone_number_id: string;
@@ -1593,10 +1597,12 @@ export type Database = {
           weergavenummer?: string;
         };
         Update: {
+          aanbieder?: string;
           company_id?: string;
           created_at?: string;
           fout?: string;
           id?: string;
+          kapso_webhook_id?: string;
           laatste_bericht_op?: string | null;
           paaltje_vanaf?: string;
           phone_number_id?: string;
@@ -1605,6 +1611,24 @@ export type Database = {
           updated_at?: string;
           waba_id?: string;
           weergavenummer?: string;
+        };
+        Relationships: [];
+      };
+      kapso_klanten: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          customer_id: string;
+        };
+        Insert: {
+          company_id: string;
+          created_at?: string;
+          customer_id: string;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          customer_id?: string;
         };
         Relationships: [];
       };
