@@ -25,8 +25,9 @@ interface Props {
   street: Street | null;
   /** Wat er meegaat naar de nieuwe straat, op volgorde. */
   adressen: Customer[];
-  /** Hoeveel adressen deze straat in totaal heeft; zo weet je wat er
-   *  achterblijft. */
+  /** Hoeveel actieve adressen deze straat heeft; zo weet je wat er
+   *  achterblijft. Gestopte en verhuisde adressen tellen niet mee — die staan
+   *  op de klantenpagina. */
   straatAantal: number;
   /** De straatnamen die de wijk al heeft, om een vrije naam voor te stellen. */
   bestaandeNamen: string[];
@@ -159,7 +160,7 @@ export function SplitsStraatDialog({
             </div>
             {blijftAchter === 0 ? (
               <PopupHint>
-                {`Alle adressen gaan mee: “${street?.name ?? ""}” blijft leeg achter. Wil je de straat alleen een andere naam geven, sluit dit dan en hernoem hem met het potloodje.`}
+                {`Alle adressen uit deze lijst gaan mee; in “${street?.name ?? ""}” kunnen alleen nog gestopte of verhuisde adressen staan. Wil je de straat enkel een andere naam geven, sluit dit dan en hernoem hem met het potloodje.`}
               </PopupHint>
             ) : (
               <PopupHint>

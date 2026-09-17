@@ -50,12 +50,10 @@ interface Props {
   onKlus?: (() => void) | undefined;
   /** Klant laat stoppen: gestopt of verhuisd. Laat weg waar dat niet kan. */
   onStoppen?: (() => void) | undefined;
-  /** Hoeveel regels er samen geselecteerd staan, als dit adres er één van is.
-   *  Onder de twee hoort er niets te splitsen te zijn: één adres uit een
-   *  straat lichten doe je door hem te verslepen. */
-  splitsAantal?: number;
-  /** Die selectie uit de straat lichten, in een nieuwe straat ernaast. Laat
-   *  weg waar dat niet mag of niet aan de orde is. */
+  /** De selectie waar dit adres bij hoort uit de straat lichten, in een
+   *  nieuwe straat ernaast. Laat weg waar dat niet mag, of waar er niet meer
+   *  dan één regel geselecteerd staat: één adres verplaats je door het te
+   *  verslepen. */
   onSplitsen?: (() => void) | undefined;
   /** De kleuren die dit bedrijf zelf gemaakt heeft, uit Instellingen. */
   markeringen: MarkeringRij[];
@@ -85,7 +83,6 @@ export function KlantMenu({
   onHoekadres,
   onKlus,
   onStoppen,
-  splitsAantal = 0,
   onSplitsen,
   markeringen,
   alleenLezen = false,
@@ -155,12 +152,11 @@ export function KlantMenu({
         {/* Alleen als je meerdere regels tegelijk geselecteerd hebt: dan gaat
             dit menu niet meer over dit ene adres, maar over het stuk straat
             dat je vasthebt. De tegenhanger van straten samenvoegen. */}
-        {onSplitsen && splitsAantal > 1 && (
+        {onSplitsen && (
           <>
             <ContextMenuSeparator />
             <ContextMenuItem onSelect={onSplitsen}>
               <Scissors className="size-4" /> Straat splitsen…
-              <span className="ml-auto text-xs text-muted-foreground">{splitsAantal}</span>
             </ContextMenuItem>
           </>
         )}

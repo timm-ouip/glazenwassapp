@@ -1025,6 +1025,12 @@ function Index() {
    *
    * De adressen verhuizen zoals ze zijn: prijs, notitie, ritme en de kant van
    * de straat blijven staan, alleen de straat eronder verandert.
+   *
+   * Het verzetten gaat hier adres voor adres en niet via
+   * `persistCustomerOrder`: die slikt een mislukte update in, en dan zou de
+   * melding zeggen dat het gelukt is terwijl de helft nog in de oude straat
+   * staat — met een nieuwe straat ernaast die de gebruiker nooit gevraagd
+   * heeft.
    */
   async function splitsStraat(bron: Street, adressen: Customer[], naam: string, volledig: string) {
     if (adressen.length === 0) return;
@@ -1048,6 +1054,33 @@ function Index() {
       return;
     }
     const nieuwId = (data as { id: string }).id;
+
+    // Wat er al verhuisd is, om het terug te kunnen zetten als het halverwege
+    // misgaat.
+    const verzet: Customer[] = [];
+    try {
+      for (const [i, c] of adressen.entries()) {
+        const { error: zetFout } = await supabase
+          .from("customers")
+          .update({ street_id: nieuwId, sort_order: i + 1 })
+          .eq("id", c.id);
+        if (zetFout) throw zetFout;
+        verzet.push(c);
+      }
+    } catch (e) {
+      await zetAdressenTerug(verzet);
+      const opgeruimd = await gooiLegeStraatWeg(nieuwId);
+      toast.error(
+        `Splitsen mislukt: ${(e as Error).message}` +
+          (opgeruimd ? "" : ` — kijk of "${naam}" nog leeg in de wijk staat.`),
+      );
+      herlaad();
+      return;
+    }
+
+    // Waar hij in de rij komt te staan: direct onder de straat waar hij uit
+    // komt. Dit is het cosmetische deel — gaat het mis, dan staat de straat
+    // ergens anders in de lijst, maar er raakt niets kwijt.
     const nieuweStraat: Street = {
       ...bron,
       id: nieuwId,
@@ -1059,49 +1092,34 @@ function Index() {
       print_col: null,
       print_row: null,
     };
-
-    // Waar hij komt te staan: direct onder de straat waar hij uit komt.
     const vorigeVolgorde = streets.map((s) => ({ ...s }));
     const plek = streets.findIndex((s) => s.id === bron.id);
     const volgorde = [...streets];
     volgorde.splice(plek < 0 ? streets.length : plek + 1, 0, nieuweStraat);
-
-    const vorigePlek = adressen.map((c) => ({
-      id: c.id,
-      street_id: c.street_id,
-      sort_order: c.sort_order,
-      hoek_kant: c.hoek_kant,
-    }));
-    const updates = adressen.map((c, i) => ({
-      id: c.id,
-      street_id: nieuwId,
-      sort_order: i + 1,
-      hoek_kant: c.hoek_kant,
-    }));
-    try {
-      await persistStreetOrder(volgorde);
-      await persistCustomerOrder(updates);
-    } catch (e) {
-      toast.error("Splitsen mislukt: " + (e as Error).message);
-      herlaad();
-      return;
-    }
+    await persistStreetOrder(volgorde);
 
     pushUndo({
       label: `Splitsen ${bron.name}`,
       undo: async () => {
-        // Eerst de adressen terug: aan een straat die je weggooit hangen zijn
-        // adressen mee (on delete cascade), en dan ben je ze echt kwijt.
-        await persistCustomerOrder(vorigePlek);
-        // En pas weggooien als er werkelijk niets meer aan hangt. Ging het
-        // terugzetten hierboven mis, of zette iemand er ondertussen een adres
-        // bij, dan blijft er liever een lege straat over dan dat er adressen
-        // verdwijnen.
-        const { count } = await supabase
-          .from("customers")
-          .select("id", { count: "exact", head: true })
-          .eq("street_id", nieuwId);
-        if (!count) await supabase.from("streets").delete().eq("id", nieuwId);
+        // Eerst de adressen terug, en alleen verder als dat ook echt gelukt
+        // is: aan een straat die je weggooit hangen zijn adressen met on
+        // delete cascade, en dan zijn ze voorgoed weg.
+        for (const c of adressen) {
+          const { error: terugFout } = await supabase
+            .from("customers")
+            .update({ street_id: c.street_id, sort_order: c.sort_order })
+            .eq("id", c.id);
+          if (terugFout) {
+            toast.error("Terugdraaien mislukt: " + terugFout.message);
+            herlaad();
+            return;
+          }
+        }
+        if (!(await gooiLegeStraatWeg(nieuwId))) {
+          toast.error(
+            `De adressen staan terug, maar "${naam}" kon niet weg. Gooi hem zelf weg als hij leeg is.`,
+          );
+        }
         await persistStreetOrder(vorigeVolgorde);
         herlaad();
       },
@@ -2666,9 +2684,7 @@ const StraatKolom = memo(function StraatKolom({
             rowText={p.rowText}
             rowPad={p.rowPad}
             geselecteerd={p.selectie.includes(c.id)}
-            splitsAantal={
-              p.selectie.length > 1 && p.selectie.includes(c.id) ? p.selectie.length : 0
-            }
+            magSplitsen={p.selectie.length > 1 && p.selectie.includes(c.id)}
             ronde={p.ronde}
             planmodus={p.planmodus}
             opDeDag={p.opDeDag.has(c.id)}
@@ -2705,10 +2721,10 @@ interface RijProps {
   rowText: string;
   rowPad: string;
   geselecteerd: boolean;
-  /** Hoeveel regels er samen geselecteerd staan, als deze erbij hoort; anders
-   *  0. Zo blijft `memo` werken: bij een selectie elders verandert er aan
-   *  deze regel niets. */
-  splitsAantal: number;
+  /** Hoort deze regel bij een selectie van meer dan één regel? Bewust een
+   *  ja/nee en geen aantal: dat aantal loopt bij elke shift-klik op, en dan
+   *  zou `memo` elke al geselecteerde regel opnieuw laten tekenen. */
+  magSplitsen: boolean;
   /** De maand die je bekijkt: die bepaalt de kleur van de regel. */
   ronde: string;
   planmodus: boolean;
@@ -3015,8 +3031,7 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
       onHoekadres={() => p.onHoekadres(c)}
       onKlus={() => p.onKlus(c)}
       onStoppen={p.magKlanten ? () => p.onStoppen(c) : undefined}
-      splitsAantal={p.splitsAantal}
-      onSplitsen={p.magPlannen && p.splitsAantal > 1 ? () => p.onSplitsen(c) : undefined}
+      onSplitsen={p.magPlannen && p.magSplitsen ? () => p.onSplitsen(c) : undefined}
       alleenLezen={!p.magPlannen}
       markeringen={p.markeringen}
     >
@@ -3031,6 +3046,35 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
     </KlantMenu>
   );
 });
+
+/**
+ * De adressen terugzetten waar ze stonden. Zo goed als het gaat: dit loopt in
+ * het opruimen van een mislukking, en dan helpt een tweede foutmelding niet.
+ */
+async function zetAdressenTerug(adressen: Customer[]) {
+  for (const c of adressen) {
+    await supabase
+      .from("customers")
+      .update({ street_id: c.street_id, sort_order: c.sort_order })
+      .eq("id", c.id);
+  }
+}
+
+/**
+ * Een zojuist gemaakte straat opruimen — maar alleen als er werkelijk niets
+ * meer aan hangt: adressen gaan met `on delete cascade` mee, ook de gestopte
+ * en die in de prullenbak. Kan de telling niet opgehaald worden, dan blijft
+ * hij liever leeg in de wijk staan. Geeft terug of hij weg is.
+ */
+async function gooiLegeStraatWeg(id: string): Promise<boolean> {
+  const { count, error } = await supabase
+    .from("customers")
+    .select("id", { count: "exact", head: true })
+    .eq("street_id", id);
+  if (error || count !== 0) return false;
+  const { error: wegFout } = await supabase.from("streets").delete().eq("id", id);
+  return !wegFout;
+}
 
 /** De eerstvolgende werkdagen om uit te kiezen (Instellingen → Wijken), met
  *  vandaag en morgen bij hun naam. Ongeveer twee weken vooruit. */
