@@ -67,71 +67,10 @@ export function WijkKiezer({
   straatnamenNodig = 0,
   onStraatnamen,
 }: Props) {
-  const [dialog, setDialog] = useState<{ open: boolean; mode: "nieuw" | "hernoem" }>({
-    open: false,
-    mode: "nieuw",
-  });
-  const [naam, setNaam] = useState("");
-  const [plaats, setPlaats] = useState("");
-  const [plaatsSuggesties, setPlaatsSuggesties] = useState<string[]>([]);
-  const [bezig, setBezig] = useState(false);
+  const [hernoemOpen, setHernoemOpen] = useState(false);
   const bevestig = useBevestig();
 
   const actief = districts.find((d) => d.id === activeId) ?? null;
-
-  // Woonplaatsen voorstellen zodra er iets getypt is.
-  useEffect(() => {
-    if (!dialog.open || plaats.trim().length < 2) return;
-    const ac = new AbortController();
-    const t = setTimeout(() => {
-      void zoekWoonplaatsen(plaats, ac.signal).then((namen) => {
-        if (!ac.signal.aborted) setPlaatsSuggesties(namen);
-      });
-    }, 300);
-    return () => {
-      clearTimeout(t);
-      ac.abort();
-    };
-  }, [dialog.open, plaats]);
-
-  function openNieuw() {
-    setNaam("");
-    // Een nieuwe wijk ligt bijna altijd in dezelfde plaats als de vorige.
-    setPlaats(actief?.plaats ?? "");
-    setDialog({ open: true, mode: "nieuw" });
-  }
-
-  function openHernoem() {
-    if (!actief) return;
-    setNaam(actief.name);
-    setPlaats(actief.plaats);
-    setDialog({ open: true, mode: "hernoem" });
-  }
-
-  async function opslaan() {
-    if (!naam.trim()) {
-      toast.error("Vul een naam in.");
-      return;
-    }
-    setBezig(true);
-    try {
-      if (dialog.mode === "nieuw") {
-        const wijk = await addDistrict(naam.trim(), plaats);
-        onChanged();
-        onSelect(wijk.id);
-        toast.success("Wijk toegevoegd");
-      } else if (actief) {
-        await renameDistrict(actief.id, naam.trim(), plaats);
-        onChanged();
-        toast.success("Wijk hernoemd");
-      }
-      setDialog((s) => ({ ...s, open: false }));
-    } catch (e) {
-      toast.error("Opslaan mislukt: " + (e as Error).message);
-    } finally {
-      setBezig(false);
-    }
-  }
 
   async function verwijder() {
     if (!actief) return;
@@ -206,14 +145,8 @@ export function WijkKiezer({
           ))}
         </SelectContent>
       </Select>
-      <Button
-        size="sm"
-        variant="outline"
-        className={klein ? "h-7 rounded-full px-2.5 text-[12px]" : "rounded-full"}
-        onClick={openNieuw}
-      >
-        <Plus className={klein ? "size-3.5" : "size-4"} /> Wijk
-      </Button>
+      {/* Een wijk toevoegen staat niet meer hier: dat doe je bijna alleen bij
+          het begin, en dan via Importeren of Instellingen → Wijken. */}
       {actief && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -232,16 +165,14 @@ export function WijkKiezer({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuItem onSelect={openHernoem}>
+            <DropdownMenuItem onSelect={() => setHernoemOpen(true)}>
               <Pencil className="size-4" /> Wijk hernoemen…
             </DropdownMenuItem>
             {onStraatnamen &&
               (straatnamenNodig > 0 ? (
                 <DropdownMenuItem onSelect={onStraatnamen}>
                   <Wand2 className="size-4" /> Straatnamen aanvullen
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {straatnamenNodig}
-                  </span>
+                  <span className="ml-auto text-xs text-muted-foreground">{straatnamenNodig}</span>
                 </DropdownMenuItem>
               ) : (
                 // Niet weghalen als het klaar is: dan lijkt de app iets kwijt
@@ -258,60 +189,167 @@ export function WijkKiezer({
         </DropdownMenu>
       )}
 
-      <Dialog open={dialog.open} onOpenChange={(open) => setDialog((s) => ({ ...s, open }))}>
-        <PopupKader className="sm:max-w-sm" onKeyDown={opslaanBijEnter(opslaan)}>
-          <PopupKop
-            icoon={<Map className="size-[22px]" />}
-            titel={dialog.mode === "nieuw" ? "Wijk toevoegen" : "Wijk hernoemen"}
-            subtitel={plaats.trim() || "Een ronde die je in één keer rijdt"}
-          />
-          <PopupBody>
-            <PopupBlok label="Naam van de wijk">
-              <PopupVeld icoon={<Map className="size-4" />}>
-                <Input
-                  id="wijknaam"
-                  className={popupInvoer}
-                  placeholder="bijv. Madestein"
-                  value={naam}
-                  onChange={(e) => setNaam(e.target.value)}
-                />
-              </PopupVeld>
-            </PopupBlok>
-            <PopupBlok
-              label="Plaats"
-              info="Hiermee worden straatnamen en postcodes automatisch opgehaald. Gebruik de echte woonplaats, ook als de wijk anders heet — Madestein ligt in 's-Gravenhage."
-            >
-              <PopupVeld icoon={<MapPin className="size-4" />}>
-                <Input
-                  id="wijkplaats"
-                  list="wijk-plaatsen"
-                  className={popupInvoer}
-                  placeholder="Gouda"
-                  value={plaats}
-                  onChange={(e) => setPlaats(e.target.value)}
-                />
-              </PopupVeld>
-              <datalist id="wijk-plaatsen">
-                {plaatsSuggesties.map((p) => (
-                  <option key={p} value={p} />
-                ))}
-              </datalist>
-            </PopupBlok>
-          </PopupBody>
-          <PopupVoet>
-            <Button
-              variant="outline"
-              className="rounded-full"
-              onClick={() => setDialog((s) => ({ ...s, open: false }))}
-            >
-              Annuleren
-            </Button>
-            <Button className="rounded-full" onClick={opslaan} disabled={bezig}>
-              {bezig ? "Bezig…" : "Opslaan"}
-            </Button>
-          </PopupVoet>
-        </PopupKader>
-      </Dialog>
+      {actief && (
+        <WijkDialoog
+          open={hernoemOpen}
+          onOpenChange={setHernoemOpen}
+          wijk={actief}
+          onOpgeslagen={onChanged}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Het venster om een wijk te maken of te hernoemen. Met `wijk` hernoem je
+ * die wijk; zonder maak je een nieuwe.
+ */
+function WijkDialoog({
+  open,
+  onOpenChange,
+  wijk,
+  standaardPlaats = "",
+  onOpgeslagen,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  wijk: District | null;
+  standaardPlaats?: string;
+  onOpgeslagen: (id: string) => void;
+}) {
+  const [naam, setNaam] = useState("");
+  const [plaats, setPlaats] = useState("");
+  const [plaatsSuggesties, setPlaatsSuggesties] = useState<string[]>([]);
+  const [bezig, setBezig] = useState(false);
+  const nieuw = wijk === null;
+
+  // Bij elke keer openen opnieuw invullen.
+  useEffect(() => {
+    if (!open) return;
+    setNaam(wijk?.name ?? "");
+    setPlaats(wijk?.plaats ?? standaardPlaats);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Woonplaatsen voorstellen zodra er iets getypt is.
+  useEffect(() => {
+    if (!open || plaats.trim().length < 2) return;
+    const ac = new AbortController();
+    const t = setTimeout(() => {
+      void zoekWoonplaatsen(plaats, ac.signal).then((namen) => {
+        if (!ac.signal.aborted) setPlaatsSuggesties(namen);
+      });
+    }, 300);
+    return () => {
+      clearTimeout(t);
+      ac.abort();
+    };
+  }, [open, plaats]);
+
+  async function opslaan() {
+    if (!naam.trim()) {
+      toast.error("Vul een naam in.");
+      return;
+    }
+    setBezig(true);
+    try {
+      if (nieuw) {
+        const gemaakt = await addDistrict(naam.trim(), plaats);
+        onOpgeslagen(gemaakt.id);
+        toast.success("Wijk toegevoegd");
+      } else {
+        await renameDistrict(wijk.id, naam.trim(), plaats);
+        onOpgeslagen(wijk.id);
+        toast.success("Wijk hernoemd");
+      }
+      onOpenChange(false);
+    } catch (e) {
+      toast.error("Opslaan mislukt: " + (e as Error).message);
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <PopupKader className="sm:max-w-sm" onKeyDown={opslaanBijEnter(opslaan)}>
+        <PopupKop
+          icoon={<Map className="size-[22px]" />}
+          titel={nieuw ? "Wijk toevoegen" : "Wijk hernoemen"}
+          subtitel={plaats.trim() || "Een ronde die je in één keer rijdt"}
+        />
+        <PopupBody>
+          <PopupBlok label="Naam van de wijk">
+            <PopupVeld icoon={<Map className="size-4" />}>
+              <Input
+                id="wijknaam"
+                className={popupInvoer}
+                placeholder="bijv. Madestein"
+                value={naam}
+                onChange={(e) => setNaam(e.target.value)}
+              />
+            </PopupVeld>
+          </PopupBlok>
+          <PopupBlok
+            label="Plaats"
+            info="Hiermee worden straatnamen en postcodes automatisch opgehaald. Gebruik de echte woonplaats, ook als de wijk anders heet — Madestein ligt in 's-Gravenhage."
+          >
+            <PopupVeld icoon={<MapPin className="size-4" />}>
+              <Input
+                id="wijkplaats"
+                list="wijk-plaatsen"
+                className={popupInvoer}
+                placeholder="Gouda"
+                value={plaats}
+                onChange={(e) => setPlaats(e.target.value)}
+              />
+            </PopupVeld>
+            <datalist id="wijk-plaatsen">
+              {plaatsSuggesties.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
+          </PopupBlok>
+        </PopupBody>
+        <PopupVoet>
+          <Button variant="outline" className="rounded-full" onClick={() => onOpenChange(false)}>
+            Annuleren
+          </Button>
+          <Button className="rounded-full" onClick={opslaan} disabled={bezig}>
+            {bezig ? "Bezig…" : "Opslaan"}
+          </Button>
+        </PopupVoet>
+      </PopupKader>
+    </Dialog>
+  );
+}
+
+/**
+ * "Wijk toevoegen" als losse knop, voor Instellingen → Wijken. Een nieuwe wijk
+ * ligt bijna altijd in dezelfde plaats als de vorige, dus die staat al klaar.
+ */
+export function WijkToevoegenKnop({
+  districts,
+  onToegevoegd,
+}: {
+  districts: District[];
+  onToegevoegd: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const laatstePlaats = [...districts].reverse().find((d) => d.plaats.trim())?.plaats ?? "";
+  return (
+    <>
+      <Button size="sm" variant="outline" className="rounded-full" onClick={() => setOpen(true)}>
+        <Plus className="size-4" /> Wijk toevoegen
+      </Button>
+      <WijkDialoog
+        open={open}
+        onOpenChange={setOpen}
+        wijk={null}
+        standaardPlaats={laatstePlaats}
+        onOpgeslagen={onToegevoegd}
+      />
+    </>
   );
 }

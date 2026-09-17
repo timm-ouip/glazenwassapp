@@ -59,7 +59,13 @@ import {
 import { useRecht } from "@/lib/rechten";
 import { InactieveAdressen } from "@/components/InactieveAdressen";
 import { StopDialog } from "@/components/StopDialog";
-import { draaiStoppenTerug, fetchInactieveAdressen, geplandeDagen, zetInactief, type StopReden } from "@/lib/stoppen";
+import {
+  draaiStoppenTerug,
+  fetchInactieveAdressen,
+  geplandeDagen,
+  zetInactief,
+  type StopReden,
+} from "@/lib/stoppen";
 
 interface KlantenSearch {
   wijk?: string;
@@ -320,7 +326,10 @@ function Klanten() {
   const [zoektermen, setZoektermen] = useState<string[]>([]);
   const [alleenLeeg, setAlleenLeeg] = useState(false);
   const [toonInactief, setToonInactief] = useState(false);
-  const [stop, setStop] = useState<{ open: boolean; regel: Regel | null }>({ open: false, regel: null });
+  const [stop, setStop] = useState<{ open: boolean; regel: Regel | null }>({
+    open: false,
+    regel: null,
+  });
   const [dossier, setDossier] = useState<{
     open: boolean;
     klant: Klant | null;
@@ -343,7 +352,10 @@ function Klanten() {
   const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
   const klantenQuery = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten });
-  const inactiefQuery = useQuery({ queryKey: ["customers-inactief"], queryFn: fetchInactieveAdressen });
+  const inactiefQuery = useQuery({
+    queryKey: ["customers-inactief"],
+    queryFn: fetchInactieveAdressen,
+  });
   const quickNotesQuery = useQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes });
   const markeringQuery = useQuery({ queryKey: ["markeringen"], queryFn: fetchMarkeringen });
 
@@ -472,7 +484,15 @@ function Klanten() {
     return regels.filter((r) => {
       if (alleenLeeg && r.klant?.naam.trim()) return false;
       const k = r.klant;
-      return pastZoek([adresTekst(r), k?.naam, k?.email, k?.email2, k?.telefoon, k?.telefoon2, r.customer.postcode]);
+      return pastZoek([
+        adresTekst(r),
+        k?.naam,
+        k?.email,
+        k?.email2,
+        k?.telefoon,
+        k?.telefoon2,
+        r.customer.postcode,
+      ]);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regels, zoektermen, alleenLeeg]);
@@ -480,7 +500,16 @@ function Klanten() {
   const zichtbareLos = useMemo(() => {
     return losseKlanten.filter((k) => {
       if (alleenLeeg && k.naam.trim()) return false;
-      return pastZoek([k.naam, k.email, k.email2, k.telefoon, k.telefoon2, k.postcode, k.straat, k.plaats]);
+      return pastZoek([
+        k.naam,
+        k.email,
+        k.email2,
+        k.telefoon,
+        k.telefoon2,
+        k.postcode,
+        k.straat,
+        k.plaats,
+      ]);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [losseKlanten, zoektermen, alleenLeeg]);
@@ -648,13 +677,15 @@ function Klanten() {
     vraag = true,
   ) {
     // Vanuit het stopschermpje is "Verwijderen" al de keuze; dan niet nog eens vragen.
-    const ja = !vraag || await bevestig({
-      titel: `${adres} verwijderen?`,
-      tekst: customer
-        ? "Het adres verdwijnt uit de wijklijst en uit de klantenlijst, met de klantgegevens erbij. Alles gaat naar de geschiedenis; je kunt het daar terughalen."
-        : "De klantgegevens gaan naar de geschiedenis; je kunt ze daar terughalen.",
-      gevaarlijk: true,
-    });
+    const ja =
+      !vraag ||
+      (await bevestig({
+        titel: `${adres} verwijderen?`,
+        tekst: customer
+          ? "Het adres verdwijnt uit de wijklijst en uit de klantenlijst, met de klantgegevens erbij. Alles gaat naar de geschiedenis; je kunt het daar terughalen."
+          : "De klantgegevens gaan naar de geschiedenis; je kunt ze daar terughalen.",
+        gevaarlijk: true,
+      }));
     if (!ja) return;
 
     // Bij een klant met meerdere panden gaat alleen dit adres weg; de klant
@@ -769,12 +800,10 @@ function Klanten() {
       kruimel="Overzicht / Klanten"
       onderschrift={
         actieveWijk
-          ? [
-              `${regels.length} ${regels.length === 1 ? "adres" : "adressen"}`,
-              wijkVanNu?.plaats !== wijkVanNu?.name ? wijkVanNu?.plaats : "",
-            ]
-              .filter(Boolean)
-              .join(" · ")
+          ? // Het aantal adressen staat al in de gekleurde tegel.
+            wijkVanNu?.plaats && wijkVanNu.plaats !== wijkVanNu.name
+            ? wijkVanNu.plaats
+            : undefined
           : "Kies een wijk om zijn klanten te zien."
       }
       acties={

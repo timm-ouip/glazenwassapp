@@ -3,8 +3,11 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { useRouterState } from "@tanstack/react-router";
 import { Lock } from "lucide-react";
 
+import { Tabbalk } from "@/components/Tabbalk";
 import { Zijbalk } from "@/components/Zijbalk";
 import { PaaltjeKnop } from "@/components/paaltje/PaaltjeKnop";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useVerbergBijScrollen } from "@/hooks/use-verberg-bij-scrollen";
 import { useAuth } from "@/lib/auth";
 import { heeftRecht, rechtenVoorPad } from "@/lib/rechten";
 
@@ -27,6 +30,13 @@ type Props = {
   actiePositie?: "titelbalk" | "boven" | "onder";
   /** Optionele rij onder de titelbalk, bijvoorbeeld cijferkaarten. */
   kop?: ReactNode;
+  /** Op de telefoon de knoppenbalk wegschuiven als je omlaag scrolt. Een
+   *  eigen plakbalk op de pagina doet mee met de klasse
+   *  `group-data-[weg]/layout:…` en de variabele --balkhoogte. */
+  verbergBijScrollen?: boolean;
+  /** Op de telefoon: een balk onderin, vlak boven de tabs. Daar zet je wat
+   *  je met je duim moet kunnen bereiken, zoals de zoekbalk. */
+  onderbalk?: ReactNode;
   children: ReactNode;
 };
 
@@ -37,6 +47,8 @@ export function AppLayout({
   acties,
   actiePositie = "titelbalk",
   kop,
+  verbergBijScrollen = false,
+  onderbalk,
   children,
 }: Props) {
   // De knoppenbalk plakt onder de titelbalk vast. Hoe hoog die is hangt af
@@ -47,6 +59,9 @@ export function AppLayout({
   const pad = useRouterState({ select: (st) => st.location.pathname });
   const nodig = rechtenVoorPad(pad);
   const mag = !employee || !nodig || nodig.some((r) => heeftRecht(employee, r));
+
+  const mobiel = useIsMobile();
+  const weg = useVerbergBijScrollen(verbergBijScrollen && mobiel);
 
   const kopRef = useRef<HTMLElement>(null);
   const balkRef = useRef<HTMLDivElement>(null);
@@ -70,7 +85,7 @@ export function AppLayout({
   const balk = mag && acties && (
     <div
       ref={balkRef}
-      className="sticky z-10 flex flex-wrap items-center gap-2 bg-background/95 px-6 pb-2 pt-3.5 backdrop-blur print:hidden"
+      className="sticky z-10 flex flex-wrap items-center gap-2 bg-background/95 px-3 pb-2 pt-3 backdrop-blur transition-transform duration-200 group-data-[weg]/layout:-translate-y-full md:px-6 md:pt-3.5 print:hidden"
       style={{ top: kopHoogte }}
     >
       {acties}
@@ -84,18 +99,27 @@ export function AppLayout({
           eigen vastgeplakte kolomkop hangt zichzelf daaraan op, in plaats van
           een hoogte te gokken die na elke wijziging weer niet klopt. */}
       <div
-        className="flex min-w-0 flex-1 flex-col"
-        style={{ "--plakrand": `${kopHoogte + balkHoogte}px` } as CSSProperties}
+        className="group/layout flex min-w-0 flex-1 flex-col"
+        data-weg={weg ? "" : undefined}
+        style={
+          {
+            "--plakrand": `${kopHoogte + balkHoogte}px`,
+            "--balkhoogte": `${balkHoogte}px`,
+          } as CSSProperties
+        }
       >
         <header
           ref={kopRef}
           className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur print:hidden"
         >
-          <div className="flex flex-wrap items-center gap-3 px-6 py-3.5">
+          <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 md:px-6 md:py-3.5">
             <div className="mr-auto min-w-0">
               {kruimel &&
                 (typeof kruimel === "string" ? (
-                  <p className="text-[11.5px] leading-tight text-muted-foreground">{kruimel}</p>
+                  // Op de telefoon weg: de tabbalk zegt al waar je bent.
+                  <p className="hidden text-[11.5px] leading-tight text-muted-foreground md:block">
+                    {kruimel}
+                  </p>
                 ) : (
                   <div className="mb-1 flex min-w-0 flex-wrap items-center gap-1.5">{kruimel}</div>
                 ))}
@@ -104,7 +128,11 @@ export function AppLayout({
               ) : (
                 <div className="flex min-w-0 flex-wrap items-center gap-2">{titel}</div>
               )}
-              {onderschrift && <p className="text-xs text-muted-foreground">{onderschrift}</p>}
+              {onderschrift && (
+                <p className="truncate text-xs text-muted-foreground md:whitespace-normal">
+                  {onderschrift}
+                </p>
+              )}
             </div>
             {acties && actiePositie === "titelbalk" && (
               <div className="flex flex-wrap items-center gap-2">{acties}</div>
@@ -116,12 +144,16 @@ export function AppLayout({
             de ruimte eronder. Anders zouden de kaarten tegen de inhoud aan
             plakken: erboven lucht, eronder niets. */}
         {kop && (
-          <div className={`px-6 pt-4 ${acties && actiePositie === "onder" ? "" : "pb-4"}`}>
+          <div
+            className={`px-3 pt-3 md:px-6 md:pt-4 ${acties && actiePositie === "onder" ? "" : "pb-4"}`}
+          >
             {kop}
           </div>
         )}
         {actiePositie === "onder" && balk}
-        <main className="min-w-0 flex-1 px-6 pb-4">
+        {/* Onderaan ruimte voor wat er op de telefoon onderin zweeft: de tabs, de
+            balk erboven en de Paaltje-knop, zodat je de laatste regel vrij kunt scrollen. */}
+        <main className="min-w-0 flex-1 px-3 pb-[calc(var(--onderrand,0px)+5rem)] md:px-6 md:pb-4">
           {mag ? (
             children
           ) : (
@@ -136,6 +168,7 @@ export function AppLayout({
           )}
         </main>
       </div>
+      <Tabbalk boven={mag ? onderbalk : undefined} />
       {employee && <PaaltjeKnop />}
     </div>
   );

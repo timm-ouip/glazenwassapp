@@ -48,9 +48,11 @@ const BEHEER: Pagina[] = [
   { label: "Geschiedenis", to: "/prullenbak", icon: History, recht: ["klanten_bewerken"] },
 ];
 
-export function Zijbalk() {
+/** De pagina's waar deze gebruiker bij mag, plus het aantal open
+ *  aanmeldingen. Gedeeld door de zijbalk en de tabbalk op de telefoon, zodat
+ *  die nooit iets anders laten zien. */
+export function useMenu() {
   const { employee, company } = useAuth();
-  const navigate = useNavigate();
   const pad = useRouterState({ select: (s) => s.location.pathname });
 
   // Wat er in het postvak op een mens wacht. Staat in de balk en niet op
@@ -60,6 +62,23 @@ export function Zijbalk() {
     queryFn: aantalOpenAanmeldingen,
     enabled: heeftRecht(employee, "klanten_bewerken"),
   });
+
+  const magZien = (p: Pagina) => !p.recht || p.recht.some((r) => heeftRecht(employee, r));
+  return {
+    employee,
+    company,
+    werk: WERK.filter(magZien),
+    beheer: BEHEER.filter(magZien),
+    teDoen: teDoen ?? 0,
+    isActief: (p: Pagina) => (p.to === "/" ? pad === "/" : pad.startsWith(p.to)),
+  };
+}
+
+export type { Pagina };
+
+export function Zijbalk() {
+  const { employee, company, werk, beheer, teDoen, isActief } = useMenu();
+  const navigate = useNavigate();
 
   // Begint uitgeklapt; de keuze van de gebruiker wordt na het eerste
   // renderen ingelezen, zodat server en client hetzelfde beginnen.
@@ -88,8 +107,8 @@ export function Zijbalk() {
   const breed = ingeklapt ? "w-[68px]" : "w-[236px]";
 
   function Item({ p }: { p: Pagina }) {
-    const actief = p.to === "/" ? pad === "/" : pad.startsWith(p.to);
-    const telletje = p.to === "/aanmeldingen" ? (teDoen ?? 0) : 0;
+    const actief = isActief(p);
+    const telletje = p.to === "/aanmeldingen" ? teDoen : 0;
     return (
       <Link
         to={p.to}
@@ -124,13 +143,9 @@ export function Zijbalk() {
     );
   }
 
-  const magZien = (p: Pagina) => !p.recht || p.recht.some((r) => heeftRecht(employee, r));
-  const werk = WERK.filter(magZien);
-  const beheer = BEHEER.filter(magZien);
-
   return (
     <aside
-      className={`${breed} sticky top-0 flex h-screen shrink-0 flex-col gap-5 border-r border-border bg-surface px-3.5 py-5 transition-[width] duration-200 print:hidden`}
+      className={`${breed} sticky top-0 hidden h-screen md:flex shrink-0 flex-col gap-5 border-r border-border bg-surface px-3.5 py-5 transition-[width] duration-200 print:hidden`}
     >
       <div className={`flex items-center ${ingeklapt ? "flex-col gap-3" : "gap-2.5"}`}>
         <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[12px] border border-border bg-card">
@@ -198,9 +213,7 @@ export function Zijbalk() {
               <p className="truncate text-[12.5px] font-medium leading-tight">
                 {employee.naam || employee.email}
               </p>
-              <p className="text-[11px] text-muted-foreground">
-                {rolLabel(employee)}
-              </p>
+              <p className="text-[11px] text-muted-foreground">{rolLabel(employee)}</p>
             </div>
           </div>
         )}

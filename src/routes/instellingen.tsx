@@ -70,6 +70,7 @@ import { WhatsAppInstellingen } from "@/components/whatsapp/WhatsAppInstellingen
 import { PaaltjeAfspraken, PaaltjeCategorieen } from "@/components/PaaltjeInstellingen";
 import { SchrijfstijlInstellingen } from "@/components/SchrijfstijlInstellingen";
 import { AppLayout } from "@/components/AppLayout";
+import { WijkToevoegenKnop } from "@/components/WijkKiezer";
 import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,7 +104,9 @@ export const Route = createFileRoute("/instellingen")({
   validateSearch: (search: Record<string, unknown>): InstellingenSearch => {
     const tab = String(search["tab"] ?? "");
     const uit: InstellingenSearch = {
-      tab: (TABBLADEN as readonly string[]).includes(tab) ? (tab as Tab) : (OUDE_TABS[tab] ?? "account"),
+      tab: (TABBLADEN as readonly string[]).includes(tab)
+        ? (tab as Tab)
+        : (OUDE_TABS[tab] ?? "account"),
     };
     const kapso = search["kapso"];
     if (kapso === "klaar" || kapso === "mislukt") {
@@ -1037,9 +1040,22 @@ function WijkenTab() {
         titel="Volgorde van de wijken"
         uitleg="De ronde die je rijdt. Deze volgorde bepaalt de kleuren op de kalender en welke wijk de app voorstelt als eerstvolgende."
       >
+        {/* Hier en bij Importeren maak je wijken aan: dat doe je vooral in het
+            begin, dus op de wijkenpagina zelf staat er geen knop meer voor. */}
+        <div className="mb-3">
+          <WijkToevoegenKnop
+            districts={districtsQuery.data ?? []}
+            onToegevoegd={() => {
+              // Een half verschoven volgorde zou de nieuwe wijk verbergen tot
+              // je opslaat; dan lijkt toevoegen niets te doen.
+              setVolgorde(null);
+              void qc.invalidateQueries({ queryKey: ["districts"] });
+            }}
+          />
+        </div>
         {districts.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Nog geen wijken. Die maak je aan op de wijkenpagina.
+            Nog geen wijken. Voeg er hierboven een toe, of importeer je Excel-bestand.
           </p>
         ) : (
           <ol className="divide-y divide-border overflow-hidden rounded-[18px] border border-border bg-card shadow-card">

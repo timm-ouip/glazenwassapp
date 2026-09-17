@@ -23,7 +23,9 @@ export function PaaltjeKnop() {
         }
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-[calc(1.25rem+env(safe-area-inset-right))] z-40",
+          // Op de telefoon boven alles wat onderin staat (tabs, zoekbalk,
+          // selectiebalk): --onderrand is hoe hoog dat samen is.
+          "fixed bottom-[calc(var(--onderrand,0px)+0.75rem)] right-[calc(1rem+env(safe-area-inset-right))] z-40 md:bottom-[calc(1.25rem+env(safe-area-inset-bottom))] md:right-[calc(1.25rem+env(safe-area-inset-right))]",
           "flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_4px_14px_oklch(0.4_0.02_70/25%)] transition-transform hover:scale-105 active:scale-95 print:hidden",
           open && "hidden",
         )}

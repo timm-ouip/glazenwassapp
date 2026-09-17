@@ -50,13 +50,23 @@ import {
   Folder,
   Layers,
   ListOrdered,
+  ChevronLeft,
+  MoreHorizontal,
+  X,
 } from "lucide-react";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useLangIndrukken } from "@/hooks/use-lang-indrukken";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -171,6 +181,9 @@ interface IndexSearch {
   wijk?: string;
   /** De dag die je aan het vullen bent, gekozen op /planning. */
   dag?: string;
+  /** Op de telefoon: de straat die open staat op zijn eigen scherm. In de
+   *  adresbalk, zodat de terugknop van de telefoon hem weer sluit. */
+  straat?: string;
 }
 
 export const Route = createFileRoute("/")({
@@ -181,6 +194,9 @@ export const Route = createFileRoute("/")({
     ...(typeof search["wijk"] === "string" && search["wijk"] ? { wijk: search["wijk"] } : {}),
     ...(typeof search["dag"] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(search["dag"])
       ? { dag: search["dag"] }
+      : {}),
+    ...(typeof search["straat"] === "string" && search["straat"]
+      ? { straat: search["straat"] }
       : {}),
   }),
   head: () => ({
@@ -218,7 +234,14 @@ function Index() {
   const qc = useQueryClient();
   const bevestig = useBevestig();
   const navigate = useNavigate();
-  const { wijk, dag } = Route.useSearch();
+  const { wijk, dag, straat: openStraat } = Route.useSearch();
+  const mobiel = useIsMobile();
+  // Telefoon en computer hebben elk hun eigen zoekbalk. Wissel je (tablet
+  // draaien), dan begint de nieuwe leeg — dan hoort de lijst ook niet meer
+  // op het oude woord gefilterd te staan.
+  useEffect(() => {
+    setZoektermen([]);
+  }, [mobiel]);
   // Standaard de maand die je nu loopt, net als op de printlijst.
   const [filter, setFilter] = useState<MaandFilter>(() => maandSleutel(new Date()));
   const ronde = isKalendermaand(filter) ? filter : maandSleutel(new Date());
@@ -665,7 +688,8 @@ function Index() {
       await voegToeAanWasdag(datum, toevoegen);
     } catch (e) {
       toast.error(
-        "Inplannen mislukt: " + (e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e)),
+        "Inplannen mislukt: " +
+          (e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e)),
       );
       if (kenmerk) {
         const teruggezet = kenmerk;
@@ -901,7 +925,9 @@ function Index() {
     } catch (error) {
       toast.error(
         "Opslaan mislukt: " +
-          (error instanceof Error ? error.message : String((error as { message?: string })?.message ?? error)),
+          (error instanceof Error
+            ? error.message
+            : String((error as { message?: string })?.message ?? error)),
       );
       qc.invalidateQueries({ queryKey: ["customers"] });
       return;
@@ -1398,6 +1424,39 @@ function Index() {
   const opEditGroep = useStabiel((groep: StraatGroep) => setGroepDialog({ open: true, groep }));
   const opDeleteGroep = useStabiel((groep: StraatGroep) => void verwijderGroep(groep));
 
+  // --- Telefoon: een straat op zijn eigen scherm -------------------------
+  // Openen zet ?straat= in de adresbalk. Kwam je er met een tik, dan sluit
+  // "terug" hem met een stap terug in de geschiedenis — precies wat de
+  // terugknop van de telefoon ook doet, zodat die twee nooit uit de pas lopen.
+  const doorTikGeopend = useRef(false);
+  const terugOnderweg = useRef(false);
+  useEffect(() => {
+    if (!openStraat) {
+      doorTikGeopend.current = false;
+      terugOnderweg.current = false;
+    }
+  }, [openStraat]);
+  const opOpenStraat = useStabiel((streetId: string) => {
+    doorTikGeopend.current = true;
+    void navigate({ to: "/", search: (oud) => ({ ...oud, straat: streetId }) });
+  });
+  function sluitStraat() {
+    if (doorTikGeopend.current) {
+      // Twee snelle tikken op "terug": de tweede mag niet nog een stap doen.
+      if (terugOnderweg.current) return;
+      terugOnderweg.current = true;
+      window.history.back();
+    } else {
+      void navigate({ to: "/", search: ({ straat: _dicht, ...oud }) => oud, replace: true });
+    }
+  }
+  /** Lang indrukken op een adres: de selecteermodus aan, met dit adres al
+   *  aangevinkt. Zoals je op je telefoon foto's gaat selecteren. */
+  const opLangIngedrukt = useStabiel((c: Customer) => {
+    selecteermodus(true);
+    pasKeuzeAan([c.id], []);
+  });
+
   // De id-lijsten voor dnd-kit. Zonder useMemo krijgt SortableContext bij elke
   // render een verse array, verandert zijn context, en hertekent React álle
   // regels die `useSortable` gebruiken — `memo` kan daar niets tegen doen.
@@ -1584,6 +1643,81 @@ function Index() {
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
 
+  // --- Telefoon: welke straat staat open, en de balk onderin ------------
+  const schermStraat = mobiel && openStraat ? streets.find((s) => s.id === openStraat) : undefined;
+  // Tijdens het wegschuiven is ?straat= al weg; dan tonen we nog even de
+  // straat die er stond, in plaats van een leeg vlak.
+  const laatsteScherm = useRef<Street | undefined>(undefined);
+  if (schermStraat) laatsteScherm.current = schermStraat;
+  const getoondScherm = schermStraat ?? laatsteScherm.current;
+  const schermBlok = getoondScherm
+    ? groepen.find((g) => g.street.id === getoondScherm.id)
+    : undefined;
+  const schermIds = schermBlok ? [...schermBlok.even, ...schermBlok.oneven].map((c) => c.id) : [];
+  const schermErop = schermIds.filter((id) => keuze.has(id)).length;
+
+  // Een straat die niet (meer) bestaat — weggegooid, of een oude link — hoort
+  // niet in de adresbalk te blijven hangen.
+  useEffect(() => {
+    if (openStraat && streetsQuery.isSuccess && !streets.some((s) => s.id === openStraat)) {
+      void navigate({ to: "/", search: ({ straat: _dicht, ...oud }) => oud, replace: true });
+    }
+  }, [openStraat, streetsQuery.isSuccess, streets, navigate]);
+
+  /** De balk onderin tijdens het selecteren, op de telefoon. Staat zowel op
+   *  de pagina als in het straatscherm: dat scherm legt de rest van de
+   *  pagina stil, dus daar moet hij zelf ook in. */
+  const selectieBalk = (plek = "") => (
+    <div
+      className={`rounded-[20px] border border-border bg-card p-2 shadow-[0_8px_30px_oklch(0.3_0.02_70/22%)] md:hidden ${plek}`}
+    >
+      <div className="flex items-center gap-2 pl-1.5">
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate text-[14px] font-semibold tabular-nums">
+            {keuze.size} {keuze.size === 1 ? "adres" : "adressen"}
+            {prijzenZien && <span className="font-display"> · {formatPrice(keuzeBedrag)}</span>}
+          </p>
+          <p className="truncate text-[11.5px] text-muted-foreground">
+            {bewerktDag
+              ? `Je bewerkt ${toonDatum(bewerktDag)}`
+              : "Tik adressen aan om ze te kiezen"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => selecteermodus(false)}
+          aria-label="Stoppen met selecteren"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+        >
+          <X className="size-5" />
+        </button>
+      </div>
+      <div className="mt-1.5 flex items-center gap-1.5">
+        <Button
+          size="sm"
+          variant="outline"
+          className="rounded-full"
+          onClick={wisselAlles}
+          disabled={alleZichtbare.length === 0}
+        >
+          {allesGekozen ? "Niets" : "Alles"}
+        </Button>
+        <OverslaanKnop
+          aantal={keuze.size}
+          onOverslaan={(m) => void slaKeuzeOver(m)}
+          onNietsOverslaan={() => void wisOverslaanVanKeuze()}
+        />
+        <div className="ml-auto">
+          <InplannenKnop
+            aantal={keuze.size}
+            bewerktDag={bewerktDag}
+            onKies={(d) => void planIn(d)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
   // De lijst staat altijd in de compacte weergave: zo passen er meer regels
   // op het scherm, en dat is waar je op de ronde naar kijkt.
   const rowText = "text-[12px]";
@@ -1591,9 +1725,15 @@ function Index() {
 
   /** Eén straatblok. Staat hier als functie omdat hij op twee plekken nodig
    *  is: binnen een groep, en los eronder. */
-  const straatBlok = (g: (typeof groepen)[number]) => (
+  const straatBlok = (
+    g: (typeof groepen)[number],
+    weergave: BlokProps["weergave"] = mobiel ? "regel" : "blok",
+  ) => (
     <StraatBlok
       key={g.street.id}
+      weergave={weergave}
+      onOpen={opOpenStraat}
+      onLangIngedrukt={mobiel && magPlannen ? opLangIngedrukt : null}
       street={g.street}
       ronde={ronde}
       even={g.even}
@@ -1607,8 +1747,8 @@ function Index() {
       quickNotes={quickNotes}
       markeringen={markeringen}
       klantNamen={klantNamen}
-      rowText={rowText}
-      rowPad={rowPad}
+      rowText={weergave === "scherm" ? "text-[14px]" : rowText}
+      rowPad={weergave === "scherm" ? "py-1.5" : rowPad}
       selectie={selectie}
       onSelect={opSelect}
       onSplitsen={opSplitsen}
@@ -1651,7 +1791,12 @@ function Index() {
           variant="titel"
           districts={districts}
           activeId={actieveWijk}
-          onSelect={(id) => void navigate({ to: "/", search: (oud) => ({ ...oud, wijk: id }) })}
+          onSelect={(id) =>
+            void navigate({
+              to: "/",
+              search: ({ straat: _dicht, ...oud }) => ({ ...oud, wijk: id }),
+            })
+          }
           onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
           // Straatnamen aanvullen doe je één keer per wijk; die hoort bij de
           // wijk zelf en niet in de knoppenbalk die je elke dag gebruikt.
@@ -1664,113 +1809,152 @@ function Index() {
         />
       }
       actiePositie="onder"
+      verbergBijScrollen
       kruimel="Overzicht / Wijken"
       onderschrift={
         actieveWijk
-          ? [
-              `${groepen.length} ${groepen.length === 1 ? "straat" : "straten"}`,
-              `${totaal} ${totaal === 1 ? "klant" : "klanten"}`,
-              // De plaats alleen als hij iets toevoegt: "Gouda · Gouda"
-              // zegt twee keer hetzelfde.
-              wijkPlaats && wijkPlaats !== districts.find((d) => d.id === actieveWijk)?.name
-                ? wijkPlaats
-                : "",
-            ]
-              .filter(Boolean)
-              .join(" · ")
-          : "Kies links een wijk om zijn straten te zien."
+          ? // Aantallen staan al in de gekleurde tegels. De plaats alleen als
+            // hij iets toevoegt: "Gouda · Gouda" zegt twee keer hetzelfde.
+            wijkPlaats && wijkPlaats !== districts.find((d) => d.id === actieveWijk)?.name
+            ? wijkPlaats
+            : undefined
+          : "Kies een wijk om zijn straten te zien."
       }
+      // Op de telefoon staan zoeken en ⋯ onderin (zie onderbalk), en de rest
+      // van deze knoppen zit in dat ⋯-menu.
       acties={
-        <>
-          <ZoekBalk placeholder="Zoek straat" onTermen={setZoektermen} />
-          {magPlannen && (
-            <Button
-              size="sm"
-              variant={selecteren ? "default" : "outline"}
-              className="rounded-full"
-              onClick={() => selecteermodus(!selecteren)}
-              title="Adressen aanvinken om daarna in te plannen"
-            >
-              <CheckSquare className="size-4" /> Selecteren
-            </Button>
-          )}
-          {selecteren && (
-            <>
+        mobiel ? undefined : (
+          <>
+            <ZoekBalk placeholder="Zoek straat" onTermen={setZoektermen} />
+            <div className="contents">
+              {magPlannen && (
+                <Button
+                  size="sm"
+                  variant={selecteren ? "default" : "outline"}
+                  className="rounded-full"
+                  onClick={() => selecteermodus(!selecteren)}
+                  title="Adressen aanvinken om daarna in te plannen"
+                >
+                  <CheckSquare className="size-4" /> Selecteren
+                </Button>
+              )}
+              {selecteren && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={wisselAlles}
+                    disabled={alleZichtbare.length === 0}
+                    title={
+                      allesGekozen
+                        ? "Alles in beeld uitvinken"
+                        : `Alle ${alleZichtbare.length} adressen in beeld aanvinken`
+                    }
+                  >
+                    {allesGekozen ? (
+                      <Square className="size-4" />
+                    ) : (
+                      <CheckSquare className="size-4" />
+                    )}
+                    {allesGekozen ? "Niets" : "Alles"}
+                  </Button>
+                  <OverslaanKnop
+                    aantal={keuze.size}
+                    onOverslaan={(m) => void slaKeuzeOver(m)}
+                    onNietsOverslaan={() => void wisOverslaanVanKeuze()}
+                  />
+                  <InplannenKnop
+                    aantal={keuze.size}
+                    bewerktDag={bewerktDag}
+                    onKies={(d) => void planIn(d)}
+                  />
+                </>
+              )}
               <Button
                 size="sm"
                 variant="outline"
                 className="rounded-full"
-                onClick={wisselAlles}
-                disabled={alleZichtbare.length === 0}
-                title={
-                  allesGekozen
-                    ? "Alles in beeld uitvinken"
-                    : `Alle ${alleZichtbare.length} adressen in beeld aanvinken`
-                }
+                onClick={klapAlles}
+                disabled={groepen.length === 0}
+                title={allesIngeklapt ? "Alle straten uitklappen" : "Alle straten inklappen"}
               >
-                {allesGekozen ? <Square className="size-4" /> : <CheckSquare className="size-4" />}
-                {allesGekozen ? "Niets" : "Alles"}
+                {allesIngeklapt ? (
+                  <ChevronsUpDown className="size-4" />
+                ) : (
+                  <ChevronsDownUp className="size-4" />
+                )}
+                {allesIngeklapt ? "Uitklappen" : "Inklappen"}
               </Button>
-              <OverslaanKnop
-                aantal={keuze.size}
-                onOverslaan={(m) => void slaKeuzeOver(m)}
-                onNietsOverslaan={() => void wisOverslaanVanKeuze()}
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                disabled={!undoLabel}
+                onClick={() => void doeUndo()}
+                title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
+              >
+                <Undo2 className="size-4" /> Ongedaan
+              </Button>
+              <Button size="sm" variant="outline" className="rounded-full" asChild>
+                <Link
+                  to="/printen"
+                  search={{
+                    wijk: actieveWijk ?? "",
+                    maand: filter === "alles" ? "even" : filter,
+                    prijzen: false,
+                    liggend: true,
+                  }}
+                >
+                  <Printer className="size-4" /> Printlijst
+                </Link>
+              </Button>
+              {magKlanten && (
+                <Button
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setKlantDialog({ open: true, customer: null })}
+                >
+                  <Plus className="size-4" /> Klant
+                </Button>
+              )}
+            </div>
+          </>
+        )
+      }
+      onderbalk={
+        mobiel ? (
+          <>
+            {selecteren && selectieBalk()}
+            <div className="flex items-center gap-2">
+              <ZoekBalk
+                placeholder="Zoek straat"
+                onTermen={setZoektermen}
+                className="w-0 flex-1 shadow-[0_4px_20px_oklch(0.3_0.02_70/18%)]"
               />
-              <InplannenKnop
-                aantal={keuze.size}
-                bewerktDag={bewerktDag}
-                onKies={(d) => void planIn(d)}
+              {/* Op de telefoon zit de rest achter ⋯, en staan de knoppen van de
+              selecteermodus in de balk onderin. */}
+              <MeerKnoppen
+                magPlannen={magPlannen}
+                magKlanten={magKlanten}
+                selecteren={selecteren}
+                onSelecteren={() => selecteermodus(!selecteren)}
+                prijzenZien={prijzenZien}
+                prijzenTonen={prijzenTonen}
+                onPrijzenTonen={setPrijzenTonen}
+                undoLabel={undoLabel}
+                onUndo={() => void doeUndo()}
+                printSearch={{
+                  wijk: actieveWijk ?? "",
+                  maand: filter === "alles" ? "even" : filter,
+                  prijzen: false,
+                  liggend: true,
+                }}
+                onNieuweKlant={() => setKlantDialog({ open: true, customer: null })}
               />
-            </>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            className="rounded-full"
-            onClick={klapAlles}
-            disabled={groepen.length === 0}
-            title={allesIngeklapt ? "Alle straten uitklappen" : "Alle straten inklappen"}
-          >
-            {allesIngeklapt ? (
-              <ChevronsUpDown className="size-4" />
-            ) : (
-              <ChevronsDownUp className="size-4" />
-            )}
-            {allesIngeklapt ? "Uitklappen" : "Inklappen"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="rounded-full"
-            disabled={!undoLabel}
-            onClick={() => void doeUndo()}
-            title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
-          >
-            <Undo2 className="size-4" /> Ongedaan
-          </Button>
-          <Button size="sm" variant="outline" className="rounded-full" asChild>
-            <Link
-              to="/printen"
-              search={{
-                wijk: actieveWijk ?? "",
-                maand: filter === "alles" ? "even" : filter,
-                prijzen: false,
-                liggend: true,
-              }}
-            >
-              <Printer className="size-4" /> Printlijst
-            </Link>
-          </Button>
-          {magKlanten && (
-            <Button
-              size="sm"
-              className="rounded-full"
-              onClick={() => setKlantDialog({ open: true, customer: null })}
-            >
-              <Plus className="size-4" /> Klant
-            </Button>
-          )}
-        </>
+            </div>
+          </>
+        ) : undefined
       }
       kop={
         <Cijferkaarten
@@ -1802,14 +1986,15 @@ function Index() {
       }
     >
       <div className="space-y-3">
-        <div className="sticky top-[var(--plakrand)] z-[9] -mx-6 flex flex-wrap items-center gap-3 border-b border-border/70 bg-background/85 px-6 py-2 backdrop-blur">
-          <div className="inline-flex gap-0.5 rounded-full bg-card p-[3px] shadow-card">
+        <div className="sticky top-[var(--plakrand)] z-[9] -mx-3 flex flex-wrap items-center gap-2 border-b border-border/70 bg-background/85 px-3 py-2 backdrop-blur transition-transform duration-200 group-data-[weg]/layout:translate-y-[calc(-100%-var(--balkhoogte))] md:-mx-6 md:gap-3 md:px-6">
+          {/* Op de telefoon veeg je deze rij opzij als hij niet past. */}
+          <div className="inline-flex max-w-full gap-0.5 overflow-x-auto rounded-full bg-card p-[3px] shadow-card [scrollbar-width:none]">
             {/* Dezelfde keuze als op de printlijst: wat je hier ziet is wat je
                 straks meeneemt. */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
-                  className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[13px] capitalize transition-colors ${
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] capitalize transition-colors md:px-4 ${
                     isKalendermaand(filter)
                       ? "bg-primary font-medium text-primary-foreground"
                       : "text-foreground/80 hover:text-foreground"
@@ -1835,18 +2020,27 @@ function Index() {
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`rounded-full px-4 py-1.5 text-[13px] transition-colors ${
+                className={`shrink-0 rounded-full px-3 py-1.5 text-[13px] transition-colors md:px-4 ${
                   filter === f
                     ? "bg-primary font-medium text-primary-foreground"
                     : "text-foreground/80 hover:text-foreground"
                 }`}
               >
-                {f === "alles" ? "Alles" : f === "even" ? "Even maand" : "Oneven maand"}
+                {f === "alles" ? (
+                  "Alles"
+                ) : (
+                  <>
+                    {f === "even" ? "Even" : "Oneven"}
+                    <span className="hidden md:inline"> maand</span>
+                  </>
+                )}
               </button>
             ))}
           </div>
           {prijzenZien && (
-            <div className="flex items-center gap-2">
+            // Op de telefoon staat dit in het ⋯-menu: zo past het maandfilter
+            // op één regel.
+            <div className="hidden items-center gap-2 md:flex">
               <Switch id="prijzen" checked={prijzenTonen} onCheckedChange={setPrijzenTonen} />
               <Label htmlFor="prijzen" className="text-sm text-muted-foreground">
                 Prijzen
@@ -1857,7 +2051,7 @@ function Index() {
           {selecteren && (
             // Blijft in beeld terwijl je naar beneden vinkt: het bedrag is
             // waar je op stuurt bij het samenstellen van een dag.
-            <div className="flex w-full flex-wrap items-center gap-2 border-t border-border/70 pt-2">
+            <div className="hidden w-full flex-wrap items-center gap-2 border-t border-border/70 pt-2 md:flex">
               <CalendarCheck className="size-4 text-brand-ink" />
               {bewerktDag ? (
                 <Link
@@ -1930,7 +2124,8 @@ function Index() {
         {!streetsQuery.isLoading && districts.length === 0 && (
           <div className="rounded-lg border border-dashed border-border p-8 text-center">
             <p className="text-sm text-muted-foreground">
-              Nog geen wijken. Maak hierboven eerst een wijk aan.
+              Nog geen wijken. Importeer je Excel-bestand, of voeg een wijk toe bij Instellingen →
+              Wijken.
             </p>
           </div>
         )}
@@ -2001,6 +2196,95 @@ function Index() {
               </div>
             ) : null}
           </DragOverlay>
+
+          {/* Telefoon: de open straat op een eigen scherm. Binnen de
+              DndContext, want de regels erin kun je gewoon verslepen. */}
+          {mobiel && (
+            <Sheet
+              open={!!schermStraat}
+              onOpenChange={(open) => {
+                if (!open) sluitStraat();
+              }}
+            >
+              <SheetContent
+                side="right"
+                className="flex w-full flex-col gap-0 border-0 p-0 sm:max-w-none [&>button:first-of-type]:hidden"
+              >
+                {getoondScherm && (
+                  <>
+                    <div className="flex shrink-0 items-center gap-1 border-b border-border bg-card px-1.5 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))]">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 rounded-full"
+                        onClick={sluitStraat}
+                        aria-label="Terug naar de straten"
+                      >
+                        <ChevronLeft className="size-6" />
+                      </Button>
+                      {selecteren && schermIds.length > 0 && (
+                        <Checkbox
+                          className="mr-1.5 size-5"
+                          checked={
+                            schermErop === 0
+                              ? false
+                              : schermErop === schermIds.length
+                                ? true
+                                : "indeterminate"
+                          }
+                          disabled={!dagKlaar}
+                          onCheckedChange={(v) => opStraatOpDag(getoondScherm.id, v === true)}
+                          aria-label={`Hele ${getoondScherm.name} op de dag`}
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <SheetTitle className="truncate font-display text-[18px] font-semibold leading-tight tracking-[-0.01em]">
+                          {getoondScherm.name}
+                        </SheetTitle>
+                        <SheetDescription className="truncate text-xs">
+                          {schermBlok?.aantal ?? 0}{" "}
+                          {schermBlok?.aantal === 1 ? "adres" : "adressen"}
+                          {toonPrijzen && schermBlok ? ` · ${formatPrice(schermBlok.totaal)}` : ""}
+                        </SheetDescription>
+                      </div>
+                      {!selecteren && (magPlannen || magKlanten) && (
+                        <StraatMenu
+                          street={getoondScherm}
+                          groepen={subgroepen}
+                          magPlannen={magPlannen}
+                          magKlanten={magKlanten}
+                          onAddKlant={opAddKlant}
+                          onToggleSort={opToggleSort}
+                          onToggleDoorlopend={opToggleDoorlopend}
+                          onEdit={opEditStreet}
+                          onDelete={opDeleteStreet}
+                          onZetGroep={opZetGroep}
+                          onNieuweGroep={opNieuweGroep}
+                        />
+                      )}
+                    </div>
+                    <div
+                      className={`min-h-0 flex-1 overflow-y-auto overscroll-contain pt-1 ${
+                        selecteren ? "pb-36" : "pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+                      } ${verfBezig ? "select-none" : ""}`}
+                    >
+                      {schermBlok ? (
+                        straatBlok(schermBlok, "scherm")
+                      ) : (
+                        <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+                          Met dit filter staan er geen adressen van deze straat in beeld.
+                        </p>
+                      )}
+                    </div>
+                    {selecteren &&
+                      selectieBalk(
+                        "fixed inset-x-2 bottom-[calc(0.5rem+env(safe-area-inset-bottom))] z-40",
+                      )}
+                  </>
+                )}
+              </SheetContent>
+            </Sheet>
+          )}
         </DndContext>
       </div>
 
@@ -2229,7 +2513,7 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
           />
         ) : (
           <button
-            className={`cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing ${
+            className={`cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent active:cursor-grabbing max-md:hidden ${
               p.magPlannen ? "" : "invisible"
             }`}
             aria-label="Groep verslepen"
@@ -2310,6 +2594,13 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
 });
 
 interface BlokProps {
+  /** "blok" is de kaart op de computer. Op de telefoon staat een straat als
+   *  "regel" in de lijst, en opent hij als "scherm" met alle adressen. */
+  weergave: "blok" | "regel" | "scherm";
+  /** Op de telefoon: tik op de regel en de straat opent. */
+  onOpen: (streetId: string) => void;
+  /** Op de telefoon: lang indrukken op een adres start het selecteren. */
+  onLangIngedrukt: ((c: Customer) => void) | null;
   street: Street;
   even: Customer[];
   oneven: Customer[];
@@ -2375,8 +2666,12 @@ interface BlokProps {
 
 const StraatBlok = memo(function StraatBlok(p: BlokProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: `s:${p.street.id}`,
-    disabled: !p.magPlannen,
+    // Het scherm op de telefoon toont dezelfde straat nog een keer; met een
+    // eigen id zit hij de straat in de lijst niet in de weg.
+    id: p.weergave === "scherm" ? `scherm:${p.street.id}` : `s:${p.street.id}`,
+    // Straten verslepen doe je op de computer. Op de telefoon zou je bij
+    // het scrollen steeds per ongeluk een straat oppakken.
+    disabled: !p.magPlannen || p.weergave !== "blok",
   });
 
   const zichtbaar = [...p.even, ...p.oneven];
@@ -2409,6 +2704,107 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
       ? 0
       : Math.max(10, Math.round((erop / zichtbaar.length) * 100));
 
+  if (p.weergave === "regel") {
+    const bruikbaar = zichtbaar.length > 0 && p.dagKlaar;
+    return (
+      <section className="mb-2 overflow-hidden rounded-[16px] bg-card shadow-card">
+        <div
+          {...(p.planmodus ? { "data-verf-straat": p.street.id } : {})}
+          style={
+            gevuld > 0
+              ? {
+                  backgroundImage: `linear-gradient(to right, var(--tint-amber) ${gevuld}%, transparent ${gevuld}%)`,
+                }
+              : undefined
+          }
+          className={`flex min-h-[3.25rem] items-center gap-2.5 px-3 py-1.5 ${
+            p.planmodus && straatRond ? kopKleur : ""
+          }`}
+        >
+          {p.planmodus && (
+            // Een streek over de vinkjes heen vinkt meerdere straten in één
+            // keer aan, net als op de computer.
+            <Checkbox
+              className="size-5 shrink-0 touch-none"
+              checked={straatVink}
+              disabled={!bruikbaar}
+              onCheckedChange={(v) => {
+                if (p.negeerKlik.current) {
+                  p.negeerKlik.current = false;
+                  return;
+                }
+                p.onStraatOpDag(p.street.id, v === true);
+              }}
+              onPointerDown={(e) => {
+                if (bruikbaar && e.button === 0) {
+                  p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
+                }
+              }}
+              aria-label={`Hele ${p.street.name} op de dag`}
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => p.onOpen(p.street.id)}
+            className="flex min-w-0 flex-1 items-center gap-2 self-stretch text-left"
+          >
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block truncate font-display text-[15.5px] font-semibold tracking-[-0.01em]">
+                {p.street.name}
+              </span>
+              <span className="block truncate text-[12px] tabular-nums text-muted-foreground">
+                {p.planmodus && erop > 0 ? `${erop} van ${p.aantal}` : p.aantal}{" "}
+                {p.aantal === 1 ? "adres" : "adressen"}
+                {p.prijzenTonen ? ` · ${formatPrice(p.totaal)}` : ""}
+              </span>
+            </span>
+            {p.planmodus && alGedaan > 0 && (
+              <span className="shrink-0 rounded-full bg-tint-groen px-2 py-0.5 text-[11px] tabular-nums text-tint-groen-ink">
+                {alGedaan} gedaan
+              </span>
+            )}
+            {p.planmodus && alGepland > 0 && (
+              <span className="shrink-0 rounded-full bg-tint-paars px-2 py-0.5 text-[11px] tabular-nums text-tint-paars-ink">
+                {alGepland} gepland
+              </span>
+            )}
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (p.weergave === "scherm") {
+    const kanten = (["even", "oneven"] as const).filter(
+      (kant) => !p.street.doorlopend || kant === "even" || p.oneven.length > 0,
+    );
+    return (
+      <div className="px-2">
+        {kanten.map((kant) => (
+          <div key={kant} className="mb-2">
+            {/* Doorlopend genummerd is één reeks: dan alleen boven de eerste
+                helft een kopje. */}
+            {(!p.street.doorlopend || kant === "even") && (
+              <div className="sticky top-0 z-[25] -mx-2 flex items-center gap-2 bg-background/95 px-4 py-1.5 text-[12px] font-medium text-muted-foreground backdrop-blur">
+                {p.street.doorlopend
+                  ? `Alle nummers · ${p.aantal}`
+                  : `${kant === "even" ? "Even" : "Oneven"} kant · ${p[kant].length}`}
+              </div>
+            )}
+            <StraatKolom regels={p[kant]} blok={p} kant={kant} />
+            {kant === "even" && p.magKlanten && (
+              <NieuweRegel
+                onSubmit={(nr) => p.onNieuweRegel(p.street.id, nr)}
+                rowText={p.rowText}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <section
       ref={setNodeRef}
@@ -2438,7 +2834,13 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
                   onPointerDown: (e: React.PointerEvent) => {
                     // Bij aanraken niet: dan is een veeg over de kop bedoeld om te
                     // scrollen. Op de telefoon begin je een streek op het vinkje.
-                    if (e.pointerType !== "touch" && e.button === 0 && !e.ctrlKey && zichtbaar.length > 0 && p.dagKlaar) {
+                    if (
+                      e.pointerType !== "touch" &&
+                      e.button === 0 &&
+                      !e.ctrlKey &&
+                      zichtbaar.length > 0 &&
+                      p.dagKlaar
+                    ) {
                       p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
                     }
                   },
@@ -2470,7 +2872,8 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => {
                   e.stopPropagation();
-                  if (e.button === 0 && !e.ctrlKey) p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
+                  if (e.button === 0 && !e.ctrlKey)
+                    p.onVerfStart(straatVink !== true, e.clientX, e.clientY);
                 }}
                 aria-label={`Hele ${p.street.name} op de dag`}
               />
@@ -2536,7 +2939,9 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
                   <button
                     className="rounded p-1 text-muted-foreground hover:bg-accent"
                     onClick={() => p.onToggleSort(p.street)}
-                    aria-label={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
+                    aria-label={
+                      p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"
+                    }
                     title={p.sort === "asc" ? "Hoge nummers bovenaan" : "Lage nummers bovenaan"}
                   >
                     {p.sort === "asc" ? (
@@ -2694,6 +3099,7 @@ const StraatKolom = memo(function StraatKolom({
             onOpDag={p.onKlantOpDag}
             onVerfStart={p.onVerfStart}
             negeerKlik={p.negeerKlik}
+            onLangIngedrukt={p.onLangIngedrukt}
             onSelect={p.onSelect}
             onSplitsen={p.onSplitsen}
             onPatch={p.onPatch}
@@ -2736,6 +3142,8 @@ interface RijProps {
   onOpDag: (c: Customer, aan: boolean) => void;
   onVerfStart: (aan: boolean, x: number, y: number) => void;
   negeerKlik: { current: boolean };
+  /** Op de telefoon: lang indrukken start het selecteren met dit adres. */
+  onLangIngedrukt: ((c: Customer) => void) | null;
   onSelect: (c: Customer, shift: boolean) => void;
   onSplitsen: (c: Customer) => void;
   onPatch: (c: Customer, patch: Partial<Customer>) => void;
@@ -2810,6 +3218,7 @@ function KlantRijSleep({
         <button
           className="cursor-grab touch-none text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
           aria-label="Regel verslepen"
+          data-sleepgreep=""
           onClick={onGreep}
           {...attributes}
           {...listeners}
@@ -2868,7 +3277,8 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
             onPointerDown={(e) => {
               // Alleen de linkerknop zonder Ctrl: met rechts of Ctrl-klik open je het menu (en kun je
               // splitsen), dan hoort het vinkje te blijven staan.
-              if (dagKlaar && e.button === 0 && !e.ctrlKey) onVerfStart(!opDeDag, e.clientX, e.clientY);
+              if (dagKlaar && e.button === 0 && !e.ctrlKey)
+                onVerfStart(!opDeDag, e.clientX, e.clientY);
             }}
             onClick={() => {
               // Kwam je hier via een streek, dan is het vakje al om.
@@ -2971,13 +3381,35 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
           </button>
         )}
       </span>
+      {/* Op de telefoon is er geen hover en geen rechtermuisknop: dit knopje
+          opent hetzelfde menu als rechts klikken. Stoppen of verwijderen
+          staat daar ook in. */}
+      <button
+        type="button"
+        tabIndex={-1}
+        className="relative z-20 -my-1 flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground md:hidden"
+        aria-label="Meer voor dit adres"
+        onClick={(e) => {
+          const knop = e.currentTarget.getBoundingClientRect();
+          e.currentTarget.closest("[data-klantrij]")?.dispatchEvent(
+            new MouseEvent("contextmenu", {
+              bubbles: true,
+              cancelable: true,
+              clientX: knop.right,
+              clientY: knop.bottom,
+            }),
+          );
+        }}
+      >
+        <MoreHorizontal className="size-4" />
+      </button>
       {magKlanten ? (
         <button
           tabIndex={-1}
           // Boven het kliklaagje van de selecteerstand (z-10): de regel ligt
           // dan op slot, maar het prullenbakje vraagt eerst wat je wilt, dus
           // per ongeluk gaat er niets weg.
-          className="relative z-20 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:!text-destructive"
+          className="relative z-20 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:!text-destructive max-md:hidden"
           onClick={() => onDelete(c)}
           aria-label="Stoppen of verwijderen"
           title="Stoppen of verwijderen"
@@ -2986,7 +3418,7 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
         </button>
       ) : (
         // Dezelfde breedte, zodat de kolommen in de pas blijven.
-        <span className="w-3 shrink-0" />
+        <span className="w-3 shrink-0 max-md:hidden" />
       )}
     </>
   );
@@ -3003,6 +3435,11 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
  */
 const KlantRij = memo(function KlantRij(p: RijProps) {
   const c = p.customer;
+  // Alleen buiten de selecteermodus: daarin is een tik al aanvinken, en lang
+  // indrukken opent het menu (om af te splitsen).
+  const langIndrukken = useLangIndrukken(
+    p.onLangIngedrukt && !p.planmodus ? () => p.onLangIngedrukt?.(c) : null,
+  );
 
   // In planmodus vertelt de kleur waar je die dag staat; daarbuiten waar je
   // op moet letten. Twee kleursystemen tegelijk zou niet te lezen zijn.
@@ -3038,9 +3475,11 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
     >
       <KlantRijSleep
         id={`c:${c.id}`}
-        className={`group relative flex items-center gap-0.5 rounded-[9px] px-0.5 ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond} ${!p.geselecteerd && !achtergrond ? "hover:bg-muted/70" : ""} data-[state=open]:ring-2 data-[state=open]:ring-inset data-[state=open]:ring-foreground/60`}
+        className={`group relative flex items-center gap-0.5 rounded-[9px] px-0.5 max-md:select-none max-md:[-webkit-touch-callout:none] ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond} ${!p.geselecteerd && !achtergrond ? "hover:bg-muted/70" : ""} data-[state=open]:ring-2 data-[state=open]:ring-inset data-[state=open]:ring-foreground/60`}
         verfKlant={p.planmodus ? c.id : undefined}
         onGreep={p.planmodus || !p.magPlannen ? null : (e) => p.onSelect(c, e.shiftKey)}
+        data-klantrij=""
+        {...langIndrukken}
       >
         <KlantRijInhoud {...p} />
       </KlantRijSleep>
@@ -3127,7 +3566,8 @@ function InplannenKnop({
           disabled={aantal === 0}
           title={aantal === 0 ? "Vink eerst adressen aan" : `${aantal} adressen inplannen`}
         >
-          <CalendarPlus className="size-4" /> Inplannen voor
+          <CalendarPlus className="size-4" /> Inplannen
+          <span className="-ml-1 hidden md:inline">voor</span>
           {aantal > 0 && <span className="tabular-nums opacity-80">({aantal})</span>}
           <ChevronDown className="size-3.5 opacity-70" />
         </Button>
@@ -3147,6 +3587,186 @@ function InplannenKnop({
             {d === bewerktDag && <Check className={`size-4 ${naam ? "ml-1" : "ml-auto"}`} />}
           </DropdownMenuItem>
         ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
+ * Op de telefoon: de knoppen van de wijkenpagina achter één ⋯. Op de computer
+ * staan ze gewoon los in de balk en is dit knopje er niet.
+ */
+function MeerKnoppen({
+  magPlannen,
+  magKlanten,
+  selecteren,
+  onSelecteren,
+  prijzenZien,
+  prijzenTonen,
+  onPrijzenTonen,
+  undoLabel,
+  onUndo,
+  printSearch,
+  onNieuweKlant,
+}: {
+  magPlannen: boolean;
+  magKlanten: boolean;
+  selecteren: boolean;
+  onSelecteren: () => void;
+  prijzenZien: boolean;
+  prijzenTonen: boolean;
+  onPrijzenTonen: (aan: boolean) => void;
+  undoLabel: string | null;
+  onUndo: () => void;
+  printSearch: { wijk: string; maand: string; prijzen: boolean; liggend: boolean };
+  onNieuweKlant: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="icon"
+          variant="outline"
+          className="size-9 shrink-0 rounded-full md:hidden"
+          aria-label="Meer knoppen"
+        >
+          <MoreHorizontal className="size-5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        {magPlannen && (
+          <DropdownMenuItem onSelect={onSelecteren}>
+            <CheckSquare className="size-4" />
+            {selecteren ? "Stoppen met selecteren" : "Selecteren"}
+          </DropdownMenuItem>
+        )}
+        {prijzenZien && (
+          <DropdownMenuCheckboxItem checked={prijzenTonen} onCheckedChange={onPrijzenTonen}>
+            Prijzen tonen
+          </DropdownMenuCheckboxItem>
+        )}
+        <DropdownMenuItem disabled={!undoLabel} onSelect={onUndo}>
+          <Undo2 className="size-4" />
+          <span className="truncate">
+            {undoLabel ? `Ongedaan: ${undoLabel}` : "Ongedaan maken"}
+          </span>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/printen" search={printSearch}>
+            <Printer className="size-4" /> Printlijst
+          </Link>
+        </DropdownMenuItem>
+        {magKlanten && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onNieuweKlant}>
+              <Plus className="size-4" /> Klant toevoegen
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
+ * Het ⋯-menu bovenin het straatscherm op de telefoon: alles wat op de
+ * computer als knopjes in de straatkop en onder de rechtermuisknop zit.
+ */
+function StraatMenu({
+  street,
+  groepen,
+  magPlannen,
+  magKlanten,
+  onAddKlant,
+  onToggleSort,
+  onToggleDoorlopend,
+  onEdit,
+  onDelete,
+  onZetGroep,
+  onNieuweGroep,
+}: {
+  street: Street;
+  groepen: StraatGroep[];
+  magPlannen: boolean;
+  magKlanten: boolean;
+  onAddKlant: (streetId: string) => void;
+  onToggleSort: (street: Street) => void;
+  onToggleDoorlopend: (street: Street) => void;
+  onEdit: (street: Street) => void;
+  onDelete: (street: Street) => void;
+  onZetGroep: (street: Street, groepId: string | null) => void;
+  onNieuweGroep: (street: Street) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0 rounded-full"
+          aria-label={`Meer voor ${street.name}`}
+        >
+          <MoreHorizontal className="size-5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
+        {magKlanten && (
+          <DropdownMenuItem onSelect={() => onAddKlant(street.id)}>
+            <Plus className="size-4" /> Adres toevoegen
+          </DropdownMenuItem>
+        )}
+        {magPlannen && (
+          <>
+            <DropdownMenuItem onSelect={() => onToggleSort(street)}>
+              {street.sort_desc ? (
+                <ArrowUpNarrowWide className="size-4" />
+              ) : (
+                <ArrowDownNarrowWide className="size-4" />
+              )}
+              {street.sort_desc ? "Lage nummers bovenaan" : "Hoge nummers bovenaan"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onToggleDoorlopend(street)}>
+              <ListOrdered className="size-4" /> Nummers lopen per 1 op
+              {street.doorlopend && <Check className="ml-auto size-4" />}
+            </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Layers className="size-4" /> Groep
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="max-h-72 w-52 overflow-y-auto">
+                <DropdownMenuItem onSelect={() => onNieuweGroep(street)}>
+                  <Plus className="size-4" /> Nieuwe groep…
+                </DropdownMenuItem>
+                {groepen.length > 0 && <DropdownMenuSeparator />}
+                {groepen.map((groep) => (
+                  <DropdownMenuItem key={groep.id} onSelect={() => onZetGroep(street, groep.id)}>
+                    {groep.naam}
+                    {street.groep_id === groep.id && <Check className="ml-auto size-4" />}
+                  </DropdownMenuItem>
+                ))}
+                {street.groep_id && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => onZetGroep(street, null)}>
+                      <CircleSlash className="size-4" /> Uit de groep halen
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => onEdit(street)}>
+              <Pencil className="size-4" /> Straat bewerken
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => onDelete(street)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="size-4" /> Straat verwijderen
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

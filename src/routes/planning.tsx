@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -36,6 +36,7 @@ import {
   Euro,
   Hammer,
   ListChecks,
+  MoreHorizontal,
   Mail,
   Milestone as Route2,
   Check,
@@ -49,6 +50,14 @@ import { AppLayout } from "@/components/AppLayout";
 import { Cijferkaarten } from "@/components/Cijferkaarten";
 import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { pushUndo, undoLaatste } from "@/lib/undo";
 import {
   aanDeBeurt,
@@ -104,7 +113,7 @@ import {
   werkdagenVerder,
 } from "@/lib/wasdag";
 import { alDichtbij, dubbelVraag, verplaatsWasdag } from "@/lib/wasdag";
-import { useWerkdagen } from "@/lib/werkdagen";
+import { isWerkdag, useWerkdagen } from "@/lib/werkdagen";
 import { haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
 
 interface PlanningSearch {
@@ -425,6 +434,11 @@ function Planning() {
 
   const [sleep, setSleep] = useState<Klus | null>(null);
   const [klusOpen, setKlusOpen] = useState(false);
+  const mobiel = useIsMobile();
+  /** Op de telefoon staan de extra opdrachten eerst ingeklapt tot één regel. */
+  const [opdrachtenOpen, setOpdrachtenOpen] = useState(false);
+  /** Waar een veeg over de kalender begon. */
+  const veeg = useRef<{ x: number; y: number } | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
@@ -473,7 +487,9 @@ function Planning() {
     /** Hoeveel wijken verderop in de ronde; onbekend achteraan. */
     const plekInRonde = (k: Klus) => {
       const index = wijkInfo.get(wijkVanKlant.get(k.customer_id) ?? "")?.index;
-      return index === undefined ? aantalWijken : (index - startIndex + aantalWijken) % aantalWijken;
+      return index === undefined
+        ? aantalWijken
+        : (index - startIndex + aantalWijken) % aantalWijken;
     };
     // Binnen een wijk komen ze op adres; dat doet perWijkGroep hieronder.
     const opVolgorde = (a: Klus, b: Klus) => plekInRonde(a) - plekInRonde(b);
@@ -587,7 +603,9 @@ function Planning() {
               adres={adresVan(k)}
               wijkKleurtje={info?.kleur ?? "transparent"}
               wijkNaam={info?.naam ?? "Onbekende wijk"}
-              sleepbaar
+              // Op de telefoon niet slepen: dan kun je niet meer over de
+              // kaartjes heen scrollen. Lang indrukken → "Zet op…" doet het daar.
+              sleepbaar={!mobiel}
             />
           </div>
         </ContextMenuTrigger>
@@ -992,7 +1010,10 @@ function Planning() {
     try {
       kenmerk = await haalUitWasdagBewaard(gekozenDag);
     } catch (e) {
-      toast.error("Leegmaken mislukt: " + (e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e)));
+      toast.error(
+        "Leegmaken mislukt: " +
+          (e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e)),
+      );
       return;
     }
     pushUndo({
@@ -1023,11 +1044,90 @@ function Planning() {
   }
 
   const weekdagen = eachDayOfInterval({ start: van, end: endOfWeek(van, { locale: nl }) });
+  // Op de telefoon alleen de dagen waarop je werkt (Instellingen → Wijken):
+  // dan worden de vakjes breed genoeg om te lezen. Een weekdag waar deze
+  // maand tóch werk op staat blijft zichtbaar, anders verdwijnt dat werk.
+  const weekdagNr = (d: Date) => (d.getDay() === 0 ? 7 : d.getDay());
+  const kolommen = mobiel
+    ? weekdagen.filter(
+        (w) =>
+          isWerkdag(w, vasteWerkdagen) ||
+          dagen.some(
+            (d) =>
+              weekdagNr(d) === weekdagNr(w) &&
+              isSameMonth(d, maand) &&
+              // Werk op die dag, of het is de dag die je bekijkt: die moet je
+              // in de kalender terugzien, ook op een zaterdag.
+              (perDag.has(sleutel(d)) || sleutel(d) === gekozenDag),
+          ),
+      )
+    : weekdagen;
+  const zichtbareNrs = new Set(kolommen.map(weekdagNr));
+  const toonDagen = mobiel ? dagen.filter((d) => zichtbareNrs.has(weekdagNr(d))) : dagen;
+  const raster = mobiel
+    ? { gridTemplateColumns: `repeat(${kolommen.length}, minmax(0, 1fr))` }
+    : undefined;
+  const aantalOpdrachten = strook.lijst.length + strook.wachten.length;
 
   return (
     <AppLayout
       titel="Planning"
       kruimel="Overzicht / Planning"
+      onderbalk={
+        mobiel ? (
+          <div className="flex items-center gap-2">
+            <Button
+              className="h-11 flex-1 rounded-full shadow-[0_4px_20px_oklch(0.3_0.02_70/18%)]"
+              asChild
+            >
+              <Link to="/dag" search={{ datum: gekozenDag }}>
+                <ListChecks className="size-4" /> Dagplanning
+              </Link>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-11 rounded-full bg-card shadow-[0_4px_20px_oklch(0.3_0.02_70/18%)]"
+              asChild
+            >
+              <Link to="/" search={{ dag: gekozenDag }}>
+                <Euro className="size-4" /> Inplannen
+              </Link>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-11 shrink-0 rounded-full bg-card shadow-[0_4px_20px_oklch(0.3_0.02_70/18%)]"
+                  aria-label="Meer voor deze dag"
+                >
+                  <MoreHorizontal className="size-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {dagRegels.length > 0 && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/mailing" search={{ dag: gekozenDag }}>
+                      <Mail className="size-4" /> Deze dag aankondigen
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onSelect={() => setKlusOpen(true)}>
+                  <Plus className="size-4" /> Extra opdracht
+                </DropdownMenuItem>
+                {dagRegels.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => void maakDagLeeg()}>
+                      <Eraser className="size-4" /> Dag leegmaken
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : undefined
+      }
       onderschrift="Wat er per dag gewassen wordt — vooruit gepland en achteraf geteld."
       kop={
         <Cijferkaarten
@@ -1070,8 +1170,33 @@ function Planning() {
         onDragCancel={() => setSleep(null)}
       >
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-          {/* --- maandkalender --- */}
-          <div className="overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
+          {/* --- maandkalender ---
+              Op de telefoon veeg je naar links of rechts voor de volgende of
+              vorige maand. */}
+          <div
+            className="overflow-hidden rounded-[18px] border border-border bg-card shadow-card max-md:order-1"
+            onTouchStart={(e) => {
+              const t = e.touches[0];
+              // Alleen op de telefoon, en niet vanuit het menu onder lang
+              // indrukken: dat hangt los op de pagina, maar zijn aanrakingen
+              // komen in React toch hier binnen.
+              veeg.current =
+                mobiel && t && e.touches.length === 1 && e.currentTarget.contains(e.target as Node)
+                  ? { x: t.clientX, y: t.clientY }
+                  : null;
+            }}
+            onTouchEnd={(e) => {
+              const start = veeg.current;
+              veeg.current = null;
+              const t = e.changedTouches[0];
+              if (!start || !t || sleep) return;
+              const dx = t.clientX - start.x;
+              const dy = t.clientY - start.y;
+              if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+                setMaand((m) => addMonths(m, dx < 0 ? 1 : -1));
+              }
+            }}
+          >
             <div className="flex items-center gap-2 px-3 pt-3">
               {/* De maand is één pil met de pijltjes erin: samen één ding om
                   te bedienen, in plaats van drie losse knoppen naast elkaar. */}
@@ -1108,8 +1233,8 @@ function Planning() {
               </button>
             </div>
 
-            <div className="grid grid-cols-7 px-1.5 pt-1.5">
-              {weekdagen.map((d) => (
+            <div className="grid grid-cols-7 px-1.5 pt-1.5" style={raster}>
+              {kolommen.map((d) => (
                 <div
                   key={d.toISOString()}
                   className="py-2 text-center text-[11px] font-medium text-muted-foreground/80"
@@ -1119,8 +1244,8 @@ function Planning() {
               ))}
             </div>
 
-            <div className="grid grid-cols-7 gap-1.5 p-1.5">
-              {dagen.map((d) => {
+            <div className="grid grid-cols-7 gap-1.5 p-1.5 max-md:gap-1" style={raster}>
+              {toonDagen.map((d) => {
                 const k = sleutel(d);
                 const info = perDag.get(k);
                 const buitenMaand = !isSameMonth(d, maand);
@@ -1144,209 +1269,217 @@ function Planning() {
                       // een knop in een knop kan niet, en zo vangt hij geen
                       // klikken of dubbelklikken van de dag zelf af.
                       <div className="group/dag relative">
-                      <ContextMenu>
-                        <ContextMenuTrigger asChild>
-                          <button
-                            // De ref van dnd-kit erbij; het contextmenu hangt via
-                            // `asChild` zijn eigen ref aan dezelfde knop en Radix
-                            // voegt die twee samen.
-                            ref={setDropRef}
-                            onClick={() => kiesDag(d)}
-                            // Dubbelklikken opent de dagplanning: de route van die dag.
-                            // Aanvinken in de wijken zit onder het knopje rechtsboven.
-                            onDoubleClick={() => void navigate({ to: "/dag", search: { datum: k } })}
-                            title="Klik om te bekijken, dubbelklik voor de dagplanning"
-                            aria-current={isVandaag ? "date" : undefined}
-                            aria-pressed={isGekozen}
-                            // Het hele vakje krijgt de pastelkleur van de wijk die er
-                            // die dag aan de beurt is; zo zie je een maand aan de
-                            // kleuren, zonder namen te lezen.
-                            style={vlak ? { background: vlak } : undefined}
-                            className={`relative flex h-full min-h-[4.5rem] w-full flex-col rounded-[12px] p-1.5 text-left transition-colors sm:min-h-[6.25rem] ${
-                              buitenMaand
-                                ? "bg-transparent"
-                                : vlak
-                                  ? ""
-                                  : "bg-surface/70 hover:bg-surface"
-                            } ${isGekozen ? "outline outline-2 -outline-offset-2 outline-brand" : ""} ${
-                              isGekozen && !vlak ? "bg-brand/10" : ""
-                            } ${erboven ? "outline outline-2 -outline-offset-2 outline-brand ring-2 ring-brand/30" : ""}`}
-                          >
-                            <span
-                              className={`self-start rounded-md px-1 text-[12px] font-semibold leading-5 tabular-nums ${
-                                isVandaag
-                                  ? "bg-brand text-brand-foreground"
-                                  : buitenMaand
-                                    ? "text-muted-foreground/70"
-                                    : "text-foreground"
-                              }`}
+                        <ContextMenu>
+                          <ContextMenuTrigger asChild>
+                            <button
+                              // De ref van dnd-kit erbij; het contextmenu hangt via
+                              // `asChild` zijn eigen ref aan dezelfde knop en Radix
+                              // voegt die twee samen.
+                              ref={setDropRef}
+                              onClick={() => kiesDag(d)}
+                              // Dubbelklikken opent de dagplanning: de route van die dag.
+                              // Aanvinken in de wijken zit onder het knopje rechtsboven.
+                              onDoubleClick={() =>
+                                void navigate({ to: "/dag", search: { datum: k } })
+                              }
+                              title="Klik om te bekijken, dubbelklik voor de dagplanning"
+                              aria-current={isVandaag ? "date" : undefined}
+                              aria-pressed={isGekozen}
+                              // Het hele vakje krijgt de pastelkleur van de wijk die er
+                              // die dag aan de beurt is; zo zie je een maand aan de
+                              // kleuren, zonder namen te lezen.
+                              style={vlak ? { background: vlak } : undefined}
+                              className={`relative flex h-full min-h-[4.5rem] w-full flex-col rounded-[12px] p-1.5 text-left transition-colors max-md:min-h-[3.25rem] max-md:select-none max-md:[-webkit-touch-callout:none] md:min-h-[6.25rem] ${
+                                buitenMaand
+                                  ? "bg-transparent"
+                                  : vlak
+                                    ? ""
+                                    : "bg-surface/70 hover:bg-surface"
+                              } ${isGekozen ? "outline outline-2 -outline-offset-2 outline-brand" : ""} ${
+                                isGekozen && !vlak ? "bg-brand/10" : ""
+                              } ${erboven ? "outline outline-2 -outline-offset-2 outline-brand ring-2 ring-brand/30" : ""}`}
                             >
-                              {format(d, "d")}
-                            </span>
+                              <span
+                                className={`self-start rounded-md px-1 text-[12px] font-semibold leading-5 tabular-nums ${
+                                  isVandaag
+                                    ? "bg-brand text-brand-foreground"
+                                    : buitenMaand
+                                      ? "text-muted-foreground/70"
+                                      : "text-foreground"
+                                }`}
+                              >
+                                {format(d, "d")}
+                              </span>
 
-                            {info && (
-                              <>
-                                {/* De wijk staat boven het bedrag: dat is waar je heen
+                              {info && (
+                                <>
+                                  {/* De wijk staat boven het bedrag: dat is waar je heen
                           rijdt. Elke wijk heeft zijn eigen kleur, zodat je
                           een maand in één oogopslag ziet. */}
-                                {info.wijken.length > 0 && (
-                                  <span
-                                    style={inkt ? { color: inkt } : undefined}
-                                    className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] font-medium"
-                                  >
+                                  {info.wijken.length > 0 && (
                                     <span
-                                      className="size-1.5 shrink-0 rounded-full"
-                                      style={{ background: wijkInfo.get(info.wijken[0]!)?.kleur }}
-                                    />
-                                    <span className="truncate">
-                                      {wijkInfo.get(info.wijken[0]!)?.naam ?? "Onbekende wijk"}
-                                      {info.wijken.length > 1 && ` +${info.wijken.length - 1}`}
-                                    </span>
-                                  </span>
-                                )}
-                                {prijzenZien && (
-                                  <span
-                                    style={inkt ? { color: inkt } : undefined}
-                                    className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.03em] tabular-nums sm:text-[15px] ${
-                                      info.wijken.length > 0 ? "mt-0.5" : "mt-auto"
-                                    }`}
-                                  >
-                                    {formatPrice(info.bedrag)}
-                                  </span>
-                                )}
-                                <span className="mt-1 hidden truncate text-[10.5px] text-muted-foreground sm:block">
-                                  {info.straten.size > 0
-                                    ? `${info.straten.size} ${info.straten.size === 1 ? "straat" : "straten"} · ${info.aantal}×`
-                                    : `${info.aantal}×`}
-                                </span>
-                                <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
-                                  <span
-                                    className={`block h-full rounded-full ${
-                                      inkt ? "" : isGedaan ? "bg-tint-groen-ink" : "bg-brand"
-                                    }`}
-                                    style={{
-                                      width: `${Math.round(((prijzenZien ? info.bedrag : info.aantal) / drukste) * 100)}%`,
-                                      ...(inkt
-                                        ? { background: inkt, opacity: isGedaan ? 1 : 0.5 }
-                                        : {}),
-                                    }}
-                                  />
-                                </span>
-                              </>
-                            )}
-
-                            {/* Staat er nog niets op deze dag, dan zegt de app welke
-                          wijk er volgens de ronde aan de beurt is. Zacht en
-                          cursief, want het is een voorstel en geen planning. */}
-                            {!info && !buitenMaand && voorstel.get(k) && (
-                              <span className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] italic text-muted-foreground/70">
-                                <span
-                                  className="size-1.5 shrink-0 rounded-full opacity-60"
-                                  style={{
-                                    background: wijkInfo.get(voorstel.get(k)!.wijkId)?.kleur,
-                                  }}
-                                />
-                                <span className="truncate">
-                                  {voorstel.get(k)!.naam}
-                                  {voorstel.get(k)!.van > 1 &&
-                                    ` ${voorstel.get(k)!.deel}/${voorstel.get(k)!.van}`}
-                                </span>
-                              </span>
-                            )}
-                          </button>
-                        </ContextMenuTrigger>
-                        {/* Rechtermuisknop op een dag: een hele wijk erop zetten
-                      zonder eerst naar de wijklijst te gaan. De wijken staan
-                      in de volgorde die je in de instellingen hebt gezet. */}
-                        <ContextMenuContent className="w-56">
-                          <ContextMenuLabel className="capitalize">{toonDatum(k)}</ContextMenuLabel>
-                          <ContextMenuSub>
-                            <ContextMenuSubTrigger>
-                              <CalendarPlus className="size-4" /> Hele wijk inplannen
-                            </ContextMenuSubTrigger>
-                            <ContextMenuSubContent className="max-h-72 w-52 overflow-y-auto">
-                              {(districtsQuery.data ?? []).map((w) => (
-                                <ContextMenuItem key={w.id} onSelect={() => void planWijk(k, w)}>
-                                  <span
-                                    className="size-2 shrink-0 rounded-full"
-                                    style={{ background: wijkInfo.get(w.id)?.kleur }}
-                                  />
-                                  <span className="truncate">{w.name}</span>
-                                  {/* De wijk die volgens de ronde aan de beurt is
-                                staat gewoon op zijn plek in de lijst, met een
-                                merkje — verspringen zou je laten misklikken. */}
-                                  {voorstel.get(k)?.wijkId === w.id && (
-                                    <span className="ml-auto shrink-0 text-[10.5px] text-muted-foreground">
-                                      aan de beurt
+                                      style={inkt ? { color: inkt } : undefined}
+                                      // Op de telefoon zegt de kleur van het vakje al welke wijk het is.
+                                      className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] font-medium max-md:hidden"
+                                    >
+                                      <span
+                                        className="size-1.5 shrink-0 rounded-full"
+                                        style={{ background: wijkInfo.get(info.wijken[0]!)?.kleur }}
+                                      />
+                                      <span className="truncate">
+                                        {wijkInfo.get(info.wijken[0]!)?.naam ?? "Onbekende wijk"}
+                                        {info.wijken.length > 1 && ` +${info.wijken.length - 1}`}
+                                      </span>
                                     </span>
                                   )}
-                                </ContextMenuItem>
-                              ))}
-                              {(districtsQuery.data ?? []).length === 0 && (
-                                <ContextMenuLabel className="font-normal text-muted-foreground">
-                                  Nog geen wijken
-                                </ContextMenuLabel>
+                                  {prijzenZien && (
+                                    <span
+                                      style={inkt ? { color: inkt } : undefined}
+                                      className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.03em] tabular-nums max-md:mt-auto md:text-[15px] ${
+                                        info.wijken.length > 0 ? "mt-0.5" : "mt-auto"
+                                      }`}
+                                    >
+                                      {/* Op de telefoon zonder centen: "€ 593,50" past niet. */}
+                                      {mobiel
+                                        ? `€${Math.round(info.bedrag)}`
+                                        : formatPrice(info.bedrag)}
+                                    </span>
+                                  )}
+                                  <span className="mt-1 hidden truncate text-[10.5px] text-muted-foreground md:block">
+                                    {info.straten.size > 0
+                                      ? `${info.straten.size} ${info.straten.size === 1 ? "straat" : "straten"} · ${info.aantal}×`
+                                      : `${info.aantal}×`}
+                                  </span>
+                                  <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
+                                    <span
+                                      className={`block h-full rounded-full ${
+                                        inkt ? "" : isGedaan ? "bg-tint-groen-ink" : "bg-brand"
+                                      }`}
+                                      style={{
+                                        width: `${Math.round(((prijzenZien ? info.bedrag : info.aantal) / drukste) * 100)}%`,
+                                        ...(inkt
+                                          ? { background: inkt, opacity: isGedaan ? 1 : 0.5 }
+                                          : {}),
+                                      }}
+                                    />
+                                  </span>
+                                </>
                               )}
-                            </ContextMenuSubContent>
-                          </ContextMenuSub>
-                          <ContextMenuSub>
-                            <ContextMenuSubTrigger>
-                              <ChevronsRight className="size-4" /> Planning vanaf hier opschuiven
-                            </ContextMenuSubTrigger>
-                            <ContextMenuSubContent className="w-56">
-                              {[1, 2, 3].map((n) => (
-                                <ContextMenuItem key={n} onSelect={() => void schuifOp(k, n)}>
-                                  {n} {n === 1 ? "werkdag" : "werkdagen"} later
-                                </ContextMenuItem>
-                              ))}
-                              <ContextMenuSeparator />
-                              <ContextMenuLabel className="font-normal text-muted-foreground">
-                                Alles t/m het eind van de maand schuift mee. Dagen waarop je
-                                niet werkt slaan we over.
-                              </ContextMenuLabel>
-                            </ContextMenuSubContent>
-                          </ContextMenuSub>
 
-                          <ContextMenuSeparator />
-                          <ContextMenuItem onSelect={() => kiesDag(d)}>
-                            <CalendarCheck className="size-4" /> Deze dag bekijken
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onSelect={() => void navigate({ to: "/dag", search: { datum: k } })}
-                          >
-                            <ListChecks className="size-4" /> Dagplanning
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onSelect={() => void navigate({ to: "/", search: { dag: k } })}
-                          >
-                            <Euro className="size-4" /> Werk inplannen
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onSelect={() => void navigate({ to: "/mailing", search: { dag: k } })}
-                          >
-                            <Mail className="size-4" /> Deze dag aankondigen
-                          </ContextMenuItem>
-                        </ContextMenuContent>
-                      </ContextMenu>
-                      {/* Rechtsboven: meteen naar de wijken om voor deze dag aan
+                              {/* Staat er nog niets op deze dag, dan zegt de app welke
+                          wijk er volgens de ronde aan de beurt is. Zacht en
+                          cursief, want het is een voorstel en geen planning. */}
+                              {!info && !buitenMaand && voorstel.get(k) && (
+                                <span className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] italic text-muted-foreground/70">
+                                  <span
+                                    className="size-1.5 shrink-0 rounded-full opacity-60"
+                                    style={{
+                                      background: wijkInfo.get(voorstel.get(k)!.wijkId)?.kleur,
+                                    }}
+                                  />
+                                  <span className="truncate">
+                                    {voorstel.get(k)!.naam}
+                                    {voorstel.get(k)!.van > 1 &&
+                                      ` ${voorstel.get(k)!.deel}/${voorstel.get(k)!.van}`}
+                                  </span>
+                                </span>
+                              )}
+                            </button>
+                          </ContextMenuTrigger>
+                          {/* Rechtermuisknop op een dag: een hele wijk erop zetten
+                      zonder eerst naar de wijklijst te gaan. De wijken staan
+                      in de volgorde die je in de instellingen hebt gezet. */}
+                          <ContextMenuContent className="w-56">
+                            <ContextMenuLabel className="capitalize">
+                              {toonDatum(k)}
+                            </ContextMenuLabel>
+                            <ContextMenuSub>
+                              <ContextMenuSubTrigger>
+                                <CalendarPlus className="size-4" /> Hele wijk inplannen
+                              </ContextMenuSubTrigger>
+                              <ContextMenuSubContent className="max-h-72 w-52 overflow-y-auto">
+                                {(districtsQuery.data ?? []).map((w) => (
+                                  <ContextMenuItem key={w.id} onSelect={() => void planWijk(k, w)}>
+                                    <span
+                                      className="size-2 shrink-0 rounded-full"
+                                      style={{ background: wijkInfo.get(w.id)?.kleur }}
+                                    />
+                                    <span className="truncate">{w.name}</span>
+                                    {/* De wijk die volgens de ronde aan de beurt is
+                                staat gewoon op zijn plek in de lijst, met een
+                                merkje — verspringen zou je laten misklikken. */}
+                                    {voorstel.get(k)?.wijkId === w.id && (
+                                      <span className="ml-auto shrink-0 text-[10.5px] text-muted-foreground">
+                                        aan de beurt
+                                      </span>
+                                    )}
+                                  </ContextMenuItem>
+                                ))}
+                                {(districtsQuery.data ?? []).length === 0 && (
+                                  <ContextMenuLabel className="font-normal text-muted-foreground">
+                                    Nog geen wijken
+                                  </ContextMenuLabel>
+                                )}
+                              </ContextMenuSubContent>
+                            </ContextMenuSub>
+                            <ContextMenuSub>
+                              <ContextMenuSubTrigger>
+                                <ChevronsRight className="size-4" /> Planning vanaf hier opschuiven
+                              </ContextMenuSubTrigger>
+                              <ContextMenuSubContent className="w-56">
+                                {[1, 2, 3].map((n) => (
+                                  <ContextMenuItem key={n} onSelect={() => void schuifOp(k, n)}>
+                                    {n} {n === 1 ? "werkdag" : "werkdagen"} later
+                                  </ContextMenuItem>
+                                ))}
+                                <ContextMenuSeparator />
+                                <ContextMenuLabel className="font-normal text-muted-foreground">
+                                  Alles t/m het eind van de maand schuift mee. Dagen waarop je niet
+                                  werkt slaan we over.
+                                </ContextMenuLabel>
+                              </ContextMenuSubContent>
+                            </ContextMenuSub>
+
+                            <ContextMenuSeparator />
+                            <ContextMenuItem onSelect={() => kiesDag(d)}>
+                              <CalendarCheck className="size-4" /> Deze dag bekijken
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                              onSelect={() => void navigate({ to: "/dag", search: { datum: k } })}
+                            >
+                              <ListChecks className="size-4" /> Dagplanning
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                              onSelect={() => void navigate({ to: "/", search: { dag: k } })}
+                            >
+                              <Euro className="size-4" /> Werk inplannen
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                              onSelect={() => void navigate({ to: "/mailing", search: { dag: k } })}
+                            >
+                              <Mail className="size-4" /> Deze dag aankondigen
+                            </ContextMenuItem>
+                          </ContextMenuContent>
+                        </ContextMenu>
+                        {/* Rechtsboven: meteen naar de wijken om voor deze dag aan
                           te vinken. Alleen met een muis, en pas zichtbaar als je
                           over de dag beweegt. Op een telefoon of tablet zou een
                           onzichtbaar knopje tikken op de dag afvangen en over het
                           dagnummer vallen; daar staat "Werk inplannen" in het
                           menu onder lang indrukken. Buiten de Tab-volgorde om
                           dezelfde reden: het menu heeft het al. */}
-                      {!buitenMaand && (
-                        <Link
-                          to="/"
-                          search={{ dag: k }}
-                          tabIndex={-1}
-                          title="Inplannen voor deze dag"
-                          aria-label={`Inplannen voor ${format(d, "d MMMM", { locale: nl })}`}
-                          className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded-[8px] text-foreground/45 opacity-0 transition-[opacity,color,background-color] hover:bg-card hover:text-foreground hover:shadow-card group-hover/dag:opacity-100 [@media(hover:hover)]:flex"
-                        >
-                          <CalendarPlus className="size-3.5" />
-                        </Link>
-                      )}
+                        {!buitenMaand && (
+                          <Link
+                            to="/"
+                            search={{ dag: k }}
+                            tabIndex={-1}
+                            title="Inplannen voor deze dag"
+                            aria-label={`Inplannen voor ${format(d, "d MMMM", { locale: nl })}`}
+                            className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded-[8px] text-foreground/45 opacity-0 transition-[opacity,color,background-color] hover:bg-card hover:text-foreground hover:shadow-card group-hover/dag:opacity-100 [@media(hover:hover)]:flex"
+                          >
+                            <CalendarPlus className="size-3.5" />
+                          </Link>
+                        )}
                       </div>
                     )}
                   </DagDrop>
@@ -1356,15 +1489,33 @@ function Planning() {
           </div>
 
           {/* --- extra opdrachten: werk zonder maand --- */}
-          <div className="rounded-[18px] bg-tint-geel p-3 text-tint-geel-ink shadow-card lg:col-start-1 lg:row-start-2">
-            <div className="mb-2.5 flex items-center gap-2">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-tint-geel-ink/15">
-                <Hammer className="size-[15px]" />
+          <div className="rounded-[18px] bg-tint-geel p-3 text-tint-geel-ink shadow-card max-md:order-3 lg:col-start-1 lg:row-start-2">
+            <div className={`flex items-center gap-2 ${mobiel && !opdrachtenOpen ? "" : "mb-2.5"}`}>
+              {/* Op de telefoon is de kop een knop die de lijst open- en
+                  dichtklapt. */}
+              <button
+                type="button"
+                className="flex min-w-0 items-center gap-2 text-left md:pointer-events-none"
+                onClick={() => setOpdrachtenOpen((o) => !o)}
+                aria-expanded={!mobiel || opdrachtenOpen}
+                tabIndex={mobiel ? 0 : -1}
+              >
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-tint-geel-ink/15">
+                  <Hammer className="size-[15px]" />
+                </span>
+                <h2 className="truncate font-display text-[15px] font-semibold tracking-[-0.01em]">
+                  Extra opdrachten
+                  {mobiel && aantalOpdrachten > 0 && (
+                    <span className="ml-1 tabular-nums opacity-75">({aantalOpdrachten})</span>
+                  )}
+                </h2>
+                <ChevronRight
+                  className={`size-4 shrink-0 transition-transform md:hidden ${opdrachtenOpen ? "rotate-90" : ""}`}
+                />
+              </button>
+              <span className="text-[12px] opacity-75 max-md:hidden">
+                sleep ze op een dag in die wijk
               </span>
-              <h2 className="font-display text-[15px] font-semibold tracking-[-0.01em]">
-                Extra opdrachten
-              </h2>
-              <span className="text-[12px] opacity-75">sleep ze op een dag in die wijk</span>
               <button
                 type="button"
                 className="ml-auto flex items-center gap-1 rounded-full bg-tint-geel-ink/12 px-3 py-1.5 text-[12.5px] font-medium hover:bg-tint-geel-ink/20"
@@ -1374,32 +1525,37 @@ function Planning() {
               </button>
             </div>
 
-            {strook.lijst.length === 0 && strook.wachten.length === 0 && (
-              <p className="text-[12.5px] opacity-75">
-                Niets openstaand. Werk dat niet aan een maand vastzit — een dakrand, een goot —
-                noteer je bij het adres, en het komt hier terug zodra die wijk een dag heeft.
-              </p>
-            )}
+            <div className={mobiel && !opdrachtenOpen ? "hidden" : ""}>
+              {mobiel && aantalOpdrachten > 0 && (
+                <p className="mb-2 text-[12px] opacity-75">
+                  Hou een opdracht ingedrukt om hem op een dag te zetten.
+                </p>
+              )}
+              {strook.lijst.length === 0 && strook.wachten.length === 0 && (
+                <p className="text-[12.5px] opacity-75">
+                  Niets openstaand. Werk dat niet aan een maand vastzit — een dakrand, een goot —
+                  noteer je bij het adres, en het komt hier terug zodra die wijk een dag heeft.
+                </p>
+              )}
 
-            {strook.lijst.length > 0 && (
-              <div>{klussenPerWijk(strook.lijst)}</div>
-            )}
+              {strook.lijst.length > 0 && <div>{klussenPerWijk(strook.lijst)}</div>}
 
-            {strook.wachten.length > 0 && (
-              <details className="mt-3">
-                <summary className="cursor-pointer text-[11.5px] font-medium opacity-70">
-                  Wacht op een dag in die wijk ({strook.wachten.length})
-                </summary>
-                <div className="mt-1.5">{klussenPerWijk(strook.wachten)}</div>
-              </details>
-            )}
+              {strook.wachten.length > 0 && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-[11.5px] font-medium opacity-70">
+                    Wacht op een dag in die wijk ({strook.wachten.length})
+                  </summary>
+                  <div className="mt-1.5">{klussenPerWijk(strook.wachten)}</div>
+                </details>
+              )}
+            </div>
           </div>
 
           {/* --- de gekozen dag ---
               Rechts naast de kalender en bovenaan beginnen: zonder row-start
               schuift hij onder de strook met opdrachten door, en dan staat
               het belangrijkste van de pagina onderin. */}
-          <div className="rounded-[18px] border border-border bg-card shadow-card p-4 lg:col-start-2 lg:row-start-1">
+          <div className="rounded-[18px] border border-border bg-card shadow-card p-4 max-md:order-2 lg:col-start-2 lg:row-start-1">
             <p className="text-xs text-muted-foreground">
               {gekozenDag > nu ? "Gepland voor" : "Gewassen op"}
             </p>
@@ -1480,7 +1636,9 @@ function Planning() {
                           {adresVan(k)} — {k.omschrijving}
                         </span>
                         {prijzenZien && (
-                          <span className="w-16 text-right tabular-nums">{formatPrice(k.prijs)}</span>
+                          <span className="w-16 text-right tabular-nums">
+                            {formatPrice(k.prijs)}
+                          </span>
                         )}
                       </div>
                     ))}
@@ -1494,7 +1652,8 @@ function Planning() {
               )}
             </div>
 
-            <div className="mt-5 flex flex-col gap-2">
+            {/* Op de telefoon staan deze knoppen onderin, bij je duim. */}
+            <div className="mt-5 flex flex-col gap-2 max-md:hidden">
               {/* De dag zelf: welke huisnummers je langsgaat, en de printlijst
                 van precies dat deel van de wijk. */}
               <Button size="sm" className="w-full justify-start rounded-full" asChild>

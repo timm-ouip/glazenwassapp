@@ -34,21 +34,28 @@ export interface Cijfer {
 export function Cijferkaarten({ cijfers }: { cijfers: Cijfer[] }) {
   const zichtbaar = cijfers.filter((c) => !c.verberg);
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+    // Op de telefoon drie kleine tegels naast elkaar: het getal telt, de uitleg
+    // eronder en het icoon passen daar niet meer.
+    <div className="grid grid-cols-3 gap-2 sm:gap-3">
       {zichtbaar.map((c) => {
         const kleur = KLEUREN[c.kleur];
         return (
-          <div key={c.label} className={`rounded-[18px] px-4 py-3.5 ${kleur.vlak}`}>
+          <div
+            key={c.label}
+            className={`min-w-0 rounded-[14px] px-2.5 py-2 sm:rounded-[18px] sm:px-4 sm:py-3.5 ${kleur.vlak}`}
+          >
             <div
-              className={`mb-2.5 flex size-8 items-center justify-center rounded-[10px] ${kleur.chip}`}
+              className={`mb-2.5 hidden size-8 items-center sm:flex justify-center rounded-[10px] ${kleur.chip}`}
             >
               <c.icon className="size-[16px]" />
             </div>
-            <p className="truncate text-[12.5px] opacity-80">{c.label}</p>
-            <p className="font-display text-[24px] font-semibold leading-tight tracking-[-0.02em] tabular-nums">
+            <p className="truncate text-[11px] opacity-80 sm:text-[12.5px]">{c.label}</p>
+            <p className="truncate font-display text-[17px] font-semibold sm:text-[24px] leading-tight tracking-[-0.02em] tabular-nums">
               {c.waarde}
             </p>
-            {c.onder && <p className="mt-0.5 truncate text-[11px] opacity-70">{c.onder}</p>}
+            {c.onder && (
+              <p className="mt-0.5 hidden truncate text-[11px] opacity-70 sm:block">{c.onder}</p>
+            )}
           </div>
         );
       })}
