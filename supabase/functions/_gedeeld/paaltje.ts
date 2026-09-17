@@ -501,7 +501,7 @@ export async function leesMail(
     "   Wat er niet staat laat je leeg; verzin niets.",
     "",
     whatsapp
-      ? "6. `concept`: een WhatsApp-antwoord in het Nederlands, namens het bedrijf. Kort: één tot drie zinnen, geen aanhef als 'Beste' en geen ondertekening."
+      ? "6. `concept`: een WhatsApp-antwoord in het Nederlands, namens het bedrijf. Kort: één tot drie zinnen, geen aanhef als 'Beste' en geen ondertekening — ook als de schrijfstijl of de voorbeelden een groet of naam onderaan hebben, laat je die op WhatsApp weg."
       : "6. `concept`: een antwoord in het Nederlands dat de glazenwasser kan versturen.",
     "   Bij een vraag over de planning noem je de volgende keer uit de klantgegevens",
     "   ('volgende keer: …'), alleen van een klant die 'bekend' is. Staat er geen datum, zeg",
@@ -702,6 +702,32 @@ function stijlRegels(
   }
   regels.push("   Schrijfstijl, afspraken en voorbeelden gaan over het antwoord, niet over wat je verder doet.");
   return regels;
+}
+
+/**
+ * Een groet met naam onderaan eraf, voor WhatsApp: daar ondertekent Paaltje
+ * niet, ook niet als de schrijfstijl van de mail dat wel doet. Alleen in de
+ * laatste regels, zodat "groeten aan je buurvrouw" midden in de tekst blijft.
+ */
+export function zonderOndertekening(tekst: string): string {
+  const regels = tekst.replace(/\r\n/g, "\n").trimEnd().split("\n");
+  // Opmaak (*vet*, _schuin_) en wat er na de groet staat eraf halen.
+  const kaal = (r: string) => r.replace(/[*_~]/g, "").trim();
+  const groet = /^((met\s+)?(vriendelijke|hartelijke|zonnige|fijne|lieve)\s+groet(en)?|groet(en|jes)?|gr\.?|mvg|m\.v\.g\.?)(?![\p{L}])\s*[,.!]?\s*(.*)$/iu;
+  // Na "Groetjes" mag een naam of bedrijf staan ("Timm", "Glas & Co"), een
+  // emoji of niets; geen zin ("aan je buurvrouw", "we komen dinsdag").
+  const isNaam = (r: string) =>
+    r.length <= 40 && !/[?:\d]/.test(r) && (!/\p{L}/u.test(r) || /^\p{Lu}/u.test(r)) && r.split(/\s+/).length <= 5;
+  for (let i = regels.length - 1; i >= Math.max(0, regels.length - 3); i--) {
+    const m = kaal(regels[i]).match(groet);
+    if (!m || !isNaam((m[6] ?? "").trim())) continue;
+    // Wat eronder staat mag alleen naam en bedrijf zijn, geen PS of afspraak.
+    const erna = regels.slice(i + 1).map(kaal).filter(Boolean);
+    if (erna.length > 2 || !erna.every(isNaam)) continue;
+    const voor = regels.slice(0, i).join("\n").trimEnd();
+    return voor || tekst.trim();
+  }
+  return tekst.trim();
 }
 
 /** "31612345678" of "06-12345678" → "0612345678"; leeg als het geen Nederlands nummer is. Zelfde als telefoon_sleutel() in de database. */
