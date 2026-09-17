@@ -31,13 +31,7 @@ import {
 } from "../_gedeeld/mailwerk.ts";
 import { type StopReden, voerOverslaanDoor, voerStoppenDoor } from "../_gedeeld/doorvoeren.ts";
 import { heeftRecht } from "../_gedeeld/rechten.ts";
-import {
-  leesKlantgegevens,
-  type KlantGegevens,
-  type Veld,
-  VELDEN,
-  vergelijkbaar,
-} from "../_gedeeld/klantgegevens.ts";
+import { bevestigKlant, draaiKlantgegevensTerug } from "../_gedeeld/klantgegevens-acties.ts";
 
 interface Verzoek {
   actie:
@@ -277,10 +271,23 @@ Deno.serve(async (req) => {
       }
       case "stoppen-planning":
         return await stoppenPlanning(db, box, String(verzoek.bericht_id ?? ""));
-      case "klant-koppelen":
-        return await koppelKlant(db, box, String(verzoek.bericht_id ?? ""), String(verzoek.klant_id ?? ""));
-      case "klantgegevens-terugdraaien":
-        return await klantgegevensTerugdraaien(db, box, String(verzoek.bericht_id ?? ""));
+      case "klant-koppelen": {
+        const uit = await bevestigKlant(
+          db,
+          { kanaal: "mail", companyId: box.company_id, mailboxId: box.id },
+          String(verzoek.bericht_id ?? ""),
+          String(verzoek.klant_id ?? ""),
+        );
+        return antwoord(uit.body, uit.status);
+      }
+      case "klantgegevens-terugdraaien": {
+        const uit = await draaiKlantgegevensTerug(
+          db,
+          { kanaal: "mail", companyId: box.company_id, mailboxId: box.id },
+          String(verzoek.bericht_id ?? ""),
+        );
+        return antwoord(uit.body, uit.status);
+      }
       default:
         return antwoord({ fout: "Onbekende actie." }, 400);
     }
@@ -497,256 +504,6 @@ async function overslaanDoorvoeren(db: Db, box: Box, id: string, door: string): 
     .eq("id", rij.id);
   if (bewaarFout) console.error("voorstel bijwerken:", bewaarFout.message);
   return antwoord({ ok: true, aangepast: uit.aangepast });
-}
-
-/**
- * Dit mailadres hoort bij deze klant. Het adres komt bij de klant, de klant
- * komt op de mail, en Paaltje leest de mail opnieuw met die klant erbij.
- */
-async function koppelKlant(db: Db, box: Box, id: string, klantId: string): Promise<Response> {
-  if (!UUID.test(id) || !UUID.test(klantId)) return antwoord({ fout: "Die mail of klant bestaat niet." }, 404);
-  const { data: mail, error } = await db
-    .from("berichten")
-    .select("id,van_email,beantwoord_op,klantgegevens")
-    .eq("id", id)
-    .eq("mailbox_id", box.id)
-    .maybeSingle();
-  if (error) throw new Error(`Mail opzoeken: ${error.message}`);
-  const { data: klant, error: klantFout } = await db
-    .from("klanten")
-    .select("id")
-    .eq("id", klantId)
-    .eq("company_id", box.company_id)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (klantFout) throw new Error(`Klant opzoeken: ${klantFout.message}`);
-  if (!mail || !klant) return antwoord({ fout: "Die mail of klant bestaat niet." }, 404);
-
-  const email = String(mail.van_email ?? "").trim().toLowerCase();
-  if (email) {
-    const { error: koppelFout } = await db
-      .from("klant_emails")
-      .insert({ company_id: box.company_id, klant_id: klant.id, email, bron: "mens" });
-    if (koppelFout && koppelFout.code !== "23505") throw new Error(`Koppelen: ${koppelFout.message}`);
-    // Had Wooshy het adres al zelf gekoppeld, dan is het nu door een mens bevestigd.
-    if (koppelFout) {
-      const { error: bevestigFout } = await db
-        .from("klant_emails")
-        .update({ bron: "mens" })
-        .eq("company_id", box.company_id)
-        .eq("klant_id", klant.id)
-        .eq("email", email)
-        .eq("bron", "paaltje");
-      if (bevestigFout) throw new Error(`Koppeling bevestigen: ${bevestigFout.message}`);
-    }
-  }
-
-  // Een mens koppelt bewust: een eerder teruggedraaide klant mag dan weer, en
-  // wat teruggedraaid was mag Wooshy weer aanvullen. Een herkenning van deze
-  // klant is nu bevestigd en hoeft niet meer ongedaan gemaakt te kunnen worden.
-  const kg: KlantGegevens = { ...leesKlantgegevens(mail.klantgegevens) };
-  if (kg.herkend?.klant_id === klant.id) delete kg.herkend;
-  if (kg.teruggedraaid) kg.teruggedraaid = { ...kg.teruggedraaid, waarden: [] };
-  const { data: gezet, error: mailFout } = await db
-    .from("berichten")
-    .update({
-      klant_id: klant.id,
-      klant_gok_id: null,
-      klantgegevens: { ...kg, afgewezen: (kg.afgewezen ?? []).filter((k) => k !== klant.id) },
-      paaltje_status: "wacht",
-      paaltje_pogingen: 0,
-      ai_fout: "",
-    })
-    .eq("id", mail.id)
-    .neq("paaltje_status", "bezig")
-    .select("id");
-  if (mailFout) throw new Error(`Klant op de mail zetten: ${mailFout.message}`);
-  if (!gezet?.length) {
-    return antwoord(
-      { fout: "Het mailadres is gekoppeld, maar Paaltje leest deze mail net. Probeer het zo nog eens." },
-      409,
-    );
-  }
-  // Zette Paaltje hem zelf op afgehandeld (hij dacht: geen klantmail), dan gaat
-  // dat eraf: met deze klant erbij leest hij hem opnieuw.
-  const { error: afFout } = await db
-    .from("berichten")
-    .update({ afgehandeld_op: null, afgehandeld_door_paaltje: false })
-    .eq("id", mail.id)
-    .eq("afgehandeld_door_paaltje", true);
-  if (afFout) console.error("afgehandeld terugzetten:", afFout.message);
-  return antwoord({ ok: true });
-}
-
-/**
- * Terugdraaien wat Wooshy met de klantgegevens uit een mail deed. Een vak gaat
- * alleen weer leeg als er nog precies staat wat Wooshy invulde: heeft iemand
- * het intussen aangepast, dan blijft het staan (dat staat in `bleven`).
- *
- * Een herkende klant gaat van de mail af, het zelf gekoppelde mailadres ook,
- * en Paaltje leest de mail opnieuw zonder die klant. Wat teruggedraaid is doet
- * Wooshy bij opnieuw lezen niet nog eens.
- */
-async function klantgegevensTerugdraaien(db: Db, box: Box, id: string): Promise<Response> {
-  if (!UUID.test(id)) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
-  const { data: rij, error } = await db
-    .from("berichten")
-    .select("id,klant_id,paaltje_status,klantgegevens")
-    .eq("id", id)
-    .eq("mailbox_id", box.id)
-    .maybeSingle();
-  if (error) throw new Error(`Mail opzoeken: ${error.message}`);
-  if (!rij) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
-  if (rij.paaltje_status === "bezig") {
-    return antwoord({ fout: "Paaltje leest deze mail net. Probeer het zo nog eens." }, 409);
-  }
-  const kg = leesKlantgegevens(rij.klantgegevens);
-  const { toegevoegd, herkend } = kg;
-  if (!toegevoegd && !herkend) return antwoord({ fout: "Er is niets om terug te draaien." }, 400);
-
-  // Eerder teruggedraaid bij deze mail blijft in de lijst staan.
-  const waarden = new Set(kg.teruggedraaid?.waarden ?? []);
-  for (const veld of VELDEN) {
-    const waarde = toegevoegd?.velden?.[veld];
-    if (typeof waarde === "string" && waarde) waarden.add(vergelijkbaar(waarde));
-  }
-  const eerderBleven = kg.teruggedraaid?.bleven ?? [];
-  const vorigHerkend = herkend ?? kg.teruggedraaid?.herkend;
-  const nieuw: KlantGegevens = {
-    ...kg,
-    // De klant, en bij een zelf aangemaakte klant ook het adres: anders maakt
-    // Wooshy bij opnieuw lezen gewoon weer een klant aan op dat adres.
-    afgewezen: herkend
-      ? [
-          ...new Set([
-            ...(kg.afgewezen ?? []),
-            herkend.klant_id,
-            ...(herkend.aangemaakt && herkend.customer_id ? [herkend.customer_id] : []),
-          ]),
-        ]
-      : kg.afgewezen,
-    teruggedraaid: {
-      op: new Date().toISOString(),
-      velden: { ...(kg.teruggedraaid?.velden ?? {}), ...(toegevoegd?.velden ?? {}) },
-      ...(vorigHerkend ? { herkend: vorigHerkend } : {}),
-      bleven: eerderBleven,
-      waarden: [...waarden],
-    },
-  };
-  delete nieuw.toegevoegd;
-  delete nieuw.herkend;
-  delete nieuw.anders;
-
-  // Eerst de mail vastzetten (alleen als Paaltje er niet mee bezig is), en pas
-  // daarna de klant terugdraaien. Andersom kan Paaltje de mail er net tussendoor
-  // pakken en de gewiste vakjes meteen weer invullen.
-  const bijwerken: Record<string, unknown> = { klantgegevens: nieuw };
-  if (herkend && rij.klant_id === herkend.klant_id) {
-    Object.assign(bijwerken, {
-      klant_id: null,
-      klant_gok_id: null,
-      paaltje_status: "wacht",
-      paaltje_pogingen: 0,
-      ai_fout: "",
-    });
-  }
-  const { data: gezet, error: mailFout } = await db
-    .from("berichten")
-    .update(bijwerken)
-    .eq("id", rij.id)
-    .neq("paaltje_status", "bezig")
-    .select("id");
-  if (mailFout) throw new Error(`Mail bijwerken: ${mailFout.message}`);
-  if (!gezet?.length) {
-    return antwoord({ fout: "Paaltje leest deze mail net. Probeer het zo nog eens." }, 409);
-  }
-
-  const bleven: Veld[] = [];
-  if (toegevoegd && UUID.test(String(toegevoegd.klant_id))) {
-    for (const veld of VELDEN) {
-      const waarde = toegevoegd.velden?.[veld];
-      if (typeof waarde !== "string" || !waarde) continue;
-      const { data, error: veldFout } = await db
-        .from("klanten")
-        .update({ [veld]: "" })
-        .eq("id", toegevoegd.klant_id)
-        .eq("company_id", box.company_id)
-        .eq(veld, waarde)
-        .select("id");
-      if (veldFout) throw new Error(`Terugdraaien (${veld}): ${veldFout.message}`);
-      if (!data?.length) bleven.push(veld);
-    }
-  }
-
-  if (herkend && UUID.test(String(herkend.klant_id)) && herkend.email) {
-    const { error: wegFout } = await db
-      .from("klant_emails")
-      .delete()
-      .eq("company_id", box.company_id)
-      .eq("klant_id", herkend.klant_id)
-      .eq("email", herkend.email)
-      .eq("bron", "paaltje");
-    if (wegFout) throw new Error(`Mailadres loskoppelen: ${wegFout.message}`);
-  }
-
-  // Maakte Wooshy de klant zelf aan bij een adres zonder klant, dan gaat die
-  // klant weer van het adres af. Naar de prullenbak (daar terug te halen) alleen
-  // als hij echt van dit adres af ging en aan geen ander adres meer hangt:
-  // hing iemand hem intussen ergens anders aan, dan blijft hij staan.
-  if (herkend?.aangemaakt && UUID.test(String(herkend.klant_id)) && UUID.test(String(herkend.customer_id ?? ""))) {
-    try {
-      const { data: los, error: losFout } = await db
-        .from("customers")
-        .update({ klant_id: null })
-        .eq("id", herkend.customer_id)
-        .eq("company_id", box.company_id)
-        .eq("klant_id", herkend.klant_id)
-        .select("id");
-      if (losFout) throw new Error(`Klant van het adres halen: ${losFout.message}`);
-      if ((los ?? []).length > 0) {
-        const { count, error: telFout } = await db
-          .from("customers")
-          .select("id", { count: "exact", head: true })
-          .eq("company_id", box.company_id)
-          .eq("klant_id", herkend.klant_id)
-          .is("deleted_at", null);
-        if (telFout) throw new Error(`Andere adressen van de klant tellen: ${telFout.message}`);
-        if ((count ?? 0) === 0) {
-          const { error: prullenbakFout } = await db
-            .from("klanten")
-            .update({ deleted_at: new Date().toISOString() })
-            .eq("id", herkend.klant_id)
-            .eq("company_id", box.company_id)
-            .is("deleted_at", null);
-          if (prullenbakFout) throw new Error(`Klant naar de prullenbak: ${prullenbakFout.message}`);
-        }
-      }
-    } catch (e) {
-      // De herkenning terug op de mail, zodat Ongedaan maken nog eens kan.
-      const { error: herstelFout } = await db
-        .from("berichten")
-        .update({ klantgegevens: kg, klant_id: rij.klant_id })
-        .eq("id", rij.id);
-      if (herstelFout) console.error("herkenning terugzetten:", herstelFout.message);
-      throw e;
-    }
-  }
-
-  // Wat bleef staan erbij zetten, voor het vakje "Teruggedraaid".
-  if (bleven.length > 0 && nieuw.teruggedraaid) {
-    const { error: blevenFout } = await db
-      .from("berichten")
-      .update({
-        klantgegevens: {
-          ...nieuw,
-          teruggedraaid: { ...nieuw.teruggedraaid, bleven: [...new Set([...eerderBleven, ...bleven])] },
-        },
-      })
-      .eq("id", rij.id)
-      .neq("paaltje_status", "bezig");
-    if (blevenFout) console.error("bleven bewaren:", blevenFout.message);
-  }
-  return antwoord({ ok: true, bleven });
 }
 
 /** "jjjj-mm-dd" in Nederlandse tijd — de server draait in UTC. */

@@ -227,18 +227,34 @@ export function KlantBlok({ k }: { k: KlantBijMail }) {
   );
 }
 
+/** Genoeg van een bericht voor de vakjes: ook een appje past hierin. */
+export type VakjesBericht = Pick<Bericht, "id" | "klantgegevens" | "klant_id">;
+
+/** Klopt en Ongedaan maken lopen bij mail en WhatsApp via een andere functie. */
+export interface VakjesActies {
+  klopt: (berichtId: string, klantId: string) => Promise<unknown>;
+  terug: (berichtId: string) => Promise<{ bleven?: string[] }>;
+  /** "mail" of "appje", voor de teksten. */
+  soort: "mail" | "appje";
+}
+
+const MAIL_ACTIES: VakjesActies = { klopt: koppelKlant, terug: draaiKlantgegevensTerug, soort: "mail" };
+
 /** Wat Wooshy zelf deed, geel zodat het opvalt, met Ongedaan maken. */
-function WooshyVakje({
+export function WooshyVakje({
   b,
   klanten,
   uit,
   onKlaar,
+  acties = MAIL_ACTIES,
 }: {
-  b: Bericht;
+  b: VakjesBericht;
   klanten: KlantBijMail[];
   uit: boolean;
   onKlaar: () => void;
+  acties?: VakjesActies;
 }) {
+  const hier = acties.soort === "mail" ? "deze mail" : "dit appje";
   const [bezig, setBezig] = useState<"terug" | "klopt" | null>(null);
   const kg = b.klantgegevens;
   const velden = (Object.entries(kg.toegevoegd?.velden ?? {}) as [KlantVeld, string | undefined][]).filter(
@@ -254,7 +270,7 @@ function WooshyVakje({
           <Undo2 className="size-3.5" /> Teruggedraaid
         </p>
         <p className="mt-0.5 leading-snug">
-          Wooshy doet dit bij deze mail niet opnieuw.
+          Wooshy doet dit bij {hier} niet opnieuw.
           {bleven.length > 0 &&
             ` Bleef staan omdat het intussen aangepast was: ${bleven.map((v) => VELD_NAAM[v] ?? v).join(", ")}.`}
         </p>
@@ -268,8 +284,8 @@ function WooshyVakje({
   async function klopt(klantId: string) {
     setBezig("klopt");
     try {
-      await koppelKlant(b.id, klantId);
-      toast.success("Bevestigd. Paaltje leest de mail opnieuw.");
+      await acties.klopt(b.id, klantId);
+      toast.success(`Bevestigd. Paaltje leest ${acties.soort === "mail" ? "de mail" : "het appje"} opnieuw.`);
       onKlaar();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -281,7 +297,7 @@ function WooshyVakje({
   async function terug() {
     setBezig("terug");
     try {
-      const r = await draaiKlantgegevensTerug(b.id);
+      const r = await acties.terug(b.id);
       const bleven = (r.bleven ?? []) as KlantVeld[];
       toast.success(
         bleven.length > 0
@@ -307,13 +323,13 @@ function WooshyVakje({
             <>
               {kg.gevonden?.straat
                 ? `${kg.gevonden.straat} ${kg.gevonden.huisnummer}`.trim()
-                : "Het adres uit de mail"}{" "}
+                : `Het adres uit ${hier}`}{" "}
               stond er nog zonder klant; Wooshy maakte <strong>{naam}</strong> aan
             </>
           ) : (
             <>
               Herkend als <strong>{naam}</strong> aan{" "}
-              {kg.herkend.via === "telefoon" ? "het telefoonnummer" : "het adres en de naam"} in de mail
+              {kg.herkend.via === "telefoon" ? "het telefoonnummer" : "het adres en de naam"} in {hier}
             </>
           )}
           {kg.herkend.email ? `; ${kg.herkend.email} hoort nu bij deze klant` : ""}. Tot je dit bevestigt voert
@@ -322,7 +338,7 @@ function WooshyVakje({
       )}
       {velden.length > 0 && (
         <div className="mt-1.5 text-[12.5px]">
-          <p>Toegevoegd uit deze mail:</p>
+          <p>Toegevoegd uit {hier}:</p>
           <ul className="mt-0.5 space-y-0.5">
             {velden.map(([veld, waarde]) => (
               <li key={veld} className="min-w-0 break-words">
@@ -361,8 +377,18 @@ function WooshyVakje({
 
 type Vak = "telefoon" | "telefoon2" | "email" | "email2";
 
-/** Wat in de mail anders is dan bij de klant en niet in een leeg vak paste: jij kiest. */
-function AndersVakje({ b, klant, uit }: { b: Bericht; klant: KlantBijMail; uit: boolean }) {
+/** Wat in het bericht anders is dan bij de klant en niet in een leeg vak paste: jij kiest. */
+export function AndersVakje({
+  b,
+  klant,
+  uit,
+  soort = "mail",
+}: {
+  b: VakjesBericht;
+  klant: KlantBijMail;
+  uit: boolean;
+  soort?: "mail" | "appje";
+}) {
   const qc = useQueryClient();
   const [bezig, setBezig] = useState(false);
   const anders = b.klantgegevens.anders ?? {};
@@ -381,6 +407,7 @@ function AndersVakje({ b, klant, uit }: { b: Bericht; klant: KlantBijMail; uit: 
 
   const herlaad = () => {
     void qc.invalidateQueries({ queryKey: ["klant-bij-email"] });
+    void qc.invalidateQueries({ queryKey: ["wa-klant"] });
     void qc.invalidateQueries({ queryKey: ["klanten"] });
     void qc.invalidateQueries({ queryKey: ["customers"] });
   };
@@ -428,7 +455,7 @@ function AndersVakje({ b, klant, uit }: { b: Bericht; klant: KlantBijMail; uit: 
 
   return (
     <div className="rounded-[14px] bg-tint-blauw/70 p-3 text-[12.5px] text-tint-blauw-ink">
-      <p className="text-[13px] font-semibold">Anders in de mail</p>
+      <p className="text-[13px] font-semibold">Anders in {soort === "mail" ? "de mail" : "het appje"}</p>
       {telefoon && (
         <div className="mt-1.5">
           <p className="break-words">
