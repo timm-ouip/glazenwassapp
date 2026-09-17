@@ -16,10 +16,11 @@ import { toast } from "sonner";
 
 import { fetchKlantBijEmail, type Bericht, type KlantBijMail, type KlantVeld } from "@/lib/berichten";
 import { draaiKlantgegevensTerug, koppelKlant } from "@/lib/mailacties";
-import { klantAdres, ritmeLabel, updateKlant } from "@/lib/klanten";
+import { formatPrice, klantAdres, ritmeLabel, updateKlant } from "@/lib/klanten";
 import { toonDatum, vandaag } from "@/lib/wasdag";
 import { useRecht } from "@/lib/rechten";
 import { Button } from "@/components/ui/button";
+import { DossierKnop } from "@/components/DossierKnop";
 import { KlantUitMailDialog } from "@/components/mail/KlantUitMailDialog";
 import { KoppelAanAdresDialog } from "@/components/mail/KoppelAanAdresDialog";
 
@@ -157,15 +158,25 @@ export function KlantKaart({ b, kanSchrijven }: { b: Bericht; kanSchrijven: bool
   );
 }
 
-function KlantBlok({ k }: { k: KlantBijMail }) {
+/** De groene tegel met één klant; ook naast een WhatsApp-gesprek. */
+export function KlantBlok({ k }: { k: KlantBijMail }) {
+  const magKlantenZien = useRecht("klanten_bekijken");
+  const prijzenZien = useRecht("prijzen_zien");
   const frequenties = [...new Set(k.adressen.map((a) => ritmeLabel(a)))];
   const nummers = [k.telefoon, k.telefoon2].filter((t) => t.trim());
   const mails = [k.email, k.email2].filter((e) => e.trim());
   return (
     <div className="rounded-[14px] bg-tint-groen p-3 text-tint-groen-ink">
-      <p className="flex items-center gap-1.5 text-[13.5px] font-semibold">
-        <UserRound className="size-3.5" /> {k.naam || "Zonder naam"}
-      </p>
+      <div className="flex items-start gap-1.5">
+        <p className="flex min-w-0 flex-1 items-center gap-1.5 text-[13.5px] font-semibold">
+          <UserRound className="size-3.5 shrink-0" /> <span className="truncate">{k.naam || "Zonder naam"}</span>
+        </p>
+        {/* Het poppetje: het dossier, hier ter plekke. Bij één pand hier; bij
+            meer staat er een naast elk pand, want het dossier gaat over één pand. */}
+        {magKlantenZien && k.adressen.length === 1 && (
+          <DossierKnop klantId={k.id} customerId={k.adressen[0]!.id} naam={k.naam} className="-mr-1 -mt-1" />
+        )}
+      </div>
       {klantAdres(k) && <p className="mt-1 text-[12.5px]">{klantAdres(k)}</p>}
       {nummers.map((t) => (
         <a
@@ -191,6 +202,27 @@ function KlantBlok({ k }: { k: KlantBijMail }) {
           {k.volgendeWasdag ? `Volgende wasdag: ${toonDatum(k.volgendeWasdag)}` : "Nog niet ingepland"}
         </p>
       </div>
+      {/* Per adres wat het kost en wat erbij staat. Bij één adres zonder
+          straatnaam erboven: dat is het adres hierboven al. Geen prijs (0)
+          laten we weg. */}
+      {(k.adressen.length > 1 || k.adressen.some((a) => (prijzenZien && !!a.prijs) || a.notitie)) && (
+        <ul className="mt-2 space-y-1.5 border-t border-tint-groen-ink/15 pt-2 text-[12px]">
+          {k.adressen.map((a) => (
+            <li key={a.id} className="min-w-0">
+              <div className="flex items-center gap-2">
+                {k.adressen.length > 1 && <span className="min-w-0 flex-1 truncate">{a.adres}</span>}
+                {prijzenZien && !!a.prijs && (
+                  <span className="font-medium tabular-nums">{formatPrice(a.prijs)}</span>
+                )}
+                {magKlantenZien && k.adressen.length > 1 && (
+                  <DossierKnop klantId={k.id} customerId={a.id} naam={k.naam} className="-my-1 -mr-1 size-6" />
+                )}
+              </div>
+              {a.notitie && <p className="break-words italic leading-snug opacity-85">{a.notitie}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

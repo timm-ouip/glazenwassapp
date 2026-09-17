@@ -6,6 +6,7 @@
  * `whatsapp`: die praat met Meta en is de enige die het token ooit ziet.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { klantenMetAdressen, type KlantBijMail } from "@/lib/berichten";
 
 export interface WhatsAppKoppeling {
   id: string;
@@ -195,6 +196,39 @@ export function vensterOpen(berichten: WaBericht[]): boolean {
   return (
     !!laatsteIn && Date.now() - new Date(laatsteIn.ontvangen_op).getTime() < 24 * 60 * 60 * 1000
   );
+}
+
+/** "31612345678" → "0612345678", zoals klant_telefoons het bewaart (telefoon_sleutel() in de database). Leeg als het geen Nederlands nummer is. */
+export function telefoonSleutel(nummer: string): string {
+  let d = nummer.replace(/\D/g, "");
+  if (d.startsWith("0031")) d = `0${d.slice(4)}`;
+  else if (d.startsWith("31") && d.length === 11) d = `0${d.slice(2)}`;
+  return d.length === 10 && d.startsWith("0") ? d : "";
+}
+
+/**
+ * De klant(en) achter een WhatsApp-nummer, voor de tegel naast de chat: via
+ * de telefoonnummers van klanten, plus de klant die Paaltje of jij al aan het
+ * gesprek hing. Meer dan één kan (een stel met één nummer); dan tonen we ze
+ * allemaal in plaats van er stil één te kiezen.
+ */
+export async function fetchKlantBijTelefoon(
+  telefoon: string,
+  klantId: string | null,
+  vandaag: string,
+): Promise<KlantBijMail[]> {
+  const ids: string[] = klantId ? [klantId] : [];
+  const sleutel = telefoonSleutel(telefoon);
+  if (sleutel) {
+    const { data, error } = await supabase
+      .from("klant_telefoons")
+      .select("klant_id")
+      .eq("telefoon", sleutel)
+      .limit(5);
+    if (error) throw error;
+    ids.push(...(data ?? []).map((k) => k.klant_id));
+  }
+  return await klantenMetAdressen([...new Set(ids)], vandaag);
 }
 
 /** De nummers waarmee een klant appte, meest recente gesprek eerst. */
