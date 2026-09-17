@@ -77,6 +77,7 @@ import { Cijferkaarten } from "@/components/Cijferkaarten";
 import { KlantDialog } from "@/components/KlantDialog";
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { StraatDialog } from "@/components/StraatDialog";
+import { SplitsStraatDialog } from "@/components/SplitsStraatDialog";
 import { GroepDialog } from "@/components/GroepDialog";
 import { StratenAanvullen } from "@/components/StratenAanvullen";
 import { stratenZonderNaam } from "@/lib/aanvullen";
@@ -259,6 +260,13 @@ function Index() {
     open: false,
     street: null,
   });
+  /** Een stuk straat afsplitsen: de regels die je geselecteerd hebt gaan naar
+   *  een nieuwe straat. Het schermpje vraagt alleen nog de naam. */
+  const [splits, setSplits] = useState<{
+    open: boolean;
+    street: Street | null;
+    adressen: Customer[];
+  }>({ open: false, street: null, adressen: [] });
   /** Hernoemen als er een groep in staat; is die leeg en staat er een straat
    *  in, dan maakt het dialoogje een nieuwe groep met die straat erin. */
   const [groepDialog, setGroepDialog] = useState<{
@@ -1008,6 +1016,105 @@ function Index() {
     meldUndo(`Straat "${s.name}" verwijderd`);
   }
 
+  /**
+   * Een stuk van een straat afsplitsen: wat je geselecteerd hebt gaat naar
+   * een nieuwe straat, direct onder de oude en in dezelfde groep. De
+   * tegenhanger van twee straten samenvoegen (zie DubbeleStraten) — voor een
+   * lange straat die je in twee stukken loopt, of een rij huizen die
+   * eigenlijk bij het zijstraatje hoort.
+   *
+   * De adressen verhuizen zoals ze zijn: prijs, notitie, ritme en de kant van
+   * de straat blijven staan, alleen de straat eronder verandert.
+   */
+  async function splitsStraat(bron: Street, adressen: Customer[], naam: string, volledig: string) {
+    if (adressen.length === 0) return;
+    const { data, error } = await supabase
+      .from("streets")
+      .insert({
+        name: naam,
+        volledige_naam: volledig,
+        district_id: bron.district_id,
+        groep_id: bron.groep_id,
+        // Hetzelfde stuk straat: dan hoort het ook op dezelfde manier
+        // geteld en gesorteerd te worden.
+        doorlopend: bron.doorlopend,
+        sort_desc: bron.sort_desc,
+        sort_order: bron.sort_order,
+      })
+      .select("id")
+      .single();
+    if (error || !data) {
+      toast.error("Splitsen mislukt: " + (error?.message ?? "de straat werd niet aangemaakt"));
+      return;
+    }
+    const nieuwId = (data as { id: string }).id;
+    const nieuweStraat: Street = {
+      ...bron,
+      id: nieuwId,
+      name: naam,
+      volledige_naam: volledig,
+      // De plek op de printlijst hoort bij de oude straat; de nieuwe zoekt
+      // zelf een plekje.
+      kolom_start: false,
+      print_col: null,
+      print_row: null,
+    };
+
+    // Waar hij komt te staan: direct onder de straat waar hij uit komt.
+    const vorigeVolgorde = streets.map((s) => ({ ...s }));
+    const plek = streets.findIndex((s) => s.id === bron.id);
+    const volgorde = [...streets];
+    volgorde.splice(plek < 0 ? streets.length : plek + 1, 0, nieuweStraat);
+
+    const vorigePlek = adressen.map((c) => ({
+      id: c.id,
+      street_id: c.street_id,
+      sort_order: c.sort_order,
+      hoek_kant: c.hoek_kant,
+    }));
+    const updates = adressen.map((c, i) => ({
+      id: c.id,
+      street_id: nieuwId,
+      sort_order: i + 1,
+      hoek_kant: c.hoek_kant,
+    }));
+    try {
+      await persistStreetOrder(volgorde);
+      await persistCustomerOrder(updates);
+    } catch (e) {
+      toast.error("Splitsen mislukt: " + (e as Error).message);
+      herlaad();
+      return;
+    }
+
+    pushUndo({
+      label: `Splitsen ${bron.name}`,
+      undo: async () => {
+        // Eerst de adressen terug: aan een straat die je weggooit hangen zijn
+        // adressen mee (on delete cascade), en dan ben je ze echt kwijt.
+        await persistCustomerOrder(vorigePlek);
+        // En pas weggooien als er werkelijk niets meer aan hangt. Ging het
+        // terugzetten hierboven mis, of zette iemand er ondertussen een adres
+        // bij, dan blijft er liever een lege straat over dan dat er adressen
+        // verdwijnen.
+        const { count } = await supabase
+          .from("customers")
+          .select("id", { count: "exact", head: true })
+          .eq("street_id", nieuwId);
+        if (!count) await supabase.from("streets").delete().eq("id", nieuwId);
+        await persistStreetOrder(vorigeVolgorde);
+        herlaad();
+      },
+    });
+    // De regels staan nu in een andere straat; die selectie slaat nergens
+    // meer op.
+    setSelectie([]);
+    herlaad();
+    meldUndo(
+      `${adressen.length} ${adressen.length === 1 ? "adres staat" : "adressen staan"} nu in "${naam}"`,
+    );
+  }
+
   /** Een straat in een groep zetten of eruit halen, vanaf de rechtermuisknop
    *  op de straatkop. */
   async function zetStraatInGroep(street: Street, groepId: string | null) {
@@ -1231,6 +1338,20 @@ function Index() {
     pasKeuzeAan(aan ? [c.id] : [], aan ? [] : [c.id]);
   });
   const opNieuweRegel = useStabiel(nieuweRegel);
+  /** Rechtermuisknop op een regel die bij een selectie hoort: die selectie
+   *  uit de straat lichten. Wat er precies meegaat, zoekt hij hier op — de
+   *  regel zelf weet alleen dát hij geselecteerd is. */
+  const opSplitsen = useStabiel((c: Customer) => {
+    const street = streets.find((s) => s.id === c.street_id);
+    if (!street) return;
+    // Een selectie loopt nooit over twee straten heen (zie klikSelectie),
+    // maar wat er toch buiten valt gaat niet mee.
+    const adressen = sortCustomers(
+      customers.filter((x) => selectie.includes(x.id) && x.street_id === street.id),
+    );
+    if (adressen.length < 2) return;
+    setSplits({ open: true, street, adressen });
+  });
   const opEditStreet = useStabiel((street: Street) => setStraatDialog({ open: true, street }));
   const opDeleteStreet = useStabiel((street: Street) => verwijderStraat(street));
   const opAddKlant = useStabiel((streetId: string) =>
@@ -1473,6 +1594,7 @@ function Index() {
       rowPad={rowPad}
       selectie={selectie}
       onSelect={opSelect}
+      onSplitsen={opSplitsen}
       onPatch={opPatch}
       onAddQuickNote={opAddQuickNote}
       onDelete={opDelete}
@@ -1775,7 +1897,8 @@ function Index() {
 
         {selectie.length > 1 && (
           <p className="text-xs text-muted-foreground">
-            {selectie.length} regels geselecteerd — sleep er één om ze samen te verplaatsen.{" "}
+            {selectie.length} regels geselecteerd — sleep er één om ze samen te verplaatsen, of klik
+            er met rechts op om ze in een eigen straat te zetten.{" "}
             <button className="underline" onClick={() => setSelectie([])}>
               selectie wissen
             </button>
@@ -1941,6 +2064,19 @@ function Index() {
         street={straatDialog.street}
         groepen={subgroepen}
         onSaved={herlaad}
+      />
+      <SplitsStraatDialog
+        open={splits.open}
+        onOpenChange={(open) => setSplits((s) => ({ ...s, open }))}
+        street={splits.street}
+        adressen={splits.adressen}
+        straatAantal={
+          splits.open ? customers.filter((c) => c.street_id === splits.street?.id).length : 0
+        }
+        bestaandeNamen={streets.map((s) => s.name)}
+        onSplitsen={(naam, volledig) => {
+          if (splits.street) void splitsStraat(splits.street, splits.adressen, naam, volledig);
+        }}
       />
       <GroepDialog
         open={groepDialog.open}
@@ -2178,6 +2314,9 @@ interface BlokProps {
   rowPad: string;
   selectie: string[];
   onSelect: (c: Customer, shift: boolean) => void;
+  /** De geselecteerde regels uit deze straat lichten, in een nieuwe straat
+   *  ernaast. Staat alleen in het menu zodra er meer dan één regel staat. */
+  onSplitsen: (c: Customer) => void;
   onPatch: (c: Customer, patch: Partial<Customer>) => void;
   onAddQuickNote: (label: string) => void;
   onDelete: (c: Customer) => void;
@@ -2527,6 +2666,9 @@ const StraatKolom = memo(function StraatKolom({
             rowText={p.rowText}
             rowPad={p.rowPad}
             geselecteerd={p.selectie.includes(c.id)}
+            splitsAantal={
+              p.selectie.length > 1 && p.selectie.includes(c.id) ? p.selectie.length : 0
+            }
             ronde={p.ronde}
             planmodus={p.planmodus}
             opDeDag={p.opDeDag.has(c.id)}
@@ -2537,6 +2679,7 @@ const StraatKolom = memo(function StraatKolom({
             onVerfStart={p.onVerfStart}
             negeerKlik={p.negeerKlik}
             onSelect={p.onSelect}
+            onSplitsen={p.onSplitsen}
             onPatch={p.onPatch}
             onAddQuickNote={p.onAddQuickNote}
             onDelete={p.onDelete}
@@ -2562,6 +2705,10 @@ interface RijProps {
   rowText: string;
   rowPad: string;
   geselecteerd: boolean;
+  /** Hoeveel regels er samen geselecteerd staan, als deze erbij hoort; anders
+   *  0. Zo blijft `memo` werken: bij een selectie elders verandert er aan
+   *  deze regel niets. */
+  splitsAantal: number;
   /** De maand die je bekijkt: die bepaalt de kleur van de regel. */
   ronde: string;
   planmodus: boolean;
@@ -2575,6 +2722,7 @@ interface RijProps {
   onVerfStart: (aan: boolean, x: number, y: number) => void;
   negeerKlik: { current: boolean };
   onSelect: (c: Customer, shift: boolean) => void;
+  onSplitsen: (c: Customer) => void;
   onPatch: (c: Customer, patch: Partial<Customer>) => void;
   onAddQuickNote: (label: string) => void;
   onDelete: (c: Customer) => void;
@@ -2867,6 +3015,8 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
       onHoekadres={() => p.onHoekadres(c)}
       onKlus={() => p.onKlus(c)}
       onStoppen={p.magKlanten ? () => p.onStoppen(c) : undefined}
+      splitsAantal={p.splitsAantal}
+      onSplitsen={p.magPlannen && p.splitsAantal > 1 ? () => p.onSplitsen(c) : undefined}
       alleenLezen={!p.magPlannen}
       markeringen={p.markeringen}
     >
