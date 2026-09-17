@@ -74,7 +74,7 @@ import {
   toonMaandKort,
   vorigeMaand,
   zelfdeRitme,
-  zorgVoorAdresRegel,
+  zorgVoorAdres,
   type Customer,
   type District,
   type Klant,
@@ -372,9 +372,15 @@ export function KlantgegevensDialog({
       // blijft er geen losse klant achter (en bij nog eens proberen geen tweede).
       let adresId = dossierCustomer?.id ?? null;
       let aangemaakt = false;
+      /** Alleen gezet bij een adres dat al bestond: zijn postcode van nu. */
+      let bestaandePostcode: string | null = null;
       if (!adresId && wijkId && velden.straat.trim() && velden.huisnummer.trim()) {
-        adresId = await zorgVoorAdresRegel(wijkId, velden.straat, velden.huisnummer);
-        aangemaakt = Boolean(adresId);
+        const gevonden = await zorgVoorAdres(wijkId, velden.straat, velden.huisnummer);
+        adresId = gevonden?.id ?? null;
+        // Het kan ook een adres zijn dat al op de wijklijst stond. Dat is dan
+        // alleen gevonden, niet nieuw.
+        aangemaakt = gevonden?.nieuw ?? false;
+        bestaandePostcode = gevonden && !gevonden.nieuw ? gevonden.postcode : null;
       }
 
       const klantId =
@@ -404,8 +410,10 @@ export function KlantgegevensDialog({
 
       // Prijs, ritme, notitie, kleur en de maanden horen bij dít adres. De
       // bijgekoppelde adressen houden de hunne; die bewerk je in hun eigen
-      // dossier.
-      if (adresId) {
+      // dossier. Een adres dat al bestond maar niet het adres van dit dossier
+      // was, blijft zoals het is: het formulier stond dan leeg (prijs 0, geen
+      // notitie), en dat hoort niet over zijn gegevens heen.
+      if (adresId && (dossierCustomer || aangemaakt)) {
         // Dezelfde regel als in de wijklijst: een adres dat nog moet
         // beginnen en dat je zijn startmaand laat overslaan, begint gewoon
         // later — anders staan er twee badges die hetzelfde zeggen.
@@ -425,6 +433,10 @@ export function KlantgegevensDialog({
             markering: pand.markering,
           }),
         );
+      } else if (adresId && bestaandePostcode === "" && velden.postcode.trim()) {
+        // Een gevonden adres houdt zijn eigen gegevens. Alleen een postcode
+        // die er nog niet was, zetten we erbij.
+        await patchCustomer(adresId, { postcode: velden.postcode.trim() });
       }
 
       // De klant die het adres kwijtraakt laten we staan. Hij houdt misschien
@@ -437,6 +449,11 @@ export function KlantgegevensDialog({
         .map((c) => klantNaam(c.klant_id))
         .filter((n, i, a) => n && a.indexOf(n) === i);
 
+      // Stond het adres al op de wijklijst, dan zeggen we dat zijn gegevens
+      // niet zijn aangepast: wie een prijs invulde, moet dat weten.
+      const bestondAl = Boolean(adresId) && !dossierCustomer && !aangemaakt;
+      const nietAangepast = bestondAl ? " Prijs en notitie van dat adres zijn niet aangepast." : "";
+
       if (overgenomen.length > 0) {
         toast.success(
           `Samengevoegd: ${overgenomen.map(adresTekst).join(", ")} ${
@@ -445,11 +462,18 @@ export function KlantgegevensDialog({
             verweesd.length > 0
               ? ` De oude gegevens van ${verweesd.join(" en ")} staan nu onder "Nog zonder wijk".`
               : ""
-          }`,
+          }${nietAangepast}`,
           { duration: 8000 },
         );
       } else if (aangemaakt) {
         toast.success(`Klant opgeslagen en toegevoegd aan ${velden.straat.trim()} in de wijklijst`);
+      } else if (bestondAl) {
+        toast.success(
+          klantId
+            ? `Gekoppeld aan ${velden.straat.trim()} ${velden.huisnummer.trim()}, dat al op de wijklijst stond.${nietAangepast}`
+            : `${velden.straat.trim()} ${velden.huisnummer.trim()} stond al op de wijklijst.${nietAangepast}`,
+          { duration: 8000 },
+        );
       } else if (alles.length === 0) {
         toast.success("Klant opgeslagen — nog niet aan een adres in een wijk gekoppeld");
       } else if (!klantId) {

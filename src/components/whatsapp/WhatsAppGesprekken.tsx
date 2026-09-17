@@ -1,6 +1,7 @@
 /**
- * De WhatsApp-tab: links de gesprekken, rechts het gesprek zelf, zoals in
- * WhatsApp. Op een telefoon één van de twee tegelijk.
+ * De WhatsApp-tab: links de gesprekken, in het midden het gesprek zelf, zoals
+ * in WhatsApp, en op een breed scherm rechts wie het is (net als bij mail).
+ * Op een telefoon één van de twee tegelijk, zonder de klanttegel.
  *
  * Antwoorden kan binnen 24 uur na het laatste bericht van de klant; Paaltje
  * en sjablonen komen later.
@@ -18,7 +19,21 @@ import {
   toonNummer,
 } from "@/lib/whatsapp";
 import { ChatVenster } from "@/components/whatsapp/Chat";
+import { KlantTegel } from "@/components/whatsapp/KlantTegel";
 import { cn } from "@/lib/utils";
+
+/** Breed genoeg voor de klanttegel (Tailwinds xl). Zo niet, dan wordt hij ook niet opgehaald. */
+function useBreed(): boolean {
+  const [breed, setBreed] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia("(min-width: 1280px)");
+    const zet = () => setBreed(mql.matches);
+    zet();
+    mql.addEventListener("change", zet);
+    return () => mql.removeEventListener("change", zet);
+  }, []);
+  return breed;
+}
 
 export function WhatsAppGesprekken() {
   const qc = useQueryClient();
@@ -29,6 +44,7 @@ export function WhatsAppGesprekken() {
     refetchInterval: 15_000,
   });
   const [open, setOpen] = useState<string | null>(null);
+  const breed = useBreed();
 
   const gekozen = (gesprekken.data ?? []).find((g) => g.wa_telefoon === open) ?? null;
 
@@ -61,9 +77,16 @@ export function WhatsAppGesprekken() {
   }
 
   const lijst = gesprekken.data ?? [];
+  // De klanttegel pas als er een gesprek open staat, zoals bij mail.
+  const metKlant = breed && !!gekozen;
 
   return (
-    <div className="grid h-[calc(100vh-220px)] min-h-[420px] overflow-hidden rounded-[18px] border border-border bg-card shadow-card md:grid-cols-[300px_1fr]">
+    <div
+      className={cn(
+        "grid h-[calc(100vh-220px)] min-h-[420px] overflow-hidden rounded-[18px] border border-border bg-card shadow-card md:grid-cols-[300px_1fr]",
+        metKlant && "xl:grid-cols-[300px_minmax(0,1fr)_250px]",
+      )}
+    >
       <ul className={cn("overflow-y-auto border-border md:border-r", open && "hidden md:block")}>
         {lijst.length === 0 && (
           <li className="p-4 text-[13px] text-muted-foreground">
@@ -128,6 +151,12 @@ export function WhatsAppGesprekken() {
           </div>
         )}
       </div>
+
+      {metKlant && gekozen && (
+        <aside className="overflow-y-auto border-l border-border p-4">
+          <KlantTegel telefoon={gekozen.wa_telefoon} klantId={gekozen.klant_id} />
+        </aside>
+      )}
     </div>
   );
 }

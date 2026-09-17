@@ -378,16 +378,43 @@ function Klanten() {
   // de wijkenpagina goed. Daarna halen we hem uit de URL, anders kun je het
   // dossier niet sluiten en opnieuw openen.
   useEffect(() => {
-    if (!klantUitUrl) return;
+    // Wachten op de adressen en straten, anders opent hij zonder adres.
+    if (!klantUitUrl || !customersQuery.isSuccess || !streetsQuery.isSuccess) return;
     const gevonden = klanten.find((k) => k.id === klantUitUrl);
     if (!gevonden) return;
-    setDossier({ open: true, klant: gevonden, customer: null });
+    // Het dossier gaat over een adres. Zonder adres zoekt opslaan het op uit
+    // straat en huisnummer en zet er het lege formulier overheen. Het adres
+    // dat bij de klant zelf hoort gaat voor; anders zijn eerste.
+    const eigen = customers.filter((c) => c.klant_id === gevonden.id);
+    const straatNamen = (c: Customer) => {
+      const s = streets.find((x) => x.id === c.street_id);
+      // Een hoekadres hoort voor de post bij de andere straat.
+      return [s?.name, s?.volledige_naam, c.hoek_straat_volledig].map((n) =>
+        (n ?? "").trim().toLowerCase(),
+      );
+    };
+    const postadres = eigen.find(
+      (c) =>
+        straatNamen(c).includes(gevonden.straat.trim().toLowerCase()) &&
+        `${c.house_number}${c.addition ?? ""}`.toLowerCase() ===
+          gevonden.huisnummer.replace(/\s/g, "").toLowerCase(),
+    );
+    setDossier({ open: true, klant: gevonden, customer: postadres ?? eigen[0] ?? null });
     void navigate({
       to: "/klanten",
       search: actieveWijk ? { wijk: actieveWijk } : {},
       replace: true,
     });
-  }, [klantUitUrl, klanten, actieveWijk, navigate]);
+  }, [
+    klantUitUrl,
+    klanten,
+    customers,
+    streets,
+    customersQuery.isSuccess,
+    streetsQuery.isSuccess,
+    actieveWijk,
+    navigate,
+  ]);
 
   // Alle adressen van de wijk, in dezelfde volgorde als op de wijkenpagina,
   // plus de klanten die nergens aan hangen.

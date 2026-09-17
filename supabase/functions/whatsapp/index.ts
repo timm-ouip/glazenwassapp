@@ -22,6 +22,7 @@ import { antwoord, CORS } from "../_gedeeld/mail.ts";
 import { ontsleutel, versleutel } from "../_gedeeld/geheim.ts";
 import { heeftRecht } from "../_gedeeld/rechten.ts";
 import { telefoonAlsSleutel } from "../_gedeeld/paaltje.ts";
+import { bevestigKlant, draaiKlantgegevensTerug } from "../_gedeeld/klantgegevens-acties.ts";
 import {
   annuleerGeplandeAntwoorden,
   datumVoluit,
@@ -71,7 +72,9 @@ interface Verzoek {
     | "sjablonen_verversen"
     | "sjabloon_weg"
     | "sjabloon_voorbeeld"
-    | "sjabloon_versturen";
+    | "sjabloon_versturen"
+    | "klant_bevestigen"
+    | "klantgegevens_terugdraaien";
   titel?: string;
   categorie?: string;
   sjabloon_id?: string;
@@ -83,6 +86,7 @@ interface Verzoek {
   token?: string;
   telefoon?: string;
   terug_url?: string;
+  klant_id?: string;
 }
 
 Deno.serve(async (req) => {
@@ -165,6 +169,20 @@ Deno.serve(async (req) => {
           return antwoord({ fout: "Je mag geen berichten versturen." }, 403);
         }
         return await sjabloonNaarKlant(db, m, verzoek, verzoek.actie === "sjabloon_versturen");
+      // Wat Wooshy met klantgegevens uit een appje deed: bevestigen of
+      // terugdraaien. Net als bij mail: wie berichten leest én klanten bewerkt.
+      case "klant_bevestigen":
+      case "klantgegevens_terugdraaien": {
+        if (!(await heeftRecht(db, m, "mail_lezen")) || !(await heeftRecht(db, m, "klanten_bewerken"))) {
+          return antwoord({ fout: "Je hebt geen recht om klanten te bewerken." }, 403);
+        }
+        const bereik = { kanaal: "whatsapp" as const, companyId: m.company_id };
+        const uit =
+          verzoek.actie === "klant_bevestigen"
+            ? await bevestigKlant(db, bereik, String(verzoek.bericht_id ?? ""), String(verzoek.klant_id ?? ""))
+            : await draaiKlantgegevensTerug(db, bereik, String(verzoek.bericht_id ?? ""));
+        return antwoord(uit.body, uit.status);
+      }
       default:
         return antwoord({ fout: "Onbekende actie." }, 400);
     }

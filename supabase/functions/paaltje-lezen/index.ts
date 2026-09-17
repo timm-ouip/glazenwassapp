@@ -28,6 +28,7 @@ import {
   telefoonAlsSleutel,
   type Categorie,
   type TeLezen,
+  zonderOndertekening,
 } from "../_gedeeld/paaltje.ts";
 import { ZEKER_AUTOMATISCH } from "../_gedeeld/doorvoeren.ts";
 import { binnenAntwoordtijd } from "../_gedeeld/whatsapp.ts";
@@ -489,7 +490,11 @@ async function leesEen(
     },
     bewaarVoorstel,
   );
-  const concept = acties.conceptToegestaan ? uit.concept : "";
+  const concept = acties.conceptToegestaan
+    ? mail.kanaal === "whatsapp"
+      ? zonderOndertekening(uit.concept)
+      : uit.concept
+    : "";
 
   const bijwerken: Record<string, unknown> = {
     is_klantmail: isKlantmail,

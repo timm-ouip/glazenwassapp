@@ -450,7 +450,16 @@ export interface KlantBijMail {
   huisnummer: string;
   postcode: string;
   plaats: string;
-  adressen: { id: string; interval_maanden: number; ritme: number }[];
+  adressen: {
+    id: string;
+    interval_maanden: number;
+    ritme: number;
+    /** "Dorpsstraat 12a". */
+    adres: string;
+    /** Leeg zonder het recht "prijzen zien". */
+    prijs: number | null;
+    notitie: string;
+  }[];
   /** De eerstvolgende ingeplande dag voor een van zijn adressen, 'jjjj-mm-dd'. */
   volgendeWasdag: string | null;
 }
@@ -521,7 +530,7 @@ export async function klantenMetAdressen(ids: string[], vandaag: string): Promis
     (klanten ?? []).map(async (k) => {
       const { data: adressen, error: adresFout } = await supabase
         .from("customers")
-        .select("id,interval_maanden,ritme")
+        .select("id,interval_maanden,ritme,house_number,addition,note,streets(name,volledige_naam),adres_prijzen(prijs)")
         .eq("klant_id", k.id)
         .is("deleted_at", null)
         .is("inactief_op", null);
@@ -542,11 +551,19 @@ export async function klantenMetAdressen(ids: string[], vandaag: string): Promis
       }
       return {
         ...k,
-        adressen: (adressen ?? []).map((a) => ({
-          id: a.id,
-          interval_maanden: a.interval_maanden ?? 1,
-          ritme: a.ritme ?? 1,
-        })),
+        adressen: (adressen ?? []).map((a) => {
+          const straat = Array.isArray(a.streets) ? a.streets[0] : a.streets;
+          // Prijzen staan in hun eigen tabel; zonder het recht komt die leeg terug.
+          const prijsRij = Array.isArray(a.adres_prijzen) ? a.adres_prijzen[0] : a.adres_prijzen;
+          return {
+            id: a.id,
+            interval_maanden: a.interval_maanden ?? 1,
+            ritme: a.ritme ?? 1,
+            adres: `${straat?.volledige_naam || straat?.name || ""} ${a.house_number}${a.addition ?? ""}`.trim(),
+            prijs: prijsRij ? Number(prijsRij.prijs) : null,
+            notitie: (a.note ?? "").trim(),
+          };
+        }),
         volgendeWasdag,
       };
     }),

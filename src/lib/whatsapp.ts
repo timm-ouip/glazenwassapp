@@ -6,6 +6,7 @@
  * `whatsapp`: die praat met Meta en is de enige die het token ooit ziet.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { klantenMetAdressen, type KlantBijMail, type KlantGegevens } from "@/lib/berichten";
 
 export interface WhatsAppKoppeling {
   id: string;
@@ -195,6 +196,84 @@ export function vensterOpen(berichten: WaBericht[]): boolean {
   return (
     !!laatsteIn && Date.now() - new Date(laatsteIn.ontvangen_op).getTime() < 24 * 60 * 60 * 1000
   );
+}
+
+/** "31612345678" → "0612345678", zoals klant_telefoons het bewaart (telefoon_sleutel() in de database). Leeg als het geen Nederlands nummer is. */
+export function telefoonSleutel(nummer: string): string {
+  let d = nummer.replace(/\D/g, "");
+  if (d.startsWith("0031")) d = `0${d.slice(4)}`;
+  else if (d.startsWith("31") && d.length === 11) d = `0${d.slice(2)}`;
+  return d.length === 10 && d.startsWith("0") ? d : "";
+}
+
+/**
+ * De klant(en) achter een WhatsApp-nummer, voor de tegel naast de chat: via
+ * de telefoonnummers van klanten, plus de klant die Paaltje of jij al aan het
+ * gesprek hing. Meer dan één kan (een stel met één nummer); dan tonen we ze
+ * allemaal in plaats van er stil één te kiezen.
+ */
+export async function fetchKlantBijTelefoon(
+  telefoon: string,
+  klantId: string | null,
+  vandaag: string,
+): Promise<KlantBijMail[]> {
+  const ids: string[] = klantId ? [klantId] : [];
+  const sleutel = telefoonSleutel(telefoon);
+  if (sleutel) {
+    const { data, error } = await supabase
+      .from("klant_telefoons")
+      .select("klant_id")
+      .eq("telefoon", sleutel)
+      .limit(5);
+    if (error) throw error;
+    ids.push(...(data ?? []).map((k) => k.klant_id));
+  }
+  return await klantenMetAdressen([...new Set(ids)], vandaag);
+}
+
+/** Een appje waarin Wooshy iets met klantgegevens deed (of dat terugdraaide). */
+export interface WaKlantgegevens {
+  id: string;
+  klant_id: string | null;
+  klantgegevens: KlantGegevens;
+}
+
+/**
+ * De appjes in dit gesprek waar Wooshy klantgegevens uit haalde, nieuwste
+ * eerst: voor het gele vakje (met Klopt en Ongedaan maken) en "Anders in het
+ * appje" in de klanttegel.
+ */
+export async function fetchWaKlantgegevens(telefoon: string): Promise<WaKlantgegevens[]> {
+  const { data, error } = await supabase
+    .from("berichten")
+    .select("id,klant_id,klantgegevens")
+    .eq("kanaal", "whatsapp")
+    .eq("wa_telefoon", telefoon)
+    .eq("richting", "in")
+    .is("deleted_at", null)
+    .order("ontvangen_op", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return ((data ?? []) as unknown as WaKlantgegevens[])
+    .map((r) => ({ ...r, klantgegevens: (r.klantgegevens ?? {}) as KlantGegevens }))
+    .filter((r) => {
+      const kg = r.klantgegevens;
+      return !!(kg.herkend || kg.toegevoegd || kg.anders || kg.teruggedraaid);
+    })
+    // Wat nog terug te draaien is gaat voor: dat mag niet uit beeld raken
+    // door nieuwere appjes met alleen "anders" of een oude terugdraaiing.
+    .sort((a, b) => Number(!!(b.klantgegevens.herkend || b.klantgegevens.toegevoegd)) - Number(!!(a.klantgegevens.herkend || a.klantgegevens.toegevoegd)))
+    .slice(0, 5);
+}
+
+/** "Klopt": dit appje (en dit nummer) hoort bij deze klant. */
+export function bevestigWaKlant(berichtId: string, klantId: string): Promise<{ ok: true }> {
+  return roep({ actie: "klant_bevestigen", bericht_id: berichtId, klant_id: klantId });
+}
+
+/** "Ongedaan maken": terugdraaien wat Wooshy uit dit appje bij de klant zette. */
+export function draaiWaKlantgegevensTerug(berichtId: string): Promise<{ ok: true; bleven: string[] }> {
+  return roep({ actie: "klantgegevens_terugdraaien", bericht_id: berichtId });
 }
 
 /** De nummers waarmee een klant appte, meest recente gesprek eerst. */
