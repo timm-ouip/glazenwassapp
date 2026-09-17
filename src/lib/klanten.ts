@@ -632,6 +632,20 @@ export async function zorgVoorAdresRegel(
   straat: string,
   huisnummer: string,
 ): Promise<string | null> {
+  return (await zorgVoorAdres(districtId, straat, huisnummer))?.id ?? null;
+}
+
+/**
+ * Als `zorgVoorAdresRegel`, maar zegt er ook bij of het adres nieuw is of al
+ * op de wijklijst stond, en welke postcode dat bestaande adres al had. Een
+ * gevonden adres heeft eigen prijs en notities; die horen niet overschreven te
+ * worden door een formulier dat voor een nieuw adres was.
+ */
+export async function zorgVoorAdres(
+  districtId: string,
+  straat: string,
+  huisnummer: string,
+): Promise<{ id: string; nieuw: boolean; postcode: string } | null> {
   const naam = straat.trim();
   const nummer = splitsHuisnummer(huisnummer);
   if (!naam || !nummer) return null;
@@ -660,7 +674,7 @@ export async function zorgVoorAdresRegel(
 
   const { data: nummers, error: nummerFout } = await supabase
     .from("customers")
-    .select("id,house_number,addition,inactief_op")
+    .select("id,house_number,addition,inactief_op,postcode")
     .eq("street_id", streetId)
     .is("deleted_at", null);
   if (nummerFout) throw nummerFout;
@@ -682,7 +696,7 @@ export async function zorgVoorAdresRegel(
         "Dit adres staat bij Inactief (gestopt of verhuisd). Zet het eerst weer actief via Klanten → Inactief; dan blijven prijs en notities bewaard.",
       );
     }
-    return bestaand.id;
+    return { id: bestaand.id, nieuw: false, postcode: bestaand.postcode ?? "" };
   }
 
   const { data, error } = await supabase
@@ -698,7 +712,7 @@ export async function zorgVoorAdresRegel(
     .select("id")
     .single();
   if (error) throw error;
-  return data.id;
+  return { id: data.id, nieuw: true, postcode: "" };
 }
 
 /** Slaat opgehaalde postcodes op voor een groep adressen tegelijk. */
