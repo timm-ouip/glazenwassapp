@@ -366,6 +366,7 @@ interface KapsoNummer {
   verified_name?: string;
   is_coexistence?: boolean;
   customer_id?: string | null;
+  kind?: string;
 }
 
 /**
@@ -380,18 +381,40 @@ async function kapsoAfronden(db: Db, m: Medewerker, gevraagd: string): Promise<R
   if (!geheim) return antwoord({ fout: "Het webhookgeheim voor Kapso staat nog niet op de server." }, 500);
   if (gevraagd && !/^\d{5,30}$/.test(gevraagd)) return antwoord({ fout: "Onbekend nummer." }, 400);
 
-  const { data: bekend } = await db.from("kapso_klanten").select("customer_id").eq("company_id", m.company_id).maybeSingle();
-  if (!bekend?.customer_id) return antwoord({ fout: "Begin eerst met koppelen via Kapso." }, 409);
-  const customerId = String(bekend.customer_id);
+  // Om te testen: één bedrijf (KAPSO_SANDBOX_BEDRIJF) mag Kapso's
+  // sandbox-nummer van het project koppelen. Dat nummer hoort bij geen customer.
+  const sandboxMag = (Deno.env.get("KAPSO_SANDBOX_BEDRIJF") ?? "") === m.company_id;
 
-  const lijst = await kapsoPlatform<{ data?: KapsoNummer[] }>(
-    `whatsapp/phone_numbers?customer_id=${encodeURIComponent(customerId)}`,
-    sleutel,
-  );
-  if (!lijst.ok) return antwoord({ fout: `Kapso gaf de nummers niet: ${lijst.fout}` }, 502);
-  // Het filter nog eens zelf nakijken: nooit een nummer van een andere customer.
-  const nummers = (lijst.data.data ?? []).filter((n) => n.customer_id === customerId && n.phone_number_id);
-  const nummer = gevraagd ? nummers.find((n) => n.phone_number_id === gevraagd) : nummers[0];
+  const { data: bekend } = await db.from("kapso_klanten").select("customer_id").eq("company_id", m.company_id).maybeSingle();
+  const customerId = String(bekend?.customer_id ?? "");
+  if (!customerId && !sandboxMag) return antwoord({ fout: "Begin eerst met koppelen via Kapso." }, 409);
+
+  let nummers: KapsoNummer[] = [];
+  if (customerId) {
+    const lijst = await kapsoPlatform<{ data?: KapsoNummer[] }>(
+      `whatsapp/phone_numbers?customer_id=${encodeURIComponent(customerId)}`,
+      sleutel,
+    );
+    if (!lijst.ok) return antwoord({ fout: `Kapso gaf de nummers niet: ${lijst.fout}` }, 502);
+    // Het filter nog eens zelf nakijken: nooit een nummer van een andere customer.
+    nummers = (lijst.data.data ?? []).filter((n) => n.customer_id === customerId && n.phone_number_id);
+  }
+  const sandbox: KapsoNummer[] = [];
+  if (sandboxMag) {
+    for (let pagina = 1; pagina <= 50; pagina++) {
+      const lijst = await kapsoPlatform<{ data?: KapsoNummer[]; meta?: { total_pages?: number } }>(
+        `whatsapp/phone_numbers?per_page=100&page=${pagina}`,
+        sleutel,
+      );
+      if (!lijst.ok) return antwoord({ fout: `Kapso gaf de nummers niet: ${lijst.fout}` }, 502);
+      sandbox.push(...(lijst.data.data ?? []).filter((n) => n.kind === "sandbox" && !n.customer_id && n.phone_number_id));
+      if (pagina >= Number(lijst.data.meta?.total_pages ?? 1)) break;
+    }
+  }
+  // Zonder gevraagd nummer: het eigen nummer gaat voor, anders de sandbox.
+  const nummer = gevraagd
+    ? [...nummers, ...sandbox].find((n) => n.phone_number_id === gevraagd)
+    : (nummers[0] ?? sandbox[0]);
   if (!nummer?.phone_number_id) {
     return antwoord({ fout: "Bij Kapso is nog geen nummer gekoppeld. Maak de koppeling eerst af via de link." }, 409);
   }
@@ -452,7 +475,7 @@ async function kapsoAfronden(db: Db, m: Medewerker, gevraagd: string): Promise<R
         phone_number_id: phoneNumberId,
         waba_id: String(nummer.business_account_id ?? ""),
         weergavenummer: String(nummer.display_phone_number ?? ""),
-        soort: "app",
+        soort: nummer.kind === "sandbox" ? "test" : "app",
         aanbieder: "kapso",
         kapso_webhook_id: String(webhook.data.data?.id ?? ""),
         status: "actief",
