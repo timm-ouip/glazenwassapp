@@ -61,6 +61,7 @@ import {
   IconListNumbers as ListOrdered,
   IconDots as MoreHorizontal,
   IconX as X,
+  IconKeyboard as Keyboard,
 } from "@tabler/icons-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLangIndrukken } from "@/hooks/use-lang-indrukken";
@@ -93,6 +94,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Cijferkaarten } from "@/components/Cijferkaarten";
 import { KlantDialog } from "@/components/KlantDialog";
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
+import { SneltoetsenHulp } from "@/components/mail/Sneltoetsen";
 import { StraatDialog } from "@/components/StraatDialog";
 import { SplitsStraatDialog } from "@/components/SplitsStraatDialog";
 import { GroepDialog } from "@/components/GroepDialog";
@@ -148,6 +150,7 @@ import {
   isKalendermaand,
   kantVan,
   komendeMaanden,
+  volgendeMaand,
   patchCustomer,
   schuifStartOp,
   maandSleutel,
@@ -229,6 +232,25 @@ type MaandFilter = string;
  *  telefoon die de pagina weggooit — je niet uit die modus te gooien. De
  *  datum onthouden we niet: dat is bijna altijd vandaag. */
 const PLANMODUS_OPSLAG = "glazenwasapp.dagplanning-aan";
+
+/** Wat er in het sneltoetsen-venster staat (toets ?). */
+const WIJK_SNELTOETSEN: [string, string][] = [
+  ["/", "Zoek straat"],
+  ["x", "Selecteren aan / uit"],
+  ["⌘ / Ctrl + klik", "Adres of straat selecteren, slepen voor meer"],
+  ["a", "Alles aanvinken / niets"],
+  ["i", "Inplannen voor een dag"],
+  ["Esc", "Selectie wissen, daarna stoppen"],
+  ["m", "Maand kiezen"],
+  ["[ en ]", "Vorige / volgende maand"],
+  ["e / o / 0", "Even / oneven / alles"],
+  ["p", "Prijzen tonen / verbergen"],
+  ["w", "Andere wijk"],
+  ["n", "Nieuwe klant"],
+  ["⌘ / Ctrl + P", "Printlijst"],
+  ["⌘ / Ctrl + Z", "Ongedaan maken"],
+  ["?", "Dit overzicht"],
+];
 
 function Index() {
   useRequireAuth();
@@ -1834,6 +1856,99 @@ function Index() {
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
 
+  // --- Sneltoetsen, zoals in het postvak ----------------------------------
+  // Niet als je in een tekstvak typt, en niet als er een venster of menu
+  // openstaat: dan horen de toetsen daarbij.
+  const [hulpOpen, setHulpOpen] = useState(false);
+  const [inplanOpen, setInplanOpen] = useState(false);
+  const [maandOpen, setMaandOpen] = useState(false);
+  const [wijkOpen, setWijkOpen] = useState(false);
+  const sneltoets = useRef<(e: KeyboardEvent) => void>(() => {});
+  sneltoets.current = (e: KeyboardEvent) => {
+    const doel = e.target as HTMLElement | null;
+    if (doel && (doel.tagName === "INPUT" || doel.tagName === "TEXTAREA" || doel.isContentEditable))
+      return;
+    if (
+      document.querySelector(
+        '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]',
+      )
+    )
+      return;
+    const cmd = e.metaKey || e.ctrlKey;
+    if (cmd && e.key.toLowerCase() === "p") {
+      // De printlijst van wat je nu ziet, in plaats van de pagina zelf.
+      e.preventDefault();
+      void navigate({
+        to: "/printen",
+        search: {
+          wijk: actieveWijk ?? "",
+          maand: filter === "alles" ? "even" : filter,
+          prijzen: false,
+          liggend: true,
+        },
+      });
+      return;
+    }
+    if (cmd || e.altKey) return;
+    const doe = (actie: () => void) => {
+      e.preventDefault();
+      actie();
+    };
+    switch (e.key) {
+      case "/":
+        return doe(() =>
+          document.querySelector<HTMLInputElement>('input[placeholder="Zoek straat"]')?.focus(),
+        );
+      case "x":
+        if (magPlannen) doe(() => selecteermodus(!selecteren));
+        return;
+      case "a":
+        if (selecteren && alleZichtbare.length > 0) doe(wisselAlles);
+        return;
+      case "Escape":
+        if (keuze.size > 0) doe(wisKeuze);
+        else if (selecteren) doe(() => selecteermodus(false));
+        return;
+      case "i":
+        if (selecteren && keuze.size > 0) doe(() => setInplanOpen(true));
+        return;
+      case "m":
+        return doe(() => setMaandOpen(true));
+      case "e":
+        return doe(() => setFilter("even"));
+      case "o":
+        return doe(() => setFilter("oneven"));
+      case "0":
+        return doe(() => setFilter("alles"));
+      case "[":
+        // Net als ]: stond er even/oneven/alles, dan eerst de maand van nu.
+        return doe(() => {
+          if (!isKalendermaand(filter)) return setFilter(ronde);
+          const [jaar, maand] = ronde.split("-").map(Number);
+          setFilter(maandSleutel(new Date(jaar!, maand! - 2, 1)));
+        });
+      case "]":
+        // Stond er even/oneven/alles, dan eerst naar de maand van nu.
+        return doe(() => setFilter(isKalendermaand(filter) ? volgendeMaand(ronde) : ronde));
+      case "p":
+        if (prijzenZien) doe(() => setPrijzenTonen((v) => !v));
+        return;
+      case "w":
+        if (districts.length > 0) doe(() => setWijkOpen(true));
+        return;
+      case "n":
+        if (magKlanten) doe(() => setKlantDialog({ open: true, customer: null }));
+        return;
+      case "?":
+        return doe(() => setHulpOpen(true));
+    }
+  };
+  useEffect(() => {
+    const opToets = (e: KeyboardEvent) => sneltoets.current(e);
+    window.addEventListener("keydown", opToets);
+    return () => window.removeEventListener("keydown", opToets);
+  }, []);
+
   /** De balk onderin tijdens het selecteren, op de telefoon. */
   const selectieBalk = () => (
     <div className="rounded-[20px] border border-border bg-card p-2 shadow-[0_8px_30px_oklch(0.3_0.02_70/22%)] md:hidden">
@@ -1878,6 +1993,8 @@ function Index() {
             aantal={keuze.size}
             bewerktDag={bewerktDag}
             onKies={(d) => void planIn(d)}
+            open={inplanOpen}
+            onOpenChange={setInplanOpen}
           />
         </div>
       </div>
@@ -1973,6 +2090,8 @@ function Index() {
               : 0
           }
           onStraatnamen={() => setStraatnamenOpen(true)}
+          kiezerOpen={wijkOpen}
+          onKiezerOpen={setWijkOpen}
         />
       }
       actiePositie="onder"
@@ -2035,6 +2154,8 @@ function Index() {
                     aantal={keuze.size}
                     bewerktDag={bewerktDag}
                     onKies={(d) => void planIn(d)}
+                    open={inplanOpen}
+                    onOpenChange={setInplanOpen}
                   />
                 </>
               )}
@@ -2085,6 +2206,15 @@ function Index() {
                   <Plus className="size-4" /> Klant
                 </Button>
               )}
+              <button
+                type="button"
+                onClick={() => setHulpOpen(true)}
+                aria-label="Sneltoetsen"
+                title="Sneltoetsen (?)"
+                className="hidden size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
+              >
+                <Keyboard className="size-4" />
+              </button>
             </div>
           </>
         )
@@ -2158,7 +2288,7 @@ function Index() {
           <div className="inline-flex max-w-full gap-0.5 overflow-x-auto rounded-full bg-card p-[3px] shadow-card [scrollbar-width:none]">
             {/* Dezelfde keuze als op de printlijst: wat je hier ziet is wat je
                 straks meeneemt. */}
-            <DropdownMenu>
+            <DropdownMenu open={maandOpen} onOpenChange={setMaandOpen}>
               <DropdownMenuTrigger asChild>
                 <button
                   className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] capitalize transition-colors md:px-4 ${
@@ -2409,6 +2539,12 @@ function Index() {
         customer={hoek.customer}
         straten={streets.filter((s) => s.district_id === actieveWijk)}
         onOpslaan={(patch) => hoek.customer && void patchKlant(hoek.customer, patch)}
+      />
+      <SneltoetsenHulp
+        open={hulpOpen}
+        onSluit={() => setHulpOpen(false)}
+        toetsen={WIJK_SNELTOETSEN}
+        waarvoor="Toetsen om sneller door je wijken te werken"
       />
       <KlantgegevensDialog
         open={dossier.open}
@@ -3657,15 +3793,20 @@ function InplannenKnop({
   aantal,
   bewerktDag,
   onKies,
+  open,
+  onOpenChange,
 }: {
   aantal: number;
   bewerktDag: string | null;
   onKies: (datum: string) => void;
+  /** Van buitenaf openen, voor de sneltoets i. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const werkdagen = useWerkdagen();
   const dagen = komendeDagen(werkdagen);
   return (
-    <DropdownMenu>
+    <DropdownMenu {...(onOpenChange ? { open: open ?? false, onOpenChange } : {})}>
       <DropdownMenuTrigger asChild>
         <Button
           size="sm"

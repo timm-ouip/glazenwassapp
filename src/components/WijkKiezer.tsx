@@ -65,6 +65,9 @@ interface Props {
   /** Opent "Straatnamen aanvullen". Dat hoort bij de wijk en niet in de
    *  knoppenbalk: je doet het één keer per wijk en daarna nooit meer. */
   onStraatnamen?: () => void;
+  /** De keuzelijst van buitenaf openen, voor de sneltoets w. */
+  kiezerOpen?: boolean;
+  onKiezerOpen?: (open: boolean) => void;
 }
 
 export function WijkKiezer({
@@ -75,6 +78,8 @@ export function WijkKiezer({
   variant = "balk",
   straatnamenNodig = 0,
   onStraatnamen,
+  kiezerOpen,
+  onKiezerOpen,
 }: Props) {
   const [hernoemOpen, setHernoemOpen] = useState(false);
   const bevestig = useBevestig();
@@ -125,7 +130,11 @@ export function WijkKiezer({
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-      <Select value={activeId ?? ""} onValueChange={onSelect}>
+      <Select
+        value={activeId ?? ""}
+        onValueChange={onSelect}
+        {...(onKiezerOpen ? { open: kiezerOpen ?? false, onOpenChange: onKiezerOpen } : {})}
+      >
         <SelectTrigger
           className={
             klein
@@ -138,7 +147,12 @@ export function WijkKiezer({
         >
           <SelectValue placeholder="Kies een wijk" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent
+          // De focus niet terug naar de kiezer: die springt anders bij elke
+          // letter naar een wijk met die beginletter, en de sneltoetsen van
+          // de wijkenpagina (e, o, m…) zouden je zo van wijk laten wisselen.
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
           {districts.map((d, i) => (
             <SelectItem key={d.id} value={d.id}>
               <span className="flex items-center gap-2">
