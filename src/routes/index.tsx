@@ -2252,7 +2252,10 @@ function Index() {
         />
       }
     >
-      <div className="space-y-3">
+      {/* @container: of er twee straten naast elkaar passen hangt af van de
+          ruimte voor de lijst, niet van het scherm — met de zijbalk open is
+          dat op een 13-inch MacBook een stuk minder. */}
+      <div className="@container space-y-3">
         <div className="sticky top-[var(--plakrand)] z-[9] -mx-3 flex flex-wrap items-center gap-2 border-b border-border/70 bg-background/85 px-3 py-2 backdrop-blur transition-transform duration-200 group-data-[weg]/layout:translate-y-[calc(-100%-var(--balkhoogte))] md:-mx-6 md:gap-3 md:px-6">
           {/* Op de telefoon veeg je deze rij opzij als hij niet past. */}
           <div className="inline-flex max-w-full gap-0.5 overflow-x-auto rounded-full bg-card p-[3px] shadow-card [scrollbar-width:none]">
@@ -2363,7 +2366,9 @@ function Index() {
           <SortableContext items={straatIds} strategy={verticalListSortingStrategy}>
             <div
               data-selecteren={selecteren ? "" : undefined}
-              className={`gap-3.5 md:columns-1 xl:columns-2 ${
+              // Pas twee straten naast elkaar als elke adresregel dan nog
+              // ruimte voor de notitie heeft; daaronder werd die 15px breed.
+              className={`gap-3.5 md:columns-1 @min-[88rem]:columns-2 ${
                 // Tijdens een streek niets selecteren: anders sleep je een
                 // blauwe tekstselectie over de halve wijk.
                 verfBezig ? "select-none" : ""
@@ -2819,7 +2824,7 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
           {p.aantal} {p.aantal === 1 ? "adres" : "adressen"} ingeklapt
         </p>
       ) : (
-        <div className="gap-3.5 md:columns-1 xl:columns-2">{p.children}</div>
+        <div className="gap-3.5 md:columns-1 @min-[88rem]:columns-2">{p.children}</div>
       )}
     </section>
   );
