@@ -2449,6 +2449,7 @@ function Index() {
         >
           <SortableContext items={straatIds} strategy={verticalListSortingStrategy}>
             <div
+              data-selecteren={selecteren ? "" : undefined}
               className={`gap-3.5 md:columns-1 xl:columns-2 ${
                 // Tijdens een streek niets selecteren: anders sleep je een
                 // blauwe tekstselectie over de halve wijk.
@@ -3330,7 +3331,6 @@ const StraatKolom = memo(function StraatKolom({
             geselecteerd={p.selectie.includes(c.id)}
             magSplitsen={p.planmodus && p.opDeDag.has(c.id)}
             ronde={p.ronde}
-            planmodus={p.planmodus}
             opDeDag={p.opDeDag.has(c.id)}
             eerderGewassen={p.eerderGewassen.has(c.id)}
             elderGepland={p.elderGepland.has(c.id)}
@@ -3371,7 +3371,6 @@ interface RijProps {
   magSplitsen: boolean;
   /** De maand die je bekijkt: die bepaalt de kleur van de regel. */
   ronde: string;
-  planmodus: boolean;
   opDeDag: boolean;
   /** Deze maand al op een andere dag gewassen. */
   eerderGewassen: boolean;
@@ -3455,7 +3454,9 @@ function KlantRijSleep({
     >
       {onGreep && (
         <button
-          className="cursor-grab touch-none text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
+          // In de selecteermodus sleep je niet: dan ben je een dag aan het
+          // samenstellen. Via CSS, zodat de regel niet hertekend hoeft.
+          className="cursor-grab touch-none text-muted-foreground/60 hover:text-foreground active:cursor-grabbing in-data-[selecteren]:hidden"
           aria-label="Regel verslepen"
           data-sleepgreep=""
           onClick={onGreep}
@@ -3481,6 +3482,90 @@ function KlantRijSleep({
  * Zolang er aan dit adres niets verandert hoeft het tijdens een sleep geen
  * enkele keer opnieuw getekend te worden.
  */
+/**
+ * Het vinkje en het kliklaagje van de selecteermodus. Los van de rest van de
+ * regel: aan- en uitzetten van de modus hertekent dan alleen dit kleine
+ * stukje, niet de notitie, prijs en menu's van honderden regels.
+ */
+const SelecteerVakje = memo(function SelecteerVakje({
+  customer: c,
+  opDeDag,
+  dagKlaar,
+  onOpDag,
+  onVerfStart,
+  negeerKlik,
+}: Pick<RijProps, "customer" | "opDeDag" | "dagKlaar" | "onOpDag" | "onVerfStart" | "negeerKlik">) {
+  // Staat er altijd, maar alleen zichtbaar binnen [data-selecteren]: zo
+  // hoeft de modus aan- of uitzetten geen enkele regel te hertekenen.
+  return (
+    <>
+      {/* In de selecteerstand ligt de hele regel op slot: je bent een dag
+              aan het samenstellen, niet aan het bijwerken. Eén doorzichtig
+              laagje vangt alle klikken, zodat je overal op de regel kunt
+              aanvinken en nergens per ongeluk een notitie openklikt. */}
+      <div
+        role="checkbox"
+        aria-checked={opDeDag}
+        aria-disabled={!dagKlaar}
+        aria-label={`${formatNumber(c)} op de dag`}
+        // Buiten de modus is het laagje verborgen en dus ook niet te bereiken
+        // met Tab; erin spring je van vakje naar vakje.
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key !== " " && e.key !== "Enter") return;
+          e.preventDefault();
+          if (dagKlaar) onOpDag(c, !opDeDag);
+        }}
+        className={`absolute inset-0 z-10 hidden rounded-[9px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring in-data-[selecteren]:block ${dagKlaar ? "cursor-pointer" : "cursor-not-allowed"}`}
+        onPointerDown={(e) => {
+          // Alleen de linkerknop zonder Ctrl: met rechts of Ctrl-klik open je het menu (en kun je
+          // splitsen), dan hoort het vinkje te blijven staan.
+          // Met een vinger niet: dan zou je bij het scrollen adressen
+          // aanvinken, en op een iPhone schakelt de tik erna hem terug.
+          // Een tik doet het via onClick; vegen gaat met twee vingers.
+          if (e.pointerType === "touch") negeerKlik.current = false;
+          else if (dagKlaar && e.button === 0 && !e.ctrlKey)
+            onVerfStart(!opDeDag, e.clientX, e.clientY);
+        }}
+        onClick={() => {
+          // Kwam je hier via een streek, dan is het vakje al om.
+          if (negeerKlik.current) {
+            negeerKlik.current = false;
+            return;
+          }
+          if (dagKlaar) onOpDag(c, !opDeDag);
+        }}
+      />
+      {/* Alleen het plaatje van een vinkje; het laagje hierboven vangt de
+          klik. Een echte Checkbox per regel is voor honderden regels te
+          zwaar om steeds klaar te hebben staan. */}
+      <span
+        aria-hidden="true"
+        className={`hidden size-3.5 shrink-0 place-content-center rounded-sm border border-primary shadow in-data-[selecteren]:grid ${
+          opDeDag ? "bg-primary text-primary-foreground" : ""
+        } ${dagKlaar ? "" : "opacity-50"}`}
+      >
+        {opDeDag && <Check className="size-3.5" />}
+      </span>
+    </>
+  );
+});
+
+type InhoudProps = Pick<
+  RijProps,
+  | "customer"
+  | "prijzenTonen"
+  | "magKlanten"
+  | "magPlannen"
+  | "quickNotes"
+  | "klantNaam"
+  | "ronde"
+  | "onPatch"
+  | "onAddQuickNote"
+  | "onDelete"
+  | "onDossier"
+>;
+
 const KlantRijInhoud = memo(function KlantRijInhoud({
   customer: c,
   prijzenTonen,
@@ -3489,58 +3574,16 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
   quickNotes,
   klantNaam,
   ronde: dezeMaand,
-  planmodus,
-  opDeDag,
-  dagKlaar,
-  onOpDag,
-  onVerfStart,
-  negeerKlik,
   onPatch,
   onAddQuickNote,
   onDelete,
   onDossier,
-}: RijProps) {
+}: InhoudProps) {
   return (
     <>
       {/* Het greepje om aan te slepen staat in KlantRijSleep hierboven: dat
-          hangt aan de sleepbeweging, de rest hieronder niet. */}
-      {planmodus && (
-        <>
-          {/* In de selecteerstand ligt de hele regel op slot: je bent een dag
-              aan het samenstellen, niet aan het bijwerken. Eén doorzichtig
-              laagje vangt alle klikken, zodat je overal op de regel kunt
-              aanvinken en nergens per ongeluk een notitie openklikt. */}
-          <div
-            className={`absolute inset-0 z-10 ${dagKlaar ? "cursor-pointer" : "cursor-not-allowed"}`}
-            aria-hidden="true"
-            onPointerDown={(e) => {
-              // Alleen de linkerknop zonder Ctrl: met rechts of Ctrl-klik open je het menu (en kun je
-              // splitsen), dan hoort het vinkje te blijven staan.
-              // Met een vinger niet: dan zou je bij het scrollen adressen
-              // aanvinken, en op een iPhone schakelt de tik erna hem terug.
-              // Een tik doet het via onClick; vegen gaat met twee vingers.
-              if (e.pointerType === "touch") negeerKlik.current = false;
-              else if (dagKlaar && e.button === 0 && !e.ctrlKey)
-                onVerfStart(!opDeDag, e.clientX, e.clientY);
-            }}
-            onClick={() => {
-              // Kwam je hier via een streek, dan is het vakje al om.
-              if (negeerKlik.current) {
-                negeerKlik.current = false;
-                return;
-              }
-              if (dagKlaar) onOpDag(c, !opDeDag);
-            }}
-          />
-          <Checkbox
-            className="size-3.5 shrink-0 touch-none"
-            checked={opDeDag}
-            disabled={!dagKlaar}
-            onCheckedChange={(v) => onOpDag(c, v === true)}
-            aria-label={`${formatNumber(c)} op de dag`}
-          />
-        </>
-      )}
+          hangt aan de sleepbeweging, de rest hieronder niet. Het vinkje van
+          de selecteermodus staat in SelecteerVakje. */}
       <div className="flex w-11 shrink-0 items-center gap-px">
         {isHoekadres(c) && (
           <CornerDownRight
@@ -3580,7 +3623,9 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
           alleenLezen={!magPlannen}
         />
       </div>
-      {!planmodus && (
+      {/* In de selecteermodus weg, via CSS: zo hoeft de regel niet opnieuw
+          getekend te worden als je de modus aan- of uitzet. */}
+      <span className="contents in-data-[selecteren]:hidden">
         <>
           <Overgeslagen customer={c} />
           <WassenVanaf
@@ -3590,7 +3635,7 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
             alleenLezen={!magPlannen}
           />
         </>
-      )}
+      </span>
       {prijzenTonen && (
         <div className="w-16 shrink-0">
           <PrijsCel
@@ -3680,24 +3725,33 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
   const c = p.customer;
   // Alleen buiten de selecteermodus: daarin is een tik al aanvinken, en lang
   // indrukken opent het menu (om af te splitsen).
-  const langIndrukken = useLangIndrukken(
-    p.onLangIngedrukt && !p.planmodus ? () => p.onLangIngedrukt?.(c) : null,
-  );
+  // (De hook kijkt zelf of de regel in [data-selecteren] staat.)
+  const langIndrukken = useLangIndrukken(p.onLangIngedrukt ? () => p.onLangIngedrukt?.(c) : null);
 
   // In planmodus vertelt de kleur waar je die dag staat; daarbuiten waar je
   // op moet letten. Twee kleursystemen tegelijk zou niet te lezen zijn.
+  // Beide staan klaar; CSS kiest via [data-selecteren] welke je ziet, zodat
+  // de modus wisselen de regel niet hoeft te hertekenen.
   const kleur = regelKleur(c, p.ronde, p.markeringen);
-  const achtergrond = p.planmodus
-    ? p.opDeDag
-      ? "bg-tint-amber"
-      : p.eerderGewassen
-        ? "bg-tint-groen"
-        : p.elderGepland
-          ? "bg-tint-paars"
-          : ""
-    : kleur
-      ? tintAchtergrond[kleur]
-      : "";
+  const dagKleur = p.opDeDag
+    ? "in-data-[selecteren]:bg-tint-amber"
+    : p.eerderGewassen
+      ? "in-data-[selecteren]:bg-tint-groen"
+      : p.elderGepland
+        ? "in-data-[selecteren]:bg-tint-paars"
+        : "in-data-[selecteren]:bg-transparent";
+  // Onder de muis in de modus: de dagkleur blijft staan (anders zie je niet
+  // of hij aangevinkt is), en een regel zonder dagkleur wordt grijs — ook als
+  // hij buiten de modus een printlijstkleur heeft. Met ! zodat hij wint van
+  // de gewone hover hieronder.
+  const dagHover = p.opDeDag
+    ? "in-data-[selecteren]:hover:bg-tint-amber!"
+    : p.eerderGewassen
+      ? "in-data-[selecteren]:hover:bg-tint-groen!"
+      : p.elderGepland
+        ? "in-data-[selecteren]:hover:bg-tint-paars!"
+        : "in-data-[selecteren]:hover:bg-muted/70!";
+  const achtergrond = `${kleur ? tintAchtergrond[kleur] : ""} ${dagKleur} ${dagHover}`;
 
   // De rechtermuisknop hangt om de hele regel: kleur, overslaan en het
   // dossier zitten daarin, want in de regel zelf is er geen plek voor.
@@ -3718,13 +3772,33 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
     >
       <KlantRijSleep
         id={`c:${c.id}`}
-        className={`group relative flex items-center gap-0.5 rounded-[9px] px-0.5 max-md:select-none max-md:[-webkit-touch-callout:none] ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond} ${!p.geselecteerd && !achtergrond ? "hover:bg-muted/70" : ""} data-[state=open]:ring-2 data-[state=open]:ring-inset data-[state=open]:ring-foreground/60`}
+        className={`group relative flex items-center gap-0.5 rounded-[9px] px-0.5 max-md:select-none max-md:[-webkit-touch-callout:none] ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond} ${!p.geselecteerd && !kleur ? "hover:bg-muted/70" : ""} data-[state=open]:ring-2 data-[state=open]:ring-inset data-[state=open]:ring-foreground/60`}
         verfKlant={c.id}
-        onGreep={p.planmodus || !p.magPlannen ? null : (e) => p.onSelect(c, e.shiftKey)}
+        onGreep={p.magPlannen ? (e) => p.onSelect(c, e.shiftKey) : null}
         data-klantrij=""
         {...langIndrukken}
       >
-        <KlantRijInhoud {...p} />
+        <SelecteerVakje
+          customer={c}
+          opDeDag={p.opDeDag}
+          dagKlaar={p.dagKlaar}
+          onOpDag={p.onOpDag}
+          onVerfStart={p.onVerfStart}
+          negeerKlik={p.negeerKlik}
+        />
+        <KlantRijInhoud
+          customer={c}
+          prijzenTonen={p.prijzenTonen}
+          magKlanten={p.magKlanten}
+          magPlannen={p.magPlannen}
+          quickNotes={p.quickNotes}
+          klantNaam={p.klantNaam}
+          ronde={p.ronde}
+          onPatch={p.onPatch}
+          onAddQuickNote={p.onAddQuickNote}
+          onDelete={p.onDelete}
+          onDossier={p.onDossier}
+        />
       </KlantRijSleep>
     </KlantMenu>
   );

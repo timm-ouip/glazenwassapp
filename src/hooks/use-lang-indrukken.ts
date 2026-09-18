@@ -24,8 +24,8 @@ export function useLangIndrukken(onLang: (() => void) | null) {
   }
 
   // Altijd mee, ook als lang indrukken nu niet kan: het lang indrukken zet
-  // meestal zelf de selecteermodus aan, en daarna is `onLang` leeg. Het menu
-  // van de telefoon komt dan nog een tel later binnen en moet toch tegen.
+  // meestal zelf de selecteermodus aan. Het menu van de telefoon komt dan
+  // nog een tel later binnen en moet toch tegen.
   const houdMenuTegen = {
     onContextMenu: (e: MouseEvent<HTMLElement>) => {
       if (gelukt.current) {
@@ -47,6 +47,9 @@ export function useLangIndrukken(onLang: (() => void) | null) {
     ...houdMenuTegen,
     onPointerDown: (e: PointerEvent<HTMLElement>) => {
       if (e.pointerType !== "touch") return;
+      // In de selecteermodus is een tik al aanvinken, en opent lang
+      // indrukken gewoon het menu. De pagina zet dat op de lijst.
+      if (e.currentTarget.closest("[data-selecteren]")) return;
       // Op het sleepgreepje ben je een regel aan het verplaatsen.
       if ((e.target as HTMLElement).closest("[data-sleepgreep]")) return;
       gelukt.current = false;
@@ -54,6 +57,9 @@ export function useLangIndrukken(onLang: (() => void) | null) {
       const doel = e.currentTarget;
       timer.current = setTimeout(() => {
         timer.current = null;
+        // Zette een veeg met twee vingers intussen de selecteermodus aan,
+        // dan is dit geen lang indrukken meer.
+        if (doel.closest("[data-selecteren]")) return;
         gelukt.current = true;
         // Komt er geen menu van de telefoon (iPhone), dan mag de vlag niet
         // blijven staan: dan slikt hij het eerstvolgende echte menu in.
