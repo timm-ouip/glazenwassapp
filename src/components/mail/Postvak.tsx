@@ -2031,9 +2031,12 @@ function Mailweergave({
   const naar = [...b.aan, ...b.cc].map((a) => a.naam || a.email).join(", ");
   const initiaal = (b.van_naam || b.van_email || "?").charAt(0).toUpperCase();
 
+  // Op de telefoon is het één doorlopende pagina: kop, Paaltje, de mail en de
+  // klant onder elkaar, en de mail zo hoog als hij is. Losse scrollvakjes
+  // naast elkaar laten daar voor de mail zelf bijna niets over.
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <header className="border-b border-border px-5 py-4">
+    <div className="flex min-h-0 flex-1 flex-col max-lg:overflow-y-auto">
+      <header className="border-b border-border px-5 py-4 max-lg:px-4">
         <button
           type="button"
           onClick={onTerug}
@@ -2069,9 +2072,9 @@ function Mailweergave({
         )}
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] xl:grid-cols-[minmax(0,1fr)_250px] xl:grid-rows-1">
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] max-lg:block xl:grid-cols-[minmax(0,1fr)_250px] xl:grid-rows-1">
         <div className="flex min-h-0 flex-col">
-          <div className="max-h-[45%] shrink-0 overflow-y-auto pb-1">
+          <div className="max-h-[45%] shrink-0 overflow-y-auto pb-1 max-lg:max-h-none max-lg:overflow-visible">
             {gesprek}
             {paaltje}
           </div>
@@ -2081,15 +2084,15 @@ function Mailweergave({
             </p>
           )}
           {b.html ? (
-            <MailHtml html={b.html} />
+            <MailHtml html={b.html} meegroeien />
           ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 max-lg:overflow-visible max-lg:px-4">
               <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed">{b.tekst}</p>
             </div>
           )}
         </div>
         {b.richting === "in" && (
-          <aside className="max-h-[40%] overflow-y-auto border-t border-border p-4 xl:max-h-none xl:border-l xl:border-t-0">
+          <aside className="max-h-[40%] overflow-y-auto border-t border-border p-4 max-lg:max-h-none max-lg:overflow-visible xl:max-h-none xl:border-l xl:border-t-0">
             {klant}
           </aside>
         )}
@@ -2164,29 +2167,68 @@ function grootte(bytes: number): string {
 
 /**
  * De html van een mail, in een afgesloten kader. Mail van buiten kan van alles
- * bevatten; zonder scripts en zonder toegang tot de app kan hij niets. Plaatjes
- * van internet laden we niet: daarmee ziet een verzender wanneer je zijn mail
- * opent. Links zijn eerst nagelopen (veiligeMailHtml) en gaan open zonder
- * lijntje terug naar Wooshy en zonder te verraden waar je vandaan komt.
+ * bevatten; zonder toegang tot de app kan hij niets. Plaatjes van internet
+ * laden we niet: daarmee ziet een verzender wanneer je zijn mail opent. Links
+ * zijn eerst nagelopen (veiligeMailHtml) en gaan open zonder lijntje terug naar
+ * Wooshy en zonder te verraden waar je vandaan komt.
+ *
+ * Met `meegroeien` wordt het kader op de telefoon zo hoog als de mail, zodat
+ * je de mail met de rest van de pagina mee scrolt. Daarvoor draait er één
+ * eigen scriptje in het kader dat de hoogte doorgeeft; scripts uit de mail
+ * zelf mogen niet (de CSP laat alleen het script met de juiste nonce toe), en
+ * het kader blijft afgesloten van de app (geen allow-same-origin).
  */
-export function MailHtml({ html, className }: { html: string; className?: string }) {
-  const doc = useMemo(
-    () =>
+export function MailHtml({ html, className, meegroeien }: { html: string; className?: string; meegroeien?: boolean }) {
+  const kader = useRef<HTMLIFrameElement>(null);
+  const [hoogte, setHoogte] = useState<number | null>(null);
+  const doc = useMemo(() => {
+    // getRandomValues werkt ook via gewoon http (dev-server op de telefoon).
+    const nonce = meegroeien
+      ? Array.from(crypto.getRandomValues(new Uint8Array(16)), (x) => x.toString(16).padStart(2, "0")).join("")
+      : "";
+    // De hoogte van de inhoud zelf, niet van het venster: zo kan het kader ook
+    // weer krimpen. Alleen opnieuw meten als de breedte verandert; een mail met
+    // iets van 100vh zou anders bij elke nieuwe hoogte weer groter worden.
+    const meter = meegroeien
+      ? `<script nonce="${nonce}">(function(){var w=innerWidth;function m(){var b=document.body,s=getComputedStyle(b);` +
+        `parent.postMessage({wooshyMailHoogte:Math.ceil(b.getBoundingClientRect().height+parseFloat(s.marginTop)+parseFloat(s.marginBottom))},"*")}` +
+        `addEventListener("load",m);addEventListener("resize",function(){if(innerWidth!==w){w=innerWidth;m()}});m()})()</script>`
+      : "";
+    return (
       `<!doctype html><html><head><meta charset="utf-8">` +
-      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:">` +
+      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:${meegroeien ? `; script-src 'nonce-${nonce}'` : ""}">` +
       `<meta name="referrer" content="no-referrer">` +
       `<base target="_blank">` +
       `<style>body{margin:16px 20px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.55;color:#1f2320;word-wrap:break-word}img{max-width:100%;height:auto}table{max-width:100%!important}</style>` +
-      `</head><body>${veiligeMailHtml(html)}</body></html>`,
-    [html],
-  );
+      `</head><body>${veiligeMailHtml(html)}${meter}</body></html>`
+    );
+  }, [html, meegroeien]);
+
+  useEffect(() => {
+    if (!meegroeien) return;
+    setHoogte(null);
+    function bericht(e: MessageEvent) {
+      if (e.source !== kader.current?.contentWindow) return;
+      const h = (e.data as { wooshyMailHoogte?: unknown } | null)?.wooshyMailHoogte;
+      if (typeof h === "number" && Number.isFinite(h)) setHoogte(Math.min(Math.max(h, 80), 20000));
+    }
+    window.addEventListener("message", bericht);
+    return () => window.removeEventListener("message", bericht);
+  }, [doc, meegroeien]);
+
   return (
     <iframe
+      ref={kader}
       title="Inhoud van de mail"
       srcDoc={doc}
-      sandbox="allow-popups allow-popups-to-escape-sandbox"
+      sandbox={meegroeien ? "allow-scripts allow-popups allow-popups-to-escape-sandbox" : "allow-popups allow-popups-to-escape-sandbox"}
       referrerPolicy="no-referrer"
-      className={cn("min-h-0 w-full flex-1 bg-white", className)}
+      style={meegroeien ? ({ "--mail-hoogte": `${hoogte ?? 320}px` } as React.CSSProperties) : undefined}
+      className={cn(
+        "min-h-0 w-full flex-1 bg-white",
+        meegroeien && "max-lg:h-[var(--mail-hoogte)] max-lg:flex-none",
+        className,
+      )}
     />
   );
 }

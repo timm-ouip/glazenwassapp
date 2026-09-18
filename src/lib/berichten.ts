@@ -767,7 +767,9 @@ export function lijstDatum(iso: string): string {
  */
 export function veiligeMailHtml(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
-  doc.querySelectorAll("script, base, meta, link, form, iframe, object, embed").forEach((el) => el.remove());
+  // noscript ook: hier wordt het als html gelezen, in een kader waar scripts
+  // mogen als platte tekst. Met dat verschil kan een mail er iets langs smokkelen.
+  doc.querySelectorAll("script, noscript, base, meta, link, form, iframe, object, embed").forEach((el) => el.remove());
   doc.querySelectorAll("a, area").forEach((el) => {
     const href = (el.getAttribute("href") ?? "").trim();
     if (!/^(https?:|mailto:|tel:)/i.test(href)) {
