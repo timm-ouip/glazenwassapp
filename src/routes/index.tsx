@@ -559,17 +559,24 @@ function Index() {
   const nu = vandaag();
   // Twee losse verzamelingen, want ze betekenen iets anders: wat achter je
   // ligt is gedaan, wat voor je ligt staat al ergens anders ingepland.
+  // Per adres ook de dag, zodat de regel kan zeggen wánneer: bij gewassen de
+  // laatste keer, bij gepland de eerstvolgende.
   const { eerderGewassen, elderGepland } = useMemo(() => {
-    const gewassen = new Set<string>();
-    const gepland = new Set<string>();
+    const gewassen = new Map<string, string>();
+    const gepland = new Map<string, string>();
     for (const r of maandQuery.data ?? []) {
       if (r.datum === bewerktDag || !r.customer_id) continue;
-      if (r.datum <= nu) gewassen.add(r.customer_id);
-      else gepland.add(r.customer_id);
+      if (r.datum <= nu) {
+        const was = gewassen.get(r.customer_id);
+        if (!was || r.datum > was) gewassen.set(r.customer_id, r.datum);
+      } else {
+        const was = gepland.get(r.customer_id);
+        if (!was || r.datum < was) gepland.set(r.customer_id, r.datum);
+      }
     }
     // Al gewassen weegt zwaarder: dat adres is deze maand klaar, ook als er
     // verderop nog een dag voor openstaat.
-    for (const id of gewassen) gepland.delete(id);
+    for (const id of gewassen.keys()) gepland.delete(id);
     return { eerderGewassen: gewassen, elderGepland: gepland };
   }, [maandQuery.data, bewerktDag, nu]);
 
@@ -2627,8 +2634,8 @@ interface SectieProps {
   planmodus: boolean;
   dagKlaar: boolean;
   opDeDag: Set<string>;
-  eerderGewassen: Set<string>;
-  elderGepland: Set<string>;
+  eerderGewassen: Map<string, string>;
+  elderGepland: Map<string, string>;
   onKlap: (groepId: string) => void;
   onGroepOpDag: (groepId: string, aan: boolean) => void;
   onEdit: (groep: StraatGroep) => void;
@@ -2878,10 +2885,10 @@ interface BlokProps {
   /** Vals zolang de dag nog opgehaald wordt: dan weten we van niets. */
   dagKlaar: boolean;
   opDeDag: Set<string>;
-  /** Adressen die deze maand al op een andere dag gewassen zijn. */
-  eerderGewassen: Set<string>;
-  /** Adressen die deze maand al op een latere dag ingepland staan. */
-  elderGepland: Set<string>;
+  /** Adressen die deze maand al op een andere dag gewassen zijn, met de dag. */
+  eerderGewassen: Map<string, string>;
+  /** Adressen die deze maand al op een latere dag ingepland staan, met de dag. */
+  elderGepland: Map<string, string>;
   onStraatOpDag: (streetId: string, aan: boolean) => void;
   onKlantOpDag: (c: Customer, aan: boolean) => void;
   /** Begint een sleepselectie; `aan` is de kant die de hele streek opgaat. */
@@ -3340,8 +3347,8 @@ const StraatKolom = memo(function StraatKolom({
             magSplitsen={p.planmodus && p.opDeDag.has(c.id)}
             ronde={p.ronde}
             opDeDag={p.opDeDag.has(c.id)}
-            eerderGewassen={p.eerderGewassen.has(c.id)}
-            elderGepland={p.elderGepland.has(c.id)}
+            eerderGewassen={p.eerderGewassen.get(c.id)}
+            elderGepland={p.elderGepland.get(c.id)}
             dagKlaar={p.dagKlaar}
             onOpDag={p.onKlantOpDag}
             onVerfStart={p.onVerfStart}
@@ -3380,10 +3387,10 @@ interface RijProps {
   /** De maand die je bekijkt: die bepaalt de kleur van de regel. */
   ronde: string;
   opDeDag: boolean;
-  /** Deze maand al op een andere dag gewassen. */
-  eerderGewassen: boolean;
-  /** Deze maand al op een latere dag ingepland. */
-  elderGepland: boolean;
+  /** Deze maand al op een andere dag gewassen: de dag ("2026-09-15"). */
+  eerderGewassen: string | undefined;
+  /** Deze maand al op een latere dag ingepland: de dag. */
+  elderGepland: string | undefined;
   dagKlaar: boolean;
   onOpDag: (c: Customer, aan: boolean) => void;
   onVerfStart: (aan: boolean, x: number, y: number) => void;
@@ -3497,12 +3504,19 @@ function KlantRijSleep({
  */
 const SelecteerVakje = memo(function SelecteerVakje({
   customer: c,
+  uitleg,
   opDeDag,
   dagKlaar,
   onOpDag,
   onVerfStart,
   negeerKlik,
-}: Pick<RijProps, "customer" | "opDeDag" | "dagKlaar" | "onOpDag" | "onVerfStart" | "negeerKlik">) {
+}: Pick<
+  RijProps,
+  "customer" | "opDeDag" | "dagKlaar" | "onOpDag" | "onVerfStart" | "negeerKlik"
+> & {
+  /** Waarom de regel groen of paars is; het laagje ligt boven het label. */
+  uitleg?: string | undefined;
+}) {
   // Staat er altijd, maar alleen zichtbaar binnen [data-selecteren]: zo
   // hoeft de modus aan- of uitzetten geen enkele regel te hertekenen.
   return (
@@ -3516,6 +3530,7 @@ const SelecteerVakje = memo(function SelecteerVakje({
         aria-checked={opDeDag}
         aria-disabled={!dagKlaar}
         aria-label={`${formatNumber(c)} op de dag`}
+        title={uitleg}
         // Buiten de modus is het laagje verborgen en dus ook niet te bereiken
         // met Tab; erin spring je van vakje naar vakje.
         tabIndex={0}
@@ -3572,7 +3587,12 @@ type InhoudProps = Pick<
   | "onAddQuickNote"
   | "onDelete"
   | "onDossier"
->;
+> & {
+  /** Alleen in de selecteermodus te zien: de dag van "al gewassen" of "al
+   *  ingepland". Leeg bij de meeste regels, dus die hertekenen niet. */
+  gewassenOp?: string | undefined;
+  geplandOp?: string | undefined;
+};
 
 const KlantRijInhoud = memo(function KlantRijInhoud({
   customer: c,
@@ -3586,6 +3606,8 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
   onAddQuickNote,
   onDelete,
   onDossier,
+  gewassenOp,
+  geplandOp,
 }: InhoudProps) {
   return (
     <>
@@ -3631,6 +3653,23 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
           alleenLezen={!magPlannen}
         />
       </div>
+      {/* Alleen in de selecteermodus, op de plek waar daarbuiten de
+          overslaan-tegels staan. Vaste breedte, ook leeg, zodat prijs en
+          frequentie in de pas blijven. */}
+      <span className="hidden w-12 shrink-0 justify-end in-data-[selecteren]:flex">
+        {(gewassenOp || geplandOp) && (
+          <span
+            className={`whitespace-nowrap rounded-full px-1.5 text-[10.5px] tabular-nums ${
+              gewassenOp
+                ? "bg-tint-groen-ink/15 text-tint-groen-ink"
+                : "bg-tint-paars-ink/15 text-tint-paars-ink"
+            }`}
+          >
+            {gewassenOp ? "✓ " : ""}
+            {kortDag((gewassenOp ?? geplandOp)!)}
+          </span>
+        )}
+      </span>
       {/* In de selecteermodus weg, via CSS: zo hoeft de regel niet opnieuw
           getekend te worden als je de modus aan- of uitzet. */}
       <span className="contents in-data-[selecteren]:hidden">
@@ -3760,6 +3799,10 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
         ? "in-data-[selecteren]:hover:bg-tint-paars!"
         : "in-data-[selecteren]:hover:bg-muted/70!";
   const achtergrond = `${kleur ? tintAchtergrond[kleur] : ""} ${dagKleur} ${dagHover}`;
+  // Wánneer, niet alleen dát. Staat hij op de dag die je nu maakt, dan
+  // zegt de amber kleur al genoeg.
+  const gewassenOp = p.opDeDag ? undefined : p.eerderGewassen;
+  const geplandOp = p.opDeDag || gewassenOp ? undefined : p.elderGepland;
 
   // De rechtermuisknop hangt om de hele regel: kleur, overslaan en het
   // dossier zitten daarin, want in de regel zelf is er geen plek voor.
@@ -3788,6 +3831,13 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
       >
         <SelecteerVakje
           customer={c}
+          uitleg={
+            gewassenOp
+              ? `Deze maand al gewassen op ${toonKorteDag(gewassenOp)}`
+              : geplandOp
+                ? `Al ingepland op ${toonKorteDag(geplandOp)}`
+                : undefined
+          }
           opDeDag={p.opDeDag}
           dagKlaar={p.dagKlaar}
           onOpDag={p.onOpDag}
@@ -3806,6 +3856,8 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
           onAddQuickNote={p.onAddQuickNote}
           onDelete={p.onDelete}
           onDossier={p.onDossier}
+          gewassenOp={gewassenOp}
+          geplandOp={geplandOp}
         />
       </KlantRijSleep>
     </KlantMenu>
@@ -3858,6 +3910,13 @@ function komendeDagen(
     });
   }
   return uit;
+}
+
+/** "ma 8" — past in een adresregel. Het gaat altijd om deze maand, dus de
+ *  maand erachter zegt niets. */
+function kortDag(datum: string): string {
+  const d = new Date(`${datum}T12:00:00`);
+  return d.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric" });
 }
 
 /** "ma 8 sep" — kort genoeg voor een menuregel, met de weekdag voorop omdat
