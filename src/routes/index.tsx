@@ -47,6 +47,7 @@ import {
   IconCurrencyEuro as Euro,
   IconRoute as Route2,
   IconCalendarPlus as CalendarPlus,
+  IconCalendar as Kalender,
   IconCheck as Check,
   IconSquareCheck as CheckSquare,
   IconChevronDown as ChevronDown,
@@ -239,7 +240,7 @@ const WIJK_SNELTOETSEN: [string, string][] = [
   ["x", "Selecteren aan / uit"],
   ["⌘ / Ctrl + klik", "Adres of straat selecteren, slepen voor meer"],
   ["a", "Alles aanvinken / niets"],
-  ["i", "Inplannen voor een dag"],
+  ["i", "Inplannen op een andere dag"],
   ["Esc", "Selectie wissen, daarna stoppen"],
   ["m", "Maand kiezen"],
   ["[ en ]", "Vorige / volgende maand"],
@@ -678,7 +679,20 @@ function Index() {
    * uitvinkte er ook echt af; kwam je hier zonder dag, dan voeg je alleen toe
    * — anders zou inplannen op donderdag je dinsdag stilletjes leegvegen.
    */
+  /** Loopt er al een inplanning? Een dubbelklik op "Vandaag" zou anders
+   *  alles twee keer doen: twee vragen, twee meldingen, twee keer ongedaan. */
+  const inplanBezig = useRef(false);
   async function planIn(datum: string) {
+    if (inplanBezig.current) return;
+    inplanBezig.current = true;
+    try {
+      await planInWerk(datum);
+    } finally {
+      inplanBezig.current = false;
+    }
+  }
+
+  async function planInWerk(datum: string) {
     const perId = new Map(customers.map((c) => [c.id, c]));
     const bestaand = datum === bewerktDag ? dagRegels : await fetchWasdag(datum);
     const alErop = new Set(bestaand.map((r) => r.customer_id).filter(Boolean) as string[]);
@@ -1989,6 +2003,7 @@ function Index() {
           {allesGekozen ? "Niets" : "Alles"}
         </Button>
         <OverslaanKnop
+          compact
           aantal={keuze.size}
           onOverslaan={(m) => void slaKeuzeOver(m)}
           onNietsOverslaan={() => void wisOverslaanVanKeuze()}
@@ -3951,38 +3966,65 @@ function InplannenKnop({
 }) {
   const werkdagen = useWerkdagen();
   const dagen = komendeDagen(werkdagen);
+  // De eerste twee werkdagen met één klik: meestal vandaag en morgen, op
+  // vrijdag vandaag en maandag. De eerste is de hoofdknop; de rest via
+  // "Andere dag".
+  const snel = dagen.slice(0, 2);
+  const leeg = aantal === 0 ? "Vink eerst adressen aan" : null;
   return (
-    <DropdownMenu {...(onOpenChange ? { open: open ?? false, onOpenChange } : {})}>
-      <DropdownMenuTrigger asChild>
+    <div className="flex items-center gap-1.5">
+      {snel.map(({ datum: d, naam }, i) => (
         <Button
+          key={d}
           size="sm"
-          className="rounded-full"
+          variant={i === 0 ? "default" : "outline"}
+          className="rounded-full capitalize"
           disabled={aantal === 0}
-          title={aantal === 0 ? "Vink eerst adressen aan" : `${aantal} adressen inplannen`}
+          onClick={() => onKies(d)}
+          title={leeg ?? `${aantal} ${aantal === 1 ? "adres" : "adressen"} op ${toonKorteDag(d)}`}
         >
-          <CalendarPlus className="size-4" /> Inplannen
-          <span className="-ml-1 hidden md:inline">voor</span>
-          {aantal > 0 && <span className="tabular-nums opacity-80">({aantal})</span>}
-          <ChevronDown className="size-3.5 opacity-70" />
+          <CalendarPlus className="size-4" />
+          {naam ?? kortDag(d)}
+          {/* Niet op de telefoon: daar past de rij er dan net niet meer op. */}
+          {d === bewerktDag && <Check className="size-4 max-md:hidden" />}
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-80 w-52 overflow-y-auto">
-        <DropdownMenuLabel>
-          {aantal} {aantal === 1 ? "adres" : "adressen"} inplannen op
-        </DropdownMenuLabel>
-        {dagen.map(({ datum: d, naam }) => (
-          <DropdownMenuItem key={d} onSelect={() => onKies(d)}>
-            {/* Vandaag en morgen bij hun naam, met de datum erachter; verder
+      ))}
+      <DropdownMenu {...(onOpenChange ? { open: open ?? false, onOpenChange } : {})}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            variant={snel.length ? "outline" : "default"}
+            className="rounded-full"
+            disabled={aantal === 0}
+            title={leeg ?? "Op een andere dag inplannen (i)"}
+            aria-label="Andere dag"
+          >
+            {/* Een gewoon kalendertje: het plusje staat op de knoppen die
+                meteen inplannen, dit opent eerst het lijstje. */}
+            <Kalender className="size-4" />
+            {/* Op de telefoon alleen het icoontje: anders past de rij niet. */}
+            <span className="max-md:hidden">Andere dag</span>
+            <ChevronDown className="size-3.5 opacity-70 max-md:hidden" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-h-80 w-52 overflow-y-auto">
+          <DropdownMenuLabel>
+            {aantal} {aantal === 1 ? "adres" : "adressen"} inplannen op
+          </DropdownMenuLabel>
+          {dagen.map(({ datum: d, naam }) => (
+            <DropdownMenuItem key={d} onSelect={() => onKies(d)}>
+              {/* Vandaag en morgen bij hun naam, met de datum erachter; verder
                 is de datum zelf het duidelijkst. */}
-            <span className="capitalize">{naam ?? toonKorteDag(d)}</span>
-            {naam && (
-              <span className="ml-auto text-xs text-muted-foreground">{toonKorteDag(d)}</span>
-            )}
-            {d === bewerktDag && <Check className={`size-4 ${naam ? "ml-1" : "ml-auto"}`} />}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+              <span className="capitalize">{naam ?? toonKorteDag(d)}</span>
+              {naam && (
+                <span className="ml-auto text-xs text-muted-foreground">{toonKorteDag(d)}</span>
+              )}
+              {d === bewerktDag && <Check className={`size-4 ${naam ? "ml-1" : "ml-auto"}`} />}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 

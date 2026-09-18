@@ -30,7 +30,10 @@ export function OverslaanKnop({
   aantal,
   onOverslaan,
   onNietsOverslaan,
+  compact = false,
 }: {
+  /** Alleen het icoontje, voor de smalle balk op de telefoon. */
+  compact?: boolean;
   aantal: number;
   /** `tot` is waar bij "t/m" alles ervoor ook meegaat. */
   onOverslaan: (maanden: string[]) => void;
@@ -49,9 +52,15 @@ export function OverslaanKnop({
           className="rounded-full"
           disabled={aantal === 0}
           title={aantal === 0 ? "Vink eerst adressen aan" : `${aantal} adressen overslaan`}
+          aria-label="Overslaan"
         >
-          <CalendarOff className="size-4" /> Overslaan
-          <ChevronDown className="size-3.5 opacity-70" />
+          <CalendarOff className="size-4" />
+          {!compact && (
+            <>
+              Overslaan
+              <ChevronDown className="size-3.5 opacity-70" />
+            </>
+          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-60">
