@@ -247,6 +247,16 @@ export const DUBBEL_BINNEN_DAGEN = 14;
  * dezelfde twee weken is daarentegen bijna altijd een vergissing, zoals een
  * wijk die op twee dagen wordt ingepland.
  */
+/** Van twee dagen: de eerstvolgende toekomstige, anders de laatste. */
+function belangrijksteDag(a: string, b: string): string {
+  const nu = vandaag();
+  const aKomt = a > nu;
+  const bKomt = b > nu;
+  if (aKomt && bKomt) return a < b ? a : b;
+  if (aKomt !== bKomt) return aKomt ? a : b;
+  return a > b ? a : b;
+}
+
 export async function alDichtbij(
   datum: string,
   customerIds: string[],
@@ -267,7 +277,12 @@ export async function alDichtbij(
       .in("customer_id", customerIds.slice(i, i + PER_KEER));
     if (error) throw error;
     for (const r of data ?? []) {
-      if (r.customer_id && r.datum !== behalve) uit.set(r.customer_id, r.datum);
+      if (!r.customer_id || r.datum === behalve) continue;
+      // Staat hij op meer dagen, dan de dag die ertoe doet: de eerstvolgende
+      // die nog moet komen (die kun je verplaatsen), anders de laatst
+      // gewassen. Zo gedraagt hetzelfde adres zich elke keer hetzelfde.
+      const was = uit.get(r.customer_id);
+      uit.set(r.customer_id, was ? belangrijksteDag(was, r.datum) : r.datum);
     }
   }
   return uit;

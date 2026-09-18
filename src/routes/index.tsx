@@ -95,6 +95,12 @@ import { KlantDialog } from "@/components/KlantDialog";
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { SneltoetsenHulp } from "@/components/mail/Sneltoetsen";
 import { WeekStrook } from "@/components/WeekStrook";
+import {
+  DubbelDialoog,
+  type DubbelKeuze,
+  type DubbelRij,
+  type DubbelVraag,
+} from "@/components/DubbelDialoog";
 import { StraatDialog } from "@/components/StraatDialog";
 import { SplitsStraatDialog } from "@/components/SplitsStraatDialog";
 import { GroepDialog } from "@/components/GroepDialog";
@@ -184,7 +190,7 @@ import {
 import { useRecht } from "@/lib/rechten";
 import { StopDialog } from "@/components/StopDialog";
 import { draaiStoppenTerug, geplandeDagen, zetInactief, type StopReden } from "@/lib/stoppen";
-import { alDichtbij, dubbelVraag, haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
+import { alDichtbij, datumSleutel, haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
 import { isWerkdag, useWerkdagenStatus } from "@/lib/werkdagen";
 
 interface IndexSearch {
@@ -240,9 +246,10 @@ const WIJK_SNELTOETSEN: [string, string][] = [
   ["x", "Selecteren aan / uit"],
   ["⌘ / Ctrl + klik", "Adres of straat selecteren, slepen voor meer"],
   ["a", "Alles aanvinken / niets"],
-  ["i", "Opslaan op de gekozen dag"],
+  ["s", "Opslaan op de gekozen dag"],
   ["Esc", "Stoppen met selecteren"],
   ["m", "Maand kiezen"],
+  ["← en →", "Vorige / volgende werkdag (tijdens selecteren)"],
   ["[ en ]", "Vorige / volgende maand"],
   ["e / o / 0", "Even / oneven / alles"],
   ["p", "Prijzen tonen / verbergen"],
@@ -428,7 +435,11 @@ function Index() {
       // Staat er een vraag open (zoals "toch inplannen?"), dan wacht die op
       // een antwoord over de dag zoals hij nú is; terugdraaien zou dat
       // onder zijn voeten wegtrekken.
-      const vraagOpen = document.querySelector('[role="alertdialog"]');
+      // Alleen echte vensters (Radix zet data-state): het Paaltje-paneel is
+      // ook een "dialog", maar staat vaak open terwijl je gewoon doorwerkt.
+      const vraagOpen = document.querySelector(
+        '[role="alertdialog"][data-state="open"], [role="dialog"][data-state="open"]',
+      );
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !tikt && !vraagOpen) {
         e.preventDefault();
         void doeUndo();
@@ -797,6 +808,28 @@ function Index() {
     else selecteermodus(true);
   }
 
+  // De vraag bij adressen die al kort ervoor of erna staan: per adres
+  // verplaatsen, allebei of niet. Als belofte, zodat planInWerk erop wacht.
+  const [dubbelOpen, setDubbelVraag] = useState<DubbelVraag | null>(null);
+  const dubbelAntwoord = useRef<((k: Map<string, DubbelKeuze> | null) => void) | null>(null);
+  function vraagDubbel(rijen: DubbelRij[], datum: string) {
+    return new Promise<Map<string, DubbelKeuze> | null>((klaar) => {
+      dubbelAntwoord.current = klaar;
+      setDubbelVraag({ rijen, datum });
+    });
+  }
+  function beantwoordDubbel(k: Map<string, DubbelKeuze> | null) {
+    setDubbelVraag(null);
+    dubbelAntwoord.current?.(k);
+    dubbelAntwoord.current = null;
+  }
+  function adresLabel(id: string) {
+    const c = customers.find((x) => x.id === id);
+    if (!c) return "Onbekend adres";
+    const straat = streets.find((x) => x.id === c.street_id)?.name ?? "";
+    return `${straat} ${formatNumber(c)}`.trim();
+  }
+
   async function planInWerk(datum: string): Promise<boolean> {
     const perId = new Map(customers.map((c) => [c.id, c]));
     const bestaand = datum === bewerktDag ? dagRegels : await fetchWasdag(datum);
@@ -813,13 +846,37 @@ function Index() {
       toast.error("Kon niet ophalen wat er rond die dag al ingepland staat.");
       return false;
     }
-    const overslaan = dichtbij.size > 0 && !(await bevestig(dubbelVraag(dichtbij)));
-    // Wat je overslaat niet aangevinkt laten staan: dan lijkt het alsof het
-    // toch op de dag staat.
-    if (overslaan) pasKeuzeAan([], [...dichtbij.keys()]);
+    let keuzes = new Map<string, DubbelKeuze>();
+    if (dichtbij.size > 0) {
+      const nu = vandaag();
+      const antwoord = await vraagDubbel(
+        [...dichtbij].map(([id, oud]) => ({
+          id,
+          label: adresLabel(id),
+          oudeDatum: oud,
+          gewassen: oud <= nu,
+        })),
+        datum,
+      );
+      // Annuleren: niets opslaan, ook de rest niet.
+      if (!antwoord) return false;
+      keuzes = antwoord;
+    }
+    const nietIds = [...keuzes].filter(([, k]) => k === "niet").map(([id]) => id);
+    const overslaan = nietIds.length > 0;
+    // Wat niet op deze dag komt niet aangevinkt laten staan: dan lijkt het
+    // alsof het toch op de dag staat.
+    if (overslaan) pasKeuzeAan([], nietIds);
+    // Verplaatsen: per oude dag de adressen die daar af moeten.
+    const verplaatsPerDag = new Map<string, string[]>();
+    for (const [id, k] of keuzes) {
+      if (k !== "verplaatsen") continue;
+      const oud = dichtbij.get(id)!;
+      verplaatsPerDag.set(oud, [...(verplaatsPerDag.get(oud) ?? []), id]);
+    }
 
     const toevoegen = nieuweIds
-      .filter((id) => !(overslaan && dichtbij.has(id)))
+      .filter((id) => keuzes.get(id) !== "niet")
       .map((id) => ({ customer_id: id, prijs: prijsVoorMaand(perId.get(id)!, ronde) }));
 
     // Alleen bij het bewerken van een dag: wat je uitvinkte hoort eraf.
@@ -834,6 +891,8 @@ function Index() {
       toast(overslaan ? "Niets ingepland." : `${toonDatum(datum)} stond al zo ingepland.`);
       return true;
     }
+    let verplaatst = 0;
+    const verplaatsKenmerken: string[] = [];
 
     // Wat eraf gaat bewaart de database, met het bedrag van die keer: zo zet
     // ongedaan maken ook een aangepaste dagprijs terug.
@@ -853,12 +912,12 @@ function Index() {
         "Inplannen mislukt: " +
           (e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e)),
       );
-      if (kenmerk) {
-        const teruggezet = kenmerk;
+      const terug = [kenmerk, ...verplaatsKenmerken].filter(Boolean) as string[];
+      if (terug.length > 0) {
         pushUndo({
           label: `Uitvinken ${toonDatum(datum)}`,
           undo: async () => {
-            await zetWasdagTerug(teruggezet);
+            for (const k of terug) await zetWasdagTerug(k);
             qc.invalidateQueries({ queryKey: ["wasdag"] });
             qc.invalidateQueries({ queryKey: ["wasdagen"] });
           },
@@ -867,6 +926,21 @@ function Index() {
       qc.invalidateQueries({ queryKey: ["wasdag"] });
       qc.invalidateQueries({ queryKey: ["wasdagen"] });
       return false;
+    }
+
+    // Pas ná het toevoegen van de oude dag af: mislukt het toevoegen, dan
+    // staat het adres tenminste nog ergens. Mislukt dít, dan is de nieuwe dag
+    // wél gelukt; dat zeggen we dan ook, in plaats van "mislukt".
+    for (const [oud, ids] of verplaatsPerDag) {
+      try {
+        const k = await haalUitWasdagBewaard(oud, ids);
+        if (k) verplaatsKenmerken.push(k);
+        verplaatst += ids.length;
+      } catch {
+        toast.error(
+          `Ingepland op ${toonDatum(datum)}, maar van ${toonDatum(oud)} halen lukte niet. Die staan nu op beide dagen.`,
+        );
+      }
     }
 
     pushUndo({
@@ -878,6 +952,8 @@ function Index() {
             toevoegen.map((r) => r.customer_id),
           ),
           zetWasdagTerug(kenmerk),
+          // Wat verplaatst werd staat weer op zijn oude dag.
+          ...verplaatsKenmerken.map((k) => zetWasdagTerug(k)),
         ]);
         qc.invalidateQueries({ queryKey: ["wasdag"] });
         qc.invalidateQueries({ queryKey: ["wasdagen"] });
@@ -921,8 +997,8 @@ function Index() {
     toast.success(
       eraf === 0
         ? `${erbij} ${erbij === 1 ? "adres" : "adressen"} ingepland op ${toonDatum(datum)}${
-            overslaan ? ` (${dichtbij.size} overgeslagen)` : ""
-          }`
+            verplaatst ? ` (${verplaatst} verplaatst)` : ""
+          }${overslaan ? ` (${nietIds.length} niet)` : ""}`
         : `${toonDatum(datum)} bijgewerkt: ${erbij} erbij, ${eraf} eraf`,
       {
         duration: 10000,
@@ -2015,7 +2091,7 @@ function Index() {
       return;
     if (
       document.querySelector(
-        '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]',
+        '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"], [role="listbox"]',
       )
     )
       return;
@@ -2051,7 +2127,7 @@ function Index() {
       case "Escape":
         if (selecteren) doe(() => void stopSelecteren());
         return;
-      case "i":
+      case "s":
         if (selecteren && bewerktDag && nietOpgeslagen) doe(() => void planIn(bewerktDag));
         return;
       case "m":
@@ -2062,6 +2138,19 @@ function Index() {
         return doe(() => setFilter("oneven"));
       case "0":
         return doe(() => setFilter("alles"));
+      case "ArrowLeft":
+      case "ArrowRight":
+        // Vorige of volgende werkdag, alleen tijdens het selecteren.
+        if (selecteren && bewerktDag) {
+          const stap = e.key === "ArrowLeft" ? -1 : 1;
+          const d = new Date(`${bewerktDag}T12:00:00`);
+          for (let i = 0; i < 14; i++) {
+            d.setDate(d.getDate() + stap);
+            if (isWerkdag(d, werkdagenLijst)) break;
+          }
+          doe(() => void naarDag(datumSleutel(d)));
+        }
+        return;
       case "[":
         // Net als ]: stond er even/oneven/alles, dan eerst de maand van nu.
         return doe(() => {
@@ -2108,7 +2197,7 @@ function Index() {
       className="rounded-full"
       disabled={!bewerktDag || !dagKlaar || !nietOpgeslagen}
       onClick={() => bewerktDag && void planIn(bewerktDag)}
-      title={nietOpgeslagen ? `Opslaan op ${toonDatum(bewerktDag ?? "")} (i)` : "Niets te bewaren"}
+      title={nietOpgeslagen ? `Opslaan op ${toonDatum(bewerktDag ?? "")} (s)` : "Niets te bewaren"}
     >
       <CalendarPlus className="size-4" />
       {nietOpgeslagen ? `Opslaan op ${dagNaam}` : "Opgeslagen"}
@@ -2710,6 +2799,7 @@ function Index() {
         straten={streets.filter((s) => s.district_id === actieveWijk)}
         onOpslaan={(patch) => hoek.customer && void patchKlant(hoek.customer, patch)}
       />
+      <DubbelDialoog vraag={dubbelOpen} onKlaar={beantwoordDubbel} />
       <SneltoetsenHulp
         open={hulpOpen}
         onSluit={() => setHulpOpen(false)}
