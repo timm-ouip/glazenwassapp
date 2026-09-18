@@ -5,9 +5,10 @@
   <rect x="0" y="93" width="120" height="4" fill="#fbe3c8"/>
   <rect x="0" y="101" width="120" height="3" fill="#fbe3c8"/>
 <g transform="translate(-9 -12) scale(1.15)">
-  <path d="M45 50l-6 58h42l-6-58z" fill="#2f6b56"/>
-  <path d="M67 50l5 58h9l-6-58z" fill="#24574a"/>
-  <path d="M49.5 55l-4.8 48" stroke="#4f927a" stroke-width="3" stroke-linecap="round" opacity=".6"/>
+  <!-- De schacht loopt ver door naar beneden, zodat hij in elk icoon uit de onderrand komt. -->
+  <path d="M45 50L33.6 160h52.8L75 50z" fill="#2f6b56"/>
+  <path d="M67 50l9.5 110h9.9L75 50z" fill="#24574a"/>
+  <path d="M49.5 55l-8 80" stroke="#4f927a" stroke-width="3" stroke-linecap="round" opacity=".6"/>
   <path d="M46.5 42c0-11 5.5-18 13.5-18s13.5 7 13.5 18z" fill="#2f6b56"/>
   <path d="M65 25.5c5 2.5 8.5 8.5 8.5 16.5H67c0-7-.8-12.5-2-16.5z" fill="#24574a"/>
   <ellipse cx="54" cy="31" rx="3.2" ry="2" transform="rotate(-35 54 31)" fill="#fff" opacity=".35"/>
