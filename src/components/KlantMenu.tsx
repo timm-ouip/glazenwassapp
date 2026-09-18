@@ -9,7 +9,17 @@ import {
   IconScissors as Scissors,
   IconUserMinus as UserMinus,
 } from "@tabler/icons-react";
-import { Fragment, useRef, useState, type ReactNode } from "react";
+import { Slot } from "@radix-ui/react-slot";
+import { createPortal } from "react-dom";
+import {
+  Fragment,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 
 import {
   ContextMenu,
@@ -67,6 +77,65 @@ function jaarwissel(maand: string, i: number): boolean {
   return i > 0 && maand.endsWith("-01");
 }
 
+/** Zo lang houdt Radix een vinger vast voordat het menu opengaat. */
+const LANG_INDRUKKEN = 700;
+
+/**
+ * Het menu pas bouwen als je het nodig hebt. Een wijk heeft honderden regels,
+ * en een klaarstaand Radix-menu per regel was het duurste deel van de lijst:
+ * wisselen van maand of wijk kostte daardoor bijna een halve seconde extra.
+ *
+ * De regel zelf blijft altijd hetzelfde element; het menu hangt er los naast
+ * en wordt bij de eerste rechtermuisklik (of lang indrukken) gebouwd. Zou de
+ * regel bij het bouwen vervangen worden, dan raakte je kwijt wat je net in
+ * een vakje van die regel typte.
+ */
+export function KlantMenu(props: Props) {
+  /** Waar het menu open moet; `keer` telt op, zodat dezelfde plek opnieuw kan. */
+  const [punt, setPunt] = useState<Punt | null>(null);
+  const [open, setOpen] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openOp = (x: number, y: number) => setPunt((p) => ({ x, y, keer: (p?.keer ?? 0) + 1 }));
+  const stopTimer = (e: ReactPointerEvent) => {
+    if (e.pointerType !== "mouse" && timer.current) clearTimeout(timer.current);
+  };
+
+  return (
+    <>
+      <Slot
+        // Zolang het menu open is een rand om de regel (data-[state=open]),
+        // zodat je ziet over welk adres het gaat — zoals Radix dat deed.
+        data-state={open ? "open" : "closed"}
+        // Een regel lang vasthouden opent geen menu van de telefoon zelf.
+        style={{ WebkitTouchCallout: "none" }}
+        onContextMenu={(e: ReactMouseEvent) => {
+          // Hield het lang indrukken van de regel hem al tegen, dan niet.
+          if (e.defaultPrevented) return;
+          e.preventDefault();
+          // Android opent zelf al bij lang indrukken; dan niet nog een keer.
+          if (timer.current) clearTimeout(timer.current);
+          openOp(e.clientX, e.clientY);
+        }}
+        onPointerDown={(e: ReactPointerEvent) => {
+          if (e.defaultPrevented || e.pointerType === "mouse") return;
+          if (timer.current) clearTimeout(timer.current);
+          const { clientX: x, clientY: y } = e;
+          timer.current = setTimeout(() => openOp(x, y), LANG_INDRUKKEN);
+        }}
+        onPointerMove={stopTimer}
+        onPointerUp={stopTimer}
+        onPointerCancel={stopTimer}
+      >
+        {props.children}
+      </Slot>
+      {punt && <KlantMenuVol {...props} punt={punt} onOpenChange={setOpen} />}
+    </>
+  );
+}
+
+type Punt = { x: number; y: number; keer: number };
+
 /**
  * Rechtermuisknop op een adresregel: naar het dossier, een kleur meegeven
  * voor de printlijst, en maanden overslaan.
@@ -75,7 +144,7 @@ function jaarwissel(maand: string, i: number): boolean {
  * wijklijst is al dicht bezet, en dit zijn dingen die je een paar keer per
  * jaar doet, niet elke ronde.
  */
-export function KlantMenu({
+function KlantMenuVol({
   customer: c,
   onPatch: ruwePatch,
   onDossier,
@@ -85,8 +154,23 @@ export function KlantMenu({
   onSplitsen,
   markeringen,
   alleenLezen = false,
-  children,
-}: Props) {
+  punt,
+  onOpenChange,
+}: Omit<Props, "children"> & { punt: Punt; onOpenChange: (open: boolean) => void }) {
+  // Het menu opent vanaf een onzichtbaar ankertje, via hetzelfde event dat
+  // Radix zelf opvangt: zo komt het precies op de plek van de klik.
+  const anker = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    anker.current?.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: punt.x,
+        clientY: punt.y,
+      }),
+    );
+  }, [punt]);
+
   // Alles loopt hierlangs, zodat een startmaand die je overslaat overal
   // opschuift en niet alleen in het menu-item dat je toevallig gebruikte.
   const onPatch = (p: Partial<Customer>) => ruwePatch(schuifStartOp(c, p));
@@ -142,8 +226,25 @@ export function KlantMenu({
   }
 
   return (
-    <ContextMenu onOpenChange={menuOpenDicht}>
-      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+    <ContextMenu
+      onOpenChange={(o) => {
+        menuOpenDicht(o);
+        onOpenChange(o);
+      }}
+    >
+      {/* In de body, want naast de regel kan geen span staan (een tabelrij). */}
+      {createPortal(
+        <ContextMenuTrigger asChild>
+          <span
+            ref={anker}
+            aria-hidden="true"
+            className="pointer-events-none fixed left-0 top-0 size-0"
+            // Niet doorgeven aan wat er in React boven de regel hangt.
+            onContextMenu={(e) => e.stopPropagation()}
+          />
+        </ContextMenuTrigger>,
+        document.body,
+      )}
       <ContextMenuContent className="w-60">
         <ContextMenuItem onSelect={onDossier}>
           <FileText className="size-4" /> Dossier

@@ -1,5 +1,7 @@
 import { IconCheck as Check, IconChevronDown as ChevronDown } from "@tabler/icons-react";
 
+import { useState } from "react";
+
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -54,6 +56,11 @@ function kleur(c: Pick<Customer, "interval_maanden" | "ritme">): string {
  * weten als je langs de lijst gaat.
  */
 export function FrequentieKiezer({ customer: c, onPatch, alleenLezen = false }: Props) {
+  // Het menu pas bouwen bij de eerste tik: een klaarstaand Radix-menu op
+  // honderden regels maakte wisselen van maand of wijk merkbaar trager. Tot
+  // dan is het badge een gewone knop die er precies zo uitziet, en opent hij
+  // op dezelfde manier als Radix (indrukken, of Enter/spatie/pijl omlaag).
+  const [gebouwd, setGebouwd] = useState(false);
   if (alleenLezen) {
     return (
       <span
@@ -64,19 +71,37 @@ export function FrequentieKiezer({ customer: c, onPatch, alleenLezen = false }: 
       </span>
     );
   }
+  const badge = (
+    <button
+      type="button"
+      tabIndex={-1}
+      title={ritmeOmschrijving(c)}
+      aria-label="Frequentie"
+      className={`min-w-[3.25rem] max-w-[5.5rem] shrink-0 truncate rounded-full px-1.5 py-[2px] text-center text-[10px] font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${kleur(c)}`}
+      {...(gebouwd
+        ? {}
+        : {
+            onPointerDown: (e: React.PointerEvent) => {
+              if (e.button !== 0 || e.ctrlKey) return;
+              // Anders pakt de knop de focus en springt die straks terug.
+              e.preventDefault();
+              setGebouwd(true);
+            },
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key !== "Enter" && e.key !== " " && e.key !== "ArrowDown") return;
+              e.preventDefault();
+              setGebouwd(true);
+            },
+          })}
+    >
+      {ritmeLabel(c)}
+    </button>
+  );
+  if (!gebouwd) return badge;
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          tabIndex={-1}
-          title={ritmeOmschrijving(c)}
-          aria-label="Frequentie"
-          className={`min-w-[3.25rem] max-w-[5.5rem] shrink-0 truncate rounded-full px-1.5 py-[2px] text-center text-[10px] font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${kleur(c)}`}
-        >
-          {ritmeLabel(c)}
-        </button>
-      </DropdownMenuTrigger>
+    // Net gebouwd omdat je erop tikte, dus meteen open.
+    <DropdownMenu defaultOpen>
+      <DropdownMenuTrigger asChild>{badge}</DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-52">
         <DropdownMenuLabel>Frequentie</DropdownMenuLabel>
         {INTERVALLEN.map((n) => {
