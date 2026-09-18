@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   PopupBlok,
   PopupBody,
@@ -36,6 +37,8 @@ import { toast } from "sonner";
 import {
   IconCalendar as CalendarDays,
   IconCalendarOff as CalendarOff,
+  IconChevronLeft as ChevronLeft,
+  IconChevronRight as ChevronRight,
   IconFlag as Flag,
   IconHammer as Hammer,
   IconMessageExclamation as MessageSquareWarning,
@@ -203,6 +206,9 @@ export function KlantgegevensDialog({
    *  scrollen. Mail en klachten horen bij de persoon, dus die zijn er alleen
    *  als er een klant is. */
   const [tab, setTab] = useState<"klant" | "adres" | "werk" | "mail" | "klachten">("klant");
+  const mobiel = useIsMobile();
+  /** Op de telefoon: het onderblad, het overzicht, of één onderdeel. */
+  const [stap, setStap] = useState<"blad" | "overzicht" | "tab">("blad");
   // Mail kan privé zijn: alleen wie mail mag lezen ziet dat tabblad.
   const magMailLezen = useRecht("mail_lezen");
   const klachten = useQuery({
@@ -283,6 +289,8 @@ export function KlantgegevensDialog({
     );
     setKoppelOpen(false);
     setTab("klant");
+    // Een nieuw adres heeft nog niets om snel te bekijken: meteen de lijst.
+    setStap(voorstelCustomer ? "blad" : "overzicht");
     setPostcodeHandmatig(Boolean(klant?.postcode));
     // Alleen bij openen opnieuw vullen; verder is dit een vrij formulier.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -495,9 +503,7 @@ export function KlantgegevensDialog({
   /** Sinds wanneer dit adres op de lijst staat. Bij een wijk die je in één
    *  keer geïmporteerd hebt is dat de dag van die import — de app houdt geen
    *  apart importstempel bij, dus verder kan hij die twee niet uit elkaar. */
-  const sindsMaand = dossierCustomer
-    ? maandSleutel(new Date(dossierCustomer.created_at))
-    : "";
+  const sindsMaand = dossierCustomer ? maandSleutel(new Date(dossierCustomer.created_at)) : "";
   const klantSinds = sindsMaand
     ? `${dossierCustomer?.geimporteerd ? "geïmporteerd op" : "klant sinds"} ${toonMaandKort(
         sindsMaand,
@@ -512,585 +518,825 @@ export function KlantgegevensDialog({
   /** Twaalf maanden vooruit: waar je een pauze of een startmaand uit kiest. */
   const maandenVooruit = komendeMaanden();
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <PopupKader className="sm:max-w-lg" onKeyDown={magBewerken ? opslaanBijEnter(() => void save()) : undefined}>
-        <PopupKop
-          icoon={<House className="size-[22px]" />}
-          titel={
-            dossierCustomer
-              ? adresTekst(dossierCustomer)
-              : klant
-                ? `Dossier van ${klant.naam || "naamloze klant"}`
-                : "Nieuw adres"
-          }
-          subtitel={
-            [
-              dossierCustomer ? wijkNaamVan(dossierCustomer.street_id) : "",
-              velden.plaats.trim(),
-            ]
-              .filter(Boolean)
-              .join(" · ") || "Alles van dit adres bij elkaar"
-          }
-          tabs={
-            <>
-              <PopupTab
-                actief={tab === "klant"}
-                onClick={() => setTab("klant")}
-                icoon={<User className="size-[15px]" />}
-              >
-                Gegevens
-              </PopupTab>
-              <PopupTab
-                actief={tab === "adres"}
-                onClick={() => setTab("adres")}
-                icoon={<House className="size-[15px]" />}
-              >
-                Het adres
-              </PopupTab>
-              <PopupTab
-                actief={tab === "werk"}
-                onClick={() => setTab("werk")}
-                icoon={<Hammer className="size-[15px]" />}
-                telletje={openKlussen.length}
-              >
-                Werk
-              </PopupTab>
-              {klant && magMailLezen && (
-                <PopupTab
-                  actief={tab === "mail"}
-                  onClick={() => setTab("mail")}
-                  icoon={<Mail className="size-[15px]" />}
-                >
-                  Berichten
-                </PopupTab>
-              )}
-              {klant && (
-                <PopupTab
-                  actief={tab === "klachten"}
-                  onClick={() => setTab("klachten")}
-                  icoon={<MessageSquareWarning className="size-[15px]" />}
-                  telletje={openKlachten}
-                >
-                  Klachten
-                </PopupTab>
-              )}
-            </>
-          }
-        />
-
-        <PopupBody className="max-h-[60vh]">
-          {!magBewerken && (
-            <p className="mb-3 rounded-[12px] bg-accent/50 px-3 py-2 text-[12.5px] text-muted-foreground">
-              Je kunt dit dossier bekijken, maar je rol mag het niet wijzigen.
-            </p>
-          )}
-          {/* Zonder bewerkrecht staat alles hierbinnen uit: velden, keuzes en knoppen. */}
-          <fieldset disabled={!magBewerken} className="contents">
-          {tab === "klant" && (
-            <>
-              <PopupBlok label="De klant" terzijde={klantSinds}>
-                <PopupVeld icoon={<User className="size-4" />}>
+  const tabInhoud = (
+    <>
+      {!magBewerken && (
+        <p className="mb-3 rounded-[12px] bg-accent/50 px-3 py-2 text-[12.5px] text-muted-foreground">
+          Je kunt dit dossier bekijken, maar je rol mag het niet wijzigen.
+        </p>
+      )}
+      {/* Zonder bewerkrecht staat alles hierbinnen uit: velden, keuzes en knoppen. */}
+      <fieldset disabled={!magBewerken} className="contents">
+        {tab === "klant" && (
+          <>
+            <PopupBlok label="De klant" terzijde={klantSinds}>
+              <PopupVeld icoon={<User className="size-4" />}>
+                <Input
+                  id="naam"
+                  className={popupInvoer}
+                  placeholder="Naam"
+                  value={velden.naam}
+                  onChange={(e) => zet({ naam: e.target.value })}
+                  autoFocus
+                />
+              </PopupVeld>
+              <PopupPaar>
+                <PopupVeld icoon={<Mail className="size-4" />}>
                   <Input
-                    id="naam"
+                    id="email"
+                    type="email"
+                    inputMode="email"
                     className={popupInvoer}
-                    placeholder="Naam"
-                    value={velden.naam}
-                    onChange={(e) => zet({ naam: e.target.value })}
-                    autoFocus
+                    placeholder="naam@voorbeeld.nl"
+                    value={velden.email}
+                    onChange={(e) => zet({ email: e.target.value })}
                   />
                 </PopupVeld>
-                <PopupPaar>
-                  <PopupVeld icoon={<Mail className="size-4" />}>
-                    <Input
-                      id="email"
-                      type="email"
-                      inputMode="email"
-                      className={popupInvoer}
-                      placeholder="naam@voorbeeld.nl"
-                      value={velden.email}
-                      onChange={(e) => zet({ email: e.target.value })}
-                    />
-                  </PopupVeld>
-                  <PopupVeld icoon={<Phone className="size-4" />}>
-                    <Input
-                      id="telefoon"
-                      type="tel"
-                      inputMode="tel"
-                      className={popupInvoer}
-                      placeholder="06 12 34 56 78"
-                      value={velden.telefoon}
-                      onChange={(e) => zet({ telefoon: e.target.value })}
-                    />
-                  </PopupVeld>
-                </PopupPaar>
-                {/* Een tweede adres en nummer: vaak mailen of appen de man én de vrouw. */}
-                <PopupPaar>
-                  <PopupVeld icoon={<Mail className="size-4" />}>
-                    <Input
-                      id="email2"
-                      type="email"
-                      inputMode="email"
-                      className={popupInvoer}
-                      placeholder="Tweede e-mail"
-                      value={velden.email2}
-                      onChange={(e) => zet({ email2: e.target.value })}
-                    />
-                  </PopupVeld>
-                  <PopupVeld icoon={<Phone className="size-4" />}>
-                    <Input
-                      id="telefoon2"
-                      type="tel"
-                      inputMode="tel"
-                      className={popupInvoer}
-                      placeholder="Tweede telefoon"
-                      value={velden.telefoon2}
-                      onChange={(e) => zet({ telefoon2: e.target.value })}
-                    />
-                  </PopupVeld>
-                </PopupPaar>
-              </PopupBlok>
+                <PopupVeld icoon={<Phone className="size-4" />}>
+                  <Input
+                    id="telefoon"
+                    type="tel"
+                    inputMode="tel"
+                    className={popupInvoer}
+                    placeholder="06 12 34 56 78"
+                    value={velden.telefoon}
+                    onChange={(e) => zet({ telefoon: e.target.value })}
+                  />
+                </PopupVeld>
+              </PopupPaar>
+              {/* Een tweede adres en nummer: vaak mailen of appen de man én de vrouw. */}
+              <PopupPaar>
+                <PopupVeld icoon={<Mail className="size-4" />}>
+                  <Input
+                    id="email2"
+                    type="email"
+                    inputMode="email"
+                    className={popupInvoer}
+                    placeholder="Tweede e-mail"
+                    value={velden.email2}
+                    onChange={(e) => zet({ email2: e.target.value })}
+                  />
+                </PopupVeld>
+                <PopupVeld icoon={<Phone className="size-4" />}>
+                  <Input
+                    id="telefoon2"
+                    type="tel"
+                    inputMode="tel"
+                    className={popupInvoer}
+                    placeholder="Tweede telefoon"
+                    value={velden.telefoon2}
+                    onChange={(e) => zet({ telefoon2: e.target.value })}
+                  />
+                </PopupVeld>
+              </PopupPaar>
+            </PopupBlok>
 
-              <PopupBlok>
-                <PopupPaar smal>
-                  <PopupVeld icoon={<Signpost className="size-4" />}>
-                    <Input
-                      id="straat"
-                      list="bekende-straten"
-                      className={popupInvoer}
-                      placeholder="Straat"
-                      value={velden.straat}
-                      onChange={(e) => zet({ straat: e.target.value })}
-                    />
-                  </PopupVeld>
-                  <PopupVeld icoon={<Hash className="size-4" />}>
-                    <Input
-                      id="huisnr"
-                      className={popupInvoer}
-                      placeholder="12a"
-                      value={velden.huisnummer}
-                      onChange={(e) => zet({ huisnummer: e.target.value })}
-                    />
-                  </PopupVeld>
-                </PopupPaar>
-                <datalist id="bekende-straten">
-                  {straatSuggesties.map((s) => (
-                    <option key={s} value={s} />
-                  ))}
-                </datalist>
+            <PopupBlok>
+              <PopupPaar smal>
+                <PopupVeld icoon={<Signpost className="size-4" />}>
+                  <Input
+                    id="straat"
+                    list="bekende-straten"
+                    className={popupInvoer}
+                    placeholder="Straat"
+                    value={velden.straat}
+                    onChange={(e) => zet({ straat: e.target.value })}
+                  />
+                </PopupVeld>
+                <PopupVeld icoon={<Hash className="size-4" />}>
+                  <Input
+                    id="huisnr"
+                    className={popupInvoer}
+                    placeholder="12a"
+                    value={velden.huisnummer}
+                    onChange={(e) => zet({ huisnummer: e.target.value })}
+                  />
+                </PopupVeld>
+              </PopupPaar>
+              <datalist id="bekende-straten">
+                {straatSuggesties.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
 
-                <PopupPaar smal>
-                  <PopupVeld icoon={<MapPin className="size-4" />}>
-                    <Input
-                      id="plaats"
-                      list="bekende-plaatsen"
-                      className={popupInvoer}
-                      placeholder="Plaats"
-                      value={velden.plaats}
-                      onChange={(e) => zet({ plaats: e.target.value })}
-                    />
-                  </PopupVeld>
-                  <PopupVeld>
-                    <Input
-                      id="postcode"
-                      className={popupInvoer}
-                      placeholder="1234 AB"
-                      value={velden.postcode}
-                      onChange={(e) => {
-                        setPostcodeHandmatig(true);
-                        zet({ postcode: e.target.value });
-                      }}
-                    />
-                  </PopupVeld>
-                </PopupPaar>
-                <datalist id="bekende-plaatsen">
-                  {plaatsen.map((p) => (
-                    <option key={p} value={p} />
-                  ))}
-                </datalist>
+              <PopupPaar smal>
+                <PopupVeld icoon={<MapPin className="size-4" />}>
+                  <Input
+                    id="plaats"
+                    list="bekende-plaatsen"
+                    className={popupInvoer}
+                    placeholder="Plaats"
+                    value={velden.plaats}
+                    onChange={(e) => zet({ plaats: e.target.value })}
+                  />
+                </PopupVeld>
+                <PopupVeld>
+                  <Input
+                    id="postcode"
+                    className={popupInvoer}
+                    placeholder="1234 AB"
+                    value={velden.postcode}
+                    onChange={(e) => {
+                      setPostcodeHandmatig(true);
+                      zet({ postcode: e.target.value });
+                    }}
+                  />
+                </PopupVeld>
+              </PopupPaar>
+              <datalist id="bekende-plaatsen">
+                {plaatsen.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
 
-                {/* Een adres dat nog niet op een wijklijst staat, wordt bij
+              {/* Een adres dat nog niet op een wijklijst staat, wordt bij
                     opslaan aangemaakt. In welke wijk staat hier, en is te
                     wijzigen zonder dat het een eigen formulierrij kost. */}
-                {nieuwAdres && (
-                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                    Wordt aangemaakt in
-                    <Select disabled={!magBewerken} value={wijkId} onValueChange={setWijkId}>
-                      <SelectTrigger className="h-auto w-auto gap-1 border-0 px-1 py-0 text-xs font-medium text-foreground shadow-none focus:ring-0">
-                        <SelectValue placeholder="een wijk" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {districts.map((d) => (
-                          <SelectItem key={d.id} value={d.id}>
-                            {d.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </p>
-                )}
-              </PopupBlok>
+              {nieuwAdres && (
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                  Wordt aangemaakt in
+                  <Select disabled={!magBewerken} value={wijkId} onValueChange={setWijkId}>
+                    <SelectTrigger className="h-auto w-auto gap-1 border-0 px-1 py-0 text-xs font-medium text-foreground shadow-none focus:ring-0">
+                      <SelectValue placeholder="een wijk" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {districts.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </p>
+              )}
+            </PopupBlok>
 
-              <PopupBlok>
-                <PopupVeld icoon={<MessageSquare className="size-4" />}>
-                  <Input
-                    id="notitie"
-                    className={popupInvoer}
-                    placeholder="Notitie bij klant"
-                    value={velden.notitie}
-                    onChange={(e) => zet({ notitie: e.target.value })}
-                  />
-                </PopupVeld>
-              </PopupBlok>
+            <PopupBlok>
+              <PopupVeld icoon={<MessageSquare className="size-4" />}>
+                <Input
+                  id="notitie"
+                  className={popupInvoer}
+                  placeholder="Notitie bij klant"
+                  value={velden.notitie}
+                  onChange={(e) => zet({ notitie: e.target.value })}
+                />
+              </PopupVeld>
+            </PopupBlok>
 
-              <PopupScheiding />
+            <PopupScheiding />
 
-              {/* Twee adressen op één persoon is de uitzondering, dus het
+            {/* Twee adressen op één persoon is de uitzondering, dus het
                   krijgt één regel: de andere adressen als labels, en een
                   zoekveld dat alleen ruimte inneemt als je het opent. */}
-              <PopupBlok label="Ook van deze klant">
-                <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                  {extra.map((id) => {
-                    const c = customers.find((x) => x.id === id);
-                    if (!c) return null;
-                    return (
-                      <span
-                        key={id}
-                        className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-accent-foreground"
-                      >
-                        {adresTekst(c)}
-                        <button
-                          type="button"
-                          aria-label={`${adresTekst(c)} losmaken`}
-                          onClick={() => setExtra((l) => l.filter((x) => x !== id))}
-                          className="text-accent-foreground/60 hover:text-accent-foreground"
-                        >
-                          <X className="size-3" />
-                        </button>
-                      </span>
-                    );
-                  })}
-
-                  <Popover open={koppelOpen} onOpenChange={setKoppelOpen}>
-                    <PopoverTrigger asChild>
+            <PopupBlok label="Ook van deze klant">
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                {extra.map((id) => {
+                  const c = customers.find((x) => x.id === id);
+                  if (!c) return null;
+                  return (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-accent-foreground"
+                    >
+                      {adresTekst(c)}
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                        aria-label={`${adresTekst(c)} losmaken`}
+                        onClick={() => setExtra((l) => l.filter((x) => x !== id))}
+                        className="text-accent-foreground/60 hover:text-accent-foreground"
                       >
-                        <Link2 className="size-3.5" /> nog een adres koppelen
+                        <X className="size-3" />
                       </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-80 p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Zoek een adres…" />
-                        <CommandList>
-                          <CommandEmpty>Geen adres gevonden.</CommandEmpty>
-                          <CommandGroup>
-                            {koppelbaar.map((c) => (
-                              <CommandItem
-                                key={c.id}
-                                value={`${adresTekst(c)} ${wijkNaamVan(c.street_id)}`}
-                                onSelect={() => {
-                                  setExtra((l) => [...l, c.id]);
-                                  setKoppelOpen(false);
-                                }}
-                              >
-                                <span className="truncate">{adresTekst(c)}</span>
-                                <span className="ml-auto shrink-0 pl-2 text-xs text-muted-foreground">
-                                  {c.klant_id && c.klant_id !== klant?.id
-                                    ? `nu van ${klantNaam(c.klant_id) || "een andere klant"}`
-                                    : wijkNaamVan(c.street_id)}
-                                </span>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </PopupBlok>
-            </>
-          )}
+                    </span>
+                  );
+                })}
 
-          {tab === "adres" && (
-            <>
-              <PopupBlok label={prijzenZien ? "Prijs en frequentie" : "Frequentie"}>
-                <PopupPaar>
-                  {prijzenZien && (
-                    <PopupVeld icoon={<span className="text-sm">€</span>}>
-                      <Input
-                        id="prijs"
-                        inputMode="decimal"
-                        className={`${popupInvoer} tabular-nums`}
-                        placeholder="0"
-                        value={pand.price}
-                        onChange={(e) => setPand((p) => ({ ...p, price: e.target.value }))}
-                      />
-                    </PopupVeld>
-                  )}
-                  <PopupVeld icoon={<CalendarDays className="size-4" />}>
-                    <Select disabled={!magBewerken}
-                      value={String(pand.interval_maanden)}
-                      onValueChange={(v) =>
-                        setPand((p) => ({ ...p, interval_maanden: Number(v), ritme: 1 }))
-                      }
-                    >
-                      <SelectTrigger className="h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {INTERVALLEN.map((n) => (
-                          <SelectItem key={n} value={String(n)}>
-                            {intervalLabels[n]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </PopupVeld>
-                </PopupPaar>
-
-                {/* Bij om de 2 kies je even of oneven, bij om de 3 welk van de
-                    drie kwartaalfrequenties. Bij elke maand valt er niets te
-                    kiezen. */}
-                {ritmeKeuzes.length > 1 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {ritmeKeuzes.map((r) => {
-                      const aan = zelfdeRitme(pand.ritme, r, pand.interval_maanden);
-                      return (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => setPand((p) => ({ ...p, ritme: r }))}
-                          className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-                            aan
-                              ? "border-transparent bg-tint-amber text-tint-amber-ink"
-                              : "border-border bg-card text-muted-foreground hover:bg-accent"
-                          }`}
-                        >
-                          {ritmeLabel({ interval_maanden: pand.interval_maanden, ritme: r })}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </PopupBlok>
-
-              <PopupBlok label={prijzenZien ? "Notitie en meerwerk" : "Notitie"}>
-                {/* Hetzelfde veld met snelkeuzes als op de wijkenpagina, nu
-                    inclusief het werk dat er in bepaalde maanden bij komt en
-                    wat dat extra kost. */}
-                <NotitieCel
-                  value={pand.note}
-                  maandwerk={pand.maandwerk}
-                  onChangeMaandwerk={(werk) => setPand((p) => ({ ...p, maandwerk: werk }))}
-                  beurtMaanden={beurtMaanden}
-                  quickNotes={quickNotes}
-                  onChange={(v) => setPand((p) => ({ ...p, note: v }))}
-                  onAddQuickNote={onAddQuickNote}
-                  className="flex min-h-[44px] w-full items-center truncate rounded-xl border border-input bg-background/70 px-3 text-left text-sm hover:bg-accent/40 focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25"
-                />
-              </PopupBlok>
-
-              <PopupBlok label="Kleur op printlijst">
-                <div className="flex flex-wrap gap-1.5">
-                  {markeringen.map((m) => (
+                <Popover open={koppelOpen} onOpenChange={setKoppelOpen}>
+                  <PopoverTrigger asChild>
                     <button
-                      key={m.id}
                       type="button"
-                      onClick={() =>
-                        setPand((p) => ({
-                          ...p,
-                          markering: p.markering === m.sleutel ? "" : m.sleutel,
-                        }))
-                      }
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-                        pand.markering === m.sleutel
-                          ? "border-transparent bg-tint-amber text-tint-amber-ink"
-                          : "border-border bg-card text-muted-foreground hover:bg-accent"
-                      }`}
+                      className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-muted-foreground hover:bg-accent hover:text-foreground"
                     >
-                      <span
-                        className={`size-2.5 rounded-full ring-1 ring-inset ${tintStip[m.tint]}`}
-                      />
-                      {m.naam}
+                      <Link2 className="size-3.5" /> nog een adres koppelen
                     </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setPand((p) => ({ ...p, markering: "" }))}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-                      pand.markering === ""
-                        ? "border-transparent bg-tint-amber text-tint-amber-ink"
-                        : "border-border bg-card text-muted-foreground hover:bg-accent"
-                    }`}
-                  >
-                    <Palette className="size-3" /> Geen
-                  </button>
-                </div>
-              </PopupBlok>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Zoek een adres…" />
+                      <CommandList>
+                        <CommandEmpty>Geen adres gevonden.</CommandEmpty>
+                        <CommandGroup>
+                          {koppelbaar.map((c) => (
+                            <CommandItem
+                              key={c.id}
+                              value={`${adresTekst(c)} ${wijkNaamVan(c.street_id)}`}
+                              onSelect={() => {
+                                setExtra((l) => [...l, c.id]);
+                                setKoppelOpen(false);
+                              }}
+                            >
+                              <span className="truncate">{adresTekst(c)}</span>
+                              <span className="ml-auto shrink-0 pl-2 text-xs text-muted-foreground">
+                                {c.klant_id && c.klant_id !== klant?.id
+                                  ? `nu van ${klantNaam(c.klant_id) || "een andere klant"}`
+                                  : wijkNaamVan(c.street_id)}
+                              </span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </PopupBlok>
+          </>
+        )}
 
-              <PopupBlok label="Wassen vanaf">
-                <PopupVeld icoon={<Flag className="size-4" />}>
-                  <Select disabled={!magBewerken}
-                    value={pand.start_maand || METEEN}
+        {tab === "adres" && (
+          <>
+            <PopupBlok label={prijzenZien ? "Prijs en frequentie" : "Frequentie"}>
+              <PopupPaar>
+                {prijzenZien && (
+                  <PopupVeld icoon={<span className="text-sm">€</span>}>
+                    <Input
+                      id="prijs"
+                      inputMode="decimal"
+                      className={`${popupInvoer} tabular-nums`}
+                      placeholder="0"
+                      value={pand.price}
+                      onChange={(e) => setPand((p) => ({ ...p, price: e.target.value }))}
+                    />
+                  </PopupVeld>
+                )}
+                <PopupVeld icoon={<CalendarDays className="size-4" />}>
+                  <Select
+                    disabled={!magBewerken}
+                    value={String(pand.interval_maanden)}
                     onValueChange={(v) =>
-                      setPand((p) => ({ ...p, start_maand: v === METEEN ? "" : v }))
+                      setPand((p) => ({ ...p, interval_maanden: Number(v), ritme: 1 }))
                     }
                   >
                     <SelectTrigger className="h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="max-h-72">
-                      <SelectItem value={METEEN}>Meteen (aanmaakmaand)</SelectItem>
-                      <SelectItem value={vorigeMaand()}>Niet nieuw, al langer klant</SelectItem>
-                      {maandenVooruit.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          <span className="capitalize">{toonMaand(m)}</span>{" "}
-                          <span className="text-muted-foreground">{m.slice(0, 4)}</span>
+                    <SelectContent>
+                      {INTERVALLEN.map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {intervalLabels[n]}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </PopupVeld>
-              </PopupBlok>
+              </PopupPaar>
 
-              {/* Losse maanden waarin dit adres niet meegaat: een vakantie, een
-                  steiger voor de gevel. Dit is iets anders dan de frequentie —
-                  daarom staan ze los, met de eerste maand vooraan. */}
-              <PopupBlok
-                label="Maanden overslaan"
-                terzijde={
-                  pand.overslaan.length > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => setPand((p) => ({ ...p, overslaan: [] }))}
-                      className="underline-offset-2 hover:text-foreground hover:underline"
-                    >
-                      Niets meer overslaan ({pand.overslaan.length})
-                    </button>
-                  ) : undefined
-                }
-              >
-                <div className="grid grid-cols-6 gap-1">
-                  {maandenVooruit.map((m) => {
-                    const aan = pand.overslaan.includes(m);
+              {/* Bij om de 2 kies je even of oneven, bij om de 3 welk van de
+                    drie kwartaalfrequenties. Bij elke maand valt er niets te
+                    kiezen. */}
+              {ritmeKeuzes.length > 1 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {ritmeKeuzes.map((r) => {
+                    const aan = zelfdeRitme(pand.ritme, r, pand.interval_maanden);
                     return (
                       <button
-                        key={m}
+                        key={r}
                         type="button"
-                        title={`${toonMaand(m)} ${m.slice(0, 4)}`}
-                        onClick={() =>
-                          setPand((p) => ({
-                            ...p,
-                            overslaan: aan
-                              ? p.overslaan.filter((x) => x !== m)
-                              : [...p.overslaan, m].sort(),
-                          }))
-                        }
-                        className={`rounded-lg border px-1 py-1 text-[10px] font-medium capitalize transition-colors ${
+                        onClick={() => setPand((p) => ({ ...p, ritme: r }))}
+                        className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
                           aan
-                            ? "border-transparent bg-tint-rood text-tint-rood-ink"
+                            ? "border-transparent bg-tint-amber text-tint-amber-ink"
                             : "border-border bg-card text-muted-foreground hover:bg-accent"
                         }`}
                       >
-                        {toonMaandKort(m)}
+                        {ritmeLabel({ interval_maanden: pand.interval_maanden, ritme: r })}
                       </button>
                     );
                   })}
                 </div>
-                <PopupHint>
-                  <CalendarOff className="mr-1 inline size-3.5 align-[-2px]" />
-                  Maanden die al voorbij zijn staan niet in dit rijtje, maar tellen wel mee.
-                </PopupHint>
-              </PopupBlok>
-            </>
-          )}
-
-          {tab === "werk" && (
-            <PopupBlok
-              label="Openstaand werk"
-              terzijde={
-                openKlussen.length > 0 && prijzenZien
-                  ? formatPrice(openKlussen.reduce((sum, k) => sum + k.prijs, 0))
-                  : undefined
-              }
-            >
-              {!dossierCustomer ? (
-                <PopupHint>
-                  Dit adres bestaat nog niet in een wijk. Sla het eerst op; daarna kun je er losse
-                  opdrachten bij noteren.
-                </PopupHint>
-              ) : (
-                <>
-                  {openKlussen.length === 0 ? (
-                    <PopupHint>
-                      Niets openstaand. Werk dat niet aan een maand vastzit — een dakrand, een goot —
-                      noteer je hier, en het komt terug op de planning zodra die wijk een dag heeft.
-                    </PopupHint>
-                  ) : (
-                    <ul className="divide-y divide-border/60 rounded-xl border border-input">
-                      {openKlussen.map((k) => (
-                        <li
-                          key={k.id}
-                          className="flex items-center gap-2 px-3 py-2.5 text-[13.5px]"
-                        >
-                          <span className="min-w-0 flex-1 truncate">{k.omschrijving}</span>
-                          {k.gepland_op && !blijvenLiggen(k) && (
-                            <span className="shrink-0 text-xs text-muted-foreground">
-                              {toonDatum(k.gepland_op)}
-                            </span>
-                          )}
-                          {prijzenZien && (
-                            <span className="shrink-0 tabular-nums">{formatPrice(k.prijs)}</span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="self-start rounded-full"
-                    onClick={() => setKlusOpen(true)}
-                  >
-                    <Hammer className="size-4" /> Opdracht erbij
-                  </Button>
-                </>
               )}
             </PopupBlok>
+
+            <PopupBlok label={prijzenZien ? "Notitie en meerwerk" : "Notitie"}>
+              {/* Hetzelfde veld met snelkeuzes als op de wijkenpagina, nu
+                    inclusief het werk dat er in bepaalde maanden bij komt en
+                    wat dat extra kost. */}
+              <NotitieCel
+                value={pand.note}
+                maandwerk={pand.maandwerk}
+                onChangeMaandwerk={(werk) => setPand((p) => ({ ...p, maandwerk: werk }))}
+                beurtMaanden={beurtMaanden}
+                quickNotes={quickNotes}
+                onChange={(v) => setPand((p) => ({ ...p, note: v }))}
+                onAddQuickNote={onAddQuickNote}
+                className="flex min-h-[44px] w-full items-center truncate rounded-xl border border-input bg-background/70 px-3 text-left text-sm hover:bg-accent/40 focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25"
+              />
+            </PopupBlok>
+
+            <PopupBlok label="Kleur op printlijst">
+              <div className="flex flex-wrap gap-1.5">
+                {markeringen.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() =>
+                      setPand((p) => ({
+                        ...p,
+                        markering: p.markering === m.sleutel ? "" : m.sleutel,
+                      }))
+                    }
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                      pand.markering === m.sleutel
+                        ? "border-transparent bg-tint-amber text-tint-amber-ink"
+                        : "border-border bg-card text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    <span
+                      className={`size-2.5 rounded-full ring-1 ring-inset ${tintStip[m.tint]}`}
+                    />
+                    {m.naam}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setPand((p) => ({ ...p, markering: "" }))}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                    pand.markering === ""
+                      ? "border-transparent bg-tint-amber text-tint-amber-ink"
+                      : "border-border bg-card text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  <Palette className="size-3" /> Geen
+                </button>
+              </div>
+            </PopupBlok>
+
+            <PopupBlok label="Wassen vanaf">
+              <PopupVeld icoon={<Flag className="size-4" />}>
+                <Select
+                  disabled={!magBewerken}
+                  value={pand.start_maand || METEEN}
+                  onValueChange={(v) =>
+                    setPand((p) => ({ ...p, start_maand: v === METEEN ? "" : v }))
+                  }
+                >
+                  <SelectTrigger className="h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    <SelectItem value={METEEN}>Meteen (aanmaakmaand)</SelectItem>
+                    <SelectItem value={vorigeMaand()}>Niet nieuw, al langer klant</SelectItem>
+                    {maandenVooruit.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        <span className="capitalize">{toonMaand(m)}</span>{" "}
+                        <span className="text-muted-foreground">{m.slice(0, 4)}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </PopupVeld>
+            </PopupBlok>
+
+            {/* Losse maanden waarin dit adres niet meegaat: een vakantie, een
+                  steiger voor de gevel. Dit is iets anders dan de frequentie —
+                  daarom staan ze los, met de eerste maand vooraan. */}
+            <PopupBlok
+              label="Maanden overslaan"
+              terzijde={
+                pand.overslaan.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setPand((p) => ({ ...p, overslaan: [] }))}
+                    className="underline-offset-2 hover:text-foreground hover:underline"
+                  >
+                    Niets meer overslaan ({pand.overslaan.length})
+                  </button>
+                ) : undefined
+              }
+            >
+              <div className="grid grid-cols-6 gap-1">
+                {maandenVooruit.map((m) => {
+                  const aan = pand.overslaan.includes(m);
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      title={`${toonMaand(m)} ${m.slice(0, 4)}`}
+                      onClick={() =>
+                        setPand((p) => ({
+                          ...p,
+                          overslaan: aan
+                            ? p.overslaan.filter((x) => x !== m)
+                            : [...p.overslaan, m].sort(),
+                        }))
+                      }
+                      className={`rounded-lg border px-1 py-1 text-[10px] font-medium capitalize transition-colors ${
+                        aan
+                          ? "border-transparent bg-tint-rood text-tint-rood-ink"
+                          : "border-border bg-card text-muted-foreground hover:bg-accent"
+                      }`}
+                    >
+                      {toonMaandKort(m)}
+                    </button>
+                  );
+                })}
+              </div>
+              <PopupHint>
+                <CalendarOff className="mr-1 inline size-3.5 align-[-2px]" />
+                Maanden die al voorbij zijn staan niet in dit rijtje, maar tellen wel mee.
+              </PopupHint>
+            </PopupBlok>
+          </>
+        )}
+
+        {tab === "werk" && (
+          <PopupBlok
+            label="Openstaand werk"
+            terzijde={
+              openKlussen.length > 0 && prijzenZien
+                ? formatPrice(openKlussen.reduce((sum, k) => sum + k.prijs, 0))
+                : undefined
+            }
+          >
+            {!dossierCustomer ? (
+              <PopupHint>
+                Dit adres bestaat nog niet in een wijk. Sla het eerst op; daarna kun je er losse
+                opdrachten bij noteren.
+              </PopupHint>
+            ) : (
+              <>
+                {openKlussen.length === 0 ? (
+                  <PopupHint>
+                    Niets openstaand. Werk dat niet aan een maand vastzit — een dakrand, een goot —
+                    noteer je hier, en het komt terug op de planning zodra die wijk een dag heeft.
+                  </PopupHint>
+                ) : (
+                  <ul className="divide-y divide-border/60 rounded-xl border border-input">
+                    {openKlussen.map((k) => (
+                      <li key={k.id} className="flex items-center gap-2 px-3 py-2.5 text-[13.5px]">
+                        <span className="min-w-0 flex-1 truncate">{k.omschrijving}</span>
+                        {k.gepland_op && !blijvenLiggen(k) && (
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {toonDatum(k.gepland_op)}
+                          </span>
+                        )}
+                        {prijzenZien && (
+                          <span className="shrink-0 tabular-nums">{formatPrice(k.prijs)}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="self-start rounded-full"
+                  onClick={() => setKlusOpen(true)}
+                >
+                  <Hammer className="size-4" /> Opdracht erbij
+                </Button>
+              </>
+            )}
+          </PopupBlok>
+        )}
+      </fieldset>
+      {/* Buiten het formulier: mail en klachten hebben hun eigen rechten en slaan zelf op. */}
+      {tab === "mail" && klant && magMailLezen && (
+        <div className="flex flex-col gap-5">
+          <DossierMail klant={klant} />
+          <DossierWhatsApp klant={klant} />
+        </div>
+      )}
+      {tab === "klachten" && klant && (
+        <DossierKlachten
+          klantId={klant.id}
+          adressen={customers
+            .filter((c) => c.klant_id === klant.id)
+            .map((c) => ({ id: c.id, label: adresTekst(c) }))}
+          onToonMail={magMailLezen ? () => setTab("mail") : undefined}
+        />
+      )}
+    </>
+  );
+
+  const voetKnoppen = (
+    <PopupVoet>
+      <Button variant="outline" className="rounded-full" onClick={() => onOpenChange(false)}>
+        {magBewerken ? "Annuleren" : "Sluiten"}
+      </Button>
+      {magBewerken && (
+        <Button className="rounded-full" onClick={() => void save()} disabled={saving}>
+          {saving ? "Bezig…" : "Opslaan"}
+        </Button>
+      )}
+    </PopupVoet>
+  );
+
+  // --- Telefoon ------------------------------------------------------------
+  // Een popup in het midden past daar niet. Eerst schuift er een onderblad
+  // omhoog met wat je op straat nodig hebt; "Alles bekijken" maakt er een
+  // eigen scherm van, met de onderdelen als lijst om op door te tikken.
+  const tabNamen: Record<typeof tab, string> = {
+    klant: "Gegevens",
+    adres: "Het adres",
+    werk: "Werk",
+    mail: "Berichten",
+    klachten: "Klachten",
+  };
+  const titelTekst = dossierCustomer
+    ? adresTekst(dossierCustomer)
+    : klant
+      ? klant.naam || "Naamloze klant"
+      : "Nieuw adres";
+  const telefoon = velden.telefoon.trim() || velden.telefoon2.trim();
+  // wa.me wil het nummer internationaal en zonder tekens: 06… wordt 316….
+  // Alleen een mobiel nummer: een vast nummer (070…) heeft geen WhatsApp.
+  const whatsappNummer =
+    [velden.telefoon, velden.telefoon2]
+      .map((t) =>
+        t
+          .replace(/[^\d+]/g, "")
+          .replace(/^(\+|00)/, "")
+          .replace(/^0(?=6)/, "31"),
+      )
+      .find((t) => t.startsWith("316")) ?? "";
+  // Uit het formulier, niet uit de wijklijst: daar staan afkortingen
+  // ("Othilde"), en daarmee vindt de kaart het adres niet.
+  const routeAdres = dossierCustomer
+    ? [
+        `${velden.straat.trim()} ${velden.huisnummer.trim()}`.trim(),
+        [velden.postcode.trim(), velden.plaats.trim()].filter(Boolean).join(" "),
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : "";
+  const notitieTekst = [velden.notitie.trim(), pand.note.trim()].filter(Boolean).join(" · ");
+  const onderregel = [
+    velden.naam.trim(),
+    prijzenZien && pand.price ? formatPrice(prijsGetal(pand.price)) : "",
+    dossierCustomer
+      ? `${ritmeLabel(pand).toLowerCase()}${pand.interval_maanden <= 2 ? " maand" : ""}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const snelKnop =
+    "flex flex-1 flex-col items-center gap-1 rounded-[14px] bg-muted/70 py-2.5 text-[12px] font-medium text-foreground active:bg-muted";
+  const snelleKnoppen = (
+    <div className="flex gap-2">
+      {telefoon && (
+        <a href={`tel:${telefoon.replace(/\s/g, "")}`} className={snelKnop}>
+          <Phone className="size-5" /> Bellen
+        </a>
+      )}
+      {whatsappNummer && (
+        <a
+          href={`https://wa.me/${whatsappNummer}`}
+          target="_blank"
+          rel="noreferrer"
+          className={snelKnop}
+        >
+          <MessageSquare className="size-5" /> WhatsApp
+        </a>
+      )}
+      {routeAdres && (
+        <a
+          href={`https://maps.google.com/?daddr=${encodeURIComponent(routeAdres)}`}
+          target="_blank"
+          rel="noreferrer"
+          className={snelKnop}
+        >
+          <MapPin className="size-5" /> Route
+        </a>
+      )}
+      {dossierCustomer && magBewerken && (
+        <button type="button" className={snelKnop} onClick={() => setKlusOpen(true)}>
+          <Hammer className="size-5" /> Opdracht
+        </button>
+      )}
+    </div>
+  );
+
+  const lijstRij = (naar: typeof tab, icoon: React.ReactNode, extraInfo?: React.ReactNode) => (
+    <button
+      key={naar}
+      type="button"
+      onClick={() => {
+        setTab(naar);
+        setStap("tab");
+      }}
+      className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-[15px] active:bg-muted/60"
+    >
+      <span className="text-muted-foreground">{icoon}</span>
+      <span className="flex-1">{tabNamen[naar]}</span>
+      {extraInfo}
+      <ChevronRight className="size-4 text-muted-foreground" />
+    </button>
+  );
+  const telBolletje = (n: number, rood = false) =>
+    n > 0 ? (
+      <span
+        className={`rounded-full px-2 py-px text-[12px] font-semibold ${
+          rood ? "bg-tint-rood text-tint-rood-ink" : "bg-tint-geel text-tint-geel-ink"
+        }`}
+      >
+        {n}
+      </span>
+    ) : null;
+
+  const mobielDossier =
+    stap === "blad" ? (
+      <PopupKader className="bottom-0 left-0 top-auto max-h-[85dvh] max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] data-[state=open]:slide-in-from-bottom-10 data-[state=open]:zoom-in-100 [&>button:last-child]:hidden">
+        <div className="flex flex-col gap-3.5 overflow-y-auto px-4 pb-4 pt-2.5">
+          <div className="mx-auto h-1 w-9 rounded-full bg-border" />
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="truncate font-display text-[20px] font-semibold leading-tight tracking-[-0.02em]">
+                {titelTekst}
+              </DialogTitle>
+              <DialogDescription className="truncate text-[13px]">
+                {onderregel || "Nog geen gegevens"}
+              </DialogDescription>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              aria-label="Sluiten"
+              className="-mr-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-muted"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+          {snelleKnoppen}
+          {notitieTekst && (
+            <p className="rounded-[12px] bg-tint-geel px-3 py-2 text-[13px] text-tint-geel-ink">
+              {notitieTekst}
+            </p>
           )}
-          </fieldset>
-          {/* Buiten het formulier: mail en klachten hebben hun eigen rechten en slaan zelf op. */}
-          {tab === "mail" && klant && magMailLezen && (
-            <div className="flex flex-col gap-5">
-              <DossierMail klant={klant} />
-              <DossierWhatsApp klant={klant} />
+          {(openKlussen.length > 0 || openKlachten > 0) && (
+            <div className="divide-y divide-border/60 overflow-hidden rounded-[14px] border border-border/70">
+              {openKlussen.length > 0 &&
+                lijstRij(
+                  "werk",
+                  <Hammer className="size-[18px]" />,
+                  <span className="text-[13px] tabular-nums text-muted-foreground">
+                    {openKlussen.length} open
+                    {prijzenZien
+                      ? ` · ${formatPrice(openKlussen.reduce((sum, k) => sum + k.prijs, 0))}`
+                      : ""}
+                  </span>,
+                )}
+              {openKlachten > 0 &&
+                lijstRij(
+                  "klachten",
+                  <MessageSquareWarning className="size-[18px]" />,
+                  telBolletje(openKlachten, true),
+                )}
             </div>
           )}
-          {tab === "klachten" && klant && (
-            <DossierKlachten
-              klantId={klant.id}
-              adressen={customers
-                .filter((c) => c.klant_id === klant.id)
-                .map((c) => ({ id: c.id, label: adresTekst(c) }))}
-              onToonMail={magMailLezen ? () => setTab("mail") : undefined}
-            />
-          )}
-        </PopupBody>
-
-        <PopupVoet>
-          <Button variant="outline" className="rounded-full" onClick={() => onOpenChange(false)}>
-            {magBewerken ? "Annuleren" : "Sluiten"}
+          <Button className="rounded-full" onClick={() => setStap("overzicht")}>
+            Alles bekijken
           </Button>
-          {magBewerken && (
-            <Button className="rounded-full" onClick={() => void save()} disabled={saving}>
-              {saving ? "Bezig…" : "Opslaan"}
-            </Button>
-          )}
-        </PopupVoet>
+        </div>
       </PopupKader>
+    ) : (
+      <PopupKader className="inset-0 flex h-[100dvh] max-h-none max-w-none translate-x-0 translate-y-0 flex-col rounded-none data-[state=open]:zoom-in-100 [&>button:last-child]:hidden">
+        <div className="flex shrink-0 items-center gap-1 border-b border-border/70 bg-card px-1.5 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))]">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 rounded-full"
+            onClick={() => {
+              if (stap === "tab") setStap("overzicht");
+              else if (dossierCustomer) setStap("blad");
+              else onOpenChange(false);
+            }}
+            aria-label="Terug"
+          >
+            <ChevronLeft className="size-6" />
+          </Button>
+          <div className="min-w-0 flex-1">
+            <DialogTitle className="truncate font-display text-[18px] font-semibold leading-tight tracking-[-0.01em]">
+              {stap === "tab" ? tabNamen[tab] : titelTekst}
+            </DialogTitle>
+            <DialogDescription className="truncate text-xs">
+              {stap === "tab" ? titelTekst : onderregel || "Alles van dit adres bij elkaar"}
+            </DialogDescription>
+          </div>
+        </div>
+        {stap === "overzicht" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-6 pt-3">
+            <div className="flex flex-col gap-3">
+              {snelleKnoppen}
+              {notitieTekst && (
+                <p className="rounded-[12px] bg-tint-geel px-3 py-2 text-[13px] text-tint-geel-ink">
+                  {notitieTekst}
+                </p>
+              )}
+              <div className="divide-y divide-border/60 overflow-hidden rounded-[16px] bg-card shadow-card">
+                {lijstRij("klant", <User className="size-[18px]" />)}
+                {lijstRij("adres", <House className="size-[18px]" />)}
+                {lijstRij(
+                  "werk",
+                  <Hammer className="size-[18px]" />,
+                  telBolletje(openKlussen.length),
+                )}
+                {klant && magMailLezen && lijstRij("mail", <Mail className="size-[18px]" />)}
+                {klant &&
+                  lijstRij(
+                    "klachten",
+                    <MessageSquareWarning className="size-[18px]" />,
+                    telBolletje(openKlachten, true),
+                  )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <PopupBody className="min-h-0 flex-1 overscroll-contain px-4 pt-4">{tabInhoud}</PopupBody>
+        )}
+        {/* Ook in het overzicht: wie iets wijzigt en terugtikt, moet nog
+            kunnen opslaan zonder het onderdeel opnieuw te openen. */}
+        <div className="pb-[env(safe-area-inset-bottom)]">{voetKnoppen}</div>
+      </PopupKader>
+    );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {mobiel ? (
+        mobielDossier
+      ) : (
+        <PopupKader
+          className="sm:max-w-lg"
+          onKeyDown={magBewerken ? opslaanBijEnter(() => void save()) : undefined}
+        >
+          <PopupKop
+            icoon={<House className="size-[22px]" />}
+            titel={
+              dossierCustomer
+                ? adresTekst(dossierCustomer)
+                : klant
+                  ? `Dossier van ${klant.naam || "naamloze klant"}`
+                  : "Nieuw adres"
+            }
+            subtitel={
+              [dossierCustomer ? wijkNaamVan(dossierCustomer.street_id) : "", velden.plaats.trim()]
+                .filter(Boolean)
+                .join(" · ") || "Alles van dit adres bij elkaar"
+            }
+            tabs={
+              <>
+                <PopupTab
+                  actief={tab === "klant"}
+                  onClick={() => setTab("klant")}
+                  icoon={<User className="size-[15px]" />}
+                >
+                  Gegevens
+                </PopupTab>
+                <PopupTab
+                  actief={tab === "adres"}
+                  onClick={() => setTab("adres")}
+                  icoon={<House className="size-[15px]" />}
+                >
+                  Het adres
+                </PopupTab>
+                <PopupTab
+                  actief={tab === "werk"}
+                  onClick={() => setTab("werk")}
+                  icoon={<Hammer className="size-[15px]" />}
+                  telletje={openKlussen.length}
+                >
+                  Werk
+                </PopupTab>
+                {klant && magMailLezen && (
+                  <PopupTab
+                    actief={tab === "mail"}
+                    onClick={() => setTab("mail")}
+                    icoon={<Mail className="size-[15px]" />}
+                  >
+                    Berichten
+                  </PopupTab>
+                )}
+                {klant && (
+                  <PopupTab
+                    actief={tab === "klachten"}
+                    onClick={() => setTab("klachten")}
+                    icoon={<MessageSquareWarning className="size-[15px]" />}
+                    telletje={openKlachten}
+                  >
+                    Klachten
+                  </PopupTab>
+                )}
+              </>
+            }
+          />
+
+          <PopupBody className="max-h-[60vh]">{tabInhoud}</PopupBody>
+
+          {voetKnoppen}
+        </PopupKader>
+      )}
       <KlusDialog
         open={klusOpen}
         onOpenChange={setKlusOpen}
