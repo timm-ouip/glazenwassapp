@@ -95,6 +95,7 @@ import { Cijferkaarten } from "@/components/Cijferkaarten";
 import { KlantDialog } from "@/components/KlantDialog";
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { SneltoetsenHulp } from "@/components/mail/Sneltoetsen";
+import { WeekStrook } from "@/components/WeekStrook";
 import { StraatDialog } from "@/components/StraatDialog";
 import { SplitsStraatDialog } from "@/components/SplitsStraatDialog";
 import { GroepDialog } from "@/components/GroepDialog";
@@ -682,17 +683,55 @@ function Index() {
   /** Loopt er al een inplanning? Een dubbelklik op "Vandaag" zou anders
    *  alles twee keer doen: twee vragen, twee meldingen, twee keer ongedaan. */
   const inplanBezig = useRef(false);
-  async function planIn(datum: string) {
-    if (inplanBezig.current) return;
+  /** Geeft terug of het gelukt is (of er niets te doen was). */
+  async function planIn(datum: string): Promise<boolean> {
+    if (inplanBezig.current) return false;
     inplanBezig.current = true;
     try {
-      await planInWerk(datum);
+      return await planInWerk(datum);
     } finally {
       inplanBezig.current = false;
     }
   }
 
-  async function planInWerk(datum: string) {
+  /**
+   * Naar een andere dag vanuit de weekstrook. Staat er nog iets aangevinkt
+   * dat niet op de dag staat, dan eerst vragen: anders ben je dat kwijt.
+   */
+  async function naarDag(datum: string) {
+    if (datum === bewerktDag) return;
+    const opDag = new Set(dagRegels.map((r) => r.customer_id).filter(Boolean) as string[]);
+    const gewijzigd = bewerktDag
+      ? wasdagQuery.isSuccess &&
+        (keuze.size !== opDag.size || [...keuze].some((id) => !opDag.has(id)))
+      : keuze.size > 0;
+    if (gewijzigd && bewerktDag) {
+      const opslaan = await bevestig({
+        titel: `Eerst ${toonDatum(bewerktDag)} opslaan?`,
+        tekst: "Wat je aan- of uitvinkte staat nog niet op die dag.",
+        bevestigLabel: "Opslaan",
+        annuleerLabel: "Terug",
+      });
+      if (!opslaan || !(await planIn(bewerktDag))) return;
+    } else if (gewijzigd) {
+      const loslaten = await bevestig({
+        titel: "Selectie loslaten?",
+        tekst: `Je hebt ${keuze.size} ${keuze.size === 1 ? "adres" : "adressen"} aangevinkt die nog op geen dag staan. Zet ze eerst op een dag met de knoppen onderin.`,
+        bevestigLabel: "Loslaten",
+        annuleerLabel: "Terug",
+        gevaarlijk: true,
+      });
+      if (!loslaten) return;
+    }
+    setKeuze(new Set());
+    gevuldVoor.current = null;
+    setBewerktDag(datum);
+    // Kwam je van de kalender, dan staat de dag in de adresbalk; die gaat
+    // mee, anders zet herladen je terug op de oude dag.
+    if (dag) void navigate({ to: "/", search: (oud) => ({ ...oud, dag: datum }), replace: true });
+  }
+
+  async function planInWerk(datum: string): Promise<boolean> {
     const perId = new Map(customers.map((c) => [c.id, c]));
     const bestaand = datum === bewerktDag ? dagRegels : await fetchWasdag(datum);
     const alErop = new Set(bestaand.map((r) => r.customer_id).filter(Boolean) as string[]);
@@ -706,7 +745,7 @@ function Index() {
       dichtbij = await alDichtbij(datum, nieuweIds, datum);
     } catch {
       toast.error("Kon niet ophalen wat er rond die dag al ingepland staat.");
-      return;
+      return false;
     }
     const overslaan = dichtbij.size > 0 && !(await bevestig(dubbelVraag(dichtbij)));
     // Wat je overslaat niet aangevinkt laten staan: dan lijkt het alsof het
@@ -727,7 +766,7 @@ function Index() {
 
     if (toevoegen.length === 0 && weghalen.length === 0) {
       toast(overslaan ? "Niets ingepland." : `${toonDatum(datum)} stond al zo ingepland.`);
-      return;
+      return true;
     }
 
     // Wat eraf gaat bewaart de database, met het bedrag van die keer: zo zet
@@ -761,7 +800,7 @@ function Index() {
       }
       qc.invalidateQueries({ queryKey: ["wasdag"] });
       qc.invalidateQueries({ queryKey: ["wasdagen"] });
-      return;
+      return false;
     }
 
     pushUndo({
@@ -785,6 +824,17 @@ function Index() {
     // er ook af in plaats van dat er niets gebeurt.
     setBewerktDag(datum);
     gevuldVoor.current = datum;
+    // Aangevinkt is voortaan precies wat er op de dag staat: wat er al stond
+    // plus wat erbij kwam. Stonden er al adressen op een andere dag dan die
+    // je bewerkte, dan waren die niet aangevinkt, en zou een volgende keer
+    // opslaan ze eraf halen alsof je ze uitgevinkt had.
+    const erafIds = new Set(weghalen.map((r) => r.customer_id));
+    setKeuze(
+      new Set([
+        ...[...alErop].filter((id) => !erafIds.has(id)),
+        ...toevoegen.map((r) => r.customer_id),
+      ]),
+    );
 
     const erbij = toevoegen.length;
     const eraf = weghalen.length;
@@ -806,6 +856,7 @@ function Index() {
         },
       },
     );
+    return true;
   }
 
   function zetStraatOpDag(g: (typeof groepen)[number], aan: boolean) {
@@ -2322,6 +2373,15 @@ function Index() {
               </button>
             ))}
           </div>
+          {/* Zolang je selecteert: de week, om naar een andere dag te gaan
+              zonder eerst terug naar de planning. Naast het maandfilter. */}
+          {selecteren && magPlannen && (
+            <WeekStrook
+              gekozen={bewerktDag}
+              onKies={(d) => void naarDag(d)}
+              prijzenZien={prijzenZien}
+            />
+          )}
           {prijzenZien && (
             // Op de telefoon staat dit in het ⋯-menu: zo past het maandfilter
             // op één regel.
