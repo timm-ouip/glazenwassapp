@@ -809,6 +809,10 @@ function Index() {
   const [verfBezig, setVerfBezig] = useState(false);
   /** Een streek eindigt met een klik; die mag niet nóg eens omschakelen. */
   const negeerKlik = useRef(false);
+  /** Telt de streken, zodat een late opruimactie de volgende niet raakt. */
+  const streekNr = useRef(0);
+  /** Loopt er een streek met twee vingers? Dan volgen we alleen de eerste. */
+  const tweeVingers = useRef(false);
 
   /** Past de streek toe op wat er onder de muis of vinger ligt. */
   function verfOpPunt(x: number, y: number) {
@@ -844,6 +848,7 @@ function Index() {
    * doorsleept naar een volgende straat.
    */
   function startVerf(aan: boolean, x: number, y: number) {
+    streekNr.current++;
     verf.current = { aan, laatste: null, vorig: { x, y } };
     negeerKlik.current = false;
     setVerfBezig(true);
@@ -869,16 +874,44 @@ function Index() {
     }
   }
 
-  function rondVerfAf() {
+  function rondVerfAf(aanraking = false) {
     const v = verf.current;
     verf.current = null;
     setVerfBezig(false);
     // Eindigt een streek buiten een straatkop, dan volgt er geen klik meer en
     // zou de vlag blijven staan — en de eerstvolgende gewone klik opslokken.
-    // De klik van déze streek komt nog vóór deze timeout.
-    setTimeout(() => {
-      negeerKlik.current = false;
-    }, 0);
+    // Op een iPhone komt de klik soms pas ná een timeout van 0 binnen; dan
+    // zou hij het vakje terugzetten. Daarom even wachten, maar alleen voor
+    // déze streek: begint er intussen een nieuwe, dan laten we die met rust.
+    // Met de muis komt de klik wél meteen, dus daar gewoon direct.
+    const nr = streekNr.current;
+    setTimeout(
+      () => {
+        if (streekNr.current === nr) negeerKlik.current = false;
+      },
+      aanraking ? 500 : 0,
+    );
+  }
+
+  /** Staat alles onder dit punt al op de dag? Dan haalt een streek die hier
+   *  begint het eraf, anders zet hij het erop. */
+  function alGekozenOp(x: number, y: number) {
+    const el = document.elementFromPoint(x, y);
+    const groep = el?.closest<HTMLElement>("[data-verf-groep]")?.dataset["verfGroep"];
+    const straat = el?.closest<HTMLElement>("[data-verf-straat]")?.dataset["verfStraat"];
+    const klant = el?.closest<HTMLElement>("[data-verf-klant]")?.dataset["verfKlant"];
+    const ids = groep
+      ? (secties.find((x) => x.groep.id === groep)?.klantIds ?? [])
+      : straat
+        ? [
+            ...(groepen.find((x) => x.street.id === straat)?.even ?? []),
+            ...(groepen.find((x) => x.street.id === straat)?.oneven ?? []),
+          ].map((c) => c.id)
+        : klant
+          ? [klant]
+          : null;
+    if (!ids) return null;
+    return ids.length > 0 && ids.every((id) => keuze.has(id));
   }
 
   // De streek loopt door buiten het vakje waar hij begon, dus hangen deze
@@ -891,6 +924,9 @@ function Index() {
     let frame = 0;
     let punt: Punt | null = null;
     const beweeg = (e: PointerEvent) => {
+      // Bij twee vingers stuurt elke vinger zijn eigen events; dan zou de
+      // streek heen en weer springen. Die volgen we via de touch-events.
+      if (tweeVingers.current && e.pointerType === "touch") return;
       punt = { x: e.clientX, y: e.clientY };
       if (frame) return;
       frame = requestAnimationFrame(() => {
@@ -898,7 +934,10 @@ function Index() {
         if (punt) verfRef.current(punt);
       });
     };
-    const stop = () => rondVerfAf();
+    const stop = (e: PointerEvent) => {
+      if (tweeVingers.current && e.pointerType === "touch") return;
+      rondVerfAf(e.pointerType === "touch");
+    };
     window.addEventListener("pointermove", beweeg);
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
@@ -909,6 +948,81 @@ function Index() {
       if (frame) cancelAnimationFrame(frame);
     };
   }, [verfBezig]);
+
+  // Met twee vingers vegen selecteert op de telefoon: met één vinger scroll
+  // je, dus daar kan een streek niet op. Begint de streek op iets wat al
+  // aangevinkt is, dan vinkt hij juist uit — net als met de muis.
+  const tweeVingerRef = useRef({ startVerf, rondVerfAf, alGekozenOp });
+  tweeVingerRef.current = { startVerf, rondVerfAf, alGekozenOp };
+  useEffect(() => {
+    if (!selecteren || !dagKlaar) return;
+    let frame = 0;
+    let wachtend: Punt | null = null;
+    const eerste = (e: TouchEvent) => {
+      const t = e.touches[0]!;
+      return { x: t.clientX, y: t.clientY };
+    };
+    const begin = (e: TouchEvent) => {
+      // Een nieuwe eerste vinger: is een vorige streek nooit netjes geëindigd
+      // (het vakje onder je vinger verdween), ruim hem dan nu op.
+      if (e.touches.length === 1 && tweeVingers.current) einde();
+      if (e.touches.length !== 2 || tweeVingers.current) return;
+      const { x, y } = eerste(e);
+      // Lag de eerste vinger al op een kopvinkje, dan loopt er al een streek
+      // die dat vinkje heeft omgezet. Die kant houden we aan; anders ziet
+      // de veeg het net aangevinkte en gaat hij juist uitvinken.
+      const lopend = verf.current?.aan;
+      const gekozen = tweeVingerRef.current.alGekozenOp(x, y);
+      if (lopend === undefined && gekozen === null) return;
+      // Geen scrollen en geen inzoomen zolang de streek loopt.
+      e.preventDefault();
+      tweeVingers.current = true;
+      tweeVingerRef.current.startVerf(lopend ?? !gekozen, x, y);
+    };
+    const beweeg = (e: TouchEvent) => {
+      if (!tweeVingers.current) return;
+      e.preventDefault();
+      wachtend = eerste(e);
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (wachtend) verfRef.current(wachtend);
+        wachtend = null;
+      });
+    };
+    const einde = () => {
+      if (!tweeVingers.current) return;
+      tweeVingers.current = false;
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      // De laatste beweging nog meenemen, anders mist de streek het vakje
+      // waar je je vingers optilt.
+      if (wachtend) verfRef.current(wachtend);
+      wachtend = null;
+      tweeVingerRef.current.rondVerfAf();
+      // Na twee vingers volgt er geen klik die opgevangen moet worden; een
+      // tik die er meteen op volgt is gewoon een nieuwe tik.
+      negeerKlik.current = false;
+    };
+    // Safari heeft voor knijpen een eigen event; ook dat mag niet zoomen.
+    const geenZoom = (e: Event) => {
+      if (tweeVingers.current) e.preventDefault();
+    };
+    document.addEventListener("touchstart", begin, { passive: false });
+    document.addEventListener("touchmove", beweeg, { passive: false });
+    document.addEventListener("touchend", einde);
+    document.addEventListener("touchcancel", einde);
+    document.addEventListener("gesturestart", geenZoom);
+    return () => {
+      document.removeEventListener("touchstart", begin);
+      document.removeEventListener("touchmove", beweeg);
+      document.removeEventListener("touchend", einde);
+      document.removeEventListener("touchcancel", einde);
+      document.removeEventListener("gesturestart", geenZoom);
+      if (frame) cancelAnimationFrame(frame);
+      einde();
+    };
+  }, [selecteren, dagKlaar]);
 
   /** De selectie leegvegen. Raakt de database niet: wat er al ingepland
    *  staat blijft staan, dat maak je leeg op de planningpagina. */
@@ -3169,7 +3283,11 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
             onPointerDown={(e) => {
               // Alleen de linkerknop zonder Ctrl: met rechts of Ctrl-klik open je het menu (en kun je
               // splitsen), dan hoort het vinkje te blijven staan.
-              if (dagKlaar && e.button === 0 && !e.ctrlKey)
+              // Met een vinger niet: dan zou je bij het scrollen adressen
+              // aanvinken, en op een iPhone schakelt de tik erna hem terug.
+              // Een tik doet het via onClick; vegen gaat met twee vingers.
+              if (e.pointerType === "touch") negeerKlik.current = false;
+              else if (dagKlaar && e.button === 0 && !e.ctrlKey)
                 onVerfStart(!opDeDag, e.clientX, e.clientY);
             }}
             onClick={() => {

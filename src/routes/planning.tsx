@@ -33,7 +33,6 @@ import {
   IconChevronRight as ChevronRight,
   IconDroplet as Droplet,
   IconEraser as Eraser,
-  IconCurrencyEuro as Euro,
   IconHammer as Hammer,
   IconListCheck as ListChecks,
   IconDots as MoreHorizontal,
@@ -1090,7 +1089,7 @@ function Planning() {
               asChild
             >
               <Link to="/" search={{ dag: gekozenDag }}>
-                <Euro className="size-4" /> Inplannen
+                <CalendarPlus className="size-4" /> Inplannen
               </Link>
             </Button>
             <DropdownMenu>
@@ -1452,7 +1451,7 @@ function Planning() {
                             <ContextMenuItem
                               onSelect={() => void navigate({ to: "/", search: { dag: k } })}
                             >
-                              <Euro className="size-4" /> Werk inplannen
+                              <CalendarPlus className="size-4" /> Werk inplannen
                             </ContextMenuItem>
                             <ContextMenuItem
                               onSelect={() => void navigate({ to: "/mailing", search: { dag: k } })}
@@ -1668,7 +1667,7 @@ function Planning() {
                 asChild
               >
                 <Link to="/" search={{ dag: gekozenDag }}>
-                  <Euro className="size-4" /> Werk inplannen
+                  <CalendarPlus className="size-4" /> Werk inplannen
                 </Link>
               </Button>
               {/* De aankondiging hoort bij de dag: je kijkt naar wie er morgen
