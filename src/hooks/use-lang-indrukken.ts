@@ -35,7 +35,13 @@ export function useLangIndrukken(onLang: (() => void) | null) {
     },
   };
 
-  if (!onLang) return houdMenuTegen;
+  if (!onLang) {
+    // Loopt de klok nog terwijl lang indrukken ineens niet meer kan — een
+    // veeg met twee vingers zette net de selecteermodus aan — dan hem stil
+    // zetten; de handlers die hem anders stoppen zijn er nu niet meer.
+    if (timer.current) stop();
+    return houdMenuTegen;
+  }
 
   return {
     ...houdMenuTegen,

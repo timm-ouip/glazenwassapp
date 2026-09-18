@@ -1,5 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Fragment, memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -952,10 +961,41 @@ function Index() {
   // Met twee vingers vegen selecteert op de telefoon: met één vinger scroll
   // je, dus daar kan een streek niet op. Begint de streek op iets wat al
   // aangevinkt is, dan vinkt hij juist uit — net als met de muis.
-  const tweeVingerRef = useRef({ startVerf, rondVerfAf, alGekozenOp });
-  tweeVingerRef.current = { startVerf, rondVerfAf, alGekozenOp };
+  //
+  // Staat de selecteermodus nog uit, dan zet de streek hem aan: vegen ís
+  // selecteren, daar hoef je niet eerst het ⋯-menu voor in.
+  const streekStart = (aan: boolean, x: number, y: number) => {
+    if (!selecteren) {
+      // Met de modus verschijnt er bovenin een balk en schuift de lijst
+      // omlaag. Dan zou de streek verderlopen over de regel erboven — of
+      // de straatkop, en dan pakt hij de hele straat. Onthoud waar het vakje
+      // stond, zodat we het na het tekenen weer onder de vinger zetten.
+      const el = document
+        .elementFromPoint(x, y)
+        ?.closest<HTMLElement>("[data-verf-klant], [data-verf-straat], [data-verf-groep]");
+      if (el) anker.current = { el, top: el.getBoundingClientRect().top };
+      selecteermodus(true);
+    }
+    startVerf(aan, x, y);
+  };
+  const anker = useRef<{ el: HTMLElement; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const a = anker.current;
+    anker.current = null;
+    if (!a || !a.el.isConnected) return;
+    const verschil = a.el.getBoundingClientRect().top - a.top;
+    if (Math.abs(verschil) < 1) return;
+    // Het dichtstbijzijnde vlak dat scrollt, anders het venster zelf.
+    let ouder = a.el.parentElement;
+    while (ouder && !/(auto|scroll)/.test(getComputedStyle(ouder).overflowY)) {
+      ouder = ouder.parentElement;
+    }
+    (ouder ?? window).scrollBy(0, verschil);
+  }, [selecteren]);
+  const tweeVingerRef = useRef({ streekStart, rondVerfAf, alGekozenOp, dagKlaar });
+  tweeVingerRef.current = { streekStart, rondVerfAf, alGekozenOp, dagKlaar };
   useEffect(() => {
-    if (!selecteren || !dagKlaar) return;
+    if (!magPlannen) return;
     let frame = 0;
     let wachtend: Punt | null = null;
     const eerste = (e: TouchEvent) => {
@@ -966,7 +1006,7 @@ function Index() {
       // Een nieuwe eerste vinger: is een vorige streek nooit netjes geëindigd
       // (het vakje onder je vinger verdween), ruim hem dan nu op.
       if (e.touches.length === 1 && tweeVingers.current) einde();
-      if (e.touches.length !== 2 || tweeVingers.current) return;
+      if (e.touches.length !== 2 || tweeVingers.current || !tweeVingerRef.current.dagKlaar) return;
       const { x, y } = eerste(e);
       // Lag de eerste vinger al op een kopvinkje, dan loopt er al een streek
       // die dat vinkje heeft omgezet. Die kant houden we aan; anders ziet
@@ -977,7 +1017,7 @@ function Index() {
       // Geen scrollen en geen inzoomen zolang de streek loopt.
       e.preventDefault();
       tweeVingers.current = true;
-      tweeVingerRef.current.startVerf(lopend ?? !gekozen, x, y);
+      tweeVingerRef.current.streekStart(lopend ?? !gekozen, x, y);
     };
     const beweeg = (e: TouchEvent) => {
       if (!tweeVingers.current) return;
@@ -1022,7 +1062,62 @@ function Index() {
       if (frame) cancelAnimationFrame(frame);
       einde();
     };
-  }, [selecteren, dagKlaar]);
+  }, [magPlannen]);
+
+  // Op de computer hetzelfde met Cmd-klik (Mac) of Ctrl-klik (Windows): klik
+  // of sleep over adressen, straten of groepen. Op een Mac blijft Ctrl-klik
+  // het rechtermuismenu, zoals overal op de Mac.
+  useEffect(() => {
+    if (!magPlannen) return;
+    const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+    let slikKlik = false;
+    const druk = (e: PointerEvent) => {
+      // Kwam er na de vorige streek geen klik, dan mag die deze niet opeten.
+      slikKlik = false;
+      if (e.pointerType !== "mouse" || e.button !== 0) return;
+      if (!(mac ? e.metaKey : e.ctrlKey)) return;
+      const r = tweeVingerRef.current;
+      if (!r.dagKlaar) return;
+      const gekozen = r.alGekozenOp(e.clientX, e.clientY);
+      if (gekozen === null) return;
+      // Vóór React: geen notitie die opengaat, geen regel die gaat slepen.
+      e.preventDefault();
+      e.stopPropagation();
+      slikKlik = true;
+      // Stond je nog in een notitie of prijs te typen, dan eruit: anders
+      // gaat wat je typt nog naar dat veld terwijl de regel op slot gaat.
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      r.streekStart(!gekozen, e.clientX, e.clientY);
+    };
+    // De mousedown die erbij hoort ook: die zou anders een veld de cursor
+    // geven of een sleep beginnen.
+    const muisOmlaag = (e: MouseEvent) => {
+      if (!slikKlik) return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    // Laat je buiten het venster los, dan komt er geen klik; ruim de vlag
+    // dan na het loslaten op, zodat hij niets anders opslokt.
+    const los = () => {
+      if (slikKlik) setTimeout(() => (slikKlik = false), 0);
+    };
+    const klik = (e: MouseEvent) => {
+      if (!slikKlik) return;
+      slikKlik = false;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    document.addEventListener("pointerdown", druk, true);
+    document.addEventListener("mousedown", muisOmlaag, true);
+    document.addEventListener("click", klik, true);
+    window.addEventListener("pointerup", los, true);
+    return () => {
+      document.removeEventListener("pointerdown", druk, true);
+      document.removeEventListener("mousedown", muisOmlaag, true);
+      document.removeEventListener("click", klik, true);
+      window.removeEventListener("pointerup", los, true);
+    };
+  }, [magPlannen]);
 
   /** De selectie leegvegen. Raakt de database niet: wat er al ingepland
    *  staat blijft staan, dat maak je leeg op de planningpagina. */
@@ -2446,9 +2541,11 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
       }`}
     >
       <div
+        // Ook buiten de selecteermodus: met twee vingers of Cmd/Ctrl-klik
+        // begin je hier een streek, en dan gaat de modus pas aan.
+        data-verf-groep={p.groep.id}
         {...(p.planmodus
           ? {
-              "data-verf-groep": p.groep.id,
               onClick: () => {
                 if (p.negeerKlik.current) {
                   p.negeerKlik.current = false;
@@ -2692,7 +2789,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
     return (
       <section className="mb-2 overflow-hidden rounded-[16px] bg-card shadow-card">
         <div
-          {...(p.planmodus ? { "data-verf-straat": p.street.id } : {})}
+          data-verf-straat={p.street.id}
           style={
             gevuld > 0
               ? {
@@ -2823,9 +2920,9 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
       <ContextMenu>
         <ContextMenuTrigger asChild disabled={!p.magPlannen}>
           <div
+            data-verf-straat={p.street.id}
             {...(p.planmodus
               ? {
-                  "data-verf-straat": p.street.id,
                   // De hele kop is de knop; alleen het pijltje klapt in of uit.
                   onClick: () => {
                     // Met de muis heeft het indrukken het al gedaan; dit is het
@@ -3486,7 +3583,7 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
       <KlantRijSleep
         id={`c:${c.id}`}
         className={`group relative flex items-center gap-0.5 rounded-[9px] px-0.5 max-md:select-none max-md:[-webkit-touch-callout:none] ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond} ${!p.geselecteerd && !achtergrond ? "hover:bg-muted/70" : ""} data-[state=open]:ring-2 data-[state=open]:ring-inset data-[state=open]:ring-foreground/60`}
-        verfKlant={p.planmodus ? c.id : undefined}
+        verfKlant={c.id}
         onGreep={p.planmodus || !p.magPlannen ? null : (e) => p.onSelect(c, e.shiftKey)}
         data-klantrij=""
         {...langIndrukken}
