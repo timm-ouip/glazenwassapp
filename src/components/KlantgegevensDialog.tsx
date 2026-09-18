@@ -1194,10 +1194,20 @@ export function KlantgegevensDialog({
       </span>
     ) : null;
 
+  const bladSleep = useSleepBlad({
+    onOmhoog: () => setStap("overzicht"),
+    onOmlaag: () => sluitMetVraag(),
+  });
+
   const mobielDossier =
     stap === "blad" ? (
-      <PopupKader className="bottom-0 left-0 top-auto max-h-[85dvh] max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] data-[state=open]:slide-in-from-bottom-10 data-[state=open]:zoom-in-100 [&>button:last-child]:hidden">
-        <div className="flex flex-col gap-3.5 overflow-y-auto px-4 pb-4 pt-2.5">
+      <PopupKader
+        className="bottom-0 left-0 top-auto max-h-[85dvh] max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] data-[state=open]:slide-in-from-bottom-10 data-[state=open]:zoom-in-100 data-[state=closed]:slide-out-to-bottom data-[state=closed]:zoom-out-100 [&>button:last-child]:hidden"
+      >
+        <div className="flex flex-col gap-3.5 overflow-y-auto px-4 pb-4">
+          {/* Het greepje en de titel zijn om te slepen: omhoog opent het hele
+              dossier, omlaag sluit het blad. */}
+          <div className="-mx-4 flex touch-none flex-col gap-3.5 px-4 pt-2.5" {...bladSleep}>
           <div className="mx-auto h-1 w-9 rounded-full bg-border" />
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
@@ -1216,6 +1226,7 @@ export function KlantgegevensDialog({
             >
               <X className="size-5" />
             </button>
+          </div>
           </div>
           {snelleKnoppen}
           {notitieTekst && (
@@ -1411,4 +1422,64 @@ export function KlantgegevensDialog({
 function stripId(k: Klant) {
   const { id: _id, ...rest } = k;
   return rest;
+}
+
+/**
+ * Een onderblad slepen met de vinger. Het blad gaat mee met de vinger;
+ * loslaten ver genoeg omhoog of omlaag (of met een snelle veeg) doet de
+ * actie, anders veert het terug. Omhoog gaat stroever: het blad kan zelf niet
+ * hoger, het laat alleen voelen dat er iets gebeurt.
+ *
+ * De verschuiving gaat rechtstreeks op het blad, niet via React-state: anders
+ * wordt het hele dossier bij elke millimeter opnieuw opgebouwd.
+ */
+function useSleepBlad({ onOmhoog, onOmlaag }: { onOmhoog: () => void; onOmlaag: () => Promise<unknown> | void }) {
+  const start = useRef<{ y: number; t: number; id: number; blad: HTMLElement } | null>(null);
+
+  function zet(blad: HTMLElement, dy: number, glijden: boolean) {
+    blad.style.transition = glijden ? "transform 200ms ease-out" : "none";
+    blad.style.transform = dy === 0 ? "" : `translateY(${dy}px)`;
+  }
+
+  return {
+    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+      // Het kruisje blijft gewoon een knop.
+      if ((e.target as HTMLElement).closest("button")) return;
+      const blad = e.currentTarget.closest<HTMLElement>('[role="dialog"]');
+      if (!blad) return;
+      start.current = { y: e.clientY, t: e.timeStamp, id: e.pointerId, blad };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const s = start.current;
+      if (!s || s.id !== e.pointerId) return;
+      const d = e.clientY - s.y;
+      zet(s.blad, d > 0 ? d : d / 3, false);
+    },
+    onPointerUp: (e: React.PointerEvent) => {
+      const s = start.current;
+      if (!s || s.id !== e.pointerId) return;
+      start.current = null;
+      const afstand = e.clientY - s.y;
+      const snelheid = afstand / Math.max(1, e.timeStamp - s.t); // px per ms
+      if (afstand > 90 || (afstand > 20 && snelheid > 0.5)) {
+        // Blijft staan waar hij is: de sluitanimatie glijdt vanaf hier verder
+        // omlaag. Wordt er eerst iets gevraagd en blijf je, dan veert hij terug.
+        void Promise.resolve(onOmlaag()).finally(() =>
+          // Even wachten tot het dicht-zetten verwerkt is.
+          setTimeout(() => {
+            if (s.blad.isConnected && s.blad.dataset["state"] === "open") zet(s.blad, 0, true);
+          }, 0),
+        );
+        return;
+      }
+      zet(s.blad, 0, true);
+      if (afstand < -50 || (afstand < -15 && snelheid < -0.5)) onOmhoog();
+    },
+    // Afgebroken (bijvoorbeeld een telefoontje): alleen terugveren.
+    onPointerCancel: () => {
+      if (start.current) zet(start.current.blad, 0, true);
+      start.current = null;
+    },
+  };
 }
