@@ -50,11 +50,9 @@ import {
   IconFolder as Folder,
   IconStack2 as Layers,
   IconListNumbers as ListOrdered,
-  IconChevronLeft as ChevronLeft,
   IconDots as MoreHorizontal,
   IconX as X,
 } from "@tabler/icons-react";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLangIndrukken } from "@/hooks/use-lang-indrukken";
 import {
@@ -181,9 +179,6 @@ interface IndexSearch {
   wijk?: string;
   /** De dag die je aan het vullen bent, gekozen op /planning. */
   dag?: string;
-  /** Op de telefoon: de straat die open staat op zijn eigen scherm. In de
-   *  adresbalk, zodat de terugknop van de telefoon hem weer sluit. */
-  straat?: string;
 }
 
 export const Route = createFileRoute("/")({
@@ -194,9 +189,6 @@ export const Route = createFileRoute("/")({
     ...(typeof search["wijk"] === "string" && search["wijk"] ? { wijk: search["wijk"] } : {}),
     ...(typeof search["dag"] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(search["dag"])
       ? { dag: search["dag"] }
-      : {}),
-    ...(typeof search["straat"] === "string" && search["straat"]
-      ? { straat: search["straat"] }
       : {}),
   }),
   head: () => ({
@@ -234,7 +226,7 @@ function Index() {
   const qc = useQueryClient();
   const bevestig = useBevestig();
   const navigate = useNavigate();
-  const { wijk, dag, straat: openStraat } = Route.useSearch();
+  const { wijk, dag } = Route.useSearch();
   const mobiel = useIsMobile();
   // Telefoon en computer hebben elk hun eigen zoekbalk. Wissel je (tablet
   // draaien), dan begint de nieuwe leeg — dan hoort de lijst ook niet meer
@@ -265,6 +257,10 @@ function Index() {
    *  je alleen maar toe. */
   const [bewerktDag, setBewerktDag] = useState<string | null>(null);
   const [ingeklapt, setIngeklapt] = useState<Set<string>>(new Set());
+  /** Op de telefoon: welke straten open staan. Andersom dan `ingeklapt`,
+   *  want daar begint alles dicht. Hier en niet in de straat zelf, zodat een
+   *  straat open blijft als hij even uit beeld is (zoeken, groep dicht). */
+  const [openRegels, setOpenRegels] = useState<Set<string>>(new Set());
   const [sleep, setSleep] = useState<string | null>(null);
   const [klantDialog, setKlantDialog] = useState<{
     open: boolean;
@@ -605,6 +601,15 @@ function Index() {
             ...secties.map((s) => groepSleutel(s.groep.id)),
           ]),
     );
+  }
+
+  function klapRegel(id: string, open?: boolean) {
+    setOpenRegels((was) => {
+      const nu = new Set(was);
+      if (open ?? !nu.has(id)) nu.add(id);
+      else nu.delete(id);
+      return nu;
+    });
   }
 
   function klapStraat(id: string) {
@@ -1080,6 +1085,8 @@ function Index() {
       return;
     }
     const nieuwId = (data as { id: string }).id;
+    // Op de telefoon meteen open: anders lijken de afgesplitste adressen weg.
+    klapRegel(nieuwId, true);
 
     // Wat er al verhuisd is, om het terug te kunnen zetten als het halverwege
     // misgaat.
@@ -1403,6 +1410,7 @@ function Index() {
   const opToggleSort = useStabiel((street: Street) => void wisselSort(street));
   const opToggleDoorlopend = useStabiel((street: Street) => void wisselDoorlopend(street));
   const opKlap = useStabiel((streetId: string) => klapStraat(streetId));
+  const opKlapRegel = useStabiel((streetId: string) => klapRegel(streetId));
   const opStraatOpDag = useStabiel((streetId: string, aan: boolean) => {
     const g = groepen.find((x) => x.street.id === streetId);
     if (g) zetStraatOpDag(g, aan);
@@ -1424,32 +1432,6 @@ function Index() {
   const opEditGroep = useStabiel((groep: StraatGroep) => setGroepDialog({ open: true, groep }));
   const opDeleteGroep = useStabiel((groep: StraatGroep) => void verwijderGroep(groep));
 
-  // --- Telefoon: een straat op zijn eigen scherm -------------------------
-  // Openen zet ?straat= in de adresbalk. Kwam je er met een tik, dan sluit
-  // "terug" hem met een stap terug in de geschiedenis — precies wat de
-  // terugknop van de telefoon ook doet, zodat die twee nooit uit de pas lopen.
-  const doorTikGeopend = useRef(false);
-  const terugOnderweg = useRef(false);
-  useEffect(() => {
-    if (!openStraat) {
-      doorTikGeopend.current = false;
-      terugOnderweg.current = false;
-    }
-  }, [openStraat]);
-  const opOpenStraat = useStabiel((streetId: string) => {
-    doorTikGeopend.current = true;
-    void navigate({ to: "/", search: (oud) => ({ ...oud, straat: streetId }) });
-  });
-  function sluitStraat() {
-    if (doorTikGeopend.current) {
-      // Twee snelle tikken op "terug": de tweede mag niet nog een stap doen.
-      if (terugOnderweg.current) return;
-      terugOnderweg.current = true;
-      window.history.back();
-    } else {
-      void navigate({ to: "/", search: ({ straat: _dicht, ...oud }) => oud, replace: true });
-    }
-  }
   /** Lang indrukken op een adres: de selecteermodus aan, met dit adres al
    *  aangevinkt. Zoals je op je telefoon foto's gaat selecteren. */
   const opLangIngedrukt = useStabiel((c: Customer) => {
@@ -1643,34 +1625,9 @@ function Index() {
     qc.invalidateQueries({ queryKey: ["customers"] });
   }
 
-  // --- Telefoon: welke straat staat open, en de balk onderin ------------
-  const schermStraat = mobiel && openStraat ? streets.find((s) => s.id === openStraat) : undefined;
-  // Tijdens het wegschuiven is ?straat= al weg; dan tonen we nog even de
-  // straat die er stond, in plaats van een leeg vlak.
-  const laatsteScherm = useRef<Street | undefined>(undefined);
-  if (schermStraat) laatsteScherm.current = schermStraat;
-  const getoondScherm = schermStraat ?? laatsteScherm.current;
-  const schermBlok = getoondScherm
-    ? groepen.find((g) => g.street.id === getoondScherm.id)
-    : undefined;
-  const schermIds = schermBlok ? [...schermBlok.even, ...schermBlok.oneven].map((c) => c.id) : [];
-  const schermErop = schermIds.filter((id) => keuze.has(id)).length;
-
-  // Een straat die niet (meer) bestaat — weggegooid, of een oude link — hoort
-  // niet in de adresbalk te blijven hangen.
-  useEffect(() => {
-    if (openStraat && streetsQuery.isSuccess && !streets.some((s) => s.id === openStraat)) {
-      void navigate({ to: "/", search: ({ straat: _dicht, ...oud }) => oud, replace: true });
-    }
-  }, [openStraat, streetsQuery.isSuccess, streets, navigate]);
-
-  /** De balk onderin tijdens het selecteren, op de telefoon. Staat zowel op
-   *  de pagina als in het straatscherm: dat scherm legt de rest van de
-   *  pagina stil, dus daar moet hij zelf ook in. */
-  const selectieBalk = (plek = "") => (
-    <div
-      className={`rounded-[20px] border border-border bg-card p-2 shadow-[0_8px_30px_oklch(0.3_0.02_70/22%)] md:hidden ${plek}`}
-    >
+  /** De balk onderin tijdens het selecteren, op de telefoon. */
+  const selectieBalk = () => (
+    <div className="rounded-[20px] border border-border bg-card p-2 shadow-[0_8px_30px_oklch(0.3_0.02_70/22%)] md:hidden">
       <div className="flex items-center gap-2 pl-1.5">
         <div className="min-w-0 flex-1 leading-tight">
           <p className="truncate text-[14px] font-semibold tabular-nums">
@@ -1732,7 +1689,6 @@ function Index() {
     <StraatBlok
       key={g.street.id}
       weergave={weergave}
-      onOpen={opOpenStraat}
       onLangIngedrukt={mobiel && magPlannen ? opLangIngedrukt : null}
       street={g.street}
       ronde={ronde}
@@ -1747,8 +1703,8 @@ function Index() {
       quickNotes={quickNotes}
       markeringen={markeringen}
       klantNamen={klantNamen}
-      rowText={weergave === "scherm" ? "text-[14px]" : rowText}
-      rowPad={weergave === "scherm" ? "py-1.5" : rowPad}
+      rowText={weergave === "regel" ? "text-[14px]" : rowText}
+      rowPad={weergave === "regel" ? "py-1.5" : rowPad}
       selectie={selectie}
       onSelect={opSelect}
       onSplitsen={opSplitsen}
@@ -1767,6 +1723,8 @@ function Index() {
       onToggleDoorlopend={opToggleDoorlopend}
       ingeklapt={ingeklapt.has(g.street.id)}
       onKlap={opKlap}
+      regelOpen={openRegels.has(g.street.id)}
+      onKlapRegel={opKlapRegel}
       groepen={subgroepen}
       onZetGroep={opZetGroep}
       onNieuweGroep={opNieuweGroep}
@@ -1794,7 +1752,7 @@ function Index() {
           onSelect={(id) =>
             void navigate({
               to: "/",
-              search: ({ straat: _dicht, ...oud }) => ({ ...oud, wijk: id }),
+              search: (oud) => ({ ...oud, wijk: id }),
             })
           }
           onChanged={() => qc.invalidateQueries({ queryKey: ["districts"] })}
@@ -2196,95 +2154,6 @@ function Index() {
               </div>
             ) : null}
           </DragOverlay>
-
-          {/* Telefoon: de open straat op een eigen scherm. Binnen de
-              DndContext, want de regels erin kun je gewoon verslepen. */}
-          {mobiel && (
-            <Sheet
-              open={!!schermStraat}
-              onOpenChange={(open) => {
-                if (!open) sluitStraat();
-              }}
-            >
-              <SheetContent
-                side="right"
-                className="flex w-full flex-col gap-0 border-0 p-0 sm:max-w-none [&>button:first-of-type]:hidden"
-              >
-                {getoondScherm && (
-                  <>
-                    <div className="flex shrink-0 items-center gap-1 border-b border-border bg-card px-1.5 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))]">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 rounded-full"
-                        onClick={sluitStraat}
-                        aria-label="Terug naar de straten"
-                      >
-                        <ChevronLeft className="size-6" />
-                      </Button>
-                      {selecteren && schermIds.length > 0 && (
-                        <Checkbox
-                          className="mr-1.5 size-5"
-                          checked={
-                            schermErop === 0
-                              ? false
-                              : schermErop === schermIds.length
-                                ? true
-                                : "indeterminate"
-                          }
-                          disabled={!dagKlaar}
-                          onCheckedChange={(v) => opStraatOpDag(getoondScherm.id, v === true)}
-                          aria-label={`Hele ${getoondScherm.name} op de dag`}
-                        />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <SheetTitle className="truncate font-display text-[18px] font-semibold leading-tight tracking-[-0.01em]">
-                          {getoondScherm.name}
-                        </SheetTitle>
-                        <SheetDescription className="truncate text-xs">
-                          {schermBlok?.aantal ?? 0}{" "}
-                          {schermBlok?.aantal === 1 ? "adres" : "adressen"}
-                          {toonPrijzen && schermBlok ? ` · ${formatPrice(schermBlok.totaal)}` : ""}
-                        </SheetDescription>
-                      </div>
-                      {!selecteren && (magPlannen || magKlanten) && (
-                        <StraatMenu
-                          street={getoondScherm}
-                          groepen={subgroepen}
-                          magPlannen={magPlannen}
-                          magKlanten={magKlanten}
-                          onAddKlant={opAddKlant}
-                          onToggleSort={opToggleSort}
-                          onToggleDoorlopend={opToggleDoorlopend}
-                          onEdit={opEditStreet}
-                          onDelete={opDeleteStreet}
-                          onZetGroep={opZetGroep}
-                          onNieuweGroep={opNieuweGroep}
-                        />
-                      )}
-                    </div>
-                    <div
-                      className={`min-h-0 flex-1 overflow-y-auto overscroll-contain pt-1 ${
-                        selecteren ? "pb-36" : "pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
-                      } ${verfBezig ? "select-none" : ""}`}
-                    >
-                      {schermBlok ? (
-                        straatBlok(schermBlok, "scherm")
-                      ) : (
-                        <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-                          Met dit filter staan er geen adressen van deze straat in beeld.
-                        </p>
-                      )}
-                    </div>
-                    {selecteren &&
-                      selectieBalk(
-                        "fixed inset-x-2 bottom-[calc(0.5rem+env(safe-area-inset-bottom))] z-40",
-                      )}
-                  </>
-                )}
-              </SheetContent>
-            </Sheet>
-          )}
         </DndContext>
       </div>
 
@@ -2595,10 +2464,11 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
 
 interface BlokProps {
   /** "blok" is de kaart op de computer. Op de telefoon staat een straat als
-   *  "regel" in de lijst, en opent hij als "scherm" met alle adressen. */
-  weergave: "blok" | "regel" | "scherm";
-  /** Op de telefoon: tik op de regel en de straat opent. */
-  onOpen: (streetId: string) => void;
+   *  "regel" in de lijst: tik erop en de adressen klappen eronder open. */
+  weergave: "blok" | "regel";
+  /** Op de telefoon: staat de straat open? Er mogen er meer tegelijk open. */
+  regelOpen: boolean;
+  onKlapRegel: (streetId: string) => void;
   /** Op de telefoon: lang indrukken op een adres start het selecteren. */
   onLangIngedrukt: ((c: Customer) => void) | null;
   street: Street;
@@ -2665,10 +2535,9 @@ interface BlokProps {
 }
 
 const StraatBlok = memo(function StraatBlok(p: BlokProps) {
+  const regelOpen = p.regelOpen;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    // Het scherm op de telefoon toont dezelfde straat nog een keer; met een
-    // eigen id zit hij de straat in de lijst niet in de weg.
-    id: p.weergave === "scherm" ? `scherm:${p.street.id}` : `s:${p.street.id}`,
+    id: `s:${p.street.id}`,
     // Straten verslepen doe je op de computer. Op de telefoon zou je bij
     // het scrollen steeds per ongeluk een straat oppakken.
     disabled: !p.magPlannen || p.weergave !== "blok",
@@ -2745,7 +2614,8 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
           )}
           <button
             type="button"
-            onClick={() => p.onOpen(p.street.id)}
+            onClick={() => p.onKlapRegel(p.street.id)}
+            aria-expanded={regelOpen}
             className="flex min-w-0 flex-1 items-center gap-2 self-stretch text-left"
           >
             <span className="min-w-0 flex-1 leading-tight">
@@ -2768,40 +2638,62 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
                 {alGepland} gepland
               </span>
             )}
-            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            <ChevronDown
+              className={`size-4 shrink-0 text-muted-foreground transition-transform ${
+                regelOpen ? "" : "-rotate-90"
+              }`}
+            />
           </button>
+          {regelOpen && !p.planmodus && (p.magPlannen || p.magKlanten) && (
+            <StraatMenu
+              street={p.street}
+              groepen={p.groepen}
+              magPlannen={p.magPlannen}
+              magKlanten={p.magKlanten}
+              onAddKlant={p.onAddKlant}
+              onToggleSort={p.onToggleSort}
+              onToggleDoorlopend={p.onToggleDoorlopend}
+              onEdit={p.onEditStreet}
+              onDelete={p.onDeleteStreet}
+              onZetGroep={p.onZetGroep}
+              onNieuweGroep={p.onNieuweGroep}
+            />
+          )}
         </div>
-      </section>
-    );
-  }
-
-  if (p.weergave === "scherm") {
-    const kanten = (["even", "oneven"] as const).filter(
-      (kant) => !p.street.doorlopend || kant === "even" || p.oneven.length > 0,
-    );
-    return (
-      <div className="px-2">
-        {kanten.map((kant) => (
-          <div key={kant} className="mb-2">
-            {/* Doorlopend genummerd is één reeks: dan alleen boven de eerste
-                helft een kopje. */}
-            {(!p.street.doorlopend || kant === "even") && (
-              <div className="sticky top-0 z-[25] -mx-2 flex items-center gap-2 bg-background/95 px-4 py-1.5 text-[12px] font-medium text-muted-foreground backdrop-blur">
-                {p.street.doorlopend
-                  ? `Alle nummers · ${p.aantal}`
-                  : `${kant === "even" ? "Even" : "Oneven"} kant · ${p[kant].length}`}
-              </div>
+        {regelOpen && (
+          <div className="border-t border-border/70 px-2 pb-1">
+            {zichtbaar.length === 0 && (
+              <p className="px-2 py-3 text-center text-[13px] text-muted-foreground">
+                Met dit filter staan er geen adressen van deze straat in beeld.
+              </p>
             )}
-            <StraatKolom regels={p[kant]} blok={p} kant={kant} />
-            {kant === "even" && p.magKlanten && (
+            {(["even", "oneven"] as const)
+              .filter((kant) => p[kant].length > 0)
+              .map((kant) => (
+                <div key={kant} className="mb-1">
+                  {/* Doorlopend genummerd is één reeks: dan alleen boven de
+                      eerste helft een kopje. */}
+                  {(!p.street.doorlopend || kant === "even" || p.even.length === 0) && (
+                    <div className="px-2 pb-0.5 pt-2 text-[12px] font-medium text-muted-foreground">
+                      {p.street.doorlopend
+                        ? `Alle nummers · ${p.aantal}`
+                        : `${kant === "even" ? "Even" : "Oneven"} kant · ${p[kant].length}`}
+                    </div>
+                  )}
+                  <StraatKolom regels={p[kant]} blok={p} kant={kant} />
+                </div>
+              ))}
+            {/* Onderaan de straat, niet tussen de even en oneven kant: is
+                de even kant leeg, dan stond hij anders bovenaan. */}
+            {p.magKlanten && (
               <NieuweRegel
                 onSubmit={(nr) => p.onNieuweRegel(p.street.id, nr)}
                 rowText={p.rowText}
               />
             )}
           </div>
-        ))}
-      </div>
+        )}
+      </section>
     );
   }
 
@@ -3670,7 +3562,7 @@ function MeerKnoppen({
 }
 
 /**
- * Het ⋯-menu bovenin het straatscherm op de telefoon: alles wat op de
+ * Het ⋯-menu in een opengeklapte straat op de telefoon: alles wat op de
  * computer als knopjes in de straatkop en onder de rechtermuisknop zit.
  */
 function StraatMenu({
