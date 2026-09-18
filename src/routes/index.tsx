@@ -47,7 +47,6 @@ import {
   IconCurrencyEuro as Euro,
   IconRoute as Route2,
   IconCalendarPlus as CalendarPlus,
-  IconCalendar as Kalender,
   IconCheck as Check,
   IconSquareCheck as CheckSquare,
   IconChevronDown as ChevronDown,
@@ -186,7 +185,7 @@ import { useRecht } from "@/lib/rechten";
 import { StopDialog } from "@/components/StopDialog";
 import { draaiStoppenTerug, geplandeDagen, zetInactief, type StopReden } from "@/lib/stoppen";
 import { alDichtbij, dubbelVraag, haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
-import { isWerkdag, useWerkdagen } from "@/lib/werkdagen";
+import { isWerkdag, useWerkdagenStatus } from "@/lib/werkdagen";
 
 interface IndexSearch {
   wijk?: string;
@@ -241,8 +240,8 @@ const WIJK_SNELTOETSEN: [string, string][] = [
   ["x", "Selecteren aan / uit"],
   ["⌘ / Ctrl + klik", "Adres of straat selecteren, slepen voor meer"],
   ["a", "Alles aanvinken / niets"],
-  ["i", "Inplannen op een andere dag"],
-  ["Esc", "Selectie wissen, daarna stoppen"],
+  ["i", "Opslaan op de gekozen dag"],
+  ["Esc", "Stoppen met selecteren"],
   ["m", "Maand kiezen"],
   ["[ en ]", "Vorige / volgende maand"],
   ["e / o / 0", "Even / oneven / alles"],
@@ -280,7 +279,7 @@ function Index() {
   const toonPrijzen = prijzenTonen && prijzenZien;
   const [selectie, setSelectie] = useState<string[]>([]);
   /** Staat de selecteermodus aan? Dan vink je adressen aan zonder dat er al
-   *  iets vastligt; met "Inplannen voor" zet je ze in één keer op een dag. */
+   *  iets vastligt; met "Opslaan op …" zet je ze in één keer op de gekozen dag. */
   const [selecteren, setSelecteren] = useState(false);
   /** Wat je nu aangevinkt hebt. Los van `selectie`, dat over het slepen en
    *  herschikken van regels gaat. */
@@ -523,12 +522,64 @@ function Index() {
   // Bewerk je een bestaande dag, dan staat die eerst aangevinkt. Eén keer,
   // bij het binnenkomen: daarna is de selectie van jou.
   const gevuldVoor = useRef<string | null>(null);
+  /** Wat er volgens de database op de dag stond toen we de vinkjes voor het
+   *  laatst bijwerkten. Daartegen zien we wat er elders veranderde. */
+  const vorigeStand = useRef<Set<string>>(new Set());
+  // De dag zoals hij binnenkwam; ook een oude stand die op de achtergrond
+  // opnieuw opgehaald wordt telt, anders zet een haperende verbinding de
+  // dag op slot.
+  const dagData = wasdagQuery.data;
   useEffect(() => {
-    if (!bewerktDag || !wasdagQuery.isSuccess) return;
-    if (gevuldVoor.current === bewerktDag) return;
-    gevuldVoor.current = bewerktDag;
-    setKeuze(new Set(dagRegels.map((r) => r.customer_id).filter(Boolean) as string[]));
-  }, [bewerktDag, wasdagQuery.isSuccess, dagRegels]);
+    // Pas met verse gegevens: een oude stand uit de cache zou een adres dat
+    // intussen (op de telefoon) op de dag gezet is als "eraf" tonen.
+    if (!bewerktDag || !dagData || wasdagQuery.isFetching) return;
+    const opDag = new Set(dagRegels.map((r) => r.customer_id).filter(Boolean) as string[]);
+    if (gevuldVoor.current !== bewerktDag) {
+      gevuldVoor.current = bewerktDag;
+      vorigeStand.current = opDag;
+      // Samen met wat je al aanvinkte: begon je met een veeg of Cmd-klik,
+      // dan stond de dag nog niet klaar, en die vinkjes horen te blijven.
+      setKeuze((huidig) => new Set([...huidig, ...opDag]));
+      return;
+    }
+    // Veranderde de dag elders — op de telefoon, door Ongedaan maken — dan
+    // lopen de vinkjes mee. Anders telt dat als "eraf" of "erbij", en haalt
+    // Opslaan iets weg wat je nooit zelf uitvinkte.
+    const oud = vorigeStand.current;
+    const bij = [...opDag].filter((id) => !oud.has(id));
+    const af = [...oud].filter((id) => !opDag.has(id));
+    vorigeStand.current = opDag;
+    if (bij.length === 0 && af.length === 0) return;
+    setKeuze((huidig) => {
+      const nu = new Set(huidig);
+      for (const id of bij) nu.add(id);
+      for (const id of af) nu.delete(id);
+      return nu;
+    });
+  }, [bewerktDag, dagData, wasdagQuery.isFetching, dagRegels]);
+
+  // Er is altijd precies één dag gekozen zolang je selecteert: standaard
+  // vandaag, of de eerstvolgende werkdag. Eén dag en één knop "Opslaan op …",
+  // zodat het nooit op een andere dag belandt dan je ziet.
+  // Pas als de werkdagen echt binnen zijn: tot dan zijn het ma–vr, en dan
+  // zou een zaterdagwerker op zaterdag bij maandag beginnen.
+  const { werkdagen: werkdagenLijst, geladen: werkdagenGeladen } = useWerkdagenStatus();
+  const standaardDag = komendeDagen(werkdagenLijst)[0]?.datum ?? vandaag();
+  useEffect(() => {
+    if (selecteren && !bewerktDag && werkdagenGeladen) setBewerktDag(standaardDag);
+  }, [selecteren, bewerktDag, standaardDag, werkdagenGeladen]);
+
+  /** Wat er verandert als je nu opslaat. Zolang de dag laadt: niets. */
+  const dagGevuld = bewerktDag !== null && gevuldVoor.current === bewerktDag;
+  const { erbij, eraf } = useMemo(() => {
+    if (!bewerktDag || !dagData || !dagGevuld) return { erbij: 0, eraf: 0 };
+    const opDag = new Set(dagRegels.map((r) => r.customer_id).filter(Boolean) as string[]);
+    return {
+      erbij: [...keuze].filter((id) => !opDag.has(id)).length,
+      eraf: [...opDag].filter((id) => !keuze.has(id)).length,
+    };
+  }, [bewerktDag, dagData, dagGevuld, dagRegels, keuze]);
+  const nietOpgeslagen = erbij + eraf > 0;
 
   /** Wat je aangevinkt hebt kost bij elkaar dit; daar stuur je op als je een
    *  dag samenstelt. Over alle wijken heen, want je kunt van wijk wisselen. */
@@ -544,7 +595,7 @@ function Index() {
 
   // Zolang een bestaande dag nog binnenkomt weten we niet wat er al op staat;
   // de vinkjes staan dan uit, anders vink je tegen een leeg antwoord aan.
-  const dagKlaar = bewerktDag === null || wasdagQuery.isSuccess;
+  const dagKlaar = bewerktDag === null || (dagData !== undefined && dagGevuld);
 
   // Wat er deze maand al op een ándere dag staat. Plan je morgen, dan zie je
   // zo welke adressen vandaag al gedaan zijn — je wil ze niet twee keer in
@@ -662,7 +713,7 @@ function Index() {
 
   /**
    * Zet adressen in of uit de selectie. Puur lokaal: er gaat pas iets naar de
-   * database als je op "Inplannen voor" klikt. Dat is het hele punt van de
+   * database als je op "Opslaan op …" klikt. Dat is het hele punt van de
    * selecteermodus — je kunt vrij aanvinken zonder dat er een dag vastligt.
    */
   function pasKeuzeAan(erbij: string[], eraf: string[]) {
@@ -700,11 +751,7 @@ function Index() {
    */
   async function naarDag(datum: string) {
     if (datum === bewerktDag) return;
-    const opDag = new Set(dagRegels.map((r) => r.customer_id).filter(Boolean) as string[]);
-    const gewijzigd = bewerktDag
-      ? wasdagQuery.isSuccess &&
-        (keuze.size !== opDag.size || [...keuze].some((id) => !opDag.has(id)))
-      : keuze.size > 0;
+    const gewijzigd = bewerktDag ? nietOpgeslagen : keuze.size > 0;
     if (gewijzigd && bewerktDag) {
       const opslaan = await bevestig({
         titel: `Eerst ${toonDatum(bewerktDag)} opslaan?`,
@@ -729,6 +776,25 @@ function Index() {
     // Kwam je van de kalender, dan staat de dag in de adresbalk; die gaat
     // mee, anders zet herladen je terug op de oude dag.
     if (dag) void navigate({ to: "/", search: (oud) => ({ ...oud, dag: datum }), replace: true });
+  }
+
+  /** Stoppen met selecteren; met iets wat nog niet opgeslagen is eerst vragen. */
+  async function stopSelecteren() {
+    if (nietOpgeslagen && bewerktDag) {
+      const weg = await bevestig({
+        titel: `Wijzigingen op ${toonDatum(bewerktDag)} niet opgeslagen`,
+        tekst: "Stop je nu, dan gaan ze verloren. Tik op Terug om ze nog op te slaan.",
+        bevestigLabel: "Weggooien",
+        annuleerLabel: "Terug",
+        gevaarlijk: true,
+      });
+      if (!weg) return;
+    }
+    selecteermodus(false);
+  }
+  function wisselSelecteren() {
+    if (selecteren) void stopSelecteren();
+    else selecteermodus(true);
   }
 
   async function planInWerk(datum: string): Promise<boolean> {
@@ -829,6 +895,20 @@ function Index() {
     // je bewerkte, dan waren die niet aangevinkt, en zou een volgende keer
     // opslaan ze eraf halen alsof je ze uitgevinkt had.
     const erafIds = new Set(weghalen.map((r) => r.customer_id));
+    // Meteen de nieuwe stand van de dag in de cache: anders vergelijkt de
+    // teller nog even met de oude, staat er weer "Opslaan", en sla je met
+    // een tweede tik alles nog eens op.
+    vorigeStand.current = new Set([
+      ...[...alErop].filter((id) => !erafIds.has(id)),
+      ...toevoegen.map((r) => r.customer_id),
+    ]);
+    qc.setQueryData<WasdagRegel[]>(
+      ["wasdag", datum],
+      [
+        ...bestaand.filter((r) => !r.customer_id || !erafIds.has(r.customer_id)),
+        ...toevoegen.map((r) => ({ customer_id: r.customer_id, prijs: r.prijs, notitie: null })),
+      ],
+    );
     setKeuze(
       new Set([
         ...[...alErop].filter((id) => !erafIds.has(id)),
@@ -1212,12 +1292,6 @@ function Index() {
       window.removeEventListener("pointerup", los, true);
     };
   }, [magPlannen]);
-
-  /** De selectie leegvegen. Raakt de database niet: wat er al ingepland
-   *  staat blijft staan, dat maak je leeg op de planningpagina. */
-  function wisKeuze() {
-    setKeuze(new Set());
-  }
 
   async function patchKlant(c: Customer, patch: Partial<Customer>) {
     const vorige: Partial<Customer> = {};
@@ -1932,7 +2006,6 @@ function Index() {
   // Niet als je in een tekstvak typt, en niet als er een venster of menu
   // openstaat: dan horen de toetsen daarbij.
   const [hulpOpen, setHulpOpen] = useState(false);
-  const [inplanOpen, setInplanOpen] = useState(false);
   const [maandOpen, setMaandOpen] = useState(false);
   const [wijkOpen, setWijkOpen] = useState(false);
   const sneltoets = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -1970,17 +2043,16 @@ function Index() {
       case "/":
         return doe(() => document.querySelector<HTMLInputElement>("input[data-zoekbalk]")?.focus());
       case "x":
-        if (magPlannen) doe(() => selecteermodus(!selecteren));
+        if (magPlannen) doe(wisselSelecteren);
         return;
       case "a":
         if (selecteren && alleZichtbare.length > 0) doe(wisselAlles);
         return;
       case "Escape":
-        if (keuze.size > 0) doe(wisKeuze);
-        else if (selecteren) doe(() => selecteermodus(false));
+        if (selecteren) doe(() => void stopSelecteren());
         return;
       case "i":
-        if (selecteren && keuze.size > 0) doe(() => setInplanOpen(true));
+        if (selecteren && bewerktDag && nietOpgeslagen) doe(() => void planIn(bewerktDag));
         return;
       case "m":
         return doe(() => setMaandOpen(true));
@@ -2019,6 +2091,30 @@ function Index() {
     return () => window.removeEventListener("keydown", opToets);
   }, []);
 
+  /** "vandaag" of "ma 21": de dag waar Opslaan naartoe gaat. */
+  const dagNaam = bewerktDag ? (bewerktDag === nu ? "vandaag" : kortDag(bewerktDag)) : "";
+  /** Onder het bedrag: wat opslaan gaat doen. */
+  const wijzigingTekst =
+    !dagKlaar && wasdagQuery.isError
+      ? "dag kon niet laden"
+      : !dagKlaar
+        ? "dag laden…"
+        : nietOpgeslagen
+          ? `${erbij} erbij, ${eraf} eraf`
+          : "alles opgeslagen";
+  const opslaanKnop = () => (
+    <Button
+      size="sm"
+      className="rounded-full"
+      disabled={!bewerktDag || !dagKlaar || !nietOpgeslagen}
+      onClick={() => bewerktDag && void planIn(bewerktDag)}
+      title={nietOpgeslagen ? `Opslaan op ${toonDatum(bewerktDag ?? "")} (i)` : "Niets te bewaren"}
+    >
+      <CalendarPlus className="size-4" />
+      {nietOpgeslagen ? `Opslaan op ${dagNaam}` : "Opgeslagen"}
+    </Button>
+  );
+
   /** De balk onderin tijdens het selecteren, op de telefoon. */
   const selectieBalk = () => (
     <div className="rounded-[20px] border border-border bg-card p-2 shadow-[0_8px_30px_oklch(0.3_0.02_70/22%)] md:hidden">
@@ -2029,14 +2125,12 @@ function Index() {
             {prijzenZien && <span className="font-display"> · {formatPrice(keuzeBedrag)}</span>}
           </p>
           <p className="truncate text-[11.5px] text-muted-foreground">
-            {bewerktDag
-              ? `Je bewerkt ${toonDatum(bewerktDag)}`
-              : "Tik adressen aan om ze te kiezen"}
+            {bewerktDag ? `${toonDatum(bewerktDag)} · ${wijzigingTekst}` : "Tik adressen aan"}
           </p>
         </div>
         <button
           type="button"
-          onClick={() => selecteermodus(false)}
+          onClick={() => void stopSelecteren()}
           aria-label="Stoppen met selecteren"
           className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
         >
@@ -2059,15 +2153,7 @@ function Index() {
           onOverslaan={(m) => void slaKeuzeOver(m)}
           onNietsOverslaan={() => void wisOverslaanVanKeuze()}
         />
-        <div className="ml-auto">
-          <InplannenKnop
-            aantal={keuze.size}
-            bewerktDag={bewerktDag}
-            onKies={(d) => void planIn(d)}
-            open={inplanOpen}
-            onOpenChange={setInplanOpen}
-          />
-        </div>
+        <div className="ml-auto">{opslaanKnop()}</div>
       </div>
     </div>
   );
@@ -2189,7 +2275,7 @@ function Index() {
                   size="sm"
                   variant={selecteren ? "default" : "outline"}
                   className="rounded-full"
-                  onClick={() => selecteermodus(!selecteren)}
+                  onClick={wisselSelecteren}
                   title="Adressen aanvinken om daarna in te plannen"
                 >
                   <CheckSquare className="size-4" /> Selecteren
@@ -2271,7 +2357,7 @@ function Index() {
                 magPlannen={magPlannen}
                 magKlanten={magKlanten}
                 selecteren={selecteren}
-                onSelecteren={() => selecteermodus(!selecteren)}
+                onSelecteren={wisselSelecteren}
                 prijzenZien={prijzenZien}
                 prijzenTonen={prijzenTonen}
                 onPrijzenTonen={setPrijzenTonen}
@@ -2509,15 +2595,6 @@ function Index() {
                     {prijzenZien ? "· " : ""}
                     {keuze.size} {keuze.size === 1 ? "adres" : "adressen"}
                   </span>
-                  {keuze.size > 0 && (
-                    <button
-                      className="ml-1 text-[12px] text-muted-foreground underline"
-                      onClick={wisKeuze}
-                      title="Selectie wissen (Esc)"
-                    >
-                      wissen
-                    </button>
-                  )}
                 </p>
                 <div className="mt-0.5 flex items-center gap-3 whitespace-nowrap text-[11.5px] text-muted-foreground">
                   {bewerktDag && (
@@ -2527,9 +2604,12 @@ function Index() {
                       className="min-w-0 truncate font-medium text-foreground underline-offset-2 hover:underline"
                       title="Deze dag op de kalender bekijken"
                     >
-                      Je bewerkt {toonDatum(bewerktDag)}
+                      {toonDatum(bewerktDag)}
                     </Link>
                   )}
+                  <span className={nietOpgeslagen ? "font-medium text-foreground" : ""}>
+                    {wijzigingTekst}
+                  </span>
                   {/* Drie kleuren zonder uitleg is raden. */}
                   {[
                     { stip: "bg-tint-amber ring-tint-amber-ink/30", tekst: "op de dag" },
@@ -2570,16 +2650,10 @@ function Index() {
                   onOverslaan={(m) => void slaKeuzeOver(m)}
                   onNietsOverslaan={() => void wisOverslaanVanKeuze()}
                 />
-                <InplannenKnop
-                  aantal={keuze.size}
-                  bewerktDag={bewerktDag}
-                  onKies={(d) => void planIn(d)}
-                  open={inplanOpen}
-                  onOpenChange={setInplanOpen}
-                />
+                {opslaanKnop()}
                 <button
                   type="button"
-                  onClick={() => selecteermodus(false)}
+                  onClick={() => void stopSelecteren()}
                   aria-label="Stoppen met selecteren"
                   title="Stoppen met selecteren (x)"
                   className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
@@ -4004,88 +4078,6 @@ function kortDag(datum: string): string {
 function toonKorteDag(datum: string): string {
   const d = new Date(`${datum}T12:00:00`);
   return d.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" });
-}
-
-/**
- * "Inplannen voor…" — zet wat je aangevinkt hebt op een dag. Staat alleen in
- * de selecteermodus, want zonder selectie valt er niets in te plannen.
- */
-function InplannenKnop({
-  aantal,
-  bewerktDag,
-  onKies,
-  open,
-  onOpenChange,
-}: {
-  aantal: number;
-  bewerktDag: string | null;
-  onKies: (datum: string) => void;
-  /** Van buitenaf openen, voor de sneltoets i. */
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-}) {
-  const werkdagen = useWerkdagen();
-  const dagen = komendeDagen(werkdagen);
-  // De eerste twee werkdagen met één klik: meestal vandaag en morgen, op
-  // vrijdag vandaag en maandag. De eerste is de hoofdknop; de rest via
-  // "Andere dag".
-  const snel = dagen.slice(0, 2);
-  const leeg = aantal === 0 ? "Vink eerst adressen aan" : null;
-  return (
-    <div className="flex items-center gap-1.5">
-      {snel.map(({ datum: d, naam }, i) => (
-        <Button
-          key={d}
-          size="sm"
-          variant={i === 0 ? "default" : "outline"}
-          className="rounded-full capitalize"
-          disabled={aantal === 0}
-          onClick={() => onKies(d)}
-          title={leeg ?? `${aantal} ${aantal === 1 ? "adres" : "adressen"} op ${toonKorteDag(d)}`}
-        >
-          <CalendarPlus className="size-4" />
-          {naam ?? kortDag(d)}
-          {/* Niet op de telefoon: daar past de rij er dan net niet meer op. */}
-          {d === bewerktDag && <Check className="size-4 max-md:hidden" />}
-        </Button>
-      ))}
-      <DropdownMenu {...(onOpenChange ? { open: open ?? false, onOpenChange } : {})}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            size="sm"
-            variant={snel.length ? "outline" : "default"}
-            className="rounded-full"
-            disabled={aantal === 0}
-            title={leeg ?? "Op een andere dag inplannen (i)"}
-            aria-label="Andere dag"
-          >
-            {/* Een gewoon kalendertje: het plusje staat op de knoppen die
-                meteen inplannen, dit opent eerst het lijstje. */}
-            <Kalender className="size-4" />
-            {/* Op de telefoon alleen het icoontje: anders past de rij niet. */}
-            <span className="max-md:hidden">Andere dag</span>
-            <ChevronDown className="size-3.5 opacity-70 max-md:hidden" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="max-h-80 w-52 overflow-y-auto">
-          <DropdownMenuLabel>
-            {aantal} {aantal === 1 ? "adres" : "adressen"} inplannen op
-          </DropdownMenuLabel>
-          {dagen.map(({ datum: d, naam }) => (
-            <DropdownMenuItem key={d} onSelect={() => onKies(d)}>
-              {/* Vandaag en morgen bij hun naam, met de datum erachter; verder
-                is de datum zelf het duidelijkst. */}
-              <span className="capitalize">{naam ?? toonKorteDag(d)}</span>
-              {naam && (
-                <span className="ml-auto text-xs text-muted-foreground">{toonKorteDag(d)}</span>
-              )}
-              {d === bewerktDag && <Check className={`size-4 ${naam ? "ml-1" : "ml-auto"}`} />}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
 }
 
 /**

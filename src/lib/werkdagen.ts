@@ -39,13 +39,21 @@ async function fetchWerkdagen(companyId: string): Promise<number[]> {
 
 /** De werkdagen van je bedrijf; tot ze geladen zijn maandag t/m vrijdag. */
 export function useWerkdagen(): readonly number[] {
+  return useWerkdagenStatus().werkdagen;
+}
+
+/** Hetzelfde, met erbij of het al de echte instelling is en niet de
+ *  standaard: wie er iets automatisch mee kiest, wacht daarop. */
+export function useWerkdagenStatus(): { werkdagen: readonly number[]; geladen: boolean } {
   const { company } = useAuth();
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: ["werkdagen", company?.id],
     queryFn: () => fetchWerkdagen(company!.id),
     enabled: !!company?.id,
   });
-  return data ?? STANDAARD_WERKDAGEN;
+  // Lukt het ophalen niet, dan toch verder met de standaard: anders wordt er
+  // nooit een dag gekozen.
+  return { werkdagen: data ?? STANDAARD_WERKDAGEN, geladen: data !== undefined || isError };
 }
 
 export async function bewaarWerkdagen(companyId: string, werkdagen: number[]) {
