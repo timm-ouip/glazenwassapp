@@ -280,7 +280,7 @@ export const VELD_LABEL: Record<Veld, string> = {
   klant_telefoon2: "Telefoon 2",
 };
 
-/** "elke maand" / "even maanden" / "oneven maanden" / "om de 3 maanden". */
+/** "elke maand" / "even maanden" / "oneven maanden" / "1× per 3 maanden". */
 export function frequentieTekst(waarde: unknown): string {
   const f = waarde as { interval_maanden?: number; ritme?: number } | null;
   if (!f || typeof f.interval_maanden !== "number") return "";
@@ -288,7 +288,7 @@ export function frequentieTekst(waarde: unknown): string {
   const ritme = f.ritme ?? 1;
   if (interval <= 1) return "elke maand";
   if (interval === 2) return ritme % 2 === 0 ? "even maanden" : "oneven maanden";
-  return `om de ${interval} maanden`;
+  return `1× per ${interval} maanden`;
 }
 
 /** "december 2026" — een maandsleutel ("jjjj-mm") met het jaar erbij, zodat

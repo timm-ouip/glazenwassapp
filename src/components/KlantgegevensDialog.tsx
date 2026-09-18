@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useBevestig } from "@/components/Bevestig";
 import {
   PopupBlok,
   PopupBody,
@@ -151,7 +152,9 @@ function pandVan(c: Customer): Pand {
     ritme: c.ritme || 1,
     note: c.note ?? "",
     maandwerk: c.maandwerk ?? [],
-    overslaan: c.overslaan ?? [],
+    // Op volgorde, zoals opslaan het ook bewaart: anders ziet het sluiten
+    // een verschil na aan- en weer uitvinken van een maand.
+    overslaan: [...(c.overslaan ?? [])].sort(),
     start_maand: c.start_maand ?? "",
     markering: c.markering ?? "",
   };
@@ -207,6 +210,7 @@ export function KlantgegevensDialog({
    *  als er een klant is. */
   const [tab, setTab] = useState<"klant" | "adres" | "werk" | "mail" | "klachten">("klant");
   const mobiel = useIsMobile();
+  const bevestig = useBevestig();
   /** Op de telefoon: het onderblad, het overzicht, of één onderdeel. */
   const [stap, setStap] = useState<"blad" | "overzicht" | "tab">("blad");
   // Mail kan privé zijn: alleen wie mail mag lezen ziet dat tabblad.
@@ -234,6 +238,13 @@ export function KlantgegevensDialog({
   const [straatSuggesties, setStraatSuggesties] = useState<string[]>([]);
 
   const beginKoppeling = useRef<string[]>([]);
+  /** Hoe het formulier er bij openen uitzag, om te zien of je iets wijzigde. */
+  const beginStand = useRef<{
+    velden: typeof LEEG;
+    pand: Pand;
+    extra: string[];
+    wijkId: string;
+  } | null>(null);
 
   /** Het adres waar dit dossier over gaat; null als het nog niet bestaat. */
   const dossierCustomer = voorstelCustomer ?? null;
@@ -260,22 +271,24 @@ export function KlantgegevensDialog({
       c ? streets.find((s) => s.id === c.street_id) : undefined;
     const wijkVan = (s: Street | undefined) => districts.find((d) => d.id === s?.district_id);
 
+    let beginVelden: typeof LEEG;
     if (klant) {
-      setVelden(stripId(klant));
+      beginVelden = stripId(klant);
     } else if (voorstelCustomer) {
       // Vanuit een regel op de lijst: het adres is al bekend.
       const straat = straatVan(voorstelCustomer);
       const adres = straat
         ? adresVanRegel(voorstelCustomer, straat, wijkVan(straat))
         : { straat: "", huisnummer: "", plaats: "" };
-      setVelden({ ...LEEG, ...adres });
+      beginVelden = { ...LEEG, ...adres };
     } else {
       // De plaats van de wijk waar je in werkt wint van de meest gebruikte
       // plaats: Testwijk ligt in Den Haag, ook al staan de meeste klanten in
       // Gouda. Met de verkeerde plaats vindt de postcode-opzoeking niets.
       const wijkPlaats = districts.find((d) => d.id === standaardWijkId)?.plaats.trim();
-      setVelden({ ...LEEG, plaats: wijkPlaats || (plaatsen[0] ?? "") });
+      beginVelden = { ...LEEG, plaats: wijkPlaats || (plaatsen[0] ?? "") };
     }
+    setVelden(beginVelden);
 
     // Wat er nú aan de klant hangt, tegenover wat er straks aan moet hangen.
     // `save()` leidt uit het verschil af wat er gekoppeld en losgemaakt wordt.
@@ -283,10 +296,17 @@ export function KlantgegevensDialog({
     beginKoppeling.current = bestaand;
     setExtra(bestaand.filter((id) => id !== voorstelCustomer?.id));
 
-    setPand(voorstelCustomer ? pandVan(voorstelCustomer) : LEEG_PAND);
-    setWijkId(
-      straatVan(voorstelCustomer ?? null)?.district_id ?? standaardWijkId ?? districts[0]?.id ?? "",
-    );
+    const beginPand = voorstelCustomer ? pandVan(voorstelCustomer) : LEEG_PAND;
+    const beginWijk =
+      straatVan(voorstelCustomer ?? null)?.district_id ?? standaardWijkId ?? districts[0]?.id ?? "";
+    setPand(beginPand);
+    setWijkId(beginWijk);
+    beginStand.current = {
+      velden: beginVelden,
+      pand: beginPand,
+      extra: bestaand.filter((id) => id !== voorstelCustomer?.id),
+      wijkId: beginWijk,
+    };
     setKoppelOpen(false);
     setTab("klant");
     // Een nieuw adres heeft nog niets om snel te bekijken: meteen de lijst.
@@ -307,6 +327,12 @@ export function KlantgegevensDialog({
       void zoekAdres({ straat, huisnummer, plaats }, ac.signal).then((treffer) => {
         if (!treffer || ac.signal.aborted) return;
         setVelden((v) => ({ ...v, postcode: treffer.postcode, plaats: treffer.plaats }));
+        // Wat de app zelf invult is geen wijziging van jou: daar hoeft het
+        // sluiten niet om te vragen.
+        const begin = beginStand.current;
+        if (begin && begin.velden.straat === straat && begin.velden.huisnummer === huisnummer) {
+          begin.velden = { ...begin.velden, postcode: treffer.postcode, plaats: treffer.plaats };
+        }
       });
     }, 400);
 
@@ -537,7 +563,8 @@ export function KlantgegevensDialog({
                   placeholder="Naam"
                   value={velden.naam}
                   onChange={(e) => zet({ naam: e.target.value })}
-                  autoFocus
+                  // Op de telefoon niet: dan schiet het toetsenbord over het scherm.
+                  autoFocus={!mobiel}
                 />
               </PopupVeld>
               <PopupPaar>
@@ -1037,6 +1064,27 @@ export function KlantgegevensDialog({
   // Een popup in het midden past daar niet. Eerst schuift er een onderblad
   // omhoog met wat je op straat nodig hebt; "Alles bekijken" maakt er een
   // eigen scherm van, met de onderdelen als lijst om op door te tikken.
+  const gewijzigd =
+    magBewerken &&
+    beginStand.current !== null &&
+    JSON.stringify({ velden, pand, extra, wijkId }) !== JSON.stringify(beginStand.current);
+
+  /** Op de telefoon kom je via terugtikken bij het kruisje, en is Opslaan
+   *  uit beeld. Dan niet zomaar weggooien wat je net invulde. */
+  async function sluitMetVraag() {
+    if (gewijzigd) {
+      const weg = await bevestig({
+        titel: "Wijzigingen niet opgeslagen",
+        tekst: "Je hebt iets aangepast in dit dossier. Tik op Terug om het nog op te slaan.",
+        bevestigLabel: "Weggooien",
+        annuleerLabel: "Terug",
+        gevaarlijk: true,
+      });
+      if (!weg) return;
+    }
+    onOpenChange(false);
+  }
+
   const tabNamen: Record<typeof tab, string> = {
     klant: "Gegevens",
     adres: "Het adres",
@@ -1162,7 +1210,7 @@ export function KlantgegevensDialog({
             </div>
             <button
               type="button"
-              onClick={() => onOpenChange(false)}
+              onClick={() => void sluitMetVraag()}
               aria-label="Sluiten"
               className="-mr-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-muted"
             >
@@ -1211,7 +1259,7 @@ export function KlantgegevensDialog({
             onClick={() => {
               if (stap === "tab") setStap("overzicht");
               else if (dossierCustomer) setStap("blad");
-              else onOpenChange(false);
+              else void sluitMetVraag();
             }}
             aria-label="Terug"
           >
@@ -1263,7 +1311,11 @@ export function KlantgegevensDialog({
     );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      // Op de telefoon ook bij wegtikken of Escape eerst vragen.
+      onOpenChange={(o) => (o || !mobiel ? onOpenChange(o) : void sluitMetVraag())}
+    >
       {mobiel ? (
         mobielDossier
       ) : (

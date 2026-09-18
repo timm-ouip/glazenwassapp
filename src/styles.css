@@ -337,3 +337,15 @@
     --secondary-foreground: #000;
   }
 }
+
+/* Een iPhone zoomt in zodra je in een veld tikt met tekst kleiner dan 16px,
+   en zoomt daarna niet vanzelf terug. Op aanraakschermen zijn alle
+   invulvelden daarom 16px; op de computer blijven ze zoals ontworpen. */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
+}

@@ -340,7 +340,7 @@ export function NotitieCel({
                     placeholder="+ €"
                     title="Wat dit werk extra kost, bovenop de vaste prijs"
                     inputMode="decimal"
-                    className="h-8 w-16 shrink-0 text-xs"
+                    className="h-8 w-16 shrink-0 text-xs pointer-coarse:w-20"
                     onChange={(e) => pasAan(i, { extra: e.target.value })}
                     onKeyDown={sluitBijEnter}
                   />

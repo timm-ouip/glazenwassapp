@@ -13,7 +13,7 @@ import { redenLabel, zetActief, type InactiefAdres } from "@/lib/stoppen";
 import { useRecht } from "@/lib/rechten";
 
 function frequentie(a: InactiefAdres): string {
-  return a.interval_maanden <= 1 ? "elke maand" : `om de ${a.interval_maanden} maanden`;
+  return a.interval_maanden <= 1 ? "elke maand" : `1× per ${a.interval_maanden} maanden`;
 }
 
 function sinds(tijd: string): string {

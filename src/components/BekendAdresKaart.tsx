@@ -77,7 +77,7 @@ export function BekendAdresKaart({
             <p className="mt-0.5 text-muted-foreground">
               {redenLabel(adres.inactief_reden)} sinds {sinds} ·{" "}
               {prijzenZien ? `${formatPrice(adres.price)} · ` : ""}
-              {adres.interval_maanden <= 1 ? "elke maand" : `om de ${adres.interval_maanden} maanden`}
+              {adres.interval_maanden <= 1 ? "elke maand" : `1× per ${adres.interval_maanden} maanden`}
               {adres.note.trim() ? ` · ${adres.note.trim()}` : ""}
             </p>
             {oudeKlant && (

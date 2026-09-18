@@ -314,10 +314,10 @@ export const INTERVALLEN = [1, 2, 3, 4, 6, 12] as const;
 
 export const intervalLabels: Record<number, string> = {
   1: "Elke maand",
-  2: "Om de 2 maanden",
-  3: "Om de 3 maanden",
-  4: "Om de 4 maanden",
-  6: "Om de 6 maanden",
+  2: "1× per 2 maanden",
+  3: "1× per 3 maanden",
+  4: "1× per 4 maanden",
+  6: "1× per 6 maanden",
   12: "Eén keer per jaar",
 };
 
@@ -1135,7 +1135,7 @@ export function isKalendermaand(maand: string): boolean {
   return /^\d{4}-\d{2}$/.test(maand);
 }
 
-/** Voor tooltips: "Om de 3 maanden — 3·6·9·12", of gewoon "Elke maand". */
+/** Voor tooltips: "1× per 3 maanden — 3·6·9·12", of gewoon "Elke maand". */
 export function ritmeOmschrijving(c: Pick<Customer, "interval_maanden" | "ritme">): string {
   const hoeVaak = intervalLabels[c.interval_maanden] ?? "";
   return c.interval_maanden <= 1 ? hoeVaak : `${hoeVaak} — ${ritmeLabel(c)}`;

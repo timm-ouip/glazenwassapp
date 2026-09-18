@@ -165,7 +165,7 @@ function PrijsCelMetRecht({ customer: c, ronde, onPatch }: Props) {
                   value={extras[i] ?? ""}
                   inputMode="decimal"
                   placeholder="0"
-                  className="h-8 w-14 shrink-0 text-xs"
+                  className="h-8 w-14 shrink-0 text-xs pointer-coarse:w-20"
                   onChange={(e) => setExtras(extras.map((x, j) => (j === i ? e.target.value : x)))}
                   onKeyDown={(e) => e.key === "Enter" && sluit()}
                 />

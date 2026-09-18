@@ -125,7 +125,7 @@ export function FrequentieKiezer({ customer: c, onPatch, alleenLezen = false }: 
 
 /**
  * De frequentie als veld in een invulschermpje, met hetzelfde menu als op de
- * wijklijst: "Elke maand", en "Om de 2 maanden ›" met een zijmenu voor de
+ * wijklijst: "Elke maand", en "1× per 2 maanden ›" met een zijmenu voor de
  * maanden die erbij horen. Eerst stond alles onder elkaar in één lange
  * keuzelijst, en dat was lastig lezen.
  *
