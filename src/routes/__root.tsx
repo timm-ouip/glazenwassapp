@@ -14,6 +14,8 @@ import { Toaster } from "../components/ui/sonner";
 import { AuthProvider } from "../lib/auth";
 import { BevestigProvider } from "../components/Bevestig";
 import { THEMA_SCRIPT } from "../lib/thema";
+// Legt vast met welke pagina de app opende; zie naarDagBijOpstarten.
+import "../lib/dagslot";
 
 function NotFoundComponent() {
   return (

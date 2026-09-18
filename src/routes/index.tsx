@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import {
   Fragment,
   memo,
@@ -26,6 +26,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { requireSession, useRequireAuth } from "@/lib/auth";
+import { naarDagBijOpstarten } from "@/lib/dagslot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -202,6 +203,8 @@ interface IndexSearch {
 export const Route = createFileRoute("/")({
   beforeLoad: async () => {
     await requireSession();
+    // Dagplanning vastgezet op dit toestel: de app opent meteen op vandaag.
+    if (typeof window !== "undefined" && naarDagBijOpstarten()) throw redirect({ to: "/dag" });
   },
   validateSearch: (search: Record<string, unknown>): IndexSearch => ({
     ...(typeof search["wijk"] === "string" && search["wijk"] ? { wijk: search["wijk"] } : {}),
@@ -267,6 +270,13 @@ function Index() {
   const navigate = useNavigate();
   const { wijk, dag } = Route.useSearch();
   const mobiel = useIsMobile();
+  // Vangnet voor het slot op de dag: kwam de eerste pagina van de server,
+  // dan zag beforeLoad geen localStorage en gebeurt het hier alsnog.
+  useEffect(() => {
+    if (naarDagBijOpstarten()) void navigate({ to: "/dag", replace: true });
+    // Alleen bij het openen van de pagina.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Telefoon en computer hebben elk hun eigen zoekbalk. Wissel je (tablet
   // draaien), dan begint de nieuwe leeg — dan hoort de lijst ook niet meer
   // op het oude woord gefilterd te staan.

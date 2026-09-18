@@ -10,6 +10,8 @@ import {
   IconFolder as Folder,
   IconCurrencyEuro as Euro,
   IconHammer as Hammer,
+  IconLock as Lock,
+  IconLockOpen as LockOpen,
   IconMapPin as MapPin,
   IconPrinter as Printer,
   IconSquare as Square,
@@ -17,6 +19,7 @@ import {
   IconUsers as Users,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
+import { dagVast, zetDagVast } from "@/lib/dagslot";
 
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
@@ -205,6 +208,18 @@ function DagPagina() {
    * hebben elk hun eigen mandje.
    */
   const [selecteren, setSelecteren] = useState(false);
+  // Pas na het laden lezen: de server kent de opslag van de telefoon niet.
+  const [vast, setVast] = useState(false);
+  useEffect(() => setVast(dagVast()), []);
+  function wisselVast() {
+    zetDagVast(!vast);
+    setVast(!vast);
+    toast.success(
+      vast
+        ? "Losgemaakt: de app opent weer op de wijken."
+        : "Vastgezet: de app opent op deze telefoon voortaan op de route van vandaag.",
+    );
+  }
   const [keuze, setKeuze] = useState<Set<string>>(new Set());
   const [klusKeuze, setKlusKeuze] = useState<Set<string>>(new Set());
   const [bezig, setBezig] = useState(false);
@@ -858,6 +873,17 @@ function DagPagina() {
               wat je hier komt doen. Wat de selecteerstand erbij zet, komt
               erachter. */}
           <span className="flex items-center gap-2">
+            <RondeKnop
+              actief={vast}
+              label={
+                vast
+                  ? "Vastgezet: de app opent hier op vandaag. Tik om los te maken."
+                  : "Vastzetten: de app opent op deze telefoon voortaan op vandaag"
+              }
+              onClick={wisselVast}
+            >
+              {vast ? <Lock className="size-4" /> : <LockOpen className="size-4" />}
+            </RondeKnop>
             <RondeKnop
               actief={selecteren}
               label="Aanvinken wat er niet af gekomen is"
