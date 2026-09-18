@@ -46,7 +46,6 @@ import {
   IconUser as User,
   IconCurrencyEuro as Euro,
   IconRoute as Route2,
-  IconCalendarCheck as CalendarCheck,
   IconCalendarPlus as CalendarPlus,
   IconCheck as Check,
   IconSquareCheck as CheckSquare,
@@ -236,6 +235,7 @@ const PLANMODUS_OPSLAG = "glazenwasapp.dagplanning-aan";
 /** Wat er in het sneltoetsen-venster staat (toets ?). */
 const WIJK_SNELTOETSEN: [string, string][] = [
   ["/", "Zoek straat"],
+  ["Esc (in de zoekbalk)", "Zoekbalk loslaten, zoekopdracht blijft"],
   ["x", "Selecteren aan / uit"],
   ["⌘ / Ctrl + klik", "Adres of straat selecteren, slepen voor meer"],
   ["a", "Alles aanvinken / niets"],
@@ -1896,9 +1896,7 @@ function Index() {
     };
     switch (e.key) {
       case "/":
-        return doe(() =>
-          document.querySelector<HTMLInputElement>('input[placeholder="Zoek straat"]')?.focus(),
-        );
+        return doe(() => document.querySelector<HTMLInputElement>("input[data-zoekbalk]")?.focus());
       case "x":
         if (magPlannen) doe(() => selecteermodus(!selecteren));
         return;
@@ -2124,41 +2122,6 @@ function Index() {
                   <CheckSquare className="size-4" /> Selecteren
                 </Button>
               )}
-              {selecteren && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="rounded-full"
-                    onClick={wisselAlles}
-                    disabled={alleZichtbare.length === 0}
-                    title={
-                      allesGekozen
-                        ? "Alles in beeld uitvinken"
-                        : `Alle ${alleZichtbare.length} adressen in beeld aanvinken`
-                    }
-                  >
-                    {allesGekozen ? (
-                      <Square className="size-4" />
-                    ) : (
-                      <CheckSquare className="size-4" />
-                    )}
-                    {allesGekozen ? "Niets" : "Alles"}
-                  </Button>
-                  <OverslaanKnop
-                    aantal={keuze.size}
-                    onOverslaan={(m) => void slaKeuzeOver(m)}
-                    onNietsOverslaan={() => void wisOverslaanVanKeuze()}
-                  />
-                  <InplannenKnop
-                    aantal={keuze.size}
-                    bewerktDag={bewerktDag}
-                    onKies={(d) => void planIn(d)}
-                    open={inplanOpen}
-                    onOpenChange={setInplanOpen}
-                  />
-                </>
-              )}
               <Button
                 size="sm"
                 variant="outline"
@@ -2344,63 +2307,6 @@ function Index() {
               </Label>
             </div>
           )}
-
-          {selecteren && (
-            // Blijft in beeld terwijl je naar beneden vinkt: het bedrag is
-            // waar je op stuurt bij het samenstellen van een dag.
-            <div className="hidden w-full flex-wrap items-center gap-2 border-t border-border/70 pt-2 md:flex">
-              <CalendarCheck className="size-4 text-brand-ink" />
-              {bewerktDag ? (
-                <Link
-                  to="/planning"
-                  search={{ dag: bewerktDag }}
-                  className="text-[13px] font-medium underline-offset-2 hover:underline"
-                  title="Deze dag op de kalender bekijken"
-                >
-                  Je bewerkt {toonDatum(bewerktDag)}
-                </Link>
-              ) : (
-                <span className="text-[13px] font-medium">Geselecteerd</span>
-              )}
-              {prijzenZien && (
-                <span className="font-display text-[19px] font-semibold tabular-nums tracking-[-0.02em]">
-                  {formatPrice(keuzeBedrag)}
-                </span>
-              )}
-              <span className="text-[12.5px] text-muted-foreground">
-                {keuze.size} {keuze.size === 1 ? "adres" : "adressen"}
-              </span>
-              {keuze.size > 0 && (
-                <button
-                  className="text-[12.5px] text-muted-foreground underline"
-                  onClick={wisKeuze}
-                >
-                  selectie wissen
-                </button>
-              )}
-
-              {/* Drie kleuren zonder uitleg is raden. Onder sm alleen de
-                  bolletjes: de bedragen hiernaast zijn belangrijker. */}
-              <div className="ml-auto flex items-center gap-3">
-                {[
-                  { stip: "bg-tint-amber ring-tint-amber-ink/30", tekst: "op deze dag" },
-                  { stip: "bg-tint-groen ring-tint-groen-ink/30", tekst: "al gewassen" },
-                  { stip: "bg-tint-paars ring-tint-paars-ink/30", tekst: "al ingepland" },
-                ].map((l) => (
-                  <span
-                    key={l.tekst}
-                    className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground"
-                    title={l.tekst}
-                  >
-                    <span
-                      className={`size-2.5 shrink-0 rounded-full ring-1 ring-inset ${l.stip}`}
-                    />
-                    <span className="hidden sm:inline">{l.tekst}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {selectie.length > 1 && (
@@ -2495,6 +2401,108 @@ function Index() {
             ) : null}
           </DragOverlay>
         </DndContext>
+
+        {/* Op de computer: de balk van de selecteermodus zweeft onderin,
+            net als op de telefoon. Bovenin zou hij de lijst omlaag duwen
+            zodra de modus aangaat. Sticky en niet fixed, zodat hij midden
+            boven de lijst staat en niet onder de zijbalk. */}
+        {selecteren && !mobiel && (
+          // Rechts ruimte voor Paaltje: die staat vast rechtsonder, en op een
+          // smaller scherm zou hij anders het kruisje afdekken.
+          <div className="pointer-events-none sticky bottom-4 z-30 flex justify-center pt-2 pr-16">
+            <div className="pointer-events-auto flex w-full max-w-3xl items-center gap-3 rounded-[20px] border border-border bg-card py-2 pl-4 pr-2 shadow-[0_8px_30px_oklch(0.3_0.02_70/22%)]">
+              <div className="min-w-0 overflow-hidden leading-tight">
+                <p className="flex items-baseline gap-1.5 whitespace-nowrap">
+                  {prijzenZien && (
+                    <span className="font-display text-[19px] font-semibold tabular-nums tracking-[-0.02em]">
+                      {formatPrice(keuzeBedrag)}
+                    </span>
+                  )}
+                  <span className="text-[12.5px] text-muted-foreground">
+                    {prijzenZien ? "· " : ""}
+                    {keuze.size} {keuze.size === 1 ? "adres" : "adressen"}
+                  </span>
+                  {keuze.size > 0 && (
+                    <button
+                      className="ml-1 text-[12px] text-muted-foreground underline"
+                      onClick={wisKeuze}
+                      title="Selectie wissen (Esc)"
+                    >
+                      wissen
+                    </button>
+                  )}
+                </p>
+                <div className="mt-0.5 flex items-center gap-3 whitespace-nowrap text-[11.5px] text-muted-foreground">
+                  {bewerktDag && (
+                    <Link
+                      to="/planning"
+                      search={{ dag: bewerktDag }}
+                      className="min-w-0 truncate font-medium text-foreground underline-offset-2 hover:underline"
+                      title="Deze dag op de kalender bekijken"
+                    >
+                      Je bewerkt {toonDatum(bewerktDag)}
+                    </Link>
+                  )}
+                  {/* Drie kleuren zonder uitleg is raden. */}
+                  {[
+                    { stip: "bg-tint-amber ring-tint-amber-ink/30", tekst: "op de dag" },
+                    { stip: "bg-tint-groen ring-tint-groen-ink/30", tekst: "gewassen" },
+                    { stip: "bg-tint-paars ring-tint-paars-ink/30", tekst: "gepland" },
+                  ].map((l) => (
+                    <span key={l.tekst} className="flex items-center gap-1.5">
+                      <span
+                        className={`size-2.5 shrink-0 rounded-full ring-1 ring-inset ${l.stip}`}
+                      />
+                      <span className="max-lg:hidden">{l.tekst}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={wisselAlles}
+                  disabled={alleZichtbare.length === 0}
+                  title={
+                    allesGekozen
+                      ? "Alles in beeld uitvinken (a)"
+                      : `Alle ${alleZichtbare.length} adressen in beeld aanvinken (a)`
+                  }
+                >
+                  {allesGekozen ? (
+                    <Square className="size-4" />
+                  ) : (
+                    <CheckSquare className="size-4" />
+                  )}
+                  {allesGekozen ? "Niets" : "Alles"}
+                </Button>
+                <OverslaanKnop
+                  aantal={keuze.size}
+                  onOverslaan={(m) => void slaKeuzeOver(m)}
+                  onNietsOverslaan={() => void wisOverslaanVanKeuze()}
+                />
+                <InplannenKnop
+                  aantal={keuze.size}
+                  bewerktDag={bewerktDag}
+                  onKies={(d) => void planIn(d)}
+                  open={inplanOpen}
+                  onOpenChange={setInplanOpen}
+                />
+                <button
+                  type="button"
+                  onClick={() => selecteermodus(false)}
+                  aria-label="Stoppen met selecteren"
+                  title="Stoppen met selecteren (x)"
+                  className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <KlantDialog

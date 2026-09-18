@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
  * tweede en derde straat kunt intikken. Alles wat op één van de tegels past
  * blijft staan: je wilt die straten náást elkaar zien, niet alleen wat op
  * allebei past. Backspace in een leeg vak haalt de laatste tegel weer weg.
+ * Esc laat de zoekbalk los; wat je zocht blijft staan.
  */
 export function ZoekBalk({
   placeholder,
@@ -54,9 +55,17 @@ export function ZoekBalk({
       zetVast();
       return;
     }
+    // Esc laat de zoekbalk los, maar de zoekopdracht blijft staan: zo kun je
+    // een straat intikken en daarna met de sneltoetsen verder (x, a, i…)
+    // zonder de muis. Enter in een leeg vak doet hetzelfde.
+    if (e.key === "Escape") {
+      e.preventDefault();
+      invoer.current?.blur();
+      return;
+    }
     if (e.key === "Enter") {
       e.preventDefault();
-      zetVast();
+      if (!zetVast()) invoer.current?.blur();
       return;
     }
     if (e.key === "Backspace" && !tekst && tegels.length) {
@@ -97,6 +106,9 @@ export function ZoekBalk({
         ref={invoer}
         className="h-6 min-w-16 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
         placeholder={tegels.length ? "" : placeholder}
+        // Voor de sneltoets /: de voorbeeldtekst verdwijnt zodra er een
+        // tegel staat, dit kenmerk niet.
+        data-zoekbalk=""
         value={tekst}
         onChange={(e) => {
           setTekst(e.target.value);
