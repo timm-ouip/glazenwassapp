@@ -214,12 +214,15 @@ export interface QuickNote {
 /**
  * Werk dat er alleen in bepaalde maanden bij komt. De maanden zijn
  * kalendermaanden ("01"-"12"), dus het herhaalt zich elk jaar: "in maart en
- * september komt de serre erbij, en dan is het € 25".
+ * september komt de serre erbij, en dan is het € 25". Met een jaar erbij is
+ * het eenmalig: "volgende maand één keer de serre".
  */
 export interface Maandwerk {
   /** Vast kenmerk, uitgedeeld door de database. De meerprijs hangt eraan. */
   id?: string;
   maanden: string[];
+  /** Alleen in dit jaar (eenmalig). Zonder jaar komt het elk jaar terug. */
+  jaar?: number;
   notitie: string;
   /** Wat dit werk kost bovenop de vaste prijs van het adres. Apart van de
    *  vaste prijs, zodat op een factuur te zien is wat het meerwerk was en
@@ -250,6 +253,7 @@ export function leesMaandwerk(waarde: unknown, extras?: unknown): Maandwerk[] {
         // uit, en dan raakt de meerprijs zijn stuk werk kwijt.
         ...(typeof r["id"] === "string" && r["id"] ? { id: r["id"] } : {}),
         maanden,
+        ...(typeof r["jaar"] === "number" && Number.isInteger(r["jaar"]) ? { jaar: r["jaar"] } : {}),
         notitie: typeof r["notitie"] === "string" ? r["notitie"] : "",
         extra:
           typeof r["id"] === "string" && typeof perId[r["id"]] === "number"
@@ -296,6 +300,30 @@ export function basisRitmeVan(
 
 export const EVEN_MAANDEN = ["02", "04", "06", "08", "10", "12"];
 export const ONEVEN_MAANDEN = ["01", "03", "05", "07", "09", "11"];
+
+/**
+ * Eenmalig werk waarvan de maand voorbij is. Het blijft bewaard (de meerprijs
+ * hangt eraan), maar telt nergens meer mee.
+ */
+export function isGeweest(w: Pick<Maandwerk, "maanden" | "jaar">, vandaag = new Date()): boolean {
+  if (w.jaar === undefined) return false;
+  const nu = vandaag.getFullYear() * 12 + vandaag.getMonth();
+  return w.maanden.every((m) => w.jaar! * 12 + Number(m) - 1 < nu);
+}
+
+/**
+ * Het jaar waarin deze kalendermaand ("01"-"12") het eerst weer langskomt:
+ * deze maand of later dit jaar, en anders volgend jaar.
+ */
+export function eerstvolgendJaar(maand: string, vandaag = new Date()): number {
+  return Number(maand) >= vandaag.getMonth() + 1 ? vandaag.getFullYear() : vandaag.getFullYear() + 1;
+}
+
+/** "mrt/sep" voor werk dat elk jaar terugkomt, "okt 2026" voor eenmalig werk. */
+export function maandwerkMaanden(w: Pick<Maandwerk, "maanden" | "jaar">): string {
+  const maanden = w.maanden.map((m) => toonMaandKort(`2000-${m}`)).join("/");
+  return w.jaar === undefined ? maanden : `${maanden} ${w.jaar}`;
+}
 
 /**
  * De oude even/oneven-notities als maandwerk. Het importscherm leest per
@@ -885,8 +913,7 @@ export function noteVoorMaand(c: Pick<Customer, "note" | "maandwerk">, maand: st
       // Print je alle klanten tegelijk, dan is er geen maand om op te kiezen
       // en moet erbij staan wanneer dit werk meegaat.
       if (maand !== "alles") return tekst;
-      const maanden = w.maanden.map((m) => toonMaandKort(`2000-${m}`)).join("/");
-      return `${tekst} (${maanden})`;
+      return `${tekst} (${maandwerkMaanden(w)})`;
     })
     .filter(Boolean);
   return [c.note, ...extra]
@@ -1164,13 +1191,20 @@ export function aanDeBeurt(
  * bestaan als printoptie.
  */
 export function maandwerkVoor(c: Pick<Customer, "maandwerk">, maand: string): Maandwerk[] {
-  if (maand === "alles") return c.maandwerk;
+  // Zonder echte maand telt eenmalig werk dat al geweest is niet meer mee.
+  if (maand === "alles") return c.maandwerk.filter((w) => !isGeweest(w));
   if (maand === "even" || maand === "oneven") {
     const even = maand === "even";
-    return c.maandwerk.filter((w) => w.maanden.some((m) => (Number(m) % 2 === 0) === even));
+    return c.maandwerk.filter(
+      (w) => !isGeweest(w) && w.maanden.some((m) => (Number(m) % 2 === 0) === even),
+    );
   }
   const nr = maand.slice(5, 7);
-  return c.maandwerk.filter((w) => w.maanden.includes(nr));
+  const jaar = Number(maand.slice(0, 4));
+  // Eenmalig werk alleen in zijn eigen jaar; de rest elk jaar.
+  return c.maandwerk.filter(
+    (w) => w.maanden.includes(nr) && (w.jaar === undefined || w.jaar === jaar),
+  );
 }
 
 /** Wat er deze ronde bij komt bovenop de vaste prijs. */

@@ -259,7 +259,9 @@ function maandwerkTekst(werk: unknown): string[] {
   return werk.flatMap((w) => {
     const maanden = Array.isArray(w?.maanden) ? w.maanden.map((m: string) => MAANDNAMEN[Number(m) - 1] ?? m) : [];
     if (maanden.length === 0) return [];
-    return [`${maanden.join(", ")}: ${String(w?.notitie ?? "")}`];
+    // Met een jaar is het eenmalig: alleen in die maand van dat jaar.
+    const wanneer = typeof w?.jaar === "number" ? `${maanden.join(", ")} ${w.jaar} (eenmalig)` : maanden.join(", ");
+    return [`${wanneer}: ${String(w?.notitie ?? "")}`];
   });
 }
 

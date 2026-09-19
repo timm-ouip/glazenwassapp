@@ -7,12 +7,12 @@ import { useRecht } from "@/lib/rechten";
 import {
   extraVoorMaand,
   formatPrice,
+  isGeweest,
+  maandwerkMaanden,
   maandwerkVoor,
   prijsVoorMaand,
   toonMaand,
-  toonMaandKort,
   type Customer,
-  type Maandwerk,
 } from "@/lib/klanten";
 
 interface Props {
@@ -26,10 +26,6 @@ interface Props {
 
 function bedragVan(waarde: string): number {
   return Number(waarde.replace(",", ".").replace(/[^\d.]/g, "")) || 0;
-}
-
-function maandenVan(w: Maandwerk): string {
-  return w.maanden.map((m) => toonMaandKort(`2000-${m}`)).join("/");
 }
 
 /**
@@ -64,6 +60,9 @@ function PrijsCelMetRecht({ customer: c, ronde, onPatch }: Props) {
   const [extras, setExtras] = useState<string[]>([]);
 
   const werkNu = maandwerkVoor(c, ronde);
+  // Eenmalig werk dat geweest is doet niet meer mee, behalve in de maand die
+  // je bekijkt als het dáár meetelde: dan hoort het bij het bedrag in de regel.
+  const toon = (w: (typeof c.maandwerk)[number]) => !isGeweest(w) || werkNu.includes(w);
   const extra = extraVoorMaand(c, ronde);
   const totaal = prijsVoorMaand(c, ronde);
 
@@ -96,7 +95,7 @@ function PrijsCelMetRecht({ customer: c, ronde, onPatch }: Props) {
 
   // Is er niets bijzonders aan de hand, dan hoort hier geen schermpje: dan is
   // er één prijs en typ je die gewoon in de regel.
-  if (c.maandwerk.length === 0) {
+  if (!c.maandwerk.some(toon)) {
     return (
       <InlineCel
         value={formatPrice(c.price)}
@@ -149,28 +148,30 @@ function PrijsCelMetRecht({ customer: c, ronde, onPatch }: Props) {
           </div>
         </div>
 
-        {c.maandwerk.length > 0 && (
+        {c.maandwerk.some(toon) && (
           <div className="space-y-1.5 border-t border-border pt-3">
             <p className="text-[11px] font-medium text-muted-foreground">
               Extra in bepaalde maanden
             </p>
-            {c.maandwerk.map((w, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-xs">
-                  {w.notitie || "meerwerk"}
-                  <span className="ml-1 text-muted-foreground">{maandenVan(w)}</span>
-                </span>
-                <span className="text-xs text-muted-foreground">+ €</span>
-                <Input
-                  value={extras[i] ?? ""}
-                  inputMode="decimal"
-                  placeholder="0"
-                  className="h-8 w-14 shrink-0 text-xs pointer-coarse:w-20"
-                  onChange={(e) => setExtras(extras.map((x, j) => (j === i ? e.target.value : x)))}
-                  onKeyDown={(e) => e.key === "Enter" && sluit()}
-                />
-              </div>
-            ))}
+            {c.maandwerk.map((w, i) =>
+              !toon(w) ? null : (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-xs">
+                    {w.notitie || "meerwerk"}
+                    <span className="ml-1 text-muted-foreground">{maandwerkMaanden(w)}</span>
+                  </span>
+                  <span className="text-xs text-muted-foreground">+ €</span>
+                  <Input
+                    value={extras[i] ?? ""}
+                    inputMode="decimal"
+                    placeholder="0"
+                    className="h-8 w-14 shrink-0 text-xs pointer-coarse:w-20"
+                    onChange={(e) => setExtras(extras.map((x, j) => (j === i ? e.target.value : x)))}
+                    onKeyDown={(e) => e.key === "Enter" && sluit()}
+                  />
+                </div>
+              ),
+            )}
           </div>
         )}
 
