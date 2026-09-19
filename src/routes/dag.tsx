@@ -54,7 +54,14 @@ import {
   voegToeAanWasdag,
   werkWasdagRegelBij,
 } from "@/lib/wasdag";
-import { fetchKlussen, telDagVan, vinkKlusAf, zetKlusOpDag, type Klus } from "@/lib/klussen";
+import {
+  fetchKlussen,
+  telDagVan,
+  vinkKlusAf,
+  zetAfvinkTerug,
+  zetKlusOpDag,
+  type Klus,
+} from "@/lib/klussen";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   laatsteUndo,
@@ -269,7 +276,7 @@ function DagPagina() {
 
   async function vinkAf(k: Klus, aan: boolean) {
     try {
-      await vinkKlusAf(k, aan);
+      await vinkKlusAf(k, aan, datum);
     } catch (e) {
       toast.error("Opslaan mislukt: " + (e as Error).message);
       return;
@@ -277,7 +284,7 @@ function DagPagina() {
     pushUndo({
       label: `Opdracht ${k.omschrijving}`,
       undo: async () => {
-        await vinkKlusAf(k, !aan);
+        await zetAfvinkTerug(k);
         qc.invalidateQueries({ queryKey: ["klussen"] });
       },
     });

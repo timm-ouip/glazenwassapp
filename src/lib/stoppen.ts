@@ -10,7 +10,7 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { vandaag } from "@/lib/wasdag";
+import { haalUitWasdagBewaard, vandaag, zetWasdagTerug } from "@/lib/wasdag";
 import { eenVan } from "@/lib/embed";
 import { haalAllePaginas } from "@/lib/pagineren";
 
@@ -55,6 +55,32 @@ export async function geplandeDagen(ids: string[]): Promise<{ dagen: string[]; a
   if (error) throw error;
   const dagen = [...new Set((data ?? []).map((r) => r.datum))].sort();
   return { dagen, aantal: dagen.length };
+}
+
+/**
+ * Deze adressen van de planning halen, vanaf morgen (vandaag en wat geweest
+ * is blijft staan, net als bij stoppen). Geeft de kenmerken terug om het met
+ * `zetPlanningTerug` ongedaan te maken, met ieders eigen bedrag en notitie.
+ */
+export async function haalVanPlanning(ids: string[]): Promise<string[]> {
+  const { dagen } = await geplandeDagen(ids);
+  const kenmerken: string[] = [];
+  try {
+    for (const dag of dagen) {
+      const kenmerk = await haalUitWasdagBewaard(dag, ids);
+      if (kenmerk) kenmerken.push(kenmerk);
+    }
+  } catch (e) {
+    // Halverwege mislukt (bereik weg): wat al van de planning af was eerst
+    // terug, anders zijn die dagen kwijt zonder dat je het kunt terugdraaien.
+    await zetPlanningTerug(kenmerken).catch(() => {});
+    throw e;
+  }
+  return kenmerken;
+}
+
+export async function zetPlanningTerug(kenmerken: string[]) {
+  for (const kenmerk of kenmerken) await zetWasdagTerug(kenmerk);
 }
 
 export async function zetInactief(

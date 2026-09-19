@@ -76,6 +76,17 @@ export async function zetStatus(ids: string[], status: AanmeldStatus) {
   if (error) throw error;
 }
 
+/**
+ * Een automatisch gekoppelde aanmelding terugdraaien: het adres krijgt terug
+ * wie er eerst aan hing, een door de aanmelding gemaakte klant gaat naar de
+ * prullenbak, en een bijgevulde postcode gaat er weer af. Weigert als er
+ * intussen iets anders aan het adres veranderd is.
+ */
+export async function aanmeldingTerugdraaien(id: string) {
+  const { error } = await supabase.rpc("aanmelding_terugdraaien", { aanmelding: id });
+  if (error) throw error;
+}
+
 /** Onthoudt bij welk adres en welke klant een inzending terechtkwam, zodat de
  *  kaart in het postvak later laat zien waar het naartoe ging. */
 export async function zetVerwerkt(id: string, customerId: string, klantId: string | null) {

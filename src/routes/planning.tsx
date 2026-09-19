@@ -95,6 +95,7 @@ import {
   telDagVan,
   verwijderKlus,
   vinkKlusAf,
+  zetAfvinkTerug,
   zetKlusOpDag,
   haalKlusTerug,
   nieuweKlus,
@@ -552,7 +553,7 @@ function Planning() {
     pushUndo({
       label: `Opdracht ${k.omschrijving}`,
       undo: async () => {
-        await vinkKlusAf(k, !aan);
+        await zetAfvinkTerug(k);
         qc.invalidateQueries({ queryKey: ["klussen"] });
       },
     });

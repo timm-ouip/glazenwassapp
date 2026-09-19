@@ -21,7 +21,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
+import type { Database, Json } from "@/integrations/supabase/types";
 
 /** Wat de bezoeker invult. Alles tekst; de server knipt en controleert zelf. */
 export interface Inzending {
@@ -156,7 +156,7 @@ async function zoekAdresRegel(
       .from("customers")
       // Alleen adressen in een straat en wijk die er nog zijn: de adressen van
       // een weggegooide wijk blijven zelf staan en telden anders nog mee.
-      .select("id,house_number,addition,postcode,klant_id,inactief_op,inactief_reden,streets!inner(deleted_at,districts!inner(deleted_at))")
+      .select("id,house_number,addition,postcode,klant_id,aangemeld_op,inactief_op,inactief_reden,streets!inner(deleted_at,districts!inner(deleted_at))")
       .eq("company_id", companyId)
       .eq("house_number", velden.nummer)
       .is("deleted_at", null)
@@ -196,7 +196,7 @@ async function zoekAdresRegel(
 
   const { data: adressen } = await admin
     .from("customers")
-    .select("id,house_number,addition,postcode,klant_id,inactief_op,inactief_reden")
+    .select("id,house_number,addition,postcode,klant_id,aangemeld_op,inactief_op,inactief_reden")
     .in("street_id", straatIds)
     .eq("house_number", velden.nummer)
     .is("deleted_at", null);
@@ -262,8 +262,22 @@ export const dienGegevensIn = createServerFn({ method: "POST" })
       toevoeging: nr.toevoeging,
     });
 
+    /** De klant die er vóór deze aanmelding aan het adres hing, zoals hij was. */
+    let bestaandeVooraf: {
+      id: string;
+      naam: string;
+      email: string;
+      telefoon: string;
+      straat: string;
+      huisnummer: string;
+      postcode: string;
+      plaats: string;
+    } | null = null;
     let soort: "gekoppeld" | "wijziging" | "onbekend" | "bekend_adres" = "onbekend";
     let klantId: string | null = null;
+    /** Wat er automatisch veranderde, om het precies terug te kunnen draaien
+     *  (zie de migratie aanmelding_terugdraaien). */
+    let automatisch: Record<string, unknown> | null = null;
 
     if (adres?.inactief_op) {
       // Dit huis kennen we: iemand stopte of verhuisde. Niets automatisch
@@ -275,15 +289,26 @@ export const dienGegevensIn = createServerFn({ method: "POST" })
       // Staan er al gegevens bij dit adres? Dan wordt er niets aangeraakt.
       // Iemand die een postcode kan typen mag niet het telefoonnummer van een
       // bestaande klant kunnen overschrijven.
-      let bestaande: { id: string; naam: string; email: string; telefoon: string } | null = null;
+      let bestaande: {
+        id: string;
+        naam: string;
+        email: string;
+        telefoon: string;
+        straat: string;
+        huisnummer: string;
+        postcode: string;
+        plaats: string;
+      } | null = null;
       if (adres.klant_id) {
         const { data: k } = await supabaseAdmin
           .from("klanten")
-          .select("id,naam,email,telefoon")
+          .select("id,naam,email,telefoon,straat,huisnummer,postcode,plaats")
           .eq("id", adres.klant_id)
+          .eq("company_id", bedrijf.id)
           .is("deleted_at", null)
           .maybeSingle();
         bestaande = k ?? null;
+        bestaandeVooraf = bestaande;
       }
       const heeftGegevens =
         !!bestaande &&
@@ -295,33 +320,116 @@ export const dienGegevensIn = createServerFn({ method: "POST" })
         soort = "wijziging";
         klantId = bestaande!.id;
       } else {
-        soort = "gekoppeld";
+        // Het adres is nog leeg: de gegevens komen er meteen bij. Wel open in
+        // Te doen (niet stil op klaar), met Klopt en Ongedaan maken.
         const velden = { naam, email, telefoon, straat, huisnummer, postcode, plaats };
+        const postcodeGevuld = !!postcode && !(adres.postcode ?? "").trim();
+        let nieuweKlant: string | null = null;
+        let kon = true;
         if (bestaande) {
-          await supabaseAdmin.from("klanten").update(velden).eq("id", bestaande.id);
-          klantId = bestaande.id;
+          const { error } = await supabaseAdmin
+            .from("klanten")
+            .update(velden)
+            .eq("id", bestaande.id)
+            .eq("company_id", bedrijf.id);
+          if (error) {
+            console.error("aanmelding: klant bijwerken", error.message);
+            kon = false;
+          } else klantId = bestaande.id;
         } else {
-          const { data: nieuw } = await supabaseAdmin
+          const { data: nieuw, error } = await supabaseAdmin
             .from("klanten")
             .insert({ ...velden, company_id: bedrijf.id })
             .select("id")
             .single();
-          klantId = nieuw?.id ?? null;
+          if (error || !nieuw) {
+            console.error("aanmelding: klant aanmaken", error?.message);
+            kon = false;
+          } else klantId = nieuweKlant = nieuw.id;
         }
-        await supabaseAdmin
-          .from("customers")
-          .update({
-            klant_id: klantId,
-            aangemeld_op: new Date().toISOString(),
-            // De postcode alleen bijvullen als hij nog leeg was: wat er staat
-            // komt van het Kadaster en is betrouwbaarder dan een typefout.
-            ...(postcode && !(adres.postcode ?? "").trim() ? { postcode } : {}),
-          })
-          .eq("id", adres.id);
+        if (kon) {
+          // Alleen als er nog steeds dezelfde (of geen) klant aan hangt: komen
+          // er twee aanmeldingen vlak na elkaar binnen, dan wint de eerste en
+          // blijft er geen losse klant achter.
+          let vraag = supabaseAdmin
+            .from("customers")
+            .update({
+              klant_id: klantId,
+              aangemeld_op: new Date().toISOString(),
+              // De postcode alleen bijvullen als hij nog leeg was: wat er staat
+              // komt van het Kadaster en is betrouwbaarder dan een typefout.
+              ...(postcodeGevuld ? { postcode } : {}),
+            })
+            .eq("id", adres.id)
+            .eq("company_id", bedrijf.id);
+          vraag = adres.klant_id ? vraag.eq("klant_id", adres.klant_id) : vraag.is("klant_id", null);
+          const { data: geraakt, error } = await vraag.select("id");
+          if (error || (geraakt ?? []).length === 0) {
+            console.error("aanmelding: adres koppelen", error?.message ?? "adres was intussen veranderd");
+            kon = false;
+          }
+        }
+        if (kon) {
+          soort = "gekoppeld";
+          automatisch = {
+            klant_nieuw: nieuweKlant !== null,
+            vorige_klant_id: adres.klant_id ?? null,
+            vorige_klant: bestaande
+              ? {
+                  naam: bestaande.naam,
+                  email: bestaande.email,
+                  telefoon: bestaande.telefoon,
+                  straat: bestaande.straat,
+                  huisnummer: bestaande.huisnummer,
+                  postcode: bestaande.postcode,
+                  plaats: bestaande.plaats,
+                }
+              : null,
+            postcode_gevuld: postcodeGevuld,
+            vorige_aangemeld_op: adres.aangemeld_op ?? null,
+          };
+        } else {
+          // Niet gelukt: half gekoppeld is erger dan niet. De net gemaakte
+          // klant weg, of de oude (lege) gegevens terug; een mens handelt het
+          // af, net als een onbekend adres.
+          await draaiKlantTerug(nieuweKlant, bestaande);
+          soort = "onbekend";
+          klantId = null;
+        }
       }
     }
 
-    await supabaseAdmin.from("aanmeldingen").insert({
+    /** Een automatisch gemaakte of bijgewerkte klant terug zoals hij was. */
+    async function draaiKlantTerug(
+      nieuw: string | null,
+      oud: {
+        id: string;
+        naam: string;
+        email: string;
+        telefoon: string;
+        straat: string;
+        huisnummer: string;
+        postcode: string;
+        plaats: string;
+      } | null,
+    ) {
+      const { error } = nieuw
+        ? await supabaseAdmin
+            .from("klanten")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", nieuw)
+            .eq("company_id", bedrijf.id)
+        : oud
+          ? await supabaseAdmin
+              .from("klanten")
+              .update((({ id: _, ...rest }) => rest)(oud))
+              .eq("id", oud.id)
+              .eq("company_id", bedrijf.id)
+          : { error: null };
+      if (error) console.error("aanmelding: klant terugzetten mislukt", error.message);
+    }
+
+    const { error: logFout } = await supabaseAdmin.from("aanmeldingen").insert({
       company_id: bedrijf.id,
       customer_id: adres?.id ?? null,
       klant_id: klantId,
@@ -334,9 +442,38 @@ export const dienGegevensIn = createServerFn({ method: "POST" })
       toevoeging: nr.toevoeging,
       plaats,
       soort,
-      status: soort === "gekoppeld" ? "klaar" : "open",
+      // Ook een automatisch gekoppelde blijft open, tot iemand hem nakeek.
+      status: "open",
+      automatisch: automatisch as Json | null,
       ip,
     });
+    if (logFout) {
+      console.error("aanmelding: vastleggen", logFout.message);
+      // Zonder aanmelding in Te doen is een automatische koppeling onzichtbaar
+      // en niet terug te draaien. Dan liever niets: de koppeling eraf.
+      if (soort === "gekoppeld" && adres && automatisch) {
+        const au = automatisch as {
+          vorige_klant_id: string | null;
+          vorige_aangemeld_op: string | null;
+          postcode_gevuld: boolean;
+          klant_nieuw: boolean;
+        };
+        const { error: adresFout } = await supabaseAdmin
+          .from("customers")
+          .update({
+            klant_id: au.vorige_klant_id,
+            aangemeld_op: au.vorige_aangemeld_op,
+            ...(au.postcode_gevuld ? { postcode: "" } : {}),
+          })
+          .eq("id", adres.id)
+          .eq("company_id", bedrijf.id);
+        if (adresFout) console.error("aanmelding: adres terugzetten mislukt", adresFout.message);
+        // De klant: `bestaande` is nog precies wat er vóór de aanmelding stond.
+        const vooraf = adres.klant_id ? bestaandeVooraf : null;
+        await draaiKlantTerug(au.klant_nieuw ? klantId : null, vooraf);
+      }
+      throw new Error(ALGEMEEN);
+    }
 
     return { ok: true as const };
   });

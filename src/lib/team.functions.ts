@@ -43,6 +43,24 @@ export const createCompanyAndOwner = createServerFn({ method: "POST" })
     return { companyId: company.id as string };
   });
 
+/** Zo lang is een uitnodiging geldig. Daarna moet de eigenaar een nieuwe sturen. */
+const UITNODIGING_DAGEN = 7;
+
+/** Wanneer iemand is uitgenodigd: wat wij noteerden, anders wat Supabase weet. */
+function uitgenodigdOp(user: {
+  app_metadata?: Record<string, unknown> | null;
+  invited_at?: string | null;
+  created_at?: string;
+}): string {
+  const eigen = user.app_metadata?.["uitgenodigd_op"];
+  return typeof eigen === "string" && eigen ? eigen : (user.invited_at ?? user.created_at ?? "");
+}
+
+function isVerlopen(op: string): boolean {
+  const t = Date.parse(op);
+  return !Number.isFinite(t) || Date.now() - t > UITNODIGING_DAGEN * 24 * 60 * 60 * 1000;
+}
+
 /** Alleen de eigenaar mag medewerkers uitnodigen per e-mail. */
 export const inviteEmployee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -65,19 +83,73 @@ export const inviteEmployee = createServerFn({ method: "POST" })
     const request = getRequest();
     const origin = new URL(request.url).origin;
 
-    const { data: uitnodiging, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${origin}/uitnodiging`,
-    });
-    if (error || !uitnodiging?.user) throw new Error(error?.message ?? "Uitnodigen mislukte");
-
+    const redirectTo = `${origin}/uitnodiging`;
     // Het bedrijf staat in app_metadata en niet in user_metadata: die laatste
     // kan een ingelogde gebruiker zelf aanpassen, en dan zou iedereen met een
     // bedrijfs-id zich bij dat bedrijf kunnen aansluiten. app_metadata kan
-    // alleen de server wijzigen.
-    const { error: metaFout } = await supabaseAdmin.auth.admin.updateUserById(uitnodiging.user.id, {
-      app_metadata: { uitgenodigd_voor: me.company_id },
+    // alleen de server wijzigen. Met de datum: na UITNODIGING_DAGEN verloopt hij.
+    const metadata = { uitgenodigd_voor: me.company_id, uitgenodigd_op: new Date().toISOString() };
+
+    // Eerst kijken of er al een account met dit adres is, vóór er iets
+    // verstuurd wordt. Opzoeken in de database, niet via een inloglink maken:
+    // dan weigerde Supabase de mail die daarna moest komen.
+    const { data: bestaandId, error: zoekFout } = await supabaseAdmin.rpc("gebruiker_met_email", {
+      adres: email,
+    });
+    if (zoekFout) throw new Error("Uitnodigen mislukte");
+    // Eén melding voor alles wat niet kan: anders vertelt hij aan elke
+    // eigenaar of een adres ergens anders in Wooshy gebruikt wordt.
+    const kanNiet = "Dit e-mailadres kan nu niet uitgenodigd worden.";
+    if (bestaandId) {
+      const { data: al } = await supabaseAdmin
+        .from("employees")
+        .select("company_id")
+        .eq("id", bestaandId)
+        .maybeSingle();
+      if (al) throw new Error(al.company_id === me.company_id ? "Deze persoon zit al in je team." : kanNiet);
+      // Een lopende uitnodiging van een ander bedrijf niet overnemen: dan zou
+      // hij via de mail van dat bedrijf bij jou binnenkomen. Kan dat niet
+      // nagekeken worden, dan niet.
+      const { data: bestaand, error: ophaalFout } = await supabaseAdmin.auth.admin.getUserById(bestaandId);
+      if (ophaalFout || !bestaand?.user) throw new Error("Uitnodigen mislukte");
+      const andere = bestaand.user.app_metadata?.["uitgenodigd_voor"];
+      if (
+        typeof andere === "string" &&
+        andere &&
+        andere !== me.company_id &&
+        !isVerlopen(uitgenodigdOp(bestaand.user))
+      ) {
+        throw new Error(kanNiet);
+      }
+    }
+
+    const { data: uitnodiging, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+    });
+    if (!error && uitnodiging?.user) {
+      const { error: metaFout } = await supabaseAdmin.auth.admin.updateUserById(uitnodiging.user.id, {
+        app_metadata: metadata,
+      });
+      if (metaFout) throw new Error(metaFout.message);
+      return { ok: true };
+    }
+
+    // Bestaat het account al en is het bevestigd, dan weigert Supabase een
+    // uitnodiging. Dat gebeurt als iemand de link al opende maar nooit een
+    // wachtwoord koos, of bij een oud-medewerker die terugkomt. Dan sturen we
+    // een inloglink naar dezelfde pagina: daar kiest hij alsnog een wachtwoord.
+    if (!bestaandId || !error || !/already|registered|exists/i.test(error.message)) {
+      throw new Error(error?.message ?? "Uitnodigen mislukte");
+    }
+    const { error: metaFout } = await supabaseAdmin.auth.admin.updateUserById(bestaandId, {
+      app_metadata: metadata,
     });
     if (metaFout) throw new Error(metaFout.message);
+    const { error: mailFout } = await supabaseAdmin.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false, emailRedirectTo: redirectTo },
+    });
+    if (mailFout) throw new Error(mailFout.message);
 
     return { ok: true };
   });
@@ -112,6 +184,11 @@ export const completeInvite = createServerFn({ method: "POST" })
     ];
     if (typeof companyId !== "string" || !companyId) {
       throw new Error("Geen geldige uitnodiging gevonden. Vraag de eigenaar om je opnieuw uit te nodigen.");
+    }
+    if (isVerlopen(uitgenodigdOp(gebruiker.user))) {
+      throw new Error(
+        `Deze uitnodiging is verlopen (langer dan ${UITNODIGING_DAGEN} dagen geleden). Vraag de eigenaar om een nieuwe.`,
+      );
     }
 
     const { error } = await supabaseAdmin.from("employees").insert({
@@ -151,7 +228,50 @@ export const fetchTeam = createServerFn({ method: "GET" })
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
 
-    return { rol: me.rol, collegas: collegas ?? [] };
+    // Wie is uitgenodigd maar nog niet binnen: alleen voor de eigenaar, die
+    // kan ze intrekken of opnieuw sturen. Zo zie je wie er nog kan binnenkomen.
+    let uitgenodigd: { id: string; email: string; op: string; verlopen: boolean }[] = [];
+    if (me.rol === "eigenaar") {
+      // Alleen de accounts van dit bedrijf, rechtstreeks uit de database.
+      const { data: open, error: openFout } = await supabaseAdmin.rpc("openstaande_uitnodigingen", {
+        bedrijf: me.company_id,
+      });
+      if (openFout) throw new Error(openFout.message);
+      uitgenodigd = (open ?? []).map((u) => {
+        const op = u.uitgenodigd_op || u.invited_at || u.created_at;
+        return { id: u.id, email: u.email, op, verlopen: isVerlopen(op) };
+      });
+    }
+
+    return { rol: me.rol, collegas: collegas ?? [], uitgenodigd };
+  });
+
+/** Eigenaar trekt een uitnodiging in die nog niet gebruikt is. */
+export const trekUitnodigingIn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { userId: string }) => data)
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: me } = await supabaseAdmin
+      .from("employees")
+      .select("company_id,rol")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (!me || me.rol !== "eigenaar") {
+      throw new Error("Alleen de eigenaar kan uitnodigingen intrekken");
+    }
+    const { data: gebruiker, error } = await supabaseAdmin.auth.admin.getUserById(data.userId);
+    if (error || !gebruiker?.user) throw new Error("Deze uitnodiging is niet gevonden");
+    // Alleen een uitnodiging van je eigen bedrijf.
+    if (gebruiker.user.app_metadata?.["uitgenodigd_voor"] !== me.company_id) {
+      throw new Error("Deze uitnodiging is niet (meer) van jouw bedrijf");
+    }
+    const { error: metaFout } = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
+      app_metadata: { uitgenodigd_voor: null, uitgenodigd_op: null },
+    });
+    if (metaFout) throw new Error(metaFout.message);
+    return { ok: true };
   });
 
 /** Eigenaar verwijdert een medewerker (kan zichzelf niet verwijderen). */

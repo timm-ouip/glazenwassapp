@@ -196,7 +196,14 @@ import {
 } from "@/lib/klanten";
 import { useRecht } from "@/lib/rechten";
 import { StopDialog } from "@/components/StopDialog";
-import { draaiStoppenTerug, geplandeDagen, zetInactief, type StopReden } from "@/lib/stoppen";
+import {
+  draaiStoppenTerug,
+  geplandeDagen,
+  haalVanPlanning,
+  zetInactief,
+  zetPlanningTerug,
+  type StopReden,
+} from "@/lib/stoppen";
 import { alDichtbij, datumSleutel, haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
 import { isWerkdag, useWerkdagenStatus } from "@/lib/werkdagen";
 
@@ -1461,26 +1468,50 @@ function Index() {
     meldUndo(`${adres} staat nu bij Inactief (klantenpagina)`);
   }
 
-  async function verwijderKlant(c: Customer) {
+  async function verwijderKlant(c: Customer, planningWeg: boolean) {
     // Met de straat erbij: "Klant 8" zegt niet welke 8, en elke straat heeft er een.
     const straat = streets.find((s) => s.id === c.street_id)?.name;
     const adres = straat ? `${straat} ${formatNumber(c)}` : `Klant ${formatNumber(c)}`;
-    // Geen aparte vraag meer: je koos "Verwijderen" in het stopschermpje.
+    // Geen aparte vraag meer: je koos "Verwijderen" in het stopschermpje, en
+    // daar ook wat er met de planning moet.
+    let kenmerken: string[] = [];
+    // Zonder het recht op de planning kan dat deel niet; het verwijderen zelf
+    // wel. Dan blijft de planning staan, en dat zeggen we.
+    const planningMag = planningWeg && magPlannen;
+    if (planningWeg && !magPlannen) {
+      toast.info("De planning bleef staan: je rol mag de planning niet aanpassen.");
+    }
     try {
+      if (planningMag) kenmerken = await haalVanPlanning([c.id]);
       await legWeg("customers", [c.id]);
     } catch (e) {
+      // Stond hij al van de planning af, dan dat terug: half is erger dan niets.
+      await zetPlanningTerug(kenmerken).catch(() => {});
       toast.error("Verwijderen mislukt: " + (e as Error).message);
       return;
     }
     pushUndo({
       label: `Verwijderen ${adres}`,
       undo: async () => {
+        // Eerst het adres terug, dan de planning: een weggegooid adres komt
+        // niet terug op een dag in de toekomst.
         await haalTerug("customers", [c.id]);
+        await zetPlanningTerug(kenmerken);
+        qc.invalidateQueries({ queryKey: ["wasdag"] });
+        qc.invalidateQueries({ queryKey: ["wasdagen"] });
         herlaad();
       },
     });
+    if (kenmerken.length) {
+      qc.invalidateQueries({ queryKey: ["wasdag"] });
+      qc.invalidateQueries({ queryKey: ["wasdagen"] });
+    }
     herlaad();
-    meldUndo(`${adres} verwijderd`);
+    meldUndo(
+      kenmerken.length
+        ? `${adres} verwijderd en van ${kenmerken.length} ${kenmerken.length === 1 ? "dag" : "dagen"} op de planning gehaald`
+        : `${adres} verwijderd`,
+    );
   }
 
   async function verwijderStraat(s: Street) {
@@ -2793,7 +2824,9 @@ function Index() {
         onBevestig={(reden, planningWeg) =>
           stop.customer ? stopKlant(stop.customer, reden, planningWeg) : Promise.resolve()
         }
-        onVerwijder={() => (stop.customer ? verwijderKlant(stop.customer) : Promise.resolve())}
+        onVerwijder={(planningWeg) =>
+          stop.customer ? verwijderKlant(stop.customer, planningWeg) : Promise.resolve()
+        }
       />
       <KlusDialog
         open={klus.open}

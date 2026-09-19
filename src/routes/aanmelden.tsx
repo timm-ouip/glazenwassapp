@@ -155,6 +155,16 @@ function AanmeldPagina() {
 
   const adresGevonden = straat.trim() !== "" && (zelf ? plaats.trim() !== "" : true);
 
+  /** Postcode of huisnummer veranderd na het opzoeken: het gevonden adres
+   *  hoort dan niet meer bij wat er staat (bleef het staan, dan kwamen de
+   *  gegevens bij de oude straat met het nieuwe nummer). Wat je zelf invulde
+   *  blijft staan. */
+  function vergeetGevonden() {
+    if (zelf) return;
+    setStraat("");
+    setPlaats("");
+  }
+
   return (
     <Omhulsel>
       <div className="border-b border-border bg-card-header px-6 py-5 text-center">
@@ -204,7 +214,10 @@ function AanmeldPagina() {
                   autoComplete="postal-code"
                   placeholder="1234 AB"
                   value={postcode}
-                  onChange={(e) => setPostcode(e.target.value)}
+                  onChange={(e) => {
+                    setPostcode(e.target.value);
+                    vergeetGevonden();
+                  }}
                 />
               </div>
               <div className="space-y-2">
@@ -216,7 +229,10 @@ function AanmeldPagina() {
                   autoComplete="address-line2"
                   placeholder="12"
                   value={huisnummer}
-                  onChange={(e) => setHuisnummer(e.target.value)}
+                  onChange={(e) => {
+                    setHuisnummer(e.target.value);
+                    vergeetGevonden();
+                  }}
                 />
               </div>
             </div>

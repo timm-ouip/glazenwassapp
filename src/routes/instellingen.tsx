@@ -59,6 +59,7 @@ import {
   fetchTeam,
   inviteEmployee,
   removeEmployee,
+  trekUitnodigingIn,
   updateEmployeeRole,
   updateMyProfile,
 } from "@/lib/team.functions";
@@ -649,6 +650,10 @@ function TeamTab() {
   const [laden, setLaden] = useState(true);
   const [rol, setRol] = useState<string | null>(null);
   const [collegas, setCollegas] = useState<Collega[]>([]);
+  /** Uitgenodigd maar nog niet binnen; alleen de eigenaar krijgt deze lijst. */
+  const [uitgenodigd, setUitgenodigd] = useState<
+    { id: string; email: string; op: string; verlopen: boolean }[]
+  >([]);
   const [nieuweEmail, setNieuweEmail] = useState("");
   const [uitnodigen, setUitnodigen] = useState(false);
   const bevestig = useBevestig();
@@ -659,6 +664,7 @@ function TeamTab() {
       const data = await fetchTeam();
       setRol(data.rol);
       setCollegas(data.collegas as Collega[]);
+      setUitgenodigd(data.uitgenodigd);
     } catch (err) {
       toast.error("Team laden mislukt: " + (err instanceof Error ? err.message : String(err)));
     }
@@ -688,20 +694,38 @@ function TeamTab() {
     }
   }
 
-  async function nodigUit() {
-    if (!nieuweEmail.trim()) {
+  async function nodigUit(email = nieuweEmail.trim()) {
+    if (!email) {
       toast.error("Vul een e-mailadres in.");
       return;
     }
     setUitnodigen(true);
     try {
-      await inviteEmployee({ data: { email: nieuweEmail.trim() } });
-      toast.success("Uitnodiging verstuurd");
+      await inviteEmployee({ data: { email } });
+      toast.success(`Uitnodiging verstuurd naar ${email}. Hij is 7 dagen geldig.`);
       setNieuweEmail("");
+      void herlaad();
     } catch (err) {
       toast.error("Uitnodigen mislukt: " + (err instanceof Error ? err.message : String(err)));
     }
     setUitnodigen(false);
+  }
+
+  async function trekIn(u: { id: string; email: string }) {
+    const ja = await bevestig({
+      titel: `Uitnodiging van ${u.email} intrekken?`,
+      tekst: "De link in zijn mail werkt dan niet meer. Je kunt hem later opnieuw uitnodigen.",
+      bevestigLabel: "Intrekken",
+      gevaarlijk: true,
+    });
+    if (!ja) return;
+    try {
+      await trekUitnodigingIn({ data: { userId: u.id } });
+      toast.success("Uitnodiging ingetrokken");
+      void herlaad();
+    } catch (err) {
+      toast.error("Intrekken mislukt: " + (err instanceof Error ? err.message : String(err)));
+    }
   }
 
   async function wijzigRol(c: Collega, nieuw: Rol) {
@@ -827,12 +851,53 @@ function TeamTab() {
         </table>
       </div>
 
+      {isEigenaar && uitgenodigd.length > 0 && (
+        <Kaart
+          titel="Uitgenodigd, nog niet binnen"
+          uitleg="Een uitnodiging is 7 dagen geldig. Trek hem in als hij niet meer nodig is."
+        >
+          <ul className="divide-y divide-border/60">
+            {uitgenodigd.map((u) => (
+              <li key={u.id} className="flex flex-wrap items-center gap-2 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm">{u.email}</p>
+                  <p
+                    className={`text-[12px] ${u.verlopen ? "text-destructive" : "text-muted-foreground"}`}
+                  >
+                    {u.verlopen
+                      ? "Verlopen: stuur hem opnieuw als hij nog moet komen"
+                      : `Verstuurd op ${new Date(u.op).toLocaleDateString("nl-NL", { day: "numeric", month: "long" })}`}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full"
+                  disabled={uitnodigen}
+                  onClick={() => void nodigUit(u.email)}
+                >
+                  Opnieuw sturen
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="rounded-full text-muted-foreground hover:text-destructive"
+                  onClick={() => void trekIn(u)}
+                >
+                  Intrekken
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Kaart>
+      )}
+
       {isEigenaar && <RollenBeheer gebruikt={gebruikt} onGewijzigd={() => void herlaad()} />}
 
       {isEigenaar ? (
         <Kaart
           titel="Medewerker uitnodigen"
-          uitleg="Hij krijgt een mail om een wachtwoord te kiezen en komt daarna in dit team."
+          uitleg="Hij krijgt een mail om een wachtwoord te kiezen en komt daarna in dit team. De link is 7 dagen geldig."
         >
           <form
             className="flex max-w-sm gap-2"

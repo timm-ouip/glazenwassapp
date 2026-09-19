@@ -129,11 +129,22 @@ export async function zetKlusOpDag(id: string, datum: string | null) {
 }
 
 /**
- * Afvinken. Op de dag waar hij op stond, of op vandaag als hij nergens op
- * stond — dan heb je hem tussendoor gedaan, en dat is de omzet van vandaag.
+ * Afvinken. Het bedrag telt op de dag dat je hem echt deed: vandaag. Stond
+ * hij op een latere dag, dan deed je hem eerder; was hij blijven liggen, dan
+ * deed je hem nu (en niet op die dag in augustus).
+ *
+ * `bekekenDag`: vink je af op de dagpagina van een dag die geweest is, dan
+ * ben je díe dag aan het bijwerken, en telt hij daar.
  */
-export async function vinkKlusAf(k: Klus, aan: boolean) {
-  await patchKlus(k.id, { gedaan_op: aan ? (k.gepland_op ?? vandaag()) : null });
+export async function vinkKlusAf(k: Klus, aan: boolean, bekekenDag?: string) {
+  const nu = vandaag();
+  const dag = bekekenDag && bekekenDag <= nu ? bekekenDag : nu;
+  await patchKlus(k.id, { gedaan_op: aan ? dag : null });
+}
+
+/** Terugdraaien: precies de afvinkdag van daarvoor, niet opnieuw uitrekenen. */
+export async function zetAfvinkTerug(k: Klus) {
+  await patchKlus(k.id, { gedaan_op: k.gedaan_op });
 }
 
 /** Wegleggen, zoals overal in deze app: de rij blijft staan met een stempel. */

@@ -44,7 +44,7 @@ interface Props {
    * Gewoon weggooien, zonder reden: voor een fout of een testadres. Alleen
    * waar dat kan (het prullenbakje); dan staat er een knop "Verwijderen".
    */
-  onVerwijder?: (() => Promise<void>) | undefined;
+  onVerwijder?: ((planningWeg: boolean) => Promise<void>) | undefined;
   /** Hangt er een klant aan het adres? Anders gaat de vraag over het adres. */
   metKlant?: boolean | undefined;
 }
@@ -101,11 +101,21 @@ export function StopDialog({
     }
   }
 
+  /** Verwijderen staat ook nog op de planning: eerst kiezen wat daarmee moet. */
+  const [planningVergeten, setPlanningVergeten] = useState(false);
+  useEffect(() => {
+    if (!open || planningWeg !== null) setPlanningVergeten(false);
+  }, [open, planningWeg]);
+
   async function verwijder() {
-    if (!onVerwijder || bezig) return;
+    if (!onVerwijder || bezig || telling === null) return;
+    if (heeftPlanning && planningWeg === null) {
+      setPlanningVergeten(true);
+      return;
+    }
     setBezig(true);
     try {
-      await onVerwijder();
+      await onVerwijder(heeftPlanning ? planningWeg === true : false);
       onOpenChange(false);
     } catch (e) {
       toast.error("Verwijderen lukte niet: " + (e instanceof Error ? e.message : String(e)));
@@ -176,6 +186,13 @@ export function StopDialog({
             <p className="border-t border-border/70 pt-3 text-[12px] text-muted-foreground">
               Een fout gemaakt, of een testadres? Dan kun je het ook gewoon verwijderen: het gaat zonder reden naar
               de prullenbak, en je kunt het daar terughalen.
+              {heeftPlanning && " Kies hierboven ook wat er met de planning moet."}
+            </p>
+          )}
+          {planningVergeten && (
+            <p className="flex items-start gap-1.5 rounded-[12px] bg-tint-amber px-3 py-2 text-[12.5px] text-tint-amber-ink">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              Kies eerst of het adres van de planning af moet, dan verwijder je het.
             </p>
           )}
         </PopupBody>

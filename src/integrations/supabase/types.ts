@@ -11,6 +11,7 @@ export type Database = {
       aanmeldingen: {
         Row: {
           company_id: string;
+          automatisch: Json | null;
           created_at: string;
           customer_id: string | null;
           deleted_at: string | null;
@@ -30,6 +31,7 @@ export type Database = {
         };
         Insert: {
           company_id?: string;
+          automatisch?: Json | null;
           created_at?: string;
           customer_id?: string | null;
           deleted_at?: string | null;
@@ -49,6 +51,7 @@ export type Database = {
         };
         Update: {
           company_id?: string;
+          automatisch?: Json | null;
           created_at?: string;
           customer_id?: string | null;
           deleted_at?: string | null;
@@ -1979,6 +1982,24 @@ export type Database = {
       bekend_adres_overnemen: {
         Args: { aanmelding: string; met_vorige_klant: boolean };
         Returns: string;
+      };
+      aanmelding_terugdraaien: {
+        Args: { aanmelding: string };
+        Returns: undefined;
+      };
+      gebruiker_met_email: {
+        Args: { adres: string };
+        Returns: string | null;
+      };
+      openstaande_uitnodigingen: {
+        Args: { bedrijf: string };
+        Returns: {
+          id: string;
+          email: string;
+          uitgenodigd_op: string | null;
+          invited_at: string | null;
+          created_at: string;
+        }[];
       };
       zet_bericht_categorieen: {
         Args: { bericht: string; categorieen: string[] };

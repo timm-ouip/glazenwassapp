@@ -16,6 +16,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  IconArrowBackUp as Undo2,
   IconArrowRight as ArrowRight,
   IconCheck as Check,
   IconInbox as Inbox,
@@ -29,7 +30,13 @@ import {
 import { toast } from "sonner";
 
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
-import { aanmeldAdres, fetchAanmeldingen, zetStatus, type Aanmelding } from "@/lib/aanmeldingen";
+import {
+  aanmeldAdres,
+  aanmeldingTerugdraaien,
+  fetchAanmeldingen,
+  zetStatus,
+  type Aanmelding,
+} from "@/lib/aanmeldingen";
 import {
   fetchDistricts,
   fetchKlanten,
@@ -133,7 +140,7 @@ function Aanmeldingen() {
           {alles.isLoading ? (
             <Leeg tekst="Bezig met ophalen…" />
           ) : open.length === 0 ? (
-            <Leeg tekst="Niets te doen. Alles wat binnenkwam paste op een adres dat je al had." />
+            <Leeg tekst="Niets te doen: alles wat binnenkwam is nagekeken." />
           ) : (
             open.map((a) =>
               a.soort === "bekend_adres" ? (
@@ -145,6 +152,8 @@ function Aanmeldingen() {
                   onKlaar={opnieuw}
                   onWeigeren={() => void weigeren(a)}
                 />
+              ) : a.soort === "gekoppeld" ? (
+                <AutomatischKaart key={a.id} aanmelding={a} onKlaar={opnieuw} />
               ) : a.soort === "wijziging" ? (
                 <WijzigingKaart
                   key={a.id}
@@ -178,7 +187,9 @@ function Aanmeldingen() {
                   </div>
                   <span className="shrink-0 text-[12px] text-muted-foreground">
                     {a.status === "geweigerd"
-                      ? "Weggelegd"
+                      ? a.soort === "gekoppeld"
+                        ? "Teruggedraaid"
+                        : "Weggelegd"
                       : a.soort === "gekoppeld"
                         ? "Automatisch verwerkt"
                         : "Afgehandeld"}
@@ -283,6 +294,64 @@ function Contact({ aanmelding }: { aanmelding: Aanmelding }) {
         </span>
       )}
     </div>
+  );
+}
+
+/**
+ * Automatisch gekoppeld: het adres was nog leeg, dus de gegevens staan er al
+ * bij. Geel, omdat het vanzelf ging: kijk of het klopt, of draai het terug —
+ * iemand kan met een flyer ook de adressen van zijn buren invullen.
+ */
+function AutomatischKaart({
+  aanmelding,
+  onKlaar,
+}: {
+  aanmelding: Aanmelding;
+  onKlaar: () => Promise<void> | void;
+}) {
+  const [bezig, setBezig] = useState(false);
+  async function doe(actie: () => Promise<void>, melding: string) {
+    setBezig(true);
+    try {
+      await actie();
+      await onKlaar();
+      toast.success(melding);
+    } catch (err) {
+      toast.error("Dat lukte niet: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setBezig(false);
+    }
+  }
+  return (
+    <section className="rounded-[18px] border border-tint-amber-ink/25 bg-tint-amber p-4 shadow-card">
+      <Kop aanmelding={aanmelding} tint="bg-card text-tint-amber-ink" />
+      <div className="mt-3 space-y-3">
+        <Contact aanmelding={aanmelding} />
+        <p className="text-[12.5px] text-tint-amber-ink">
+          Automatisch bij dit adres gezet: er stond nog niemand. Klopt het niet (een buurman die
+          andermans adres invulde, een typefout), draai het dan terug.
+        </p>
+        <div className="flex gap-2">
+          <Button
+            className="rounded-full"
+            disabled={bezig}
+            onClick={() => void doe(() => zetStatus([aanmelding.id], "klaar"), "Nagekeken.")}
+          >
+            <Check className="size-4" /> Klopt
+          </Button>
+          <Button
+            variant="ghost"
+            className="rounded-full text-tint-amber-ink hover:bg-card/60"
+            disabled={bezig}
+            onClick={() =>
+              void doe(() => aanmeldingTerugdraaien(aanmelding.id), "Teruggedraaid: het adres is weer leeg.")
+            }
+          >
+            <Undo2 className="size-4" /> Ongedaan maken
+          </Button>
+        </div>
+      </div>
+    </section>
   );
 }
 

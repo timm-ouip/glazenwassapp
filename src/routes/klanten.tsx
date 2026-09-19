@@ -75,7 +75,9 @@ import {
   draaiStoppenTerug,
   fetchInactieveAdressen,
   geplandeDagen,
+  haalVanPlanning,
   zetInactief,
+  zetPlanningTerug,
   type StopReden,
 } from "@/lib/stoppen";
 
@@ -1000,6 +1002,7 @@ function Klanten() {
     klant: Klant | null,
     adres: string,
     vraag = true,
+    planningWeg = false,
   ) {
     // Vanuit het stopschermpje is "Verwijderen" al de keuze; dan niet nog eens vragen.
     const ja =
@@ -1020,8 +1023,17 @@ function Klanten() {
       : [];
     const klantGaatMee = Boolean(klant) && anderePanden.length === 0;
 
+    let kenmerken: string[] = [];
+    let adresWeg = false;
+    // Zonder het recht op de planning kan dat deel niet; het verwijderen zelf
+    // wel. Dan blijft de planning staan, en dat zeggen we.
+    if (planningWeg && !magPlannen) {
+      toast.info("De planning bleef staan: je rol mag de planning niet aanpassen.");
+    }
     try {
+      if (customer && planningWeg && magPlannen) kenmerken = await haalVanPlanning([customer.id]);
       if (customer) await legWeg("customers", [customer.id]);
+      adresWeg = true;
       if (klant && klantGaatMee) await legWeg("klanten", [klant.id]);
       herlaad();
 
@@ -1030,15 +1042,23 @@ function Klanten() {
         undo: async () => {
           if (customer) await haalTerug("customers", [customer.id]);
           if (klant && klantGaatMee) await haalTerug("klanten", [klant.id]);
+          // Na het adres: een weggegooid adres komt niet terug op de planning.
+          await zetPlanningTerug(kenmerken);
           herlaad();
         },
       });
 
-      toast(`${adres} verwijderd`, {
+      const dagen = kenmerken.length;
+      toast(`${adres} verwijderd${dagen ? ` en van ${dagen} ${dagen === 1 ? "dag" : "dagen"} op de planning gehaald` : ""}`, {
         duration: 12000,
         action: undoKnop(),
       });
     } catch (e) {
+      // Eerst het adres terug: een weggegooid adres komt niet terug op een
+      // dag in de toekomst, en dan waren die dagen voorgoed weg.
+      if (adresWeg && customer) await haalTerug("customers", [customer.id]).catch(() => {});
+      await zetPlanningTerug(kenmerken).catch(() => {});
+      herlaad();
       toast.error("Verwijderen mislukt: " + (e as Error).message);
     }
   }
@@ -1436,9 +1456,15 @@ function Klanten() {
         onBevestig={(reden, planningWeg) =>
           stop.regel ? stopRegel(stop.regel, reden, planningWeg) : Promise.resolve()
         }
-        onVerwijder={() =>
+        onVerwijder={(planningWeg) =>
           stop.regel
-            ? verwijderRegel(stop.regel.customer, stop.regel.klant, adresTekst(stop.regel), false)
+            ? verwijderRegel(
+                stop.regel.customer,
+                stop.regel.klant,
+                adresTekst(stop.regel),
+                false,
+                planningWeg,
+              )
             : Promise.resolve()
         }
       />
