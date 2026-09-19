@@ -61,6 +61,7 @@ import {
   fetchMailingen,
   telOntvangers,
   verstuurAankondiging,
+  AlVerstuurdFout,
   type AankondigKanaal,
   type Controle,
 } from "@/lib/mailing";
@@ -400,7 +401,7 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
   const klaar = mailKlaar && waKlaar;
   const totaal = aantal + (sjabloon ? aantalWa : 0);
 
-  async function verstuur(test: boolean) {
+  async function verstuur(test: boolean, toch = false) {
     if (!klaar) {
       toast.error(
         !mailKlaar
@@ -409,7 +410,7 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
       );
       return;
     }
-    if (!test) {
+    if (!test && !toch) {
       const delen = [
         aantal > 0 ? `${aantal} ${aantal === 1 ? "mail" : "mails"}` : "",
         sjabloon && aantalWa > 0
@@ -437,6 +438,7 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
         ...(test && sjabloon && proefTelefoon.trim()
           ? { proefTelefoon: proefTelefoon.trim() }
           : {}),
+        ...(toch ? { toch: true } : {}),
       });
       const samen = [
         uit.verstuurd > 0 ? `${uit.verstuurd} ${uit.verstuurd === 1 ? "mail" : "mails"}` : "",
@@ -456,7 +458,23 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
         toast.success(`${samen} onderweg.`);
       }
     } catch (e) {
-      toast.error("Versturen mislukte: " + (e instanceof Error ? e.message : String(e)));
+      if (e instanceof AlVerstuurdFout) {
+        setBezig(false);
+        const nogEens = await bevestig({
+          titel: "Deze dag is net al verstuurd",
+          tekst: `De aankondiging voor ${toonDatum(datum)} ging het afgelopen uur al de deur uit. Nog een keer versturen betekent dat iedereen hem twee keer krijgt. Kijk eerst bij Verstuurd.`,
+          bevestigLabel: "Toch nog een keer",
+          annuleerLabel: "Niet versturen",
+          gevaarlijk: true,
+        });
+        if (nogEens) await verstuur(false, true);
+        return;
+      }
+      const tekst = e instanceof Error ? e.message : String(e);
+      // "Misschien toch verstuurd" is geen mislukking; dan niet zo noemen.
+      toast.error(tekst.includes("misschien toch verstuurd") ? tekst : "Versturen mislukte: " + tekst, {
+        duration: 15000,
+      });
     } finally {
       setBezig(false);
     }

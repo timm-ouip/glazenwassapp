@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
+import { haalAllePaginas } from "@/lib/pagineren";
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -735,7 +736,9 @@ function ImportPagina() {
       // Paaltje samenvoegde, dan wat je zelf hernoemde.
       const naPaaltje = vervang[straatSleutel(origineel.straat)] ?? origineel.straat;
       const r = { ...origineel, straat: hernoemd[straatSleutel(naPaaltje)] ?? naPaaltje };
-      const sleutel = `${r.straat.toLowerCase()}|${r.huisnummer}|${r.toevoeging.toLowerCase()}`;
+      // Dezelfde sleutel als bij het opslaan: een dubbele of harde spatie uit
+      // Excel ("Kz  Max") maakte anders twee adressen van één huis.
+      const sleutel = `${straatSleutel(r.straat)}|${r.huisnummer}|${r.toevoeging.toLowerCase()}`;
       const freq = freqPerTabblad[r.tabblad] ?? "elke";
       const bestaand = map.get(sleutel);
 
@@ -1123,11 +1126,19 @@ function ImportPagina() {
     try {
       let districtId = wijkId;
       if (districtId === "__geen__") {
-        const { data: bestaand } = await supabase
+        // Niet een uit de prullenbak (dan zijn de adressen nergens te zien), en
+        // bij meerdere gewoon de eerste in plaats van een fout.
+        const { data: bestaand, error: geenWijkFout } = await supabase
           .from("districts")
           .select("id")
           .eq("name", "Geen wijk")
-          .single();
+          .is("deleted_at", null)
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (geenWijkFout) throw geenWijkFout;
         if (bestaand) {
           districtId = bestaand.id;
         } else {
@@ -1234,7 +1245,34 @@ function ImportPagina() {
         return kaart?.get(nummerSleutel(r.huisnummer, r.toevoeging)) ?? "";
       };
 
-      const payload = lijst.map((r) => ({
+      // Adressen die al in deze straten staan (ook gestopte; niet die in de
+      // prullenbak) slaan we over. Zo maakt dezelfde lijst nog eens importeren
+      // — per ongeluk twee keer klikken, of opnieuw na een halve mislukking —
+      // geen dubbele adressen.
+      const adresSleutel = (straatId: string, nummer: number, toevoeging: string | null) =>
+        `${straatId}|${nummer}|${(toevoeging ?? "").trim().toLowerCase()}`;
+      const straatIds = [...new Set(lijst.map((r) => map.get(straatSleutel(r.straat))!))];
+      /** Sleutel → id van het adres dat er al staat. */
+      const bestaat = new Map<string, string>();
+      for (let i = 0; i < straatIds.length; i += 100) {
+        // In stukken: de server geeft er per keer hooguit 1000.
+        const al = await haalAllePaginas((van, tot) =>
+          supabase
+            .from("customers")
+            .select("id,street_id,house_number,addition")
+            .in("street_id", straatIds.slice(i, i + 100))
+            .is("deleted_at", null)
+            .order("id")
+            .range(van, tot),
+        );
+        for (const c of al) bestaat.set(adresSleutel(c.street_id, c.house_number, c.addition), c.id);
+      }
+      const nieuwInLijst = lijst.filter(
+        (r) => !bestaat.has(adresSleutel(map.get(straatSleutel(r.straat))!, r.huisnummer, r.toevoeging)),
+      );
+      const overgeslagen = lijst.length - nieuwInLijst.length;
+
+      const payload = nieuwInLijst.map((r) => ({
         street_id: map.get(straatSleutel(r.straat))!,
         house_number: r.huisnummer,
         addition: r.toevoeging,
@@ -1248,10 +1286,13 @@ function ImportPagina() {
         // Zo weet het dossier straks dat deze klant er vóór deze datum al was.
         geimporteerd: true,
       }));
-      const { data: ingevoegd, error } = await supabase
-        .from("customers")
-        .insert(payload)
-        .select("id,street_id,house_number,addition");
+      const { data: ingevoegd, error } =
+        payload.length > 0
+          ? await supabase
+              .from("customers")
+              .insert(payload)
+              .select("id,street_id,house_number,addition")
+          : { data: [], error: null };
       if (error) throw error;
 
       // De prijzen in hun eigen tabel. Op adres gekoppeld en niet op volgorde:
@@ -1272,14 +1313,42 @@ function ImportPagina() {
         // Wie geen prijzen mag zien, importeert de adressen zonder bedragen.
         if (prijsFout && !isGeenRecht(prijsFout)) throw prijsFout;
       }
-      toast.success(`${payload.length} klanten geïmporteerd`);
+      // Overgeslagen adressen die nog géén prijs hebben (een vorige poging
+      // mislukte net bij de prijzen) krijgen hem alsnog. Een bestaande prijs
+      // blijft staan: ignoreDuplicates overschrijft niets.
+      const ontbrekend = lijst.flatMap((r) => {
+        const straatId = map.get(straatSleutel(r.straat))!;
+        const id = bestaat.get(adresSleutel(straatId, r.huisnummer, r.toevoeging));
+        return id ? [{ customer_id: id, prijs: r.prijs }] : [];
+      });
+      if (ontbrekend.length > 0) {
+        const { error: aanvulFout } = await supabase
+          .from("adres_prijzen")
+          .upsert(ontbrekend, { onConflict: "customer_id", ignoreDuplicates: true });
+        if (aanvulFout && !isGeenRecht(aanvulFout)) throw aanvulFout;
+      }
+      toast.success(
+        `${payload.length} klanten geïmporteerd` +
+          (overgeslagen > 0
+            ? `; ${overgeslagen} ${overgeslagen === 1 ? "stond" : "stonden"} er al en ${overgeslagen === 1 ? "is" : "zijn"} overgeslagen`
+            : ""),
+      );
 
       if (!werkPlaats) {
         // Zonder plaats valt er niets op te zoeken; dan is het klaar.
         navigate({ to: "/" });
         return;
       }
-      await vulAan(districtId, werkPlaats, bewustLeeg);
+      // Een fout vanaf hier is geen mislukte import: de adressen staan er al.
+      // Zei de melding "Importeren mislukt", dan probeerde je opnieuw.
+      try {
+        await vulAan(districtId, werkPlaats, bewustLeeg);
+      } catch (e) {
+        toast.error(
+          "De adressen zijn geïmporteerd, maar straatnamen en postcodes aanvullen lukte niet: " +
+            (e as Error).message,
+        );
+      }
     } catch (e) {
       toast.error("Importeren mislukt: " + (e as Error).message);
     } finally {

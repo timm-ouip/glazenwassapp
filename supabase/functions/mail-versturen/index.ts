@@ -51,6 +51,8 @@ interface Verzoek {
   tekst: string;
   /** Proef: alleen naar jezelf, met de eerste echte ontvanger als voorbeeld. */
   test?: boolean;
+  /** Toch versturen, ook al ging deze dag het afgelopen uur al de deur uit. */
+  toch?: boolean;
   /** Bij `terugdraaien`: welke regel uit het rapport. */
   wijziging_id?: string;
   /** Waarlangs: mail, WhatsApp, allebei, of zoals bij elke klant ingesteld. */
@@ -370,6 +372,43 @@ Deno.serve(async (req) => {
       .eq("id", mailing.id);
     if (kanaalFout) console.error("proef kanaal vastleggen:", kanaalFout.message);
   } else {
+    // Dezelfde dag het afgelopen uur al echt verstuurd? Dan is dit bijna
+    // altijd een tweede druk op de knop, bijvoorbeeld omdat het antwoord van
+    // de eerste bij slecht bereik niet aankwam. Iedereen zou alles dubbel
+    // krijgen (en de appjes kosten dubbel). Alleen met `toch` gaat hij door:
+    // de app vraagt dat eerst.
+    if (verzoek.toch !== true) {
+      const { data: recent, error: recentFout } = await beheerder
+        .from("mailingen")
+        .select("kanaal,aantal,aantal_whatsapp,mislukt")
+        .eq("company_id", bedrijf.id)
+        .eq("datum", datum)
+        .eq("test", false)
+        .gte("created_at", new Date(Date.now() - 60 * 60 * 1000).toISOString());
+      if (recentFout) {
+        return antwoord({ fout: "Kon niet nagaan of deze dag al verstuurd is." }, 500);
+      }
+      // Telt niet mee: een poging waarbij alles geweigerd werd (niets de deur
+      // uit), en een ander kanaal (eerst de mail, later bewust alleen de
+      // appjes). Een verzending die nog bezig is (alles nog 0) telt wél.
+      const metMail = (k: string) => k !== "whatsapp";
+      const metApp = (k: string) => k !== "mail";
+      const overlapt = (recent ?? []).some((m) => {
+        const allesGeweigerd = m.aantal === 0 && m.aantal_whatsapp === 0 && m.mislukt > 0;
+        const zelfdeKanaal =
+          (metMail(m.kanaal) && metMail(kanaal)) || (metApp(m.kanaal) && metApp(kanaal));
+        return !allesGeweigerd && zelfdeKanaal;
+      });
+      if (overlapt) {
+        return antwoord(
+          {
+            fout: "De aankondiging voor deze dag is het afgelopen uur al verstuurd.",
+            al_verstuurd: true,
+          },
+          409,
+        );
+      }
+    }
     const { data, error: mailingFout } = await beheerder
       .from("mailingen")
       .insert({

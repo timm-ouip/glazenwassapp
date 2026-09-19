@@ -39,12 +39,28 @@ export interface Verzending {
   eersteFout: string;
 }
 
+/** Deze dag ging het afgelopen uur al de deur uit; opnieuw alleen met `toch`. */
+export class AlVerstuurdFout extends Error {}
+
 async function roep<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("mail-versturen", { body });
   if (error) {
     // Een Edge Function die een 4xx teruggeeft komt hier binnen als fout; de
     // uitleg zit in het antwoord zelf, niet in de melding van de bibliotheek.
+    const res = (error as { context?: Response })?.context;
     const uitleg = await leesFout(error);
+    if (res?.status === 409) throw new AlVerstuurdFout(uitleg);
+    // Geen antwoord (verbinding weg) of een serverfout zonder uitleg (te lang
+    // bezig): de aankondiging kan dan best al verstuurd zijn. Niet "mislukt"
+    // zeggen, anders druk je nog eens en krijgt iedereen hem dubbel.
+    const echt = body["actie"] === "versturen" && body["test"] !== true;
+    // Bij een weggevallen verbinding zit er geen echt antwoord in `context`.
+    const geenAntwoord = !(res instanceof Response);
+    if (echt && !uitleg && (geenAntwoord || res.status >= 500)) {
+      throw new Error(
+        "De verbinding viel weg of de server deed er te lang over. De aankondiging is misschien toch verstuurd: kijk bij Verstuurd voor je het opnieuw probeert.",
+      );
+    }
     throw new Error(uitleg || error.message);
   }
   const uit = data as { fout?: string } & T;
@@ -125,6 +141,8 @@ export function verstuurAankondiging(opdracht: {
   kanaal?: AankondigKanaal;
   sjabloonId?: string;
   proefTelefoon?: string;
+  /** Ook als deze dag het afgelopen uur al verstuurd is. */
+  toch?: boolean;
 }): Promise<Verzending> {
   const { proefNaar, sjabloonId, proefTelefoon, ...rest } = opdracht;
   return roep<Verzending>({
