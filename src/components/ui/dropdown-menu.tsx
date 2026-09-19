@@ -9,6 +9,7 @@ import {
 } from "@tabler/icons-react";
 
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const DropdownMenu = DropdownMenuPrimitive.Root;
 
@@ -18,7 +19,23 @@ const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 
 const DropdownMenuPortal = DropdownMenuPrimitive.Portal;
 
-const DropdownMenuSub = DropdownMenuPrimitive.Sub;
+/**
+ * Een submenu op de telefoon: daar is naast het menu geen ruimte, en klapte
+ * het naar links uit en viel het half van het scherm. Daarom klapt het daar
+ * binnen hetzelfde menu naar beneden open. Op de computer gewoon ernaast.
+ */
+const InlineSub = React.createContext<{ open: boolean; wissel: () => void } | null>(null);
+
+function DropdownMenuSub(props: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
+  const mobiel = useIsMobile();
+  const [open, setOpen] = React.useState(false);
+  if (!mobiel) return <DropdownMenuPrimitive.Sub {...props} />;
+  return (
+    <InlineSub.Provider value={{ open, wissel: () => setOpen((o) => !o) }}>
+      {props.children}
+    </InlineSub.Provider>
+  );
+}
 
 const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
 
@@ -27,35 +44,72 @@ const DropdownMenuSubTrigger = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & {
     inset?: boolean;
   }
->(({ className, inset, children, ...props }, ref) => (
-  <DropdownMenuPrimitive.SubTrigger
-    ref={ref}
-    className={cn(
-      "flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent data-[state=open]:bg-accent [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
-      inset && "pl-8",
-      className,
-    )}
-    {...props}
-  >
-    {children}
-    <ChevronRight className="ml-auto" />
-  </DropdownMenuPrimitive.SubTrigger>
-));
+>(({ className, inset, children, ...props }, ref) => {
+  const inline = React.useContext(InlineSub);
+  const klassen = cn(
+    "flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent data-[state=open]:bg-accent [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+    inset && "pl-8",
+    className,
+  );
+  if (inline) {
+    return (
+      <DropdownMenuPrimitive.Item
+        ref={ref}
+        className={klassen}
+        disabled={props.disabled ?? false}
+        aria-expanded={inline.open}
+        data-state={inline.open ? "open" : "closed"}
+        // Openklappen, niet kiezen: het menu blijft staan.
+        onSelect={(e) => {
+          e.preventDefault();
+          inline.wissel();
+        }}
+        // Net als een gewoon submenu: pijl rechts opent, pijl links sluit.
+        onKeyDown={(e) => {
+          if (e.key === (inline.open ? "ArrowLeft" : "ArrowRight")) {
+            e.preventDefault();
+            inline.wissel();
+          }
+        }}
+      >
+        {children}
+        <ChevronRight className={cn("ml-auto transition-transform", inline.open && "rotate-90")} />
+      </DropdownMenuPrimitive.Item>
+    );
+  }
+  return (
+    <DropdownMenuPrimitive.SubTrigger ref={ref} className={klassen} {...props}>
+      {children}
+      <ChevronRight className="ml-auto" />
+    </DropdownMenuPrimitive.SubTrigger>
+  );
+});
 DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName;
 
 const DropdownMenuSubContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
->(({ className, ...props }, ref) => (
-  <DropdownMenuPrimitive.SubContent
-    ref={ref}
-    className={cn(
-      "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-(--radix-dropdown-menu-content-transform-origin)",
-      className,
-    )}
-    {...props}
-  />
-));
+>(({ className, ...props }, ref) => {
+  const inline = React.useContext(InlineSub);
+  if (inline) {
+    // Ingesprongen onder het kopje, met een lijntje ervoor.
+    return inline.open ? (
+      <div role="group" className="mb-1 ml-3.5 border-l border-border pl-1">
+        {props.children}
+      </div>
+    ) : null;
+  }
+  return (
+    <DropdownMenuPrimitive.SubContent
+      ref={ref}
+      className={cn(
+        "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-(--radix-dropdown-menu-content-transform-origin)",
+        className,
+      )}
+      {...props}
+    />
+  );
+});
 DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayName;
 
 const DropdownMenuContent = React.forwardRef<

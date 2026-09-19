@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Component,
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,10 +101,37 @@ import { opslaanBijEnter } from "@/lib/dialoog";
 import { blijvenLiggen, fetchKlussen, nieuweKlus, staatOpen } from "@/lib/klussen";
 import { toonDatum } from "@/lib/wasdag";
 import { KlusDialog } from "@/components/KlusDialog";
-import { DossierMail } from "@/components/dossier/DossierMail";
-import { DossierWhatsApp } from "@/components/dossier/DossierWhatsApp";
 import { DossierKlachten } from "@/components/dossier/DossierKlachten";
 import { fetchKlachtenVanKlant } from "@/lib/klachten";
+
+// Pas laden als je het tabblad Mail opent: dit trekt het hele mailprogramma
+// mee, en het dossier zit op de wijkenpagina, die daardoor trager opende.
+const DossierMail = lazy(() =>
+  import("@/components/dossier/DossierMail").then((m) => ({ default: m.DossierMail })),
+);
+const DossierWhatsApp = lazy(() =>
+  import("@/components/dossier/DossierWhatsApp").then((m) => ({ default: m.DossierWhatsApp })),
+);
+
+/** Kon het mailgedeelte niet laden (slecht bereik, of er ging intussen een
+ *  nieuwe versie live), dan alleen hier een melding — niet de hele pagina kwijt. */
+class MailLaadFout extends Component<{ children: ReactNode }, { fout: boolean }> {
+  override state = { fout: false };
+  static getDerivedStateFromError() {
+    return { fout: true };
+  }
+  override render() {
+    if (!this.state.fout) return this.props.children;
+    return (
+      <p className="text-sm text-muted-foreground">
+        Mail kon niet laden.{" "}
+        <button type="button" className="underline" onClick={() => window.location.reload()}>
+          Herlaad de pagina
+        </button>
+      </p>
+    );
+  }
+}
 
 interface Props {
   open: boolean;
@@ -1031,8 +1067,12 @@ export function KlantgegevensDialog({
       {/* Buiten het formulier: mail en klachten hebben hun eigen rechten en slaan zelf op. */}
       {tab === "mail" && klant && magMailLezen && (
         <div className="flex flex-col gap-5">
-          <DossierMail klant={klant} />
-          <DossierWhatsApp klant={klant} />
+          <MailLaadFout>
+            <Suspense fallback={<p className="text-sm text-muted-foreground">Mail laden…</p>}>
+              <DossierMail klant={klant} />
+              <DossierWhatsApp klant={klant} />
+            </Suspense>
+          </MailLaadFout>
         </div>
       )}
       {tab === "klachten" && klant && (

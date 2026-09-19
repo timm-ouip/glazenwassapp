@@ -1017,7 +1017,9 @@ function PrintPagina() {
         </div>
       </div>
 
-      <main className="mx-auto w-fit px-4 py-5 print:p-0">
+      {/* Op een smal scherm (telefoon) schuift het vel zelf opzij, niet de
+          hele pagina met de knoppen erboven. Op papier gewoon op volle maat. */}
+      <main className="mx-auto w-fit max-w-full overflow-x-auto px-4 py-5 print:max-w-none print:overflow-hidden print:p-0">
         {groepen.length === 0 && (
           <p className="text-sm text-muted-foreground print:hidden">
             Geen klanten voor deze maand.

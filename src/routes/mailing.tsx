@@ -279,7 +279,9 @@ function Mailing() {
       onderschrift="Je mail, de aankondigingen per wasdag, en wat er terugkomt."
     >
       <Tabs value={blad} onValueChange={(v) => setBlad(v as typeof blad)}>
-        <TabsList className="mb-4">
+        {/* Zes tabbladen: op een tablet naast de zijbalk net te breed, dan
+            schuift de balk zelf in plaats van de hele pagina. */}
+        <TabsList className="mb-4 max-w-full justify-start overflow-x-auto [scrollbar-width:none]">
           {toonPostvak && <TabsTrigger value="postvak">Postvak</TabsTrigger>}
           {toonPostvak && <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>}
           {toonVersturen && <TabsTrigger value="opstellen">Opstellen</TabsTrigger>}
