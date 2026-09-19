@@ -62,6 +62,8 @@ export interface BrevoMail {
   naar: { email: string; naam: string };
   onderwerp: string;
   tekst: string;
+  /** Een eigen html-versie in plaats van de gemaakte, bv. met een knop. */
+  html?: string;
   antwoordNaar?: string;
 }
 
@@ -80,7 +82,7 @@ export async function stuurMail(
     sender: { name: afzender.naam, email: afzender.email },
     to: [{ email: mail.naar.email, name: mail.naar.naam || mail.naar.email }],
     subject: mail.onderwerp,
-    htmlContent: alsHtml(mail.tekst),
+    htmlContent: mail.html ?? alsHtml(mail.tekst),
     textContent: mail.tekst,
   };
   if (mail.antwoordNaar) body["replyTo"] = { email: mail.antwoordNaar, name: afzender.naam };

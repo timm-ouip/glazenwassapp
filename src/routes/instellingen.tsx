@@ -701,8 +701,17 @@ function TeamTab() {
     }
     setUitnodigen(true);
     try {
-      await inviteEmployee({ data: { email } });
-      toast.success(`Uitnodiging verstuurd naar ${email}. Hij is 7 dagen geldig.`);
+      const uit = await inviteEmployee({ data: { email } });
+      if (uit.via === "supabase") {
+        // Geen eigen mailbox: dan de kale standaardmail. Zeggen hoe het mooier kan.
+        toast.success(`Uitnodiging verstuurd naar ${email} (7 dagen geldig).`, {
+          description:
+            "Dit ging via de standaardmail van Supabase. Koppel je bedrijfsmail bij Instellingen → mail, dan komt hij voortaan van je eigen adres.",
+          duration: 10000,
+        });
+      } else {
+        toast.success(`Uitnodiging verstuurd naar ${email} vanaf ${uit.van}. Hij is 7 dagen geldig.`);
+      }
       setNieuweEmail("");
       void herlaad();
     } catch (err) {
@@ -897,7 +906,7 @@ function TeamTab() {
       {isEigenaar ? (
         <Kaart
           titel="Medewerker uitnodigen"
-          uitleg="Hij krijgt een mail om een wachtwoord te kiezen en komt daarna in dit team. De link is 7 dagen geldig."
+          uitleg="Hij krijgt een mail vanaf je bedrijfsadres om zijn naam en een wachtwoord te kiezen, en komt daarna in dit team. De link is 7 dagen geldig."
         >
           <form
             className="flex max-w-sm gap-2"

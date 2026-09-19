@@ -18,6 +18,8 @@ export interface Opmaak {
   onderwerp: string;
   /** Platte tekst; de html-versie wordt ervan gemaakt. */
   tekst: string;
+  /** Een eigen html-versie in plaats van de gemaakte, bv. met een knop. */
+  html?: string;
   /** Het bericht waarop dit een antwoord is, zodat het in dezelfde draad valt. */
   antwoordOp?: { messageId: string; referenties: string[] };
   /** Door Paaltje zelf verstuurd: dan antwoorden afwezigheidsmelders er niet op. */
@@ -50,7 +52,7 @@ export async function maakOp(m: Opmaak): Promise<Opgemaakt> {
     cc: (m.cc ?? []).map((a) => ({ name: a.naam ?? "", address: a.email })),
     subject: m.onderwerp,
     text: m.tekst,
-    html: alsHtml(m.tekst),
+    html: m.html ?? alsHtml(m.tekst),
     messageId,
     date: new Date(),
     ...(m.antwoordOp?.messageId

@@ -61,11 +61,52 @@ function isVerlopen(op: string): boolean {
   return !Number.isFinite(t) || Date.now() - t > UITNODIGING_DAGEN * 24 * 60 * 60 * 1000;
 }
 
-/** Alleen de eigenaar mag medewerkers uitnodigen per e-mail. */
+/** Een willekeurige code voor in de uitnodigingslink (256 bits). */
+function nieuweCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+/** Alleen de hash van de code wordt bewaard; de code zelf staat alleen in de mail. */
+async function hashVan(code: string): Promise<string> {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code));
+  return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** De uitleg uit het antwoord van een Edge Function, niet de kale melding van de bibliotheek. */
+async function uitlegVan(fout: unknown): Promise<string> {
+  const res = (fout as { context?: unknown })?.context;
+  if (res instanceof Response) {
+    try {
+      const body = (await res.clone().json()) as { fout?: string };
+      if (body?.fout) return body.fout;
+    } catch {
+      // Geen JSON: dan de gewone melding.
+    }
+  }
+  return fout instanceof Error ? fout.message : String(fout);
+}
+
+/** Waarlangs de uitnodiging ging: het eigen adres van het bedrijf, of de standaardmail van Supabase. */
+export type UitnodigingVia =
+  | { via: "mailbox" | "brevo"; van: string }
+  | { via: "supabase" };
+
+/**
+ * Alleen de eigenaar mag medewerkers uitnodigen per e-mail.
+ *
+ * De mail gaat vanaf het eigen adres van het bedrijf (Edge Function
+ * `team-uitnodiging`), met een eigen code in de link die net zo lang geldig
+ * is als de uitnodiging. De links van Supabase verlopen na hooguit een dag.
+ * Kan het bedrijf niet zelf mailen, dan de standaardmail van Supabase.
+ */
 export const inviteEmployee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { email: string }) => data)
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data, context }): Promise<UitnodigingVia> => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { data: me } = await supabaseAdmin
@@ -84,11 +125,6 @@ export const inviteEmployee = createServerFn({ method: "POST" })
     const origin = new URL(request.url).origin;
 
     const redirectTo = `${origin}/uitnodiging`;
-    // Het bedrijf staat in app_metadata en niet in user_metadata: die laatste
-    // kan een ingelogde gebruiker zelf aanpassen, en dan zou iedereen met een
-    // bedrijfs-id zich bij dat bedrijf kunnen aansluiten. app_metadata kan
-    // alleen de server wijzigen. Met de datum: na UITNODIGING_DAGEN verloopt hij.
-    const metadata = { uitgenodigd_voor: me.company_id, uitgenodigd_op: new Date().toISOString() };
 
     // Eerst kijken of er al een account met dit adres is, vóór er iets
     // verstuurd wordt. Opzoeken in de database, niet via een inloglink maken:
@@ -123,35 +159,218 @@ export const inviteEmployee = createServerFn({ method: "POST" })
       }
     }
 
-    const { data: uitnodiging, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo,
-    });
-    if (!error && uitnodiging?.user) {
-      const { error: metaFout } = await supabaseAdmin.auth.admin.updateUserById(uitnodiging.user.id, {
-        app_metadata: metadata,
-      });
-      if (metaFout) throw new Error(metaFout.message);
-      return { ok: true };
+    // Het account klaarzetten zonder dat Supabase al iets mailt. Zonder
+    // wachtwoord en onbevestigd: inloggen kan pas na de uitnodiging.
+    let account: string | null = bestaandId ?? null;
+    if (!account) {
+      const { data: nieuw, error: maakFout } = await supabaseAdmin.auth.admin.createUser({ email });
+      if (maakFout || !nieuw?.user) throw new Error(maakFout?.message ?? "Uitnodigen mislukte");
+      account = nieuw.user.id;
     }
+    const gebruikerId = account;
 
-    // Bestaat het account al en is het bevestigd, dan weigert Supabase een
-    // uitnodiging. Dat gebeurt als iemand de link al opende maar nooit een
-    // wachtwoord koos, of bij een oud-medewerker die terugkomt. Dan sturen we
-    // een inloglink naar dezelfde pagina: daar kiest hij alsnog een wachtwoord.
-    if (!bestaandId || !error || !/already|registered|exists/i.test(error.message)) {
-      throw new Error(error?.message ?? "Uitnodigen mislukte");
-    }
-    const { error: metaFout } = await supabaseAdmin.auth.admin.updateUserById(bestaandId, {
-      app_metadata: metadata,
+    // Het bedrijf staat in app_metadata en niet in user_metadata: die laatste
+    // kan een ingelogde gebruiker zelf aanpassen, en dan zou iedereen met een
+    // bedrijfs-id zich bij dat bedrijf kunnen aansluiten. app_metadata kan
+    // alleen de server wijzigen. Met de datum: na UITNODIGING_DAGEN verloopt
+    // hij. Een nieuwe code maakt de link uit een eerdere mail ongeldig.
+    const code = nieuweCode();
+    const { error: metaFout } = await supabaseAdmin.auth.admin.updateUserById(gebruikerId, {
+      app_metadata: {
+        uitgenodigd_voor: me.company_id,
+        uitgenodigd_op: new Date().toISOString(),
+        uitnodiging_code: await hashVan(code),
+      },
     });
     if (metaFout) throw new Error(metaFout.message);
-    const { error: mailFout } = await supabaseAdmin.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false, emailRedirectTo: redirectTo },
-    });
-    if (mailFout) throw new Error(mailFout.message);
 
-    return { ok: true };
+    // Mislukt het versturen, dan staat er ook geen uitnodiging open: anders
+    // staat hij in de lijst als verstuurd terwijl er niets aankwam.
+    const trekIn = () =>
+      supabaseAdmin.auth.admin.updateUserById(gebruikerId, {
+        app_metadata: { uitgenodigd_voor: null, uitgenodigd_op: null, uitnodiging_code: null },
+      });
+
+    const { data: uit, error: functieFout } = await context.supabase.functions.invoke<
+      { via: "mailbox" | "brevo"; van: string } | { via: "geen" }
+    >("team-uitnodiging", { body: { gebruiker_id: gebruikerId, code, adres: origin } });
+    if (functieFout || !uit?.via) {
+      await trekIn();
+      throw new Error(functieFout ? await uitlegVan(functieFout) : "Versturen mislukte");
+    }
+    if (uit.via !== "geen") return uit;
+
+    // Het bedrijf kan (nog) niet zelf mailen: de standaardmail van Supabase.
+    // Die link komt terug op /uitnodiging mét een sessie (zie completeInvite).
+    // Is het account al bevestigd, dan weigert Supabase een uitnodiging. Dat
+    // gebeurt als iemand de link al opende maar nooit een wachtwoord koos, of
+    // bij een oud-medewerker die terugkomt. Dan sturen we een inloglink naar
+    // dezelfde pagina: daar kiest hij alsnog een wachtwoord.
+    const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, { redirectTo });
+    let mailFout = error;
+    if (error && /already|registered|exists/i.test(error.message)) {
+      ({ error: mailFout } = await supabaseAdmin.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false, emailRedirectTo: redirectTo },
+      }));
+    }
+    if (mailFout) {
+      await trekIn();
+      throw new Error(
+        `${mailFout.message}. Koppel je bedrijfsmail bij Instellingen → mail, dan verstuurt Wooshy de uitnodiging zelf.`,
+      );
+    }
+    return { via: "supabase" };
+  });
+
+type Admin = Awaited<typeof import("@/integrations/supabase/client.server")>["supabaseAdmin"];
+
+type Uitnodiging =
+  | {
+      status: "geldig";
+      id: string;
+      email: string;
+      companyId: string;
+      /** Dit adres heeft al een eigen Wooshy-account (bevestigd): zie accepteerUitnodiging. */
+      bestaand: boolean;
+    }
+  | { status: "verlopen" | "ongeldig" | "gebruikt" };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Hoort deze code bij een uitnodiging die nog open staat? De code blijft na
+ * gebruik bewaard, zodat een tweede klik op de link "al gebruikt" kan zeggen
+ * in plaats van "ongeldig".
+ */
+async function zoekUitnodiging(admin: Admin, id: string, code: string): Promise<Uitnodiging> {
+  if (!UUID.test(id) || code.length < 20 || code.length > 200) return { status: "ongeldig" };
+  const { data: gebruiker, error } = await admin.auth.admin.getUserById(id);
+  if (error || !gebruiker?.user?.email) return { status: "ongeldig" };
+  const meta = gebruiker.user.app_metadata ?? {};
+  if (meta["uitnodiging_code"] !== (await hashVan(code))) return { status: "ongeldig" };
+  const { data: al } = await admin.from("employees").select("id").eq("id", id).maybeSingle();
+  if (al) return { status: "gebruikt" };
+  const companyId = meta["uitgenodigd_voor"];
+  if (typeof companyId !== "string" || !companyId) return { status: "ongeldig" };
+  if (isVerlopen(uitgenodigdOp(gebruiker.user))) return { status: "verlopen" };
+  return {
+    status: "geldig",
+    id,
+    email: gebruiker.user.email,
+    companyId,
+    bestaand: !!gebruiker.user.email_confirmed_at,
+  };
+}
+
+const WAAROM_NIET: Record<Exclude<Uitnodiging["status"], "geldig">, string> = {
+  verlopen: `Deze uitnodiging is verlopen (langer dan ${UITNODIGING_DAGEN} dagen geleden). Vraag de eigenaar om een nieuwe.`,
+  ongeldig: "Deze uitnodigingslink klopt niet (meer). Misschien is er een nieuwere gestuurd of is hij ingetrokken.",
+  gebruikt: "Deze uitnodiging is al gebruikt. Log in met je e-mailadres en wachtwoord.",
+};
+
+function leesCode(data: unknown): { id: string; code: string } {
+  const d = (data ?? {}) as Record<string, unknown>;
+  const id = d["id"];
+  const code = d["code"];
+  if (typeof id !== "string" || typeof code !== "string") throw new Error("Onleesbaar verzoek");
+  return { id, code };
+}
+
+/**
+ * Voor de uitnodigingspagina: klopt de link, en van welk bedrijf is hij? Zonder
+ * login, want de nieuwe collega heeft nog geen wachtwoord. Verandert niets,
+ * dus een virusscanner die de link vooraf opent, maakt hem niet stuk.
+ */
+export const bekijkUitnodiging = createServerFn({ method: "POST" })
+  .validator(leesCode)
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const u = await zoekUitnodiging(supabaseAdmin, data.id, data.code);
+    if (u.status !== "geldig") return { status: u.status, uitleg: WAAROM_NIET[u.status] };
+    const { data: bedrijf } = await supabaseAdmin
+      .from("companies")
+      .select("name")
+      .eq("id", u.companyId)
+      .maybeSingle();
+    return { status: u.status, email: u.email, bedrijf: bedrijf?.name ?? "", bestaand: u.bestaand };
+  });
+
+/**
+ * De nieuwe collega kiest zijn naam en wachtwoord. De code in de link bewijst
+ * dat hij de mail kreeg; daarna is hij lid van het bedrijf van de uitnodiging
+ * en logt hij gewoon in met zijn e-mailadres en dit wachtwoord.
+ *
+ * Alleen voor een account dat nog nooit bevestigd is. De mail staat ook in
+ * Verzonden van het bedrijf; bij een bestaand account zou wie daar kan lezen
+ * anders het wachtwoord van iemand anders kunnen kiezen. Een bestaand account
+ * logt in met zijn eigen wachtwoord (completeInvite), of vraagt een inloglink
+ * die naar zijn eigen adres gaat (stuurInloglink).
+ */
+export const accepteerUitnodiging = createServerFn({ method: "POST" })
+  .validator((data: unknown) => {
+    const d = (data ?? {}) as Record<string, unknown>;
+    const naam = d["naam"];
+    const wachtwoord = d["wachtwoord"];
+    if (typeof naam !== "string" || typeof wachtwoord !== "string") throw new Error("Onleesbaar verzoek");
+    return { ...leesCode(data), naam, wachtwoord };
+  })
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const naam = data.naam.trim().slice(0, 100);
+    if (!naam) throw new Error("Vul je naam in.");
+    if (data.wachtwoord.length < 6) throw new Error("Kies een wachtwoord van minimaal 6 tekens.");
+
+    const u = await zoekUitnodiging(supabaseAdmin, data.id, data.code);
+    if (u.status !== "geldig") throw new Error(WAAROM_NIET[u.status]);
+    if (u.bestaand) {
+      throw new Error("Er is al een Wooshy-account met dit adres. Log in met je eigen wachtwoord.");
+    }
+
+    const { error: pwFout } = await supabaseAdmin.auth.admin.updateUserById(u.id, {
+      password: data.wachtwoord,
+      email_confirm: true,
+    });
+    if (pwFout) throw new Error("Wachtwoord instellen mislukt: " + pwFout.message);
+
+    const { error } = await supabaseAdmin.from("employees").insert({
+      id: u.id,
+      company_id: u.companyId,
+      naam,
+      email: u.email,
+      rol: "medewerker",
+    });
+    if (error) throw new Error(error.message);
+
+    // De uitnodiging is gebruikt.
+    await supabaseAdmin.auth.admin.updateUserById(u.id, {
+      app_metadata: { uitgenodigd_voor: null },
+    });
+
+    return { email: u.email };
+  });
+
+/**
+ * Wie al een account heeft maar zijn wachtwoord kwijt is: een inloglink van
+ * Supabase naar zijn eigen adres. Die komt terug op /uitnodiging met een
+ * sessie, en daar kiest hij een nieuw wachtwoord (completeInvite). De code
+ * alleen is niet genoeg: de link gaat naar de uitgenodigde zelf.
+ */
+export const stuurInloglink = createServerFn({ method: "POST" })
+  .validator(leesCode)
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const u = await zoekUitnodiging(supabaseAdmin, data.id, data.code);
+    if (u.status !== "geldig") throw new Error(WAAROM_NIET[u.status]);
+    if (!u.bestaand) throw new Error("Kies hierboven gewoon een wachtwoord.");
+    const origin = new URL(getRequest().url).origin;
+    const { error } = await supabaseAdmin.auth.signInWithOtp({
+      email: u.email,
+      options: { shouldCreateUser: false, emailRedirectTo: `${origin}/uitnodiging` },
+    });
+    if (error) throw new Error(error.message);
+    return { email: u.email };
   });
 
 /**
@@ -268,7 +487,7 @@ export const trekUitnodigingIn = createServerFn({ method: "POST" })
       throw new Error("Deze uitnodiging is niet (meer) van jouw bedrijf");
     }
     const { error: metaFout } = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
-      app_metadata: { uitgenodigd_voor: null, uitgenodigd_op: null },
+      app_metadata: { uitgenodigd_voor: null, uitgenodigd_op: null, uitnodiging_code: null },
     });
     if (metaFout) throw new Error(metaFout.message);
     return { ok: true };

@@ -57,3 +57,9 @@ verify_jwt = false
 # toepassen. Zelfde slot als mail-ophalen (x-cron-sleutel).
 [functions.mail-planner]
 verify_jwt = false
+
+# De uitnodigingsmail voor een nieuwe collega, vanaf het eigen adres: alleen
+# ingelogd, en de functie kijkt zelf of je eigenaar bent en of de uitnodiging
+# van jouw bedrijf is.
+[functions.team-uitnodiging]
+verify_jwt = true
