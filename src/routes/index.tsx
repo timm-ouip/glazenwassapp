@@ -112,7 +112,13 @@ import { DubbeleStraten } from "@/components/DubbeleStraten";
 import { WijkKiezer } from "@/components/WijkKiezer";
 import { useBevestig } from "@/components/Bevestig";
 import { InlineCel } from "@/components/InlineCel";
-import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
+import {
+  laatsteUndo,
+  pushUndo,
+  undoKnop,
+  undoMetMelding,
+  useLaatsteUndoLabel,
+} from "@/lib/undo";
 import { OverslaanKnop } from "@/components/OverslaanKnop";
 import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
 import { NotitieCel } from "@/components/NotitieCel";
@@ -422,10 +428,8 @@ function Index() {
     qc.invalidateQueries({ queryKey: ["straat_groepen"] });
   }
 
-  async function doeUndo() {
-    const label = await undoLaatste();
-    if (label) toast.success("Teruggedraaid: " + label);
-    else toast("Niets om terug te draaien");
+  function doeUndo() {
+    return undoMetMelding(laatsteUndo(), "Niets om terug te draaien");
   }
 
   function meldUndo(bericht: string) {
@@ -433,7 +437,7 @@ function Index() {
     // of je een verwijdering terugdraait — de knop is weg voor je hem kunt raken.
     toast(bericht, {
       duration: 12000,
-      action: { label: "Ongedaan maken", onClick: () => void doeUndo() },
+      action: undoKnop(),
     });
   }
 
@@ -1012,14 +1016,7 @@ function Index() {
         : `${toonDatum(datum)} bijgewerkt: ${erbij} erbij, ${eraf} eraf`,
       {
         duration: 10000,
-        action: {
-          label: "Ongedaan maken",
-          onClick: () => {
-            void undoLaatste().then((label) => {
-              if (label) toast.success("Teruggedraaid: " + label);
-            });
-          },
-        },
+        action: undoKnop(),
       },
     );
     return true;
@@ -1770,7 +1767,12 @@ function Index() {
       pushUndo({
         label: `Toevoegen straat ${naam.trim()}`,
         undo: async () => {
-          await supabase.from("streets").delete().eq("id", nieuwId);
+          // Nooit hard weggooien als er intussen adressen in staan: die gaan
+          // met de straat mee (cascade). Dan naar de prullenbak, terug te halen.
+          if (!(await gooiLegeStraatWeg(nieuwId))) {
+            await legWeg("streets", [nieuwId]);
+            toast(`"${naam.trim()}" had al adressen: de straat staat met die adressen in de prullenbak.`);
+          }
           herlaad();
         },
       });

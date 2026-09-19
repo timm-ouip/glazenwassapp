@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { redirect, useNavigate } from "@tanstack/react-router";
 import type { Session } from "@supabase/supabase-js";
+import { useQueryClient } from "@tanstack/react-query";
+import { wisUndo } from "@/lib/undo";
 import { supabase } from "@/integrations/supabase/client";
 
 export type Rol = "eigenaar" | "medewerker";
@@ -76,9 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     company: null,
     loading: true,
   });
+  const qc = useQueryClient();
 
   useEffect(() => {
     let actief = true;
+    /** Wie er nu ingelogd is; nog niet bekend bij het opstarten. */
+    let gebruiker: string | null | undefined;
 
     /** Zet de sessie meteen neer; de medewerkersrij komt er zo achteraan.
      * Wachten met `session` tot die query klaar is zorgde ervoor dat een
@@ -144,6 +149,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ná deze callback: supabase houdt hier zijn auth-lock vast en een
       // query erbinnen kan blijven hangen.
       zetSessie(session);
+      // Uitgelogd of iemand anders ingelogd: alles wat de app onthield hoort
+      // bij de vorige persoon (en misschien een ander bedrijf). Weg ermee,
+      // anders zag de volgende op een gedeelde laptop even diens gegevens.
+      const id = session?.user.id ?? null;
+      if (gebruiker !== undefined && id !== gebruiker) {
+        qc.clear();
+        wisUndo();
+      }
+      gebruiker = id;
       setTimeout(() => void laadMedewerker(session), 0);
     });
 
@@ -151,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       actief = false;
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [qc]);
 
   async function refreshEmployee() {
     const { data } = await supabase.auth.getSession();

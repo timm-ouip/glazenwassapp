@@ -104,7 +104,20 @@ export function KlantDialog({
     setRitme(customer ? ritmeWaarde(customer) : "");
   }, [open, customer, defaultStreetId, defaultNumber, streets]);
 
+  /** Loopt er al een opslag? Een tweede Enter maakte anders alles dubbel
+   *  (twee klanten, twee adressen); de uitgezette knop hield alleen klikken tegen. */
+  const opslaanBezig = useRef(false);
   async function save() {
+    if (opslaanBezig.current) return;
+    opslaanBezig.current = true;
+    try {
+      await bewaar();
+    } finally {
+      opslaanBezig.current = false;
+    }
+  }
+
+  async function bewaar() {
     const huisnummer = parseInt(number, 10);
     if (!streetId || Number.isNaN(huisnummer)) {
       toast.error("Kies een straat en vul een huisnummer in.");

@@ -186,7 +186,10 @@ function Gesprek({
           {naam && <p className="text-[12px] text-muted-foreground">{toonNummer(telefoon)}</p>}
         </div>
       </div>
-      <ChatVenster telefoon={telefoon} className="flex-1" />
+      {/* Per nummer een eigen venster: anders bleef een half getypt (of door
+          Paaltje voorgesteld) appje staan als je een ander gesprek koos, en
+          ging het met Enter naar de verkeerde klant. */}
+      <ChatVenster key={telefoon} telefoon={telefoon} className="flex-1" />
     </>
   );
 }

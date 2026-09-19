@@ -83,6 +83,7 @@ export function DossierWhatsApp({ klant }: { klant: Klant }) {
             </div>
           )}
           <ChatVenster
+            key={actief}
             telefoon={actief}
             className="h-[380px] overflow-hidden rounded-[14px] border border-border"
           />

@@ -45,7 +45,7 @@ import {
   wijkKleur,
   type District,
 } from "@/lib/klanten";
-import { pushUndo, undoLaatste } from "@/lib/undo";
+import { pushUndo, undoKnop } from "@/lib/undo";
 import { zoekWoonplaatsen } from "@/lib/postcode";
 import { useBevestig } from "@/components/Bevestig";
 import { opslaanBijEnter } from "@/lib/dialoog";
@@ -111,14 +111,7 @@ export function WijkKiezer({
       });
       toast(`Wijk "${weg.name}" verwijderd`, {
         duration: 12000,
-        action: {
-          label: "Ongedaan maken",
-          onClick: () => {
-            void undoLaatste().then((label) => {
-              if (label) toast.success("Teruggedraaid: " + label);
-            });
-          },
-        },
+        action: undoKnop(),
       });
     } catch (e) {
       toast.error("Verwijderen mislukt: " + (e as Error).message);

@@ -734,8 +734,10 @@ function TeamTab() {
 
   return (
     <div className="max-w-3xl space-y-4">
-      <div className="overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
-        <table className="w-full text-sm">
+      {/* Op de telefoon past de tabel niet: dan schuift hij opzij, zodat
+          Rechten en het prullenbakje nog te bereiken zijn. */}
+      <div className="overflow-x-auto rounded-[18px] border border-border bg-card shadow-card">
+        <table className="w-full min-w-[560px] text-sm">
           <thead className="bg-card-header text-left text-[11px] font-medium text-muted-foreground/80">
             <tr>
               <th className="px-3 py-2 font-medium">Naam</th>

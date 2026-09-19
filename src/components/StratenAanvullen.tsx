@@ -11,7 +11,7 @@ import {
   stratenZonderNaam,
   type StraatVoorstel as Voorstel,
 } from "@/lib/aanvullen";
-import { pushUndo, undoLaatste } from "@/lib/undo";
+import { pushUndo, undoKnop } from "@/lib/undo";
 import {
   PopupBody,
   PopupHint,
@@ -105,14 +105,7 @@ export function StratenAanvullen({
       });
       toast(`${wijzigingen.length} straatnamen aangevuld`, {
         duration: 12000,
-        action: {
-          label: "Ongedaan maken",
-          onClick: () => {
-            void undoLaatste().then((label) => {
-              if (label) toast.success("Teruggedraaid: " + label);
-            });
-          },
-        },
+        action: undoKnop(),
       });
       setOpen(false);
     } catch (e) {

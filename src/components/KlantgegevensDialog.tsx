@@ -284,6 +284,26 @@ export function KlantgegevensDialog({
 
   /** Het adres waar dit dossier over gaat; null als het nog niet bestaat. */
   const dossierCustomer = voorstelCustomer ?? null;
+  /** Straat, nummer en plaats van dat pand, voluit. */
+  const pandStraat = dossierCustomer
+    ? streets.find((s) => s.id === dossierCustomer.street_id)
+    : undefined;
+  const pandAdres =
+    dossierCustomer && pandStraat
+      ? adresVanRegel(
+          dossierCustomer,
+          pandStraat,
+          districts.find((d) => d.id === pandStraat.district_id),
+        )
+      : null;
+  /** Gaat het adres in het formulier over dit pand? Met een klant erbij staat
+   *  daar zíjn adres; meestal is dat hetzelfde huis, maar niet altijd. */
+  const gelijk = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const formulierIsPand =
+    !klant ||
+    (pandAdres !== null &&
+      gelijk(velden.straat, pandAdres.straat) &&
+      gelijk(velden.huisnummer, pandAdres.huisnummer));
   const openKlussen = klussen.filter((k) => k.customer_id === dossierCustomer?.id && staatOpen(k));
 
   function zet(patch: Partial<typeof LEEG>) {
@@ -316,7 +336,9 @@ export function KlantgegevensDialog({
       const adres = straat
         ? adresVanRegel(voorstelCustomer, straat, wijkVan(straat))
         : { straat: "", huisnummer: "", plaats: "" };
-      beginVelden = { ...LEEG, ...adres };
+      // De postcode van het pand zelf, niet leeg: anders schreef Opslaan een
+      // lege of opgezochte postcode over die van het huis heen.
+      beginVelden = { ...LEEG, ...adres, postcode: voorstelCustomer.postcode ?? "" };
     } else {
       // De plaats van de wijk waar je in werkt wint van de meest gebruikte
       // plaats: Testwijk ligt in Den Haag, ook al staan de meeste klanten in
@@ -347,7 +369,8 @@ export function KlantgegevensDialog({
     setTab("klant");
     // Een nieuw adres heeft nog niets om snel te bekijken: meteen de lijst.
     setStap(voorstelCustomer ? "blad" : "overzicht");
-    setPostcodeHandmatig(Boolean(klant?.postcode));
+    // Staat er al een postcode, dan zoekt de app er niet overheen.
+    setPostcodeHandmatig(Boolean(beginVelden.postcode));
     // Alleen bij openen opnieuw vullen; verder is dit een vrij formulier.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, klant, voorstelCustomer]);
@@ -410,7 +433,20 @@ export function KlantgegevensDialog({
     [customers, dossierCustomer, extra],
   );
 
+  /** Loopt er al een opslag? Een tweede Enter maakte anders alles dubbel
+   *  (twee klanten, twee adressen); de uitgezette knop hield alleen klikken tegen. */
+  const opslaanBezig = useRef(false);
   async function save() {
+    if (opslaanBezig.current) return;
+    opslaanBezig.current = true;
+    try {
+      await bewaar();
+    } finally {
+      opslaanBezig.current = false;
+    }
+  }
+
+  async function bewaar() {
     if (!magBewerken) return;
     // Een naam is niet verplicht: die ken je niet altijd, en een telefoon-
     // nummer of gekoppeld adres is op zichzelf al genoeg om te bewaren. Alleen
@@ -483,6 +519,22 @@ export function KlantgegevensDialog({
       // dossier. Een adres dat al bestond maar niet het adres van dit dossier
       // was, blijft zoals het is: het formulier stond dan leeg (prijs 0, geen
       // notitie), en dat hoort niet over zijn gegevens heen.
+      /**
+       * Wat er op het pand komt als postcode; null is: laat hem staan.
+       * Een nieuw adres krijgt wat er in het veld staat. Een bestaand adres
+       * alleen een nieuwe, niet-lege postcode, en alleen als het formulier
+       * over dít huis gaat: met een klant erbij staat daar het adres van de
+       * persoon, en dat kan een ander huis zijn (zie formulierIsPand).
+       */
+      const veldPostcode = velden.postcode.trim();
+      const pandPostcode = aangemaakt
+        ? veldPostcode
+        : dossierCustomer &&
+            formulierIsPand &&
+            veldPostcode &&
+            veldPostcode !== (dossierCustomer.postcode ?? "")
+          ? veldPostcode
+          : null;
       if (adresId && (dossierCustomer || aangemaakt)) {
         // Dezelfde regel als in de wijklijst: een adres dat nog moet
         // beginnen en dat je zijn startmaand laat overslaan, begint gewoon
@@ -494,7 +546,7 @@ export function KlantgegevensDialog({
             note: pand.note.trim(),
             // De postcode hoort bij het pand, niet bij de bewoner — en de
             // klantenlijst leest hem daar ook vandaan.
-            postcode: velden.postcode.trim(),
+            ...(pandPostcode !== null ? { postcode: pandPostcode } : {}),
             interval_maanden: pand.interval_maanden,
             ritme: pand.ritme,
             maandwerk: pand.maandwerk,
@@ -1151,10 +1203,14 @@ export function KlantgegevensDialog({
       .find((t) => t.startsWith("316")) ?? "";
   // Uit het formulier, niet uit de wijklijst: daar staan afkortingen
   // ("Othilde"), en daarmee vindt de kaart het adres niet.
+  const routeVelden =
+    dossierCustomer && pandAdres && !formulierIsPand
+      ? { ...pandAdres, postcode: dossierCustomer.postcode ?? "" }
+      : velden;
   const routeAdres = dossierCustomer
     ? [
-        `${velden.straat.trim()} ${velden.huisnummer.trim()}`.trim(),
-        [velden.postcode.trim(), velden.plaats.trim()].filter(Boolean).join(" "),
+        `${routeVelden.straat.trim()} ${routeVelden.huisnummer.trim()}`.trim(),
+        [routeVelden.postcode.trim(), routeVelden.plaats.trim()].filter(Boolean).join(" "),
       ]
         .filter(Boolean)
         .join(", ")

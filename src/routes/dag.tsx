@@ -56,7 +56,13 @@ import {
 } from "@/lib/wasdag";
 import { fetchKlussen, telDagVan, vinkKlusAf, zetKlusOpDag, type Klus } from "@/lib/klussen";
 import { Checkbox } from "@/components/ui/checkbox";
-import { pushUndo, undoLaatste, useLaatsteUndoLabel } from "@/lib/undo";
+import {
+  laatsteUndo,
+  pushUndo,
+  undoKnop,
+  undoMetMelding,
+  useLaatsteUndoLabel,
+} from "@/lib/undo";
 import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
 import { redenLabel } from "@/lib/stoppen";
 import { verplaatsWasdag } from "@/lib/wasdag";
@@ -670,14 +676,7 @@ function DagPagina() {
       delen.push(`${teVerzetten.length} ${teVerzetten.length === 1 ? "opdracht" : "opdrachten"}`);
     toast.success(`${delen.join(" en ")} verplaatst naar ${toonDatum(nieuw)}`, {
       duration: 10000,
-      action: {
-        label: "Ongedaan maken",
-        onClick: () => {
-          void undoLaatste().then((label) => {
-            if (label) toast.success("Teruggedraaid: " + label);
-          });
-        },
-      },
+      action: undoKnop(),
     });
   }
 
@@ -812,21 +811,12 @@ function DagPagina() {
     qc.invalidateQueries({ queryKey: ["wasdag"] });
     qc.invalidateQueries({ queryKey: ["wasdagen"] });
     toast.success(`Bijgewerkt voor ${toonDatum(datum)}`, {
-      action: {
-        label: "Ongedaan maken",
-        onClick: () => {
-          void undoLaatste().then((label) => {
-            if (label) toast.success("Teruggedraaid: " + label);
-          });
-        },
-      },
+      action: undoKnop(),
     });
   }
 
-  async function doeUndo() {
-    const label = await undoLaatste();
-    if (label) toast.success("Teruggedraaid: " + label);
-    else toast("Niets om terug te draaien");
+  function doeUndo() {
+    return undoMetMelding(laatsteUndo(), "Niets om terug te draaien");
   }
 
   /** De dag ervoor en erna, om met de pijltjes langs de week te lopen. */
@@ -977,7 +967,9 @@ function DagPagina() {
         />
       }
     >
-      {wasdagQuery.isLoading ? (
+      {/* Ook wachten op de adressen en straten: zonder die telt elke regel
+          als "intussen verwijderd", en dat zag je 's ochtends even staan. */}
+      {wasdagQuery.isLoading || adressenQuery.isLoading || streetsQuery.isLoading ? (
         <p className="text-[13px] text-muted-foreground">Laden…</p>
       ) : regels.length === 0 && klussen.length === 0 ? (
         <div className="rounded-[18px] border border-dashed border-border bg-card/50 p-8 text-center">

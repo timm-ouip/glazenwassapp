@@ -102,11 +102,17 @@ export function NotitieCel({
 
   const actief = noteTokens(tekst).map((t) => t.toLowerCase());
 
-  /** Zelf sluiten gaat buiten Radix om, dus dan slaan we hier zelf op. */
+  /** Zelf sluiten gaat buiten Radix om, dus dan slaan we hier zelf op:
+   *  de notitie én de maanden, waar je ook op Enter drukte. */
   function sluit() {
+    if (tekst !== value) onChange(tekst);
     bewaarMaandwerk();
     setOpen(false);
   }
+
+  /** Escape betekent weggooien. Radix hoort hem eerder dan het invoerveld en
+   *  sluit via onOpenChange, dat juist opslaat; deze vlag houdt dat tegen. */
+  const weggooien = useRef(false);
 
   function sluitBijEnter(e: ReactKeyboardEvent) {
     if (e.key === "Enter") sluit();
@@ -177,7 +183,13 @@ export function NotitieCel({
         // Bij het opengaan overnemen wat er in de database staat; deed een
         // useEffect dat, dan wiste elke hervalidatie van de lijst je invoer.
         if (o) {
+          weggooien.current = false;
           setWerk(naarRegels(maandwerk));
+          return;
+        }
+        if (weggooien.current) {
+          weggooien.current = false;
+          setTekst(value);
           return;
         }
         if (tekst !== value) onChange(tekst);
@@ -198,21 +210,20 @@ export function NotitieCel({
           {stip}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-64 space-y-3 p-3" align="start">
+      <PopoverContent
+        className="w-64 space-y-3 p-3"
+        align="start"
+        onEscapeKeyDown={() => {
+          weggooien.current = true;
+        }}
+      >
         <Input
           ref={inputRef}
           value={tekst}
           placeholder="Notitie"
           onChange={(e) => setTekst(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              onChange(tekst);
-              setOpen(false);
-            }
-            if (e.key === "Escape") {
-              setTekst(value);
-              setOpen(false);
-            }
+            if (e.key === "Enter") sluit();
           }}
         />
         <div className="flex flex-wrap gap-1.5">

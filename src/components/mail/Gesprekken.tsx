@@ -310,7 +310,7 @@ export function Gesprekken() {
           <SheetTitle className="border-b border-border px-4 py-3 font-display text-[16px]">
             {losNummer ? toonNummer(losNummer) : ""}
           </SheetTitle>
-          {losNummer && <ChatVenster telefoon={losNummer} className="min-h-0 flex-1" />}
+          {losNummer && <ChatVenster key={losNummer} telefoon={losNummer} className="min-h-0 flex-1" />}
         </SheetContent>
       </Sheet>
     </div>

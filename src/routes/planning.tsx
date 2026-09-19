@@ -57,7 +57,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { pushUndo, undoLaatste } from "@/lib/undo";
+import { pushUndo, undoKnop } from "@/lib/undo";
 import {
   aanDeBeurt,
   fetchCustomers,
@@ -231,6 +231,16 @@ function Planning() {
 
   const gekozenDag = dag ?? vandaag();
   const [maand, setMaand] = useState(() => startOfMonth(new Date(`${gekozenDag}T12:00:00`)));
+  /** Een maand verder of terug. De gekozen dag gaat mee (vandaag als die in
+   *  de nieuwe maand valt, anders de 1e): bleef hij staan, dan toonde het
+   *  dagpaneel een dag die niet geladen is, als "€ 0, nog niets op deze dag". */
+  function bladerMaand(stap: number) {
+    const nieuw = addMonths(maand, stap);
+    setMaand(nieuw);
+    const dagNu = vandaag();
+    const dagNieuw = isSameMonth(new Date(`${dagNu}T12:00:00`), nieuw) ? dagNu : sleutel(nieuw);
+    void navigate({ to: "/planning", search: { dag: dagNieuw }, replace: true });
+  }
 
   // De kalender toont hele weken, dus lopen de randen buiten de maand door.
   const van = startOfWeek(startOfMonth(maand), { locale: nl });
@@ -414,14 +424,19 @@ function Planning() {
   const nu = vandaag();
   // Wat er gedaan is telt t/m vandaag; wat daarna staat is nog een plan. Dat
   // onderscheid is de reden dat deze pagina bestaat.
-  const maandRegels = regels.filter((r) => isSameMonth(new Date(`${r.datum}T12:00:00`), maand));
-  const gedaan = maandRegels
-    .filter((r) => r.datum <= nu)
-    .reduce((sum, r) => sum + Number(r.prijs), 0);
-  const gepland = maandRegels
-    .filter((r) => r.datum > nu)
-    .reduce((sum, r) => sum + Number(r.prijs), 0);
-  const werkdagen = new Set(maandRegels.map((r) => r.datum)).size;
+  const inMaand = (datum: string) => isSameMonth(new Date(`${datum}T12:00:00`), maand);
+  // De dagregels én het extra werk, op de dag waar het meetelt (telDagVan):
+  // hetzelfde als in de vakjes, anders klopte de optelling niet met de dagen.
+  const maandPosten = [
+    ...regels.filter((r) => inMaand(r.datum)).map((r) => ({ datum: r.datum, prijs: Number(r.prijs) })),
+    ...klussen.flatMap((k) => {
+      const d = telDagVan(k);
+      return d && inMaand(d) ? [{ datum: d, prijs: k.prijs }] : [];
+    }),
+  ];
+  const gedaan = maandPosten.filter((p) => p.datum <= nu).reduce((sum, p) => sum + p.prijs, 0);
+  const gepland = maandPosten.filter((p) => p.datum > nu).reduce((sum, p) => sum + p.prijs, 0);
+  const werkdagen = new Set(maandPosten.map((p) => p.datum)).size;
 
   // --- De gekozen dag, uitgesplitst per straat -----------------------------
   const dagRegels = regels.filter((r) => r.datum === gekozenDag);
@@ -896,14 +911,7 @@ function Planning() {
       `${stappen.length} ${stappen.length === 1 ? "dag" : "dagen"} opgeschoven; de laatste staat nu op ${toonDatum(laatste.nieuw)}`,
       {
         duration: 12000,
-        action: {
-          label: "Ongedaan maken",
-          onClick: () => {
-            void undoLaatste().then((label) => {
-              if (label) toast.success("Teruggedraaid: " + label);
-            });
-          },
-        },
+        action: undoKnop(),
       },
     );
   }
@@ -983,14 +991,7 @@ function Planning() {
     const eldersTekst = overslaan ? ` (${dichtbij.size} overgeslagen)` : "";
     toast.success(`${wijk.name}: ${erbij.length} adressen op ${toonDatum(datum)}${eldersTekst}`, {
       duration: 10000,
-      action: {
-        label: "Ongedaan maken",
-        onClick: () => {
-          void undoLaatste().then((label) => {
-            if (label) toast.success("Teruggedraaid: " + label);
-          });
-        },
-      },
+      action: undoKnop(),
     });
   }
 
@@ -1031,14 +1032,7 @@ function Planning() {
     // langer in beeld dan standaard: vier seconden is te kort om te beslissen.
     toast(`${terug.length} adressen van ${toonDatum(gekozenDag)} gehaald`, {
       duration: 12000,
-      action: {
-        label: "Ongedaan maken",
-        onClick: () => {
-          void undoLaatste().then((label) => {
-            if (label) toast.success("Teruggedraaid: " + label);
-          });
-        },
-      },
+      action: undoKnop(),
     });
   }
 
@@ -1192,7 +1186,7 @@ function Planning() {
               const dx = t.clientX - start.x;
               const dy = t.clientY - start.y;
               if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-                setMaand((m) => addMonths(m, dx < 0 ? 1 : -1));
+                bladerMaand(dx < 0 ? 1 : -1);
               }
             }}
           >
@@ -1203,7 +1197,7 @@ function Planning() {
                 <button
                   type="button"
                   className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
-                  onClick={() => setMaand((m) => addMonths(m, -1))}
+                  onClick={() => bladerMaand(-1)}
                   aria-label="Vorige maand"
                 >
                   <ChevronLeft className="size-4" />
@@ -1214,7 +1208,7 @@ function Planning() {
                 <button
                   type="button"
                   className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
-                  onClick={() => setMaand((m) => addMonths(m, 1))}
+                  onClick={() => bladerMaand(1)}
                   aria-label="Volgende maand"
                 >
                   <ChevronRight className="size-4" />

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { IconMapPin as MapPin } from "@tabler/icons-react";
 import { persistPostcodes, type Customer, type Street } from "@/lib/klanten";
 import { haalPostcodesOp, stratenZonderPostcode } from "@/lib/aanvullen";
-import { pushUndo, undoLaatste } from "@/lib/undo";
+import { pushUndo, undoKnop } from "@/lib/undo";
 
 interface Props {
   /** De straten van de actieve wijk. */
@@ -73,14 +73,7 @@ export function PostcodesOphalen({ streets, customers, plaats, onSaved }: Props)
     }
     toast(`${wijzigingen.length} postcodes ingevuld.${staart}`, {
       duration: 12000,
-      action: {
-        label: "Ongedaan maken",
-        onClick: () => {
-          void undoLaatste().then((label) => {
-            if (label) toast.success("Teruggedraaid: " + label);
-          });
-        },
-      },
+      action: undoKnop(),
     });
   }
 

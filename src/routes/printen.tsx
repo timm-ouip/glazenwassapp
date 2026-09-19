@@ -75,7 +75,7 @@ import {
   type Street,
 } from "@/lib/klanten";
 import { useRecht } from "@/lib/rechten";
-import { fetchWasdag, toonDatum } from "@/lib/wasdag";
+import { fetchWasdag, toonDatum, type WasdagRegel } from "@/lib/wasdag";
 import { redenLabel } from "@/lib/stoppen";
 
 interface PrintSearch {
@@ -161,6 +161,7 @@ const StraatBlok = memo(function StraatBlok({
   maand,
   ronde,
   markeringen,
+  dagRegels,
   sleepHandle,
 }: {
   g: Groep;
@@ -170,6 +171,9 @@ const StraatBlok = memo(function StraatBlok({
   ronde: string;
   /** De zelfgemaakte kleuren; die bepalen welke regel gekleurd op papier komt. */
   markeringen: MarkeringRij[];
+  /** Print je een dag, dan het bedrag en de notitie van díe dag (de
+   *  factuurregel), niet de vaste van het adres. */
+  dagRegels?: Map<string, WasdagRegel> | null;
   sleepHandle?: ReactNode;
 }) {
   const kolommen = tweeKolommen(g);
@@ -193,6 +197,9 @@ const StraatBlok = memo(function StraatBlok({
               <tbody>
                 {kolom.map((c) => {
                   const kleur = regelKleur(c, ronde, markeringen);
+                  const dagRegel = dagRegels?.get(c.id);
+                  const prijs = dagRegel ? Number(dagRegel.prijs) : prijsVoorMaand(c, maand);
+                  const anders = dagRegel?.notitie?.trim() ?? "";
                   return (
                     <tr
                       key={c.id}
@@ -226,6 +233,8 @@ const StraatBlok = memo(function StraatBlok({
                         {isNieuw(c, ronde) && (
                           <span className="font-bold uppercase">nieuw in {toonMaand(ronde)} </span>
                         )}
+                        {/* Wat er die dag anders gaat eerst: dát moet je onderweg weten. */}
+                        {anders && <span className="font-bold">{anders} </span>}
                         {noteVoorMaand(c, maand)}
                       </td>
                       {maand === "alles" && (
@@ -233,9 +242,9 @@ const StraatBlok = memo(function StraatBlok({
                       )}
                       {prijzen && (
                         <td
-                          className={`w-10 px-[2px] text-right text-[9px] leading-[1.1] tabular-nums ${prijsVoorMaand(c, maand) === 0 ? "text-red-600" : ""}`}
+                          className={`w-10 px-[2px] text-right text-[9px] leading-[1.1] tabular-nums ${prijs === 0 ? "text-red-600" : ""}`}
                         >
-                          {formatPrice(prijsVoorMaand(c, maand))}
+                          {formatPrice(prijs)}
                         </td>
                       )}
                     </tr>
@@ -257,6 +266,7 @@ function SleepbaarBlok({
   maand,
   ronde,
   markeringen,
+  dagRegels,
   kolomKop,
   onKolomKopUit,
 }: {
@@ -265,6 +275,7 @@ function SleepbaarBlok({
   maand: string;
   ronde: string;
   markeringen: MarkeringRij[];
+  dagRegels: Map<string, WasdagRegel> | null;
   kolomKop?: boolean;
   onKolomKopUit?: () => void;
 }) {
@@ -289,6 +300,7 @@ function SleepbaarBlok({
         maand={maand}
         ronde={ronde}
         markeringen={markeringen}
+        dagRegels={dagRegels}
         sleepHandle={
           <>
             {kolomKop && (
@@ -427,6 +439,18 @@ function PrintPagina() {
         : null,
     [dag, wasdagQuery.data],
   );
+  /** Per adres de regel van die dag, met het bedrag en de notitie van die dag. */
+  const dagRegels = useMemo(
+    () =>
+      dag
+        ? new Map(
+            (wasdagQuery.data ?? []).flatMap((r) =>
+              r.customer_id ? [[r.customer_id, r] as const] : [],
+            ),
+          )
+        : null,
+    [dag, wasdagQuery.data],
+  );
 
   const districts = districtsQuery.data ?? [];
   const actieveWijk = districts.find((d) => d.id === wijk) ?? districts[0] ?? null;
@@ -489,8 +513,15 @@ function PrintPagina() {
     return sleepVolgorde.map((id) => perId.get(id)).filter(Boolean) as Groep[];
   }, [zichtbaar, sleepVolgorde]);
 
+  // Hetzelfde bedrag als op de regels: met het meerwerk van die maand, en bij
+  // een dag het bedrag van die dag. Eerst telde dit alleen de vaste prijs.
   const totaal = groepen.reduce(
-    (sum, g) => sum + [...g.even, ...g.oneven].reduce((s, c) => s + c.price, 0),
+    (sum, g) =>
+      sum +
+      [...g.even, ...g.oneven].reduce((s, c) => {
+        const regel = dagRegels?.get(c.id);
+        return s + (regel ? Number(regel.prijs) : prijsVoorMaand(c, maand));
+      }, 0),
     0,
   );
 
@@ -1091,6 +1122,7 @@ function PrintPagina() {
                               maand={maand}
                               ronde={ronde}
                               markeringen={markeringen}
+                              dagRegels={dagRegels}
                               kolomKop={kolomStart(g.street)}
                               onKolomKopUit={() => kolomStartUit(g.street.id)}
                             />
@@ -1102,6 +1134,7 @@ function PrintPagina() {
                               maand={maand}
                               ronde={ronde}
                               markeringen={markeringen}
+                              dagRegels={dagRegels}
                             />
                           ),
                         )}
@@ -1127,6 +1160,7 @@ function PrintPagina() {
                               maand={maand}
                               ronde={ronde}
                               markeringen={markeringen}
+                              dagRegels={dagRegels}
                               kolomKop={kolomStart(g.street)}
                               onKolomKopUit={() => kolomStartUit(g.street.id)}
                             />
@@ -1138,6 +1172,7 @@ function PrintPagina() {
                               maand={maand}
                               ronde={ronde}
                               markeringen={markeringen}
+                              dagRegels={dagRegels}
                             />
                           ),
                         )}
@@ -1166,6 +1201,7 @@ function PrintPagina() {
                       maand={maand}
                       ronde={ronde}
                       markeringen={markeringen}
+                      dagRegels={dagRegels}
                     />
                   </div>
                 ))}

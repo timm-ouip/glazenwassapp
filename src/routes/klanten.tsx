@@ -32,7 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useBevestig } from "@/components/Bevestig";
-import { pushUndo, undoLaatste } from "@/lib/undo";
+import { pushUndo, undoKnop } from "@/lib/undo";
 import { nieuweKlus, verwijderKlus } from "@/lib/klussen";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
 import { useStabiel } from "@/hooks/use-stabiel";
@@ -911,14 +911,7 @@ function Klanten() {
     });
     toast(`${adres} staat nu bij Inactief`, {
       duration: 12000,
-      action: {
-        label: "Ongedaan maken",
-        onClick: () => {
-          void undoLaatste().then((label) => {
-            if (label) toast.success("Teruggedraaid: " + label);
-          });
-        },
-      },
+      action: undoKnop(),
     });
   }
 
@@ -1043,14 +1036,7 @@ function Klanten() {
 
       toast(`${adres} verwijderd`, {
         duration: 12000,
-        action: {
-          label: "Ongedaan maken",
-          onClick: () => {
-            void undoLaatste().then((label) => {
-              if (label) toast.success("Teruggedraaid: " + label);
-            });
-          },
-        },
+        action: undoKnop(),
       });
     } catch (e) {
       toast.error("Verwijderen mislukt: " + (e as Error).message);

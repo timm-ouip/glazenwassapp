@@ -13,10 +13,16 @@ import type { KeyboardEvent } from "react";
 export function opslaanBijEnter(opslaan: () => void) {
   return (e: KeyboardEvent) => {
     if (e.key !== "Enter" || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
-    if (e.defaultPrevented) return;
+    // Enter ingedrukt houden: één keer opslaan, niet bij elke herhaling.
+    if (e.defaultPrevented || e.repeat) return;
 
     const doel = e.target as HTMLElement | null;
     if (!doel) return;
+    // Alleen wat in het venster zelf gebeurt. Een schermpje dat erin
+    // openspringt (de notitie, een nieuwe mail) staat elders in de pagina,
+    // maar React stuurt de toets toch hierheen: dan sloeg het venster op met
+    // de oude gegevens en ging dicht, en was wat je net typte weg.
+    if (!(e.currentTarget as Node).contains(doel)) return;
     if (doel.tagName === "BUTTON" || doel.tagName === "TEXTAREA") return;
     if (doel.getAttribute("role") === "combobox") return;
     if (doel.closest("[cmdk-root]")) return;

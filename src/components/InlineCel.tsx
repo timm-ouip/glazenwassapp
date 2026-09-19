@@ -68,10 +68,10 @@ export function InlineCel({
         if (e.key === "Enter") {
           // Focus loslaten, anders zet de knop zichzelf via onFocus meteen
           // weer in bewerkmodus: je lijkt klaar maar staat nog te typen, en
-          // een Escape gooit dan weg wat je net bevestigde.
+          // een Escape gooit dan weg wat je net bevestigde. Het opslaan doet
+          // onBlur hierboven; hier nog eens zou twee keer opslaan (en twee
+          // stappen op Ongedaan maken zetten).
           e.currentTarget.blur();
-          setEditing(false);
-          if (draft !== value) onCommit(draft);
         } else if (e.key === "Escape") {
           setDraft(value);
           setEditing(false);
