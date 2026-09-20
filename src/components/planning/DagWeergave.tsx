@@ -137,9 +137,12 @@ export function DagWeergave(p: DagWeergaveProps) {
     });
   }
 
-  /** Alle blokken op volgorde, om er eentje mee te verschuiven. */
-  function verschuif(ploegNr: number, blok: Blok, richting: -1 | 1) {
-    const lijst = [...(perPloeg.get(ploegNr) ?? [])];
+  /**
+   * Een blok een plek naar voren of naar achteren. De lijst komt van de kolom
+   * zelf en niet uit perPloeg: in "Nog niet ingedeeld" kan werk staan met een
+   * ploegnummer dat deze dag niet bestaat, en dat zou daar niet te vinden zijn.
+   */
+  function verschuif(ploegNr: number, lijst: Blok[], blok: Blok, richting: -1 | 1) {
     const i = lijst.findIndex((b) => b.sleutel === blok.sleutel);
     const j = i + richting;
     if (i < 0 || j < 0 || j >= lijst.length) return;
@@ -156,8 +159,7 @@ export function DagWeergave(p: DagWeergaveProps) {
   }
 
   /** Een blok op een vaste tijd zetten (of weer loslaten). */
-  function zetVast(ploegNr: number, blok: Blok, tijd: string | null) {
-    const lijst = perPloeg.get(ploegNr) ?? [];
+  function zetVast(ploegNr: number, lijst: Blok[], blok: Blok, tijd: string | null) {
     p.onVolgorde(
       lijst.map((b) => ({
         ploeg_nr: ploegNr === NIET_INGEDEELD ? null : ploegNr,
@@ -344,18 +346,23 @@ export function DagWeergave(p: DagWeergaveProps) {
                             <DropdownMenuContent align="end" className="w-56">
                               <DropdownMenuItem
                                 disabled={i === 0}
-                                onSelect={() => verschuif(nr, blok, -1)}
+                                onSelect={() => verschuif(nr, blokken, blok, -1)}
                               >
                                 Eerder op de dag
                               </DropdownMenuItem>
-                              <DropdownMenuItem onSelect={() => verschuif(nr, blok, 1)}>
+                              <DropdownMenuItem onSelect={() => verschuif(nr, blokken, blok, 1)}>
                                 Later op de dag
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               {p.instellingen.tijdlijn && (
                                 <DropdownMenuItem
                                   onSelect={() =>
-                                    zetVast(nr, blok, blok.vasteStart ? null : tijdVan(item.start))
+                                    zetVast(
+                                      nr,
+                                      blokken,
+                                      blok,
+                                      blok.vasteStart ? null : tijdVan(item.start),
+                                    )
                                   }
                                 >
                                   {blok.vasteStart

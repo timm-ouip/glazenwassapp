@@ -740,8 +740,9 @@ async function wijzigingsbericht(
     sjabloon = (data as Sjabloon | null) ?? null;
   }
   // Wie nooit iets over deze dag hoorde, krijgt ook geen wijziging: dan zou
-  // er "we komen niet op , maar op donderdag" staan.
-  const metBericht = klanten.filter((k) => !!k.oudeDatum);
+  // er "we komen niet op , maar op donderdag" staan. En wie nergens meer op
+  // de planning staat evenmin: dan is er geen nieuwe dag om te noemen.
+  const metBericht = klanten.filter((k) => !!k.oudeDatum && !!k.nieuweDatum);
   const zonderAankondiging = klanten.length - metBericht.length;
   const verdeling = verdeel(metBericht, sjabloon ? "voorkeur" : "mail", false);
   const zonderContact = metBericht.filter(
@@ -798,7 +799,7 @@ async function wijzigingsbericht(
       {
         fout:
           zonderAankondiging > 0
-            ? "Deze klanten hebben nog geen bericht over deze dag gehad; er valt dus niets te wijzigen."
+            ? "Deze adressen hebben nog geen bericht gehad over deze dag, of staan nergens meer ingepland; er valt dus niets te wijzigen."
             : "Van deze adressen is niemand te bereiken.",
       },
       400,

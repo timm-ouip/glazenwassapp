@@ -10,8 +10,11 @@
 -- groot pand apart) leidt de app af uit de regels van die dag. Per regel
 -- staat bij welke ploeg hij hoort, waar hij in de rij staat, of hij de rest
 -- van een straat is, en of hij op een vaste tijd is vastgezet. Zo blijven
--- alle bestaande manieren om werk op een dag te zetten gewoon werken, en
--- verhuist de indeling mee bij opschuiven.
+-- alle bestaande manieren om werk op een dag te zetten gewoon werken.
+--
+-- Verhuist werk naar een andere dag (verplaatsen, opschuiven), dan laat de
+-- app ploeg, volgorde en vaste tijd los: die ploeg bestaat op de nieuwe dag
+-- misschien niet eens. Het werk komt daar binnen als "nog niet ingedeeld".
 
 -- ---------------------------------------------------------------------
 -- 1. Teamleden
