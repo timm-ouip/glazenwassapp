@@ -17,7 +17,11 @@ function frequentie(a: InactiefAdres): string {
 }
 
 function sinds(tijd: string): string {
-  return new Date(tijd).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" });
+  return new Date(tijd).toLocaleDateString("nl-NL", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 export function InactieveAdressen({
@@ -66,8 +70,8 @@ export function InactieveAdressen({
       <div className="rounded-[18px] border border-dashed border-border bg-card/50 px-6 py-12 text-center">
         <p className="font-display text-lg font-semibold">Geen inactieve adressen</p>
         <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-          Laat je een klant stoppen (rechtermuisknop op een adres), dan komt het adres hier te staan, met
-          alles wat erbij hoorde.
+          Laat je een klant stoppen (rechtermuisknop op een adres), dan komt het adres hier te
+          staan, met alles wat erbij hoorde.
         </p>
       </div>
     );
@@ -109,21 +113,29 @@ export function InactieveAdressen({
                     {redenLabel(a.inactief_reden)}
                   </span>
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{sinds(a.inactief_op)}</td>
-                {prijzenZien && <td className="px-3 py-2 text-right tabular-nums">{formatPrice(a.price)}</td>}
+                <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
+                  {sinds(a.inactief_op)}
+                </td>
+                {prijzenZien && (
+                  <td className="px-3 py-2 text-right tabular-nums">{formatPrice(a.price)}</td>
+                )}
                 <td className="px-3 py-2 text-muted-foreground">{frequentie(a)}</td>
                 <td className="px-3 py-2 text-right">
                   {magKlanten && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 rounded-full"
-                    disabled={bezig !== null}
-                    onClick={() => void maakActief(a, adres)}
-                  >
-                    {bezig === a.id ? <Loader2 className="size-3 animate-spin" /> : <RotateCcw className="size-3" />}
-                    Weer actief
-                  </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 rounded-full"
+                      disabled={bezig !== null}
+                      onClick={() => void maakActief(a, adres)}
+                    >
+                      {bezig === a.id ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <RotateCcw className="size-3" />
+                      )}
+                      Weer actief
+                    </Button>
                   )}
                 </td>
               </tr>

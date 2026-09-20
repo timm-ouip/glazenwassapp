@@ -52,6 +52,15 @@ import {
 import { aanmeldAdres, fetchAanmeldingen } from "@/lib/aanmeldingen";
 import { fetchWasdagen } from "@/lib/wasdag";
 import { bewaarWerkdagen, useWerkdagen, WEEKDAGEN } from "@/lib/werkdagen";
+import { fetchTeamleden, legTeamlidWeg, maakTeamlid } from "@/lib/ploegen";
+import {
+  bewaarPlanningInstellingen,
+  draaiHerberekeningTerug,
+  herberekenDuren,
+  telDuren,
+  usePlanningInstellingen,
+} from "@/lib/planninginstellingen";
+import type { PlanInstellingen } from "@/lib/dagplanning";
 import { AANNAME_BEDRAG_PER_DAG, meetTempo, MINIMUM_DAGEN, tempoVan } from "@/lib/wijkritme";
 import { bewaarThema, leesThema, themaLabels, type Thema } from "@/lib/thema";
 import {
@@ -67,6 +76,7 @@ import { AanmeldInstellingen } from "@/components/AanmeldInstellingen";
 import { RollenBeheer } from "@/components/RollenBeheer";
 import { fetchRollen } from "@/lib/rechten";
 import { MailboxInstellingen } from "@/components/MailboxInstellingen";
+import { BerichtSjablonen } from "@/components/BerichtSjablonen";
 import { WhatsAppInstellingen } from "@/components/whatsapp/WhatsAppInstellingen";
 import { PaaltjeAfspraken, PaaltjeCategorieen } from "@/components/PaaltjeInstellingen";
 import { SchrijfstijlInstellingen } from "@/components/SchrijfstijlInstellingen";
@@ -76,6 +86,7 @@ import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { heeftRecht, useRecht } from "@/lib/rechten";
 
@@ -184,6 +195,14 @@ function Instellingen() {
             <AanmeldenTab isEigenaar={isEigenaar} />
           </TabsContent>
           <TabsContent value="mail" className="max-w-2xl">
+            <div className="mb-4">
+              <Kaart
+                titel="Berichten aan klanten"
+                uitleg="De vaste teksten voor de aankondiging, een wijziging in de planning en 'niet af gekomen'. De standaard staat al ingevuld als je gaat opstellen."
+              >
+                <BerichtSjablonen />
+              </Kaart>
+            </div>
             <Kaart
               titel="Mailbox"
               uitleg="Je gewone mail in Wooshy: alles wat binnenkomt, niet alleen antwoorden op aankondigingen."
@@ -710,7 +729,9 @@ function TeamTab() {
           duration: 10000,
         });
       } else {
-        toast.success(`Uitnodiging verstuurd naar ${email} vanaf ${uit.van}. Hij is 7 dagen geldig.`);
+        toast.success(
+          `Uitnodiging verstuurd naar ${email} vanaf ${uit.van}. Hij is 7 dagen geldig.`,
+        );
       }
       setNieuweEmail("");
       void herlaad();
@@ -903,6 +924,8 @@ function TeamTab() {
 
       {isEigenaar && <RollenBeheer gebruikt={gebruikt} onGewijzigd={() => void herlaad()} />}
 
+      <TeamledenKaart isEigenaar={isEigenaar} />
+
       {isEigenaar ? (
         <Kaart
           titel="Medewerker uitnodigen"
@@ -932,6 +955,177 @@ function TeamTab() {
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Teamleden die (nog) geen account hebben: een hulpkracht die wel meewast en
+ * dus in een ploeg moet kunnen staan. Later kun je hem alsnog uitnodigen;
+ * accepteert hij, dan is het dezelfde persoon en blijft zijn planning kloppen.
+ */
+function TeamledenKaart({ isEigenaar }: { isEigenaar: boolean }) {
+  const qc = useQueryClient();
+  const bevestig = useBevestig();
+  const [nieuw, setNieuw] = useState("");
+  const [bezig, setBezig] = useState(false);
+  const [uitnodigen, setUitnodigen] = useState<{ id: string; naam: string } | null>(null);
+  const [email, setEmail] = useState("");
+  const teamleden = useQuery({ queryKey: ["teamleden"], queryFn: fetchTeamleden });
+  const zonderAccount = (teamleden.data ?? []).filter((t) => !t.employee_id);
+
+  async function ververs() {
+    await qc.invalidateQueries({ queryKey: ["teamleden"] });
+  }
+
+  async function voegToe() {
+    const naam = nieuw.trim();
+    if (!naam) return;
+    setBezig(true);
+    try {
+      await maakTeamlid(naam);
+      setNieuw("");
+      await ververs();
+      toast.success(`${naam} staat in het team`);
+    } catch (e) {
+      toast.error("Toevoegen mislukt: " + (e as Error).message);
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  async function haalWeg(id: string, naam: string) {
+    const ja = await bevestig({
+      titel: `${naam} uit het team halen?`,
+      tekst:
+        "Hij verdwijnt uit de ploegenkeuze. Ploegen van dagen die geweest zijn blijven kloppen.",
+      gevaarlijk: true,
+    });
+    if (!ja) return;
+    try {
+      await legTeamlidWeg(id);
+      await ververs();
+      toast.success("Teamlid weggehaald");
+    } catch (e) {
+      toast.error("Weghalen mislukt: " + (e as Error).message);
+    }
+  }
+
+  async function stuurUitnodiging() {
+    if (!uitnodigen || !email.trim()) return;
+    setBezig(true);
+    try {
+      const uit = await inviteEmployee({ data: { email: email.trim(), teamlidId: uitnodigen.id } });
+      toast.success(
+        uit.via === "supabase"
+          ? `Uitnodiging verstuurd naar ${email.trim()} (7 dagen geldig).`
+          : `Uitnodiging verstuurd naar ${email.trim()} vanaf ${uit.van}. Hij is 7 dagen geldig.`,
+      );
+      setUitnodigen(null);
+      setEmail("");
+      await ververs();
+    } catch (e) {
+      toast.error("Uitnodigen mislukt: " + (e as Error).message);
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  return (
+    <Kaart
+      titel="Teamleden zonder account"
+      uitleg="Wie meewast maar niet in de app hoeft. Je kunt ze wel in een ploeg zetten, en later alsnog uitnodigen."
+    >
+      {zonderAccount.length > 0 && (
+        <ul className="mb-3 divide-y divide-border/60">
+          {zonderAccount.map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center gap-2 py-2">
+              <span className="min-w-0 flex-1 truncate text-sm">{t.naam}</span>
+              {t.uitgenodigd_user_id && (
+                <span className="text-[12px] text-muted-foreground">uitnodiging verstuurd</span>
+              )}
+              {isEigenaar && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => {
+                      setUitnodigen({ id: t.id, naam: t.naam });
+                      setEmail("");
+                    }}
+                  >
+                    Uitnodigen
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="rounded-full text-muted-foreground hover:text-destructive"
+                    onClick={() => void haalWeg(t.id, t.naam)}
+                  >
+                    Weghalen
+                  </Button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {uitnodigen && (
+        <form
+          className="mb-3 flex max-w-md flex-wrap items-center gap-2 rounded-[14px] border border-border bg-card-header p-2.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void stuurUitnodiging();
+          }}
+        >
+          <span className="text-[13px]">{uitnodigen.naam} uitnodigen:</span>
+          <Input
+            type="email"
+            placeholder="naam@bedrijf.nl"
+            className="h-9 max-w-[16rem] flex-1"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <Button size="sm" type="submit" disabled={bezig} className="rounded-full">
+            Versturen
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            type="button"
+            className="rounded-full"
+            onClick={() => setUitnodigen(null)}
+          >
+            Annuleren
+          </Button>
+        </form>
+      )}
+
+      {isEigenaar ? (
+        <form
+          className="flex max-w-sm gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void voegToe();
+          }}
+        >
+          <Input
+            placeholder="Naam"
+            value={nieuw}
+            onChange={(e) => setNieuw(e.target.value)}
+            disabled={bezig}
+          />
+          <Button type="submit" disabled={bezig || !nieuw.trim()} className="shrink-0 rounded-full">
+            <UserPlus className="size-4" /> Toevoegen
+          </Button>
+        </form>
+      ) : (
+        zonderAccount.length === 0 && (
+          <p className="text-sm text-muted-foreground">Er zijn geen teamleden zonder account.</p>
+        )
+      )}
+    </Kaart>
   );
 }
 
@@ -1036,6 +1230,211 @@ function WerkdagenKaart() {
   );
 }
 
+/**
+ * De instellingen waar de planning mee rekent: het uurtarief waarmee de duur
+ * uit de prijs komt, de werktijd, de pauze, de rijtijd bij een wijkwissel, en
+ * vanaf wanneer een pand een eigen blok krijgt.
+ *
+ * Verander je het tarief, dan vraagt de app of de duren bijgewerkt moeten
+ * worden. Duren die je zelf invulde blijven standaard staan, en bijwerken kun
+ * je meteen ongedaan maken.
+ */
+function PlanningKaart() {
+  const { employee, company } = useAuth();
+  const isEigenaar = employee?.rol === "eigenaar";
+  const prijzenZien = useRecht("prijzen_zien");
+  const qc = useQueryClient();
+  const opgeslagen = usePlanningInstellingen();
+  const [concept, setConcept] = useState<PlanInstellingen | null>(null);
+  const [bezig, setBezig] = useState(false);
+  const i = concept ?? opgeslagen;
+  const bevestig = useBevestig();
+
+  function zet(patch: Partial<PlanInstellingen>) {
+    setConcept({ ...i, ...patch });
+  }
+
+  async function vraagOmBijwerken(nieuwTarief: number) {
+    let tellingen = { automatisch: 0, zelf: 0 };
+    try {
+      tellingen = await telDuren();
+    } catch {
+      // Lukt tellen niet, dan vragen we het zonder aantallen.
+    }
+    const ja = await bevestig({
+      titel: "Duren bijwerken met het nieuwe tarief?",
+      tekst:
+        `${tellingen.automatisch} ${tellingen.automatisch === 1 ? "adres heeft" : "adressen hebben"} een automatische duur` +
+        (tellingen.zelf > 0
+          ? `, en bij ${tellingen.zelf} vulde je hem zelf in. Die laatste blijven staan.`
+          : ". Je kunt dit meteen ongedaan maken."),
+      bevestigLabel: "Bijwerken",
+      annuleerLabel: "Laten staan",
+    });
+    if (!ja) return;
+    try {
+      const uit = await herberekenDuren(nieuwTarief, false);
+      await qc.invalidateQueries({ queryKey: ["customers"] });
+      await qc.invalidateQueries({ queryKey: ["klussen"] });
+      toast.success(`${uit.adressen} ${uit.adressen === 1 ? "adres" : "adressen"} bijgewerkt`, {
+        action: uit.kenmerk
+          ? {
+              label: "Ongedaan maken",
+              onClick: () => {
+                void draaiHerberekeningTerug(uit.kenmerk)
+                  .then(async () => {
+                    await qc.invalidateQueries({ queryKey: ["customers"] });
+                    await qc.invalidateQueries({ queryKey: ["klussen"] });
+                    toast.success("Duren teruggezet");
+                  })
+                  .catch((e: unknown) =>
+                    toast.error("Terugzetten mislukt: " + (e as Error).message),
+                  );
+              },
+            }
+          : undefined,
+        duration: 10000,
+      });
+    } catch (e) {
+      toast.error("Bijwerken mislukt: " + (e as Error).message);
+    }
+  }
+
+  async function bewaar() {
+    if (!concept || !company) return;
+    if (concept.tariefUur <= 0) {
+      toast.error("Vul een uurtarief hoger dan nul in.");
+      return;
+    }
+    if (concept.eind <= concept.begin) {
+      toast.error("De eindtijd moet na de begintijd liggen.");
+      return;
+    }
+    setBezig(true);
+    try {
+      const tariefVeranderde = concept.tariefUur !== opgeslagen.tariefUur;
+      await bewaarPlanningInstellingen(company.id, concept);
+      await qc.invalidateQueries({ queryKey: ["planning-instellingen"] });
+      setConcept(null);
+      toast.success("Planning opgeslagen");
+      if (tariefVeranderde) await vraagOmBijwerken(concept.tariefUur);
+    } catch (e) {
+      toast.error("Opslaan mislukt: " + (e as Error).message);
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  const getal = (waarde: number) => String(waarde);
+
+  return (
+    <Kaart
+      titel="Planning en tijd"
+      uitleg="Waar de week- en dagweergave mee rekenen: hoe lang een adres duurt, hoe lang je werkdag is, en hoeveel rijtijd er tussen twee wijken zit."
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        {prijzenZien && (
+          <Veld
+            id="tarief"
+            label="Wat was je weg per uur (€)"
+            waarde={getal(i.tariefUur)}
+            lezen={!isEigenaar}
+            inputMode="decimal"
+            onChange={(v) => zet({ tariefUur: Number(v.replace(",", ".")) || 0 })}
+          />
+        )}
+        <Veld
+          id="grootpand"
+          label="Eigen blok vanaf (minuten)"
+          waarde={getal(i.grootPandMin)}
+          lezen={!isEigenaar}
+          inputMode="numeric"
+          onChange={(v) => zet({ grootPandMin: Number(v) || 0 })}
+        />
+        <Veld
+          id="begin"
+          label="Werkdag begint"
+          waarde={i.begin}
+          lezen={!isEigenaar}
+          type="time"
+          onChange={(v) => zet({ begin: v })}
+        />
+        <Veld
+          id="eind"
+          label="Werkdag eindigt"
+          waarde={i.eind}
+          lezen={!isEigenaar}
+          type="time"
+          onChange={(v) => zet({ eind: v })}
+        />
+        <Veld
+          id="pauzevan"
+          label="Pauze om"
+          waarde={i.pauzeVan}
+          lezen={!isEigenaar}
+          type="time"
+          onChange={(v) => zet({ pauzeVan: v })}
+        />
+        <Veld
+          id="pauzemin"
+          label="Pauze (minuten)"
+          waarde={getal(i.pauzeMin)}
+          lezen={!isEigenaar}
+          inputMode="numeric"
+          onChange={(v) => zet({ pauzeMin: Number(v) || 0 })}
+        />
+        <Veld
+          id="rijtijd"
+          label="Rijtijd bij een andere wijk (minuten)"
+          waarde={getal(i.rijtijdMin)}
+          lezen={!isEigenaar}
+          inputMode="numeric"
+          onChange={(v) => zet({ rijtijdMin: Number(v) || 0 })}
+        />
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <label className="flex items-center gap-2 text-[13px]">
+          <Switch
+            checked={i.tijdlijn}
+            disabled={!isEigenaar}
+            onCheckedChange={(aan) =>
+              zet({ tijdlijn: aan, ...(aan ? {} : { tijdvakMailen: false }) })
+            }
+          />
+          Tijdlijn in de dagweergave
+        </label>
+        <label className="ml-8 flex items-center gap-2 text-[13px]">
+          <Switch
+            checked={i.tijdvakMailen}
+            disabled={!isEigenaar || !i.tijdlijn}
+            onCheckedChange={(aan) => zet({ tijdvakMailen: aan })}
+          />
+          <span className={i.tijdlijn ? "" : "text-muted-foreground"}>
+            Tijdvak in de aankondiging (alleen grote panden, venster van 2 uur)
+          </span>
+        </label>
+      </div>
+
+      {!isEigenaar && (
+        <p className="mt-2 text-[12.5px] text-muted-foreground">
+          Alleen de eigenaar kan deze instellingen aanpassen.
+        </p>
+      )}
+      {concept && (
+        <div className="mt-3 flex items-center gap-2">
+          <Button size="sm" onClick={() => void bewaar()} disabled={bezig}>
+            {bezig ? "Bezig…" : "Opslaan"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setConcept(null)} disabled={bezig}>
+            Annuleren
+          </Button>
+        </div>
+      )}
+    </Kaart>
+  );
+}
+
 function WijkenTab() {
   // Het tempo is in geld; zonder recht op prijzen tonen we alleen de dagen.
   const prijzenZien = useRecht("prijzen_zien");
@@ -1112,6 +1511,7 @@ function WijkenTab() {
   return (
     <div className="space-y-4">
       <WerkdagenKaart />
+      <PlanningKaart />
       <Kaart
         titel="Volgorde van de wijken"
         uitleg="De ronde die je rijdt. Deze volgorde bepaalt de kleuren op de kalender en welke wijk de app voorstelt als eerstvolgende."

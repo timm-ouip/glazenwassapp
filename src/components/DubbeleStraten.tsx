@@ -210,10 +210,11 @@ export function DubbeleStraten({ streets, customers, onDone }: Props) {
                           <span className="font-medium">nr {formatNumber(lijst[0]!)}</span> —{" "}
                           {lijst.length}× (
                           {lijst
-                            .map((c) =>
-                              [prijzenZien ? `€ ${c.price}` : "", c.note ?? ""]
-                                .filter(Boolean)
-                                .join(" · ") || "zonder notitie",
+                            .map(
+                              (c) =>
+                                [prijzenZien ? `€ ${c.price}` : "", c.note ?? ""]
+                                  .filter(Boolean)
+                                  .join(" · ") || "zonder notitie",
                             )
                             .join(" / ")}
                           )

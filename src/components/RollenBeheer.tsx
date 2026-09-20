@@ -12,7 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { bewaarRol, fetchRollen, RECHTEN, verwijderRol, type Recht, type Rol } from "@/lib/rechten";
 
-export function RollenBeheer({ gebruikt, onGewijzigd }: { gebruikt: Map<string, number>; onGewijzigd: () => void }) {
+export function RollenBeheer({
+  gebruikt,
+  onGewijzigd,
+}: {
+  gebruikt: Map<string, number>;
+  onGewijzigd: () => void;
+}) {
   const rollen = useQuery({ queryKey: ["rollen"], queryFn: fetchRollen });
   const [nieuw, setNieuw] = useState(false);
 
@@ -21,13 +27,16 @@ export function RollenBeheer({ gebruikt, onGewijzigd }: { gebruikt: Map<string, 
       <div className="flex flex-wrap items-baseline gap-2">
         <h2 className="font-display text-[15px] font-semibold tracking-[-0.01em]">Rollen</h2>
         <p className="text-[12.5px] text-muted-foreground">
-          Een rol bepaalt wat een medewerker mag. De eigenaar mag altijd alles; een medewerker zonder rol niets.
+          Een rol bepaalt wat een medewerker mag. De eigenaar mag altijd alles; een medewerker
+          zonder rol niets.
         </p>
       </div>
 
       <div className="mt-3.5 grid gap-3">
         {rollen.isLoading && <p className="text-[13px] text-muted-foreground">Laden…</p>}
-        {rollen.isError && <p className="text-[13px] text-tint-rood-ink">De rollen konden niet geladen worden.</p>}
+        {rollen.isError && (
+          <p className="text-[13px] text-tint-rood-ink">De rollen konden niet geladen worden.</p>
+        )}
         {rollen.data?.map((r) => (
           <RolKaart key={r.id} rol={r} aantal={gebruikt.get(r.id) ?? 0} onGewijzigd={onGewijzigd} />
         ))}
@@ -140,7 +149,12 @@ function RolKaart({
               Annuleren
             </Button>
           )}
-          <Button size="sm" className="h-8 rounded-full" disabled={bezig || !gewijzigd || !naam.trim()} onClick={() => void bewaar()}>
+          <Button
+            size="sm"
+            className="h-8 rounded-full"
+            disabled={bezig || !gewijzigd || !naam.trim()}
+            onClick={() => void bewaar()}
+          >
             {bezig && <Loader2 className="size-3.5 animate-spin" />}
             {rol.id ? "Bewaren" : "Rol maken"}
           </Button>
@@ -148,13 +162,18 @@ function RolKaart({
       </div>
       <div className="mt-2.5 grid gap-1.5 sm:grid-cols-2">
         {RECHTEN.map((r) => (
-          <label key={r.sleutel} className="flex cursor-pointer items-start gap-2 rounded-[10px] px-1.5 py-1 hover:bg-accent/50">
+          <label
+            key={r.sleutel}
+            className="flex cursor-pointer items-start gap-2 rounded-[10px] px-1.5 py-1 hover:bg-accent/50"
+          >
             <input
               type="checkbox"
               className="mt-0.5 size-4 accent-foreground"
               checked={rechten.includes(r.sleutel)}
               onChange={(e) =>
-                setRechten((was) => (e.target.checked ? [...was, r.sleutel] : was.filter((x) => x !== r.sleutel)))
+                setRechten((was) =>
+                  e.target.checked ? [...was, r.sleutel] : was.filter((x) => x !== r.sleutel),
+                )
               }
             />
             <span>

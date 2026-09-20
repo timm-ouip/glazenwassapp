@@ -28,7 +28,7 @@ export function vasteMomenten(nu = new Date()): { label: string; moment: Date }[
   const morgen = new Date(nu);
   morgen.setDate(nu.getDate() + 1);
   const maandag = new Date(nu);
-  maandag.setDate(nu.getDate() + (((8 - nu.getDay()) % 7) || 7));
+  maandag.setDate(nu.getDate() + ((8 - nu.getDay()) % 7 || 7));
   const week = new Date(nu);
   week.setDate(nu.getDate() + 7);
   return [

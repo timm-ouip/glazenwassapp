@@ -162,6 +162,15 @@ export interface Customer {
   start_maand: string;
   /** Wanneer het adres is aangemaakt — waar "nieuw in mei" op steunt. */
   created_at: string;
+  /** Hoe lang dit adres duurt, in minuten, voor één persoon. Leeg zolang er
+   *  geen prijs is; verder één keer uit de prijs gerekend (zie duur_zelf). */
+  duur_min: number | null;
+  /** Heeft iemand de duur zelf ingevuld? Dan laat het herberekenen bij een
+   *  nieuw uurtarief hem met rust. */
+  duur_zelf: boolean;
+  /** Krijgt dit pand een eigen blok in de dagweergave? Leeg = automatisch
+   *  (vanaf de ingestelde duur), true/false = zelf gekozen. */
+  eigen_blok: boolean | null;
   /** De straat waar dit adres echt aan ligt, als het op de hoek staat.
    *  Werknaam zoals hij op de lijst staat; leeg is het gewone geval. */
   hoek_straat: string;
@@ -224,6 +233,10 @@ export interface Maandwerk {
   /** Alleen in dit jaar (eenmalig). Zonder jaar komt het elk jaar terug. */
   jaar?: number;
   notitie: string;
+  /** Hoe lang dit extra werk duurt, in minuten. Eén keer uit de meerprijs
+   *  gerekend, of zelf ingevuld (duur_zelf). */
+  duur?: number | null;
+  duur_zelf?: boolean;
   /** Wat dit werk kost bovenop de vaste prijs van het adres. Apart van de
    *  vaste prijs, zodat op een factuur te zien is wat het meerwerk was en
    *  wat het pand normaal kost. Leeg (null) is geen meerprijs. */
@@ -253,7 +266,13 @@ export function leesMaandwerk(waarde: unknown, extras?: unknown): Maandwerk[] {
         // uit, en dan raakt de meerprijs zijn stuk werk kwijt.
         ...(typeof r["id"] === "string" && r["id"] ? { id: r["id"] } : {}),
         maanden,
-        ...(typeof r["jaar"] === "number" && Number.isInteger(r["jaar"]) ? { jaar: r["jaar"] } : {}),
+        ...(typeof r["jaar"] === "number" && Number.isInteger(r["jaar"])
+          ? { jaar: r["jaar"] }
+          : {}),
+        // De duur moet mee terug naar de database: laat je hem hier weg, dan
+        // wist elke bewerking van het maandwerk wat er was ingevuld.
+        ...(typeof r["duur"] === "number" ? { duur: r["duur"] } : {}),
+        ...(r["duur_zelf"] === true ? { duur_zelf: true } : {}),
         notitie: typeof r["notitie"] === "string" ? r["notitie"] : "",
         extra:
           typeof r["id"] === "string" && typeof perId[r["id"]] === "number"
@@ -316,7 +335,9 @@ export function isGeweest(w: Pick<Maandwerk, "maanden" | "jaar">, vandaag = new 
  * deze maand of later dit jaar, en anders volgend jaar.
  */
 export function eerstvolgendJaar(maand: string, vandaag = new Date()): number {
-  return Number(maand) >= vandaag.getMonth() + 1 ? vandaag.getFullYear() : vandaag.getFullYear() + 1;
+  return Number(maand) >= vandaag.getMonth() + 1
+    ? vandaag.getFullYear()
+    : vandaag.getFullYear() + 1;
 }
 
 /** "mrt/sep" voor werk dat elk jaar terugkomt, "okt 2026" voor eenmalig werk. */
@@ -514,7 +535,7 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
       // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
       // met een samengestelde string lukt dat niet meer.
       .select(
-        "id,street_id,house_number,addition,note,note_even,note_oneven,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op,inactief_op,inactief_reden,adres_prijzen(prijs,maandwerk_extra)",
+        "id,street_id,house_number,addition,note,note_even,note_oneven,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op,inactief_op,inactief_reden,duur_min,duur_zelf,eigen_blok,adres_prijzen(prijs,maandwerk_extra)",
       )
       .is("deleted_at", null);
     // Inactief (gestopt of verhuisd) hoort niet op de wijklijst, de planning
@@ -543,6 +564,9 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
     hoek_straat: c.hoek_straat ?? "",
     hoek_straat_volledig: c.hoek_straat_volledig ?? "",
     hoek_kant: (c.hoek_kant ?? "") as Kant | "",
+    duur_min: c.duur_min ?? null,
+    duur_zelf: c.duur_zelf ?? false,
+    eigen_blok: c.eigen_blok ?? null,
   })) as Customer[];
 }
 
@@ -1215,6 +1239,61 @@ export function extraVoorMaand(c: Pick<Customer, "maandwerk">, maand: string): n
 /** De prijs voor deze ronde: de vaste prijs plus het meerwerk van die maand. */
 export function prijsVoorMaand(c: Pick<Customer, "price" | "maandwerk">, maand: string): number {
   return c.price + extraVoorMaand(c, maand);
+}
+
+/**
+ * Hoe lang dit adres deze ronde duurt, in minuten en voor één persoon: het
+ * vaste werk plus het extra werk van die maand.
+ */
+export function duurVoorMaand(c: Pick<Customer, "duur_min" | "maandwerk">, maand: string): number {
+  const extra = maandwerkVoor(c as Pick<Customer, "maandwerk">, maand).reduce(
+    (som, w) => som + (w.duur ?? 0),
+    0,
+  );
+  return (c.duur_min ?? 0) + extra;
+}
+
+/**
+ * Een duur zoals hij op het scherm hoort: "25m" of "1u30". Zonder recht op
+ * prijzen afgerond op vijf minuten, want de duur komt uit de prijs en anders
+ * reken je die zo terug.
+ */
+export function toonDuur(minuten: number, prijzenZien: boolean): string {
+  const m = prijzenZien ? Math.round(minuten) : Math.round(minuten / 5) * 5;
+  if (m <= 0) return "—";
+  const uren = Math.floor(m / 60);
+  const rest = m % 60;
+  if (uren === 0) return `${rest}m`;
+  return rest === 0 ? `${uren}u` : `${uren}u${String(rest).padStart(2, "0")}`;
+}
+
+/**
+ * "25", "1u30", "1:30" of "90m" → minuten. Leeg is: geen duur (null).
+ * Onleesbaar geeft undefined; dan laten we de waarde staan.
+ */
+export function leesDuur(tekst: string): number | null | undefined {
+  const t = tekst.trim().toLowerCase().replace(",", ".");
+  if (t === "") return null;
+  const uurMin = /^(\d+)\s*[u:]\s*(\d{1,2})?$/.exec(t);
+  if (uurMin) return Number(uurMin[1]) * 60 + Number(uurMin[2] ?? 0);
+  const alleenUren = /^(\d+(?:\.\d+)?)\s*(?:uur|u)$/.exec(t);
+  if (alleenUren) return Math.round(Number(alleenUren[1]) * 60);
+  const minuten = /^(\d+)\s*(?:m|min|minuten)?$/.exec(t);
+  if (minuten) return Number(minuten[1]);
+  return undefined;
+}
+
+/**
+ * Krijgt dit pand een eigen blok in de dagweergave? Zelf gekozen gaat voor;
+ * anders vanaf de ingestelde duur (standaard 45 minuten).
+ */
+export function isEigenBlok(
+  c: Pick<Customer, "eigen_blok" | "duur_min" | "maandwerk">,
+  maand: string,
+  drempelMin: number,
+): boolean {
+  if (c.eigen_blok !== null) return c.eigen_blok;
+  return duurVoorMaand(c, maand) >= drempelMin;
 }
 
 /**

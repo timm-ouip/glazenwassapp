@@ -125,7 +125,9 @@ export function DossierKnop({
           klanten={vast.klanten}
           quickNotes={vast.quickNotes}
           onAddQuickNote={(label) => {
-            void addQuickNote(label).then(() => qc.invalidateQueries({ queryKey: ["quick_notes"] }));
+            void addQuickNote(label).then(() =>
+              qc.invalidateQueries({ queryKey: ["quick_notes"] }),
+            );
           }}
           onSaved={herlaad}
         />

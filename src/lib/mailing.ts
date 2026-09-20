@@ -143,14 +143,60 @@ export function verstuurAankondiging(opdracht: {
   proefTelefoon?: string;
   /** Ook als deze dag het afgelopen uur al verstuurd is. */
   toch?: boolean;
+  /** Het beloofde tijdvak per adres, bij grote panden. */
+  tijdvakken?: Record<string, { van: string; tot: string }>;
 }): Promise<Verzending> {
-  const { proefNaar, sjabloonId, proefTelefoon, ...rest } = opdracht;
+  const { proefNaar, sjabloonId, proefTelefoon, tijdvakken, ...rest } = opdracht;
   return roep<Verzending>({
     actie: "versturen",
     ...rest,
+    ...(tijdvakken && Object.keys(tijdvakken).length > 0 ? { tijdvakken } : {}),
     ...(proefNaar ? { proef_naar: proefNaar } : {}),
     ...(sjabloonId ? { sjabloon_id: sjabloonId } : {}),
     ...(proefTelefoon ? { proef_telefoon: proefTelefoon } : {}),
+  });
+}
+
+// ---------------------------------------------------------------------
+// Wijziging in de planning
+// ---------------------------------------------------------------------
+
+/** Wat een wijzigingsbericht zou worden, vóór je het verstuurt. */
+export interface WijzigingTelling {
+  /** Hoeveel mensen er bericht krijgen (ontdubbeld). */
+  aantal: number;
+  aantalWhatsApp: number;
+  /** Adressen waarvan we de klant niet kunnen bereiken. */
+  zonderContact: number;
+  voorbeeld: { naam: string; adressen: string[]; oudeDatum: string; nieuweDatum: string }[];
+}
+
+export interface Wijzigingsbericht {
+  customerIds: string[];
+  /** Ook als deze adressen het afgelopen uur al zo'n bericht kregen. */
+  toch?: boolean;
+  /** "wijziging" = de dag verschoof, "niet_af" = we kwamen er niet aan toe. */
+  soort: "wijziging" | "niet_af";
+  reden: string;
+  onderwerp: string;
+  tekst: string;
+  sjabloonId?: string;
+  test?: boolean;
+  proefNaar?: string;
+}
+
+export function telWijziging(customerIds: string[], soort: Wijzigingsbericht["soort"]) {
+  return roep<WijzigingTelling>({ actie: "wijziging_tellen", customer_ids: customerIds, soort });
+}
+
+export function verstuurWijziging(w: Wijzigingsbericht): Promise<Verzending> {
+  const { customerIds, sjabloonId, proefNaar, ...rest } = w;
+  return roep<Verzending>({
+    actie: "wijziging",
+    customer_ids: customerIds,
+    ...rest,
+    ...(sjabloonId ? { sjabloon_id: sjabloonId } : {}),
+    ...(proefNaar ? { proef_naar: proefNaar } : {}),
   });
 }
 

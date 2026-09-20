@@ -195,8 +195,8 @@ export function MailboxInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
           )}
 
           <p className="text-[12px] text-muted-foreground">
-            De eerste keer haalt Wooshy de mail van de afgelopen 12 maanden op, in stapjes van
-            zo'n 60 per ronde. Nieuwe mail gaat altijd voor.
+            De eerste keer haalt Wooshy de mail van de afgelopen 12 maanden op, in stapjes van zo'n
+            60 per ronde. Nieuwe mail gaat altijd voor.
           </p>
 
           <div className="flex flex-wrap gap-2">

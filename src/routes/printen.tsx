@@ -76,6 +76,7 @@ import {
 } from "@/lib/klanten";
 import { useRecht } from "@/lib/rechten";
 import { fetchWasdag, toonDatum, type WasdagRegel } from "@/lib/wasdag";
+import { fetchDagPloegen, ploegNaam } from "@/lib/ploegen";
 import { redenLabel } from "@/lib/stoppen";
 
 interface PrintSearch {
@@ -90,6 +91,8 @@ interface PrintSearch {
    *  vervallen de wijk- en maandkeuze: de dag zegt al wie er meegaat, en die
    *  kan over meerdere wijken lopen. */
   dag?: string;
+  /** Print een dag in de volgorde van de dagweergave, met de ploeg erbij. */
+  perPloeg?: boolean;
 }
 
 export const Route = createFileRoute("/printen")({
@@ -110,6 +113,7 @@ export const Route = createFileRoute("/printen")({
     ...(typeof search["dag"] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(search["dag"])
       ? { dag: search["dag"] }
       : {}),
+    ...(search["perPloeg"] === true || search["perPloeg"] === "true" ? { perPloeg: true } : {}),
   }),
 
   head: () => ({
@@ -401,7 +405,7 @@ const MIN_SCHAAL = 0.25;
 const KOLOMMEN = 6;
 function PrintPagina() {
   useRequireAuth();
-  const { wijk, maand, prijzen, liggend, vouwen: vouwenRaw, dag } = Route.useSearch();
+  const { wijk, maand, prijzen, liggend, vouwen: vouwenRaw, dag, perPloeg } = Route.useSearch();
   // Zonder recht op prijzen komt er nooit een bedrag op papier, ook niet als
   // de link "prijzen=true" zegt.
   const prijzenZien = useRecht("prijzen_zien");
@@ -452,6 +456,32 @@ function PrintPagina() {
     [dag, wasdagQuery.data],
   );
 
+  // Print je per ploeg, dan bepaalt de indeling van die dag de volgorde, en
+  // staat de ploegnaam bij de straat.
+  const ploegenQuery = useQuery({
+    queryKey: ["dag-ploegen", dag, dag],
+    queryFn: () => fetchDagPloegen(dag!, dag!),
+    enabled: Boolean(dag && perPloeg),
+  });
+  const ploegVanStraat = useMemo(() => {
+    const kaart = new Map<string, { nr: number; volgorde: number; naam: string }>();
+    if (!dag || !perPloeg) return kaart;
+    const ploegen = ploegenQuery.data?.get(dag) ?? [];
+    const naamVan = new Map(ploegen.map((pl) => [pl.nr, ploegNaam(pl)]));
+    const straatVan = new Map((adressenQuery.data ?? []).map((c) => [c.id, c.street_id]));
+    for (const r of wasdagQuery.data ?? []) {
+      const straatId = r.customer_id ? straatVan.get(r.customer_id) : undefined;
+      if (!straatId) continue;
+      const nr = r.ploeg_nr ?? 0;
+      const volgorde = r.volgorde ?? Number.MAX_SAFE_INTEGER;
+      const was = kaart.get(straatId);
+      if (!was || volgorde < was.volgorde) {
+        kaart.set(straatId, { nr, volgorde, naam: naamVan.get(nr) ?? "" });
+      }
+    }
+    return kaart;
+  }, [dag, perPloeg, ploegenQuery.data, wasdagQuery.data, adressenQuery.data]);
+
   const districts = districtsQuery.data ?? [];
   const actieveWijk = districts.find((d) => d.id === wijk) ?? districts[0] ?? null;
   const alleStreets = streetsQuery.data ?? [];
@@ -495,17 +525,27 @@ function PrintPagina() {
       if (rij) rij.push(c);
       else perStraat.set(c.street_id, [c]);
     }
-    return streets
+    const lijst = streets
       .map((s) => {
         const klanten = perStraat.get(s.id) ?? [];
+        const bij = ploegVanStraat.get(s.id);
         return {
-          street: s,
+          // De ploeg hoort op papier bij de straatnaam: zo weet iedereen bij
+          // welk rijtje hij hoort, zonder een tweede kop erboven.
+          street: bij?.naam ? { ...s, name: `${s.name} · ${bij.naam}` } : s,
           ...splitEvenOdd(klanten, s.sort_desc ? "desc" : "asc", s.doorlopend),
           aantal: klanten.length,
         };
       })
       .filter((g) => g.aantal > 0);
-  }, [streets, customers, maand, ronde, opDeDag]);
+    if (ploegVanStraat.size === 0) return lijst;
+    // Per ploeg, en daarbinnen de volgorde die je in de dagweergave zette.
+    return [...lijst].sort((a, b) => {
+      const x = ploegVanStraat.get(a.street.id);
+      const y = ploegVanStraat.get(b.street.id);
+      return (x?.nr ?? 99) - (y?.nr ?? 99) || (x?.volgorde ?? 0) - (y?.volgorde ?? 0);
+    });
+  }, [streets, customers, maand, ronde, opDeDag, ploegVanStraat]);
 
   const groepen: Groep[] = useMemo(() => {
     if (!sleepVolgorde) return zichtbaar;

@@ -88,11 +88,25 @@ function Privacy() {
         <Blok titel="WhatsApp">
           <p>
             Berichten via WhatsApp lopen via het WhatsApp Business Platform van Meta, en via Kapso,
-            een partner van Meta die ons nummer aan Wooshy koppelt. Stuur je ons
-            een bericht, dan gebruiken we je nummer om je te antwoorden. Foto's en spraakberichten
-            die je meestuurt, bewaren we bij je berichten. Wil je geen WhatsApp-berichten meer van
-            ons, laat het ons weten (bijvoorbeeld door <strong>stop</strong> te sturen); dan
-            gebruiken we voortaan mail.
+            een partner van Meta die ons nummer aan Wooshy koppelt. Stuur je ons een bericht, dan
+            gebruiken we je nummer om je te antwoorden. Foto's en spraakberichten die je meestuurt,
+            bewaren we bij je berichten. Wil je geen WhatsApp-berichten meer van ons, laat het ons
+            weten (bijvoorbeeld door <strong>stop</strong> te sturen); dan gebruiken we voortaan
+            mail.
+          </p>
+        </Blok>
+
+        <Blok titel="Berichten over je afspraak">
+          <p>
+            Als we langskomen, sturen we je een bericht per mail of WhatsApp. Verschuift de dag, dan
+            krijg je daar bericht over. Bij grote panden staat er soms een tijdvak in ("tussen 10:00
+            en 12:00"), zodat je weet wanneer we er ongeveer zijn.
+          </p>
+          <p>
+            We houden bij of dat bericht is aangekomen: de mailserver van je provider laat weten of
+            hij de mail heeft aangenomen of geweigerd, en bij WhatsApp zien we de vinkjes die je
+            zelf aan hebt staan. We meten <strong>niet</strong> of je een mail opent: daar zou een
+            onzichtbaar volgpixeltje voor nodig zijn, en dat gebruiken we niet.
           </p>
         </Blok>
 

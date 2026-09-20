@@ -130,7 +130,12 @@ export function StopDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => !bezig && onOpenChange(o)}>
       <PopupKader>
-        <PopupKop kleur="amber" icoon={<UserMinus className="size-5" />} titel={titel} subtitel={omschrijving} />
+        <PopupKop
+          kleur="amber"
+          icoon={<UserMinus className="size-5" />}
+          titel={titel}
+          subtitel={omschrijving}
+        />
         <PopupBody className="space-y-4">
           <div className="space-y-2">
             <p className="text-[12.5px] font-medium text-muted-foreground">
@@ -162,7 +167,8 @@ export function StopDialog({
                 <CalendarDays className="mt-0.5 size-3.5 shrink-0" />
                 <span>
                   Staat nog op de planning: {getoond.map(toonDatum).join(", ")}
-                  {rest > 0 ? ` en nog ${rest} ${rest === 1 ? "dag" : "dagen"}` : ""}. Wat moet daarmee?
+                  {rest > 0 ? ` en nog ${rest} ${rest === 1 ? "dag" : "dagen"}` : ""}. Wat moet
+                  daarmee?
                 </span>
               </p>
               <Keuze
@@ -179,13 +185,15 @@ export function StopDialog({
               />
             </div>
           ) : (
-            <p className="text-[12.5px] text-muted-foreground">Na vandaag staat er niets meer op de planning.</p>
+            <p className="text-[12.5px] text-muted-foreground">
+              Na vandaag staat er niets meer op de planning.
+            </p>
           )}
 
           {onVerwijder && (
             <p className="border-t border-border/70 pt-3 text-[12px] text-muted-foreground">
-              Een fout gemaakt, of een testadres? Dan kun je het ook gewoon verwijderen: het gaat zonder reden naar
-              de prullenbak, en je kunt het daar terughalen.
+              Een fout gemaakt, of een testadres? Dan kun je het ook gewoon verwijderen: het gaat
+              zonder reden naar de prullenbak, en je kunt het daar terughalen.
               {heeftPlanning && " Kies hierboven ook wat er met de planning moet."}
             </p>
           )}
@@ -210,10 +218,19 @@ export function StopDialog({
             ) : undefined
           }
         >
-          <Button variant="ghost" className="rounded-full" disabled={bezig} onClick={() => onOpenChange(false)}>
+          <Button
+            variant="ghost"
+            className="rounded-full"
+            disabled={bezig}
+            onClick={() => onOpenChange(false)}
+          >
             Annuleren
           </Button>
-          <Button className="rounded-full" disabled={!klaar || bezig} onClick={() => void bevestig()}>
+          <Button
+            className="rounded-full"
+            disabled={!klaar || bezig}
+            onClick={() => void bevestig()}
+          >
             {bezig && <Loader2 className="size-4 animate-spin" />}
             Laten stoppen
           </Button>
@@ -248,7 +265,9 @@ function Keuze({
       <span
         className={cn(
           "mt-1 size-3.5 shrink-0 rounded-full border",
-          gekozen ? "border-foreground bg-foreground ring-2 ring-inset ring-card" : "border-muted-foreground/50",
+          gekozen
+            ? "border-foreground bg-foreground ring-2 ring-inset ring-card"
+            : "border-muted-foreground/50",
         )}
       />
       <span>

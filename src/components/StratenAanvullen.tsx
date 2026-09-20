@@ -12,13 +12,7 @@ import {
   type StraatVoorstel as Voorstel,
 } from "@/lib/aanvullen";
 import { pushUndo, undoKnop } from "@/lib/undo";
-import {
-  PopupBody,
-  PopupHint,
-  PopupKader,
-  PopupKop,
-  PopupVoet,
-} from "@/components/Popup";
+import { PopupBody, PopupHint, PopupKader, PopupKop, PopupVoet } from "@/components/Popup";
 
 interface Props {
   /** De straten van de actieve wijk. */
@@ -155,8 +149,8 @@ export function StratenAanvullen({
 
             {afgebroken && (
               <p className="rounded-xl border border-tint-amber-ink/25 bg-tint-amber px-3 py-2 text-[13px] text-tint-amber-ink">
-                De adressendienst gaf geen antwoord meer — waarschijnlijk te veel opvragingen kort na
-                elkaar. Sla op wat hier staat en draai dit over een paar minuten nog eens voor de
+                De adressendienst gaf geen antwoord meer — waarschijnlijk te veel opvragingen kort
+                na elkaar. Sla op wat hier staat en draai dit over een paar minuten nog eens voor de
                 rest.
               </p>
             )}
@@ -173,7 +167,9 @@ export function StratenAanvullen({
                     onCheckedChange={(c) => zet(v.street.id, { aan: c === true })}
                     aria-label={`${v.street.name} aanvullen`}
                   />
-                  <span className="truncate text-[13px] text-muted-foreground">{v.street.name}</span>
+                  <span className="truncate text-[13px] text-muted-foreground">
+                    {v.street.name}
+                  </span>
                   {v.opties.length > 1 ? (
                     <select
                       className="h-9 rounded-xl border border-input bg-background/70 px-2 text-[13px]"

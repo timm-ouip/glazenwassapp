@@ -46,11 +46,20 @@ export function alsHtml(tekst: string): string {
   ].join("");
 }
 
-/** `{{naam}}` en `{{adres}}` invullen. Onbekende haakjes laten we staan. */
+/**
+ * De plaatshouders invullen: `{{naam}}`, `{{adres}}`, `{{datum}}`,
+ * `{{nieuwe datum}}`, `{{reden}}` en `{{tijdvak}}`. Wat niet meegegeven is,
+ * blijft staan zoals het staat — behalve een lege waarde, die verdwijnt met
+ * de dubbele spatie eromheen (anders leest een zin met een weggelaten
+ * tijdvak als "wassen.  Met vriendelijke groet").
+ */
 export function vulIn(sjabloon: string, velden: Record<string, string>): string {
-  return sjabloon.replace(/\{\{\s*(naam|adres)\s*\}\}/g, (heel, sleutel: string) =>
-    sleutel in velden ? velden[sleutel] : heel,
-  );
+  return sjabloon
+    .replace(/\{\{\s*([a-z ]{1,20})\s*\}\}/g, (heel, sleutel: string) =>
+      sleutel in velden ? velden[sleutel] : heel,
+    )
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n");
 }
 
 export interface BrevoAfzender {
@@ -84,6 +93,12 @@ export async function stuurMail(
     subject: mail.onderwerp,
     htmlContent: mail.html ?? alsHtml(mail.tekst),
     textContent: mail.tekst,
+    // Geen volgpixel: bijhouden of iemand een mail opent mag alleen met zijn
+    // toestemming (de cookieregels, art. 11.7a Telecommunicatiewet). Of de
+    // mail is afgeleverd, weten we van de mailserver zelf — daar is geen
+    // pixel voor nodig. Werkt zodra "per-contact pixel tracking consent" in
+    // het Brevo-account aanstaat; staat dat uit, dan negeert Brevo dit veld.
+    contactPixelTrackingConsent: false,
   };
   if (mail.antwoordNaar) body["replyTo"] = { email: mail.antwoordNaar, name: afzender.naam };
 

@@ -91,9 +91,7 @@ async function uitlegVan(fout: unknown): Promise<string> {
 }
 
 /** Waarlangs de uitnodiging ging: het eigen adres van het bedrijf, of de standaardmail van Supabase. */
-export type UitnodigingVia =
-  | { via: "mailbox" | "brevo"; van: string }
-  | { via: "supabase" };
+export type UitnodigingVia = { via: "mailbox" | "brevo"; van: string } | { via: "supabase" };
 
 /**
  * Alleen de eigenaar mag medewerkers uitnodigen per e-mail.
@@ -105,7 +103,7 @@ export type UitnodigingVia =
  */
 export const inviteEmployee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { email: string }) => data)
+  .validator((data: { email: string; teamlidId?: string }) => data)
   .handler(async ({ data, context }): Promise<UitnodigingVia> => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -142,11 +140,15 @@ export const inviteEmployee = createServerFn({ method: "POST" })
         .select("company_id")
         .eq("id", bestaandId)
         .maybeSingle();
-      if (al) throw new Error(al.company_id === me.company_id ? "Deze persoon zit al in je team." : kanNiet);
+      if (al)
+        throw new Error(
+          al.company_id === me.company_id ? "Deze persoon zit al in je team." : kanNiet,
+        );
       // Een lopende uitnodiging van een ander bedrijf niet overnemen: dan zou
       // hij via de mail van dat bedrijf bij jou binnenkomen. Kan dat niet
       // nagekeken worden, dan niet.
-      const { data: bestaand, error: ophaalFout } = await supabaseAdmin.auth.admin.getUserById(bestaandId);
+      const { data: bestaand, error: ophaalFout } =
+        await supabaseAdmin.auth.admin.getUserById(bestaandId);
       if (ophaalFout || !bestaand?.user) throw new Error("Uitnodigen mislukte");
       const andere = bestaand.user.app_metadata?.["uitgenodigd_voor"];
       if (
@@ -174,6 +176,26 @@ export const inviteEmployee = createServerFn({ method: "POST" })
     // bedrijfs-id zich bij dat bedrijf kunnen aansluiten. app_metadata kan
     // alleen de server wijzigen. Met de datum: na UITNODIGING_DAGEN verloopt
     // hij. Een nieuwe code maakt de link uit een eerdere mail ongeldig.
+    // Nodig je een teamlid zonder account uit, dan hangen we de uitnodiging
+    // aan dat teamlid: accepteert hij, dan is het dezelfde persoon en houdt
+    // hij zijn plek in de ploegen van vroeger.
+    if (data.teamlidId) {
+      const { data: teamlid, error: tlFout } = await supabaseAdmin
+        .from("teamleden")
+        .select("id,company_id,employee_id")
+        .eq("id", data.teamlidId)
+        .maybeSingle();
+      if (tlFout) throw new Error("Uitnodigen mislukte");
+      if (!teamlid || teamlid.company_id !== me.company_id || teamlid.employee_id) {
+        throw new Error("Dit teamlid kan niet uitgenodigd worden.");
+      }
+      const { error: koppelFout } = await supabaseAdmin
+        .from("teamleden")
+        .update({ uitgenodigd_user_id: gebruikerId })
+        .eq("id", data.teamlidId);
+      if (koppelFout) throw new Error("Uitnodigen mislukte");
+    }
+
     const code = nieuweCode();
     const { error: metaFout } = await supabaseAdmin.auth.admin.updateUserById(gebruikerId, {
       app_metadata: {
@@ -186,10 +208,15 @@ export const inviteEmployee = createServerFn({ method: "POST" })
 
     // Mislukt het versturen, dan staat er ook geen uitnodiging open: anders
     // staat hij in de lijst als verstuurd terwijl er niets aankwam.
-    const trekIn = () =>
-      supabaseAdmin.auth.admin.updateUserById(gebruikerId, {
+    const trekIn = async () => {
+      await supabaseAdmin.auth.admin.updateUserById(gebruikerId, {
         app_metadata: { uitgenodigd_voor: null, uitgenodigd_op: null, uitnodiging_code: null },
       });
+      await supabaseAdmin
+        .from("teamleden")
+        .update({ uitgenodigd_user_id: null })
+        .eq("uitgenodigd_user_id", gebruikerId);
+    };
 
     const { data: uit, error: functieFout } = await context.supabase.functions.invoke<
       { via: "mailbox" | "brevo"; van: string } | { via: "geen" }
@@ -265,7 +292,8 @@ async function zoekUitnodiging(admin: Admin, id: string, code: string): Promise<
 
 const WAAROM_NIET: Record<Exclude<Uitnodiging["status"], "geldig">, string> = {
   verlopen: `Deze uitnodiging is verlopen (langer dan ${UITNODIGING_DAGEN} dagen geleden). Vraag de eigenaar om een nieuwe.`,
-  ongeldig: "Deze uitnodigingslink klopt niet (meer). Misschien is er een nieuwere gestuurd of is hij ingetrokken.",
+  ongeldig:
+    "Deze uitnodigingslink klopt niet (meer). Misschien is er een nieuwere gestuurd of is hij ingetrokken.",
   gebruikt: "Deze uitnodiging is al gebruikt. Log in met je e-mailadres en wachtwoord.",
 };
 
@@ -312,7 +340,8 @@ export const accepteerUitnodiging = createServerFn({ method: "POST" })
     const d = (data ?? {}) as Record<string, unknown>;
     const naam = d["naam"];
     const wachtwoord = d["wachtwoord"];
-    if (typeof naam !== "string" || typeof wachtwoord !== "string") throw new Error("Onleesbaar verzoek");
+    if (typeof naam !== "string" || typeof wachtwoord !== "string")
+      throw new Error("Onleesbaar verzoek");
     return { ...leesCode(data), naam, wachtwoord };
   })
   .handler(async ({ data }) => {
@@ -397,12 +426,15 @@ export const completeInvite = createServerFn({ method: "POST" })
     const { data: gebruiker, error: gebruikerFout } = await supabaseAdmin.auth.admin.getUserById(
       context.userId,
     );
-    if (gebruikerFout || !gebruiker?.user) throw new Error("Deze uitnodiging kon niet gecontroleerd worden");
+    if (gebruikerFout || !gebruiker?.user)
+      throw new Error("Deze uitnodiging kon niet gecontroleerd worden");
     const companyId = (gebruiker.user.app_metadata as Record<string, unknown> | undefined)?.[
       "uitgenodigd_voor"
     ];
     if (typeof companyId !== "string" || !companyId) {
-      throw new Error("Geen geldige uitnodiging gevonden. Vraag de eigenaar om je opnieuw uit te nodigen.");
+      throw new Error(
+        "Geen geldige uitnodiging gevonden. Vraag de eigenaar om je opnieuw uit te nodigen.",
+      );
     }
     if (isVerlopen(uitgenodigdOp(gebruiker.user))) {
       throw new Error(
@@ -490,6 +522,11 @@ export const trekUitnodigingIn = createServerFn({ method: "POST" })
       app_metadata: { uitgenodigd_voor: null, uitgenodigd_op: null, uitnodiging_code: null },
     });
     if (metaFout) throw new Error(metaFout.message);
+    // Een teamlid dat op deze uitnodiging wachtte, wacht nergens meer op.
+    await supabaseAdmin
+      .from("teamleden")
+      .update({ uitgenodigd_user_id: null })
+      .eq("uitgenodigd_user_id", data.userId);
     return { ok: true };
   });
 

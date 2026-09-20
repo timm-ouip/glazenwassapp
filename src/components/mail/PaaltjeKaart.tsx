@@ -84,7 +84,8 @@ export function PaaltjeKaart({
 
   if (b.richting !== "in" || b.paaltje_status === "overslaan") return null;
 
-  const kader = "mx-5 mt-3 rounded-[14px] border border-tint-paars-ink/15 bg-tint-paars/60 px-3.5 py-3 text-[13px]";
+  const kader =
+    "mx-5 mt-3 rounded-[14px] border border-tint-paars-ink/15 bg-tint-paars/60 px-3.5 py-3 text-[13px]";
 
   if (b.paaltje_status === "wacht" || b.paaltje_status === "bezig") {
     return (
@@ -97,13 +98,17 @@ export function PaaltjeKaart({
   if (b.paaltje_status === "fout") {
     return (
       <div className={cn(kader, "flex flex-wrap items-center gap-2")}>
-        <span className="text-tint-paars-ink">Paaltje kon deze mail niet lezen{b.ai_fout ? `: ${b.ai_fout}` : "."}</span>
+        <span className="text-tint-paars-ink">
+          Paaltje kon deze mail niet lezen{b.ai_fout ? `: ${b.ai_fout}` : "."}
+        </span>
         <Button
           size="sm"
           variant="outline"
           className="h-7 rounded-full"
           disabled={!kanSchrijven || bezig !== null}
-          onClick={() => void doe("lezen", () => laatOpnieuwLezen(b.id), "Paaltje leest hem zo opnieuw.")}
+          onClick={() =>
+            void doe("lezen", () => laatOpnieuwLezen(b.id), "Paaltje leest hem zo opnieuw.")
+          }
         >
           <RefreshCw className="size-3" /> Opnieuw proberen
         </Button>
@@ -115,12 +120,16 @@ export function PaaltjeKaart({
     return (
       <div className={cn(kader, "flex flex-wrap items-center gap-2 text-tint-paars-ink")}>
         <Sparkles className="size-3.5" />
-        <span>Geen klantmail{b.samenvatting ? `: ${b.samenvatting}` : ""}. Staat in Overige post.</span>
+        <span>
+          Geen klantmail{b.samenvatting ? `: ${b.samenvatting}` : ""}. Staat in Overige post.
+        </span>
         <button
           type="button"
           className="ml-auto text-[12px] underline-offset-2 hover:underline disabled:opacity-50"
           disabled={!kanSchrijven || bezig !== null}
-          onClick={() => void doe("lezen", () => laatOpnieuwLezen(b.id), "Paaltje leest hem zo opnieuw.")}
+          onClick={() =>
+            void doe("lezen", () => laatOpnieuwLezen(b.id), "Paaltje leest hem zo opnieuw.")
+          }
         >
           Toch klantmail? Opnieuw lezen
         </button>
@@ -142,14 +151,22 @@ export function PaaltjeKaart({
         <p className="min-w-0 flex-1 text-tint-paars-ink">
           {b.samenvatting || "Paaltje las deze mail."}
           {b.zekerheid !== null && (
-            <span className="ml-1.5 text-[11.5px] opacity-70">{Math.round(b.zekerheid * 100)}% zeker</span>
+            <span className="ml-1.5 text-[11.5px] opacity-70">
+              {Math.round(b.zekerheid * 100)}% zeker
+            </span>
           )}
         </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
         {mijnCategorieen.map(({ c, i }) => (
-          <span key={c.id} className={cn("rounded-full px-2 py-0.5 text-[11.5px] font-medium", categorieTint(c, i))}>
+          <span
+            key={c.id}
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[11.5px] font-medium",
+              categorieTint(c, i),
+            )}
+          >
             {c.naam}
           </span>
         ))}
@@ -157,7 +174,9 @@ export function PaaltjeKaart({
           alle={lijst}
           gekozen={b.categorie_ids}
           uit={!kanSchrijven}
-          onBewaar={(ids) => doe("categorie", () => zetCategorieen(b.id, ids), "Categorie aangepast.")}
+          onBewaar={(ids) =>
+            doe("categorie", () => zetCategorieen(b.id, ids), "Categorie aangepast.")
+          }
         />
       </div>
 
@@ -208,7 +227,11 @@ export function PaaltjeKaart({
                   void doe("overslaan", () => overslaanDoorvoeren(b.id), "In de planning gezet.")
                 }
               >
-                {bezig === "overslaan" ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                {bezig === "overslaan" ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <Check className="size-3" />
+                )}
                 Doorvoeren
               </Button>
             </>
@@ -229,7 +252,8 @@ export function PaaltjeKaart({
               <CircleCheck className="size-3.5 text-tint-groen-ink" />
               <span>
                 Gestopt: {b.voorstel.stoppen.adressen.length}{" "}
-                {b.voorstel.stoppen.adressen.length === 1 ? "adres staat" : "adressen staan"} bij Inactief.
+                {b.voorstel.stoppen.adressen.length === 1 ? "adres staat" : "adressen staan"} bij
+                Inactief.
               </span>
               <span className="text-[12px]">Terugdraaien kan in Rapport</span>
             </>
@@ -247,7 +271,11 @@ export function PaaltjeKaart({
                 disabled={!kanSchrijven || bezig !== null}
                 onClick={() => setStopOpen(true)}
               >
-                {bezig === "stoppen" ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                {bezig === "stoppen" ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <Check className="size-3" />
+                )}
                 Klant laten stoppen
               </Button>
               <StopDialog
@@ -301,9 +329,16 @@ export function PaaltjeKaart({
 
       {b.concept && !b.beantwoord_op && (
         <div className="rounded-[12px] border border-border bg-card p-3">
-          <p className="line-clamp-6 whitespace-pre-wrap text-[13px] leading-relaxed">{b.concept}</p>
+          <p className="line-clamp-6 whitespace-pre-wrap text-[13px] leading-relaxed">
+            {b.concept}
+          </p>
           <div className="mt-2.5 flex flex-wrap gap-1.5">
-            <Button size="sm" className="rounded-full" disabled={!kanSchrijven} onClick={() => onBeantwoord(b.concept)}>
+            <Button
+              size="sm"
+              className="rounded-full"
+              disabled={!kanSchrijven}
+              onClick={() => onBeantwoord(b.concept)}
+            >
               <Pencil className="size-3.5" /> Bekijken en versturen
             </Button>
           </div>
@@ -338,7 +373,9 @@ export function PaaltjeKaart({
           type="button"
           className="ml-auto underline-offset-2 hover:underline disabled:opacity-50"
           disabled={!kanSchrijven || bezig !== null}
-          onClick={() => void doe("lezen", () => laatOpnieuwLezen(b.id), "Paaltje leest hem zo opnieuw.")}
+          onClick={() =>
+            void doe("lezen", () => laatOpnieuwLezen(b.id), "Paaltje leest hem zo opnieuw.")
+          }
         >
           Opnieuw laten lezen
         </button>
@@ -372,9 +409,16 @@ function KlantGok({
     <Regel>
       <UserRound className="size-3.5" />
       <span>
-        Paaltje denkt dat dit <strong>{k.naam}</strong> is{k.straat ? ` (${k.straat} ${k.huisnummer})` : ""}.
+        Paaltje denkt dat dit <strong>{k.naam}</strong> is
+        {k.straat ? ` (${k.straat} ${k.huisnummer})` : ""}.
       </span>
-      <Button size="sm" variant="outline" className="h-7 rounded-full" disabled={uit} onClick={() => onKoppel(k.naam)}>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 rounded-full"
+        disabled={uit}
+        onClick={() => onKoppel(k.naam)}
+      >
         Ja, {email} hoort bij {k.naam.split(" ")[0]}
       </Button>
     </Regel>

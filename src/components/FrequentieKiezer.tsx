@@ -216,7 +216,9 @@ export function FrequentieKeuze({
                 {varianten.map((r) => (
                   <DropdownMenuItem key={r} onSelect={() => onChange(`${n}-${r}`)}>
                     {ritmeLabel({ interval_maanden: n, ritme: r })}
-                    {dit && zelfdeRitme(gekozen.ritme, r, n) && <Check className="ml-auto size-4" />}
+                    {dit && zelfdeRitme(gekozen.ritme, r, n) && (
+                      <Check className="ml-auto size-4" />
+                    )}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuSubContent>

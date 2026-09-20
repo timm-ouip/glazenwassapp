@@ -55,7 +55,11 @@ export function BekendAdresKaart({
   }
 
   const sinds = adres
-    ? new Date(adres.inactief_op).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" })
+    ? new Date(adres.inactief_op).toLocaleDateString("nl-NL", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
     : "";
 
   return (
@@ -65,7 +69,9 @@ export function BekendAdresKaart({
           <Home className="size-4" />
         </span>
         <div className="min-w-0">
-          <p className="font-display text-[15px] font-semibold leading-tight">{a.naam || "Zonder naam"}</p>
+          <p className="font-display text-[15px] font-semibold leading-tight">
+            {a.naam || "Zonder naam"}
+          </p>
           <p className="mt-0.5 text-[13px] text-muted-foreground">{aanmeldAdres(a)}</p>
         </div>
       </div>
@@ -77,16 +83,21 @@ export function BekendAdresKaart({
             <p className="mt-0.5 text-muted-foreground">
               {redenLabel(adres.inactief_reden)} sinds {sinds} ·{" "}
               {prijzenZien ? `${formatPrice(adres.price)} · ` : ""}
-              {adres.interval_maanden <= 1 ? "elke maand" : `1× per ${adres.interval_maanden} maanden`}
+              {adres.interval_maanden <= 1
+                ? "elke maand"
+                : `1× per ${adres.interval_maanden} maanden`}
               {adres.note.trim() ? ` · ${adres.note.trim()}` : ""}
             </p>
             {oudeKlant && (
-              <p className="mt-0.5 text-muted-foreground">Vorige klant: {oudeKlant.naam || "zonder naam"}</p>
+              <p className="mt-0.5 text-muted-foreground">
+                Vorige klant: {oudeKlant.naam || "zonder naam"}
+              </p>
             )}
           </div>
         ) : (
           <p className="text-[12.5px] text-muted-foreground">
-            Dit adres staat intussen niet meer als inactief. Kijk op de klantenpagina hoe het er nu voor staat.
+            Dit adres staat intussen niet meer als inactief. Kijk op de klantenpagina hoe het er nu
+            voor staat.
           </p>
         )}
 
@@ -96,7 +107,11 @@ export function BekendAdresKaart({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button className="rounded-full" disabled={!adres || bezig !== null} onClick={() => void overnemen(false)}>
+          <Button
+            className="rounded-full"
+            disabled={!adres || bezig !== null}
+            onClick={() => void overnemen(false)}
+          >
             {bezig === "nieuw" && <Loader2 className="size-4 animate-spin" />}
             Weer actief met deze gegevens
           </Button>
@@ -111,7 +126,11 @@ export function BekendAdresKaart({
               Weer actief met de vorige klant
             </Button>
           )}
-          <Button variant="ghost" className="rounded-full text-muted-foreground" onClick={onWeigeren}>
+          <Button
+            variant="ghost"
+            className="rounded-full text-muted-foreground"
+            onClick={onWeigeren}
+          >
             <X className="size-4" /> Wegleggen
           </Button>
         </div>

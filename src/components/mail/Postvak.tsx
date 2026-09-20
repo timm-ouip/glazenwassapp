@@ -14,7 +14,12 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import {
   IconArrowLeft as ArrowLeft,
   IconMenu2 as Menu,
@@ -258,14 +263,22 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
   const snelKeuzes: { bron: Bron; naam: string; telletje?: number; stip?: string }[] = postvak
     ? [
         { bron: { soort: "map", mapId: postvak.id }, naam: "Postvak", telletje: postvak.ongelezen },
-        { bron: { soort: "wacht", postvakId: postvak.id }, naam: "Wacht op jou", telletje: wacht.data ?? 0 },
+        {
+          bron: { soort: "wacht", postvakId: postvak.id },
+          naam: "Wacht op jou",
+          telletje: wacht.data ?? 0,
+        },
         ...(categorieen.data ?? []).map((c, i) => ({
           bron: { soort: "categorie" as const, postvakId: postvak.id, categorieId: c.id },
           naam: c.naam,
           stip: categorieTint(c, i),
         })),
         { bron: { soort: "overige", postvakId: postvak.id }, naam: "Overige post" },
-        { bron: { soort: "vlag", prullenbakId: prullenbak?.id ?? null }, naam: "Met vlag", telletje: vlag.data ?? 0 },
+        {
+          bron: { soort: "vlag", prullenbakId: prullenbak?.id ?? null },
+          naam: "Met vlag",
+          telletje: vlag.data ?? 0,
+        },
       ]
     : [];
 
@@ -347,7 +360,9 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
             <div className="flex min-h-0 flex-1 flex-col">
               <KopMetTerug onTerug={() => setScherm("mappen")} />
               <p className="p-6 text-center text-[13px] text-muted-foreground">
-                {mappen.isError ? "De mappen konden niet geladen worden." : "Wooshy haalt je mail op…"}
+                {mappen.isError
+                  ? "De mappen konden niet geladen worden."
+                  : "Wooshy haalt je mail op…"}
               </p>
             </div>
           )}
@@ -444,7 +459,9 @@ export function doorstuurOpzet(b: Bericht): Opzet {
     aan: "",
     onderwerp,
     tekst: `\n\n\n${kop.join("\n")}\n\n${bron}`,
-    ...(b.bijlagen.length > 0 ? { bijlagenVan: b.id, bijlagenNamen: b.bijlagen.map((a) => a.naam) } : {}),
+    ...(b.bijlagen.length > 0
+      ? { bijlagenVan: b.id, bijlagenNamen: b.bijlagen.map((a) => a.naam) }
+      : {}),
   };
 }
 
@@ -541,24 +558,38 @@ function MapKolom({
   const postvak = mappen.find((m) => m.id === postvakId);
   // Een map maken verandert de echte mailbox; dat vraagt hetzelfde recht als versturen.
   const magMappenMaken = useRecht("mail_versturen");
-  const gepland = useQuery({ queryKey: ["gepland"], queryFn: fetchGepland, refetchInterval: 60_000 });
+  const gepland = useQuery({
+    queryKey: ["gepland"],
+    queryFn: fetchGepland,
+    refetchInterval: 60_000,
+  });
   const overigeMappen = mappen.filter((m) => m.id !== postvakId);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
       <div className="flex flex-col gap-1.5">
-        <Button className="w-full justify-start rounded-full" disabled={!kanSchrijven} onClick={onNieuweMail}>
+        <Button
+          className="w-full justify-start rounded-full"
+          disabled={!kanSchrijven}
+          onClick={onNieuweMail}
+        >
           <SquarePen className="size-4" /> Nieuwe mail
         </Button>
         {onAankondigen && (
-          <Button variant="outline" className="w-full justify-start rounded-full" onClick={onAankondigen}>
+          <Button
+            variant="outline"
+            className="w-full justify-start rounded-full"
+            onClick={onAankondigen}
+          >
             <Megaphone className="size-4" /> Wasdag aankondigen
           </Button>
         )}
       </div>
 
       <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1">
-        {fout && <p className="px-2.5 text-[12.5px] text-tint-rood-ink">Mappen laden lukte niet.</p>}
+        {fout && (
+          <p className="px-2.5 text-[12.5px] text-tint-rood-ink">Mappen laden lukte niet.</p>
+        )}
 
         {postvak && (
           <MapKnop
@@ -640,12 +671,17 @@ function MapKolom({
         <MapKnop
           icoon={Clock}
           naam="Gepland"
-          telletje={(gepland.data ?? []).filter((g) => g.status === "wacht" || g.status === "mislukt").length}
+          telletje={
+            (gepland.data ?? []).filter((g) => g.status === "wacht" || g.status === "mislukt")
+              .length
+          }
           tint="amber"
           actief={zelfdeBron(actief, { soort: "gepland" })}
           onClick={() => onKies({ soort: "gepland" })}
         />
-        {kanSchrijven && magMappenMaken && <NieuweMap onGemaakt={(id) => onKies({ soort: "map", mapId: id })} />}
+        {kanSchrijven && magMappenMaken && (
+          <NieuweMap onGemaakt={(id) => onKies({ soort: "map", mapId: id })} />
+        )}
       </nav>
 
       <SpamAfzenders kanSchrijven={kanSchrijven} />
@@ -717,7 +753,12 @@ function NieuweMap({ onGemaakt }: { onGemaakt: (mapId: string) => void }) {
         }}
         className="h-8 rounded-full text-[12.5px]"
       />
-      <Button type="submit" size="sm" className="h-8 rounded-full px-3" disabled={bezig || !naam.trim()}>
+      <Button
+        type="submit"
+        size="sm"
+        className="h-8 rounded-full px-3"
+        disabled={bezig || !naam.trim()}
+      >
         {bezig ? "…" : "Maak"}
       </Button>
     </form>
@@ -822,7 +863,10 @@ function EigenMapKnop({
         >
           <Pencil className="size-4" /> Hernoemen
         </ContextMenuItem>
-        <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={() => void weg()}>
+        <ContextMenuItem
+          className="text-destructive focus:text-destructive"
+          onSelect={() => void weg()}
+        >
           <Trash2 className="size-4" /> Verwijderen
         </ContextMenuItem>
       </ContextMenuContent>
@@ -860,14 +904,21 @@ function MapKnop({
       {stip ? (
         <span className={cn("ml-1 mr-0.5 size-2.5 shrink-0 rounded-full", stip)} />
       ) : (
-        <Icoon className={cn("size-4 shrink-0", actief ? "text-tint-oranje-ink" : "text-muted-foreground")} />
+        <Icoon
+          className={cn(
+            "size-4 shrink-0",
+            actief ? "text-tint-oranje-ink" : "text-muted-foreground",
+          )}
+        />
       )}
       <span className="truncate">{naam}</span>
       {telletje > 0 && (
         <span
           className={cn(
             "ml-auto rounded-full px-1.5 text-[11px] font-semibold tabular-nums",
-            tint === "amber" ? "bg-tint-amber text-tint-amber-ink" : "bg-tint-blauw text-tint-blauw-ink",
+            tint === "amber"
+              ? "bg-tint-amber text-tint-amber-ink"
+              : "bg-tint-blauw text-tint-blauw-ink",
           )}
         >
           {telletje}
@@ -975,7 +1026,8 @@ function BerichtLijst({
     setBulkBezig(true);
     try {
       const uit = await bulkActie(ids, doe, map?.id);
-      if (ids.includes(actief ?? "") && (doe === "weggooien" || doe === "verplaatsen")) onWeg(actief!);
+      if (ids.includes(actief ?? "") && (doe === "weggooien" || doe === "verplaatsen"))
+        onWeg(actief!);
       setGekozen(new Set());
       const wat: Record<BulkDoe, string> = {
         gelezen: "gelezen",
@@ -986,7 +1038,8 @@ function BerichtLijst({
         weggooien: "naar de prullenbak",
         verplaatsen: map ? `verplaatst naar ${mapNaam(map)}` : "verplaatst",
       };
-      if (uit.mislukt.length > 0) toast.warning(`${uit.gelukt} ${wat[doe]}; ${uit.mislukt.length} lukte niet.`);
+      if (uit.mislukt.length > 0)
+        toast.warning(`${uit.gelukt} ${wat[doe]}; ${uit.mislukt.length} lukte niet.`);
       else toast.success(`${uit.gelukt} ${uit.gelukt === 1 ? "mail" : "mails"} ${wat[doe]}.`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -1017,7 +1070,10 @@ function BerichtLijst({
     };
     const volledig = async (maak: (v: Bericht) => Opzet) => {
       if (!huidig || !kanSchrijven) return;
-      const v = await qc.fetchQuery({ queryKey: ["bericht", huidig.id], queryFn: () => fetchBericht(huidig.id) });
+      const v = await qc.fetchQuery({
+        queryKey: ["bericht", huidig.id],
+        queryFn: () => fetchBericht(huidig.id),
+      });
       if (v) onOpstellen(maak(v));
     };
     const rol = mappen.find((m) => m.id === huidig?.map_id)?.rol;
@@ -1093,11 +1149,11 @@ function BerichtLijst({
       ? "Er wacht niets op je."
       : bron.soort === "vlag"
         ? "Geen mail met een vlag. Zet er een op met de muis op een mail, of met S."
-      : bron.soort === "overige"
-        ? "Geen overige post."
-        : bron.soort === "categorie"
-          ? "Nog geen mail in deze categorie."
-          : "Geen mail in deze map.";
+        : bron.soort === "overige"
+          ? "Geen overige post."
+          : bron.soort === "categorie"
+            ? "Nog geen mail in deze categorie."
+            : "Geen mail in deze map.";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -1105,11 +1161,16 @@ function BerichtLijst({
         {gekozen.size > 0 ? (
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             <Checkbox
-              checked={gekozen.size === Math.min(berichten.length, MAX_SELECTIE) ? true : "indeterminate"}
+              checked={
+                gekozen.size === Math.min(berichten.length, MAX_SELECTIE) ? true : "indeterminate"
+              }
               onCheckedChange={() => {
-                if (gekozen.size === Math.min(berichten.length, MAX_SELECTIE)) return void setGekozen(new Set());
+                if (gekozen.size === Math.min(berichten.length, MAX_SELECTIE))
+                  return void setGekozen(new Set());
                 if (berichten.length > MAX_SELECTIE) {
-                  toast.info(`De eerste ${MAX_SELECTIE} mails zijn geselecteerd; meer tegelijk kan niet.`);
+                  toast.info(
+                    `De eerste ${MAX_SELECTIE} mails zijn geselecteerd; meer tegelijk kan niet.`,
+                  );
                 }
                 setGekozen(new Set(berichten.slice(0, MAX_SELECTIE).map((b) => b.id)));
               }}
@@ -1117,21 +1178,41 @@ function BerichtLijst({
               className="mx-1"
             />
             <span className="mr-1 text-[12.5px] font-medium tabular-nums">{gekozen.size}</span>
-            <SnelKnop label="Afgehandeld" onClick={() => void voorAlle("afhandelen")} uit={bulkBezig || !kanSchrijven}>
+            <SnelKnop
+              label="Afgehandeld"
+              onClick={() => void voorAlle("afhandelen")}
+              uit={bulkBezig || !kanSchrijven}
+            >
               <CircleCheck className="size-3.5" />
             </SnelKnop>
-            <SnelKnop label="Markeren als gelezen" onClick={() => void voorAlle("gelezen")} uit={bulkBezig || !kanSchrijven}>
+            <SnelKnop
+              label="Markeren als gelezen"
+              onClick={() => void voorAlle("gelezen")}
+              uit={bulkBezig || !kanSchrijven}
+            >
               <MailOpen className="size-3.5" />
             </SnelKnop>
-            <SnelKnop label="Markeren als ongelezen" onClick={() => void voorAlle("ongelezen")} uit={bulkBezig || !kanSchrijven}>
+            <SnelKnop
+              label="Markeren als ongelezen"
+              onClick={() => void voorAlle("ongelezen")}
+              uit={bulkBezig || !kanSchrijven}
+            >
               <Mail className="size-3.5" />
             </SnelKnop>
             {bron.soort === "vlag" ? (
-              <SnelKnop label="Vlag eraf" onClick={() => void voorAlle("vlag-eraf")} uit={bulkBezig || !kanSchrijven}>
+              <SnelKnop
+                label="Vlag eraf"
+                onClick={() => void voorAlle("vlag-eraf")}
+                uit={bulkBezig || !kanSchrijven}
+              >
                 <FlagOff className="size-3.5" />
               </SnelKnop>
             ) : (
-              <SnelKnop label="Vlag erop" onClick={() => void voorAlle("vlag")} uit={bulkBezig || !kanSchrijven}>
+              <SnelKnop
+                label="Vlag erop"
+                onClick={() => void voorAlle("vlag")}
+                uit={bulkBezig || !kanSchrijven}
+              >
                 <Flag className="size-3.5" />
               </SnelKnop>
             )}
@@ -1158,7 +1239,12 @@ function BerichtLijst({
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
-            <SnelKnop label="Weggooien" gevaarlijk onClick={() => void voorAlle("weggooien")} uit={bulkBezig || !kanSchrijven}>
+            <SnelKnop
+              label="Weggooien"
+              gevaarlijk
+              onClick={() => void voorAlle("weggooien")}
+              uit={bulkBezig || !kanSchrijven}
+            >
               <Trash2 className="size-3.5" />
             </SnelKnop>
             <button
@@ -1206,14 +1292,25 @@ function BerichtLijst({
                 onClick={() => !aan && onKiesBron(k.bron)}
                 // De lijst wordt per map opnieuw opgebouwd, en de rij begint dan
                 // weer links: schuif de gekozen chip terug in beeld.
-                ref={aan ? (el) => el?.scrollIntoView({ inline: "center", block: "nearest" }) : undefined}
+                ref={
+                  aan
+                    ? (el) => el?.scrollIntoView({ inline: "center", block: "nearest" })
+                    : undefined
+                }
                 aria-pressed={aan}
                 className={cn(
                   "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-[13px]",
                   aan ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground",
                 )}
               >
-                {k.stip && <span className={cn("size-2.5 rounded-full ring-1 ring-inset ring-foreground/20", k.stip)} />}
+                {k.stip && (
+                  <span
+                    className={cn(
+                      "size-2.5 rounded-full ring-1 ring-inset ring-foreground/20",
+                      k.stip,
+                    )}
+                  />
+                )}
                 {k.naam}
                 {!!k.telletje && <span className="tabular-nums opacity-80">{k.telletje}</span>}
               </button>
@@ -1227,7 +1324,9 @@ function BerichtLijst({
         ) : lijst.isError ? (
           <p className="p-4 text-[13px] text-tint-rood-ink">De mail kon niet geladen worden.</p>
         ) : berichten.length === 0 ? (
-          <p className="p-6 text-center text-[13px] text-muted-foreground">{zoekTerm ? "Niets gevonden." : leeg}</p>
+          <p className="p-6 text-center text-[13px] text-muted-foreground">
+            {zoekTerm ? "Niets gevonden." : leeg}
+          </p>
         ) : (
           <>
             {berichten.map((b) => (
@@ -1318,7 +1417,10 @@ function BerichtRij({
   /** Beantwoorden en doorsturen hebben de hele mail nodig, niet alleen de regel. */
   async function stelOp(maak: (volledig: Bericht) => Opzet) {
     try {
-      const volledig = await qc.fetchQuery({ queryKey: ["bericht", b.id], queryFn: () => fetchBericht(b.id) });
+      const volledig = await qc.fetchQuery({
+        queryKey: ["bericht", b.id],
+        queryFn: () => fetchBericht(b.id),
+      });
       if (!volledig) return void toast.error("Deze mail is er niet meer.");
       onOpstellen(maak(volledig));
     } catch (e) {
@@ -1343,7 +1445,10 @@ function BerichtRij({
       <ContextMenuSeparator />
       {b.richting === "in" && (
         <>
-          <ContextMenuItem disabled={!kanSchrijven} onSelect={() => void stelOp((v) => antwoordOpzet(v))}>
+          <ContextMenuItem
+            disabled={!kanSchrijven}
+            onSelect={() => void stelOp((v) => antwoordOpzet(v))}
+          >
             <Reply className="size-4" /> Beantwoorden
           </ContextMenuItem>
           <ContextMenuItem
@@ -1363,11 +1468,17 @@ function BerichtRij({
           <CircleCheck className="size-4" /> Afgehandeld
         </ContextMenuItem>
       )}
-      <ContextMenuItem disabled={!kanSchrijven} onSelect={() => void acties.gelezen(b.id, !b.gelezen)}>
+      <ContextMenuItem
+        disabled={!kanSchrijven}
+        onSelect={() => void acties.gelezen(b.id, !b.gelezen)}
+      >
         {b.gelezen ? <Mail className="size-4" /> : <MailOpen className="size-4" />}
         {b.gelezen ? "Markeren als ongelezen" : "Markeren als gelezen"}
       </ContextMenuItem>
-      <ContextMenuItem disabled={!kanSchrijven} onSelect={() => void acties.markeer(b.id, !b.gemarkeerd)}>
+      <ContextMenuItem
+        disabled={!kanSchrijven}
+        onSelect={() => void acties.markeer(b.id, !b.gemarkeerd)}
+      >
         {b.gemarkeerd ? <FlagOff className="size-4" /> : <Flag className="size-4" />}
         {b.gemarkeerd ? "Vlag eraf" : "Vlag erop"}
       </ContextMenuItem>
@@ -1382,7 +1493,10 @@ function BerichtRij({
             .map((m) => {
               const Icoon = MAP_ICOON[m.rol];
               return (
-                <ContextMenuItem key={m.id} onSelect={() => void acties.verplaats(b.id, b.map_id, m, mappen)}>
+                <ContextMenuItem
+                  key={m.id}
+                  onSelect={() => void acties.verplaats(b.id, b.map_id, m, mappen)}
+                >
                   <Icoon className="size-4" /> {mapNaam(m)}
                 </ContextMenuItem>
               );
@@ -1392,17 +1506,25 @@ function BerichtRij({
       {b.richting === "in" && rol === "spam" && (
         <ContextMenuItem
           disabled={!kanSchrijven}
-          onSelect={() => void acties.geenSpam(b.id, b.map_id, mappen, spamAfzender ? b.van_email : undefined)}
+          onSelect={() =>
+            void acties.geenSpam(b.id, b.map_id, mappen, spamAfzender ? b.van_email : undefined)
+          }
         >
           <ShieldCheck className="size-4" /> Geen spam
         </ContextMenuItem>
       )}
       {b.richting === "in" && rol !== "spam" && (
         <>
-          <ContextMenuItem disabled={!kanSchrijven} onSelect={() => void acties.spam(b.id, b.map_id, mappen)}>
+          <ContextMenuItem
+            disabled={!kanSchrijven}
+            onSelect={() => void acties.spam(b.id, b.map_id, mappen)}
+          >
             <ShieldAlert className="size-4" /> Spam melden
           </ContextMenuItem>
-          <ContextMenuItem disabled={!kanSchrijven} onSelect={() => void acties.altijdSpam(b.id, b.van_email, b.map_id)}>
+          <ContextMenuItem
+            disabled={!kanSchrijven}
+            onSelect={() => void acties.altijdSpam(b.id, b.van_email, b.map_id)}
+          >
             <ShieldAlert className="size-4" /> Altijd naar spam: {b.van_email}
           </ContextMenuItem>
         </>
@@ -1435,7 +1557,12 @@ function BerichtRij({
               kiesModus || gekozen ? "flex" : "hidden md:group-hover:flex",
             )}
           >
-            <Checkbox checked={gekozen} onCheckedChange={onKies} aria-label="Selecteren" className="bg-card" />
+            <Checkbox
+              checked={gekozen}
+              onCheckedChange={onKies}
+              aria-label="Selecteren"
+              className="bg-card"
+            />
           </div>
           <button
             type="button"
@@ -1454,49 +1581,74 @@ function BerichtRij({
                 (kiesModus || gekozen) && "invisible",
               )}
             >
-              {(afzenderNaam(b).replace(/^Aan: /, "").trim().charAt(0) || "?").toUpperCase()}
+              {(
+                afzenderNaam(b)
+                  .replace(/^Aan: /, "")
+                  .trim()
+                  .charAt(0) || "?"
+              ).toUpperCase()}
             </span>
             <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              {!b.gelezen && <span className="size-2 shrink-0 rounded-full bg-tint-blauw-ink max-md:hidden" aria-label="Ongelezen" />}
-              <span className={cn("truncate text-[13.5px]", !b.gelezen && "font-semibold")}>{afzenderNaam(b)}</span>
-              <span className="ml-auto shrink-0 text-[11.5px] tabular-nums text-muted-foreground">
-                {lijstDatum(b.ontvangen_op)}
-              </span>
-            </div>
-            <div className="mt-0.5 flex items-center gap-1.5">
-              <span className={cn("truncate text-[13px]", b.gelezen ? "text-foreground/80" : "font-medium")}>
-                {b.onderwerp || "(geen onderwerp)"}
-              </span>
-              {b.heeft_bijlagen && <Paperclip className="size-3 shrink-0 text-muted-foreground" />}
-              {b.gemarkeerd && <Flag className="size-3 shrink-0 text-tint-rood-ink" />}
-            </div>
-            <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">{b.fragment}</p>
-            {(labels.length > 0 || b.wacht || b.herinner_op) && (
-              <div className="mt-1 flex flex-wrap items-center gap-1">
-                {herinnerd ? (
-                  <span className="inline-flex items-center gap-0.5 rounded-full bg-tint-amber px-1.5 py-px text-[10.5px] font-medium text-tint-amber-ink">
-                    <Bell className="size-2.5" /> herinnering
-                  </span>
-                ) : (
-                  b.wacht && (
-                    <span className="inline-flex items-center gap-0.5 rounded-full bg-tint-paars px-1.5 py-px text-[10.5px] font-medium text-tint-paars-ink">
-                      <Sparkles className="size-2.5" /> klaar voor jou
-                    </span>
-                  )
+              <div className="flex items-center gap-2">
+                {!b.gelezen && (
+                  <span
+                    className="size-2 shrink-0 rounded-full bg-tint-blauw-ink max-md:hidden"
+                    aria-label="Ongelezen"
+                  />
                 )}
-                {b.herinner_op && !herinnerd && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full bg-muted px-1.5 py-px text-[10.5px] text-muted-foreground">
-                    <Clock className="size-2.5" /> {toonMoment(b.herinner_op)}
-                  </span>
-                )}
-                {labels.map(({ c, i }) => (
-                  <span key={c.id} className={cn("rounded-full px-1.5 py-px text-[10.5px] font-medium", categorieTint(c, i))}>
-                    {c.naam}
-                  </span>
-                ))}
+                <span className={cn("truncate text-[13.5px]", !b.gelezen && "font-semibold")}>
+                  {afzenderNaam(b)}
+                </span>
+                <span className="ml-auto shrink-0 text-[11.5px] tabular-nums text-muted-foreground">
+                  {lijstDatum(b.ontvangen_op)}
+                </span>
               </div>
-            )}
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "truncate text-[13px]",
+                    b.gelezen ? "text-foreground/80" : "font-medium",
+                  )}
+                >
+                  {b.onderwerp || "(geen onderwerp)"}
+                </span>
+                {b.heeft_bijlagen && (
+                  <Paperclip className="size-3 shrink-0 text-muted-foreground" />
+                )}
+                {b.gemarkeerd && <Flag className="size-3 shrink-0 text-tint-rood-ink" />}
+              </div>
+              <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">{b.fragment}</p>
+              {(labels.length > 0 || b.wacht || b.herinner_op) && (
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  {herinnerd ? (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-tint-amber px-1.5 py-px text-[10.5px] font-medium text-tint-amber-ink">
+                      <Bell className="size-2.5" /> herinnering
+                    </span>
+                  ) : (
+                    b.wacht && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-tint-paars px-1.5 py-px text-[10.5px] font-medium text-tint-paars-ink">
+                        <Sparkles className="size-2.5" /> klaar voor jou
+                      </span>
+                    )
+                  )}
+                  {b.herinner_op && !herinnerd && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-muted px-1.5 py-px text-[10.5px] text-muted-foreground">
+                      <Clock className="size-2.5" /> {toonMoment(b.herinner_op)}
+                    </span>
+                  )}
+                  {labels.map(({ c, i }) => (
+                    <span
+                      key={c.id}
+                      className={cn(
+                        "rounded-full px-1.5 py-px text-[10.5px] font-medium",
+                        categorieTint(c, i),
+                      )}
+                    >
+                      {c.naam}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </button>
           {/* Snelle knoppen als je met de muis op de mail staat, zoals in een
@@ -1514,7 +1666,10 @@ function BerichtRij({
               >
                 {b.gelezen ? <Mail className="size-3.5" /> : <MailOpen className="size-3.5" />}
               </SnelKnop>
-              <SnelKnop label={b.gemarkeerd ? "Vlag eraf" : "Vlag erop"} onClick={() => void acties.markeer(b.id, !b.gemarkeerd)}>
+              <SnelKnop
+                label={b.gemarkeerd ? "Vlag eraf" : "Vlag erop"}
+                onClick={() => void acties.markeer(b.id, !b.gemarkeerd)}
+              >
                 {b.gemarkeerd ? <FlagOff className="size-3.5" /> : <Flag className="size-3.5" />}
               </SnelKnop>
               {inPrullenbak ? (
@@ -1632,7 +1787,10 @@ function useMailActies(onWeg: (id: string) => void) {
       const terug = mappen.find((m) => m.id === van);
       if (!verplaatst || !terug) return void toast.success(tekst);
       toast.success(tekst, {
-        action: { label: "Ongedaan maken", onClick: () => void doe(() => verplaatsNaar(id, terug.id)) },
+        action: {
+          label: "Ongedaan maken",
+          onClick: () => void doe(() => verplaatsNaar(id, terug.id)),
+        },
       });
     },
     async spam(id: string, van: string, mappen: MailMap[]) {
@@ -1651,7 +1809,9 @@ function useMailActies(onWeg: (id: string) => void) {
         van,
         postvak,
         mappen,
-        regelVan ? `Geen spam: terug in je postvak, en ${regelVan} gaat niet meer vanzelf naar spam.` : "Geen spam: terug in je postvak.",
+        regelVan
+          ? `Geen spam: terug in je postvak, en ${regelVan} gaat niet meer vanzelf naar spam.`
+          : "Geen spam: terug in je postvak.",
       );
     },
     /** `van`: waar de mail stond; Ongedaan maken zet hem daar terug én haalt de regel weg. */
@@ -1672,7 +1832,11 @@ function useMailActies(onWeg: (id: string) => void) {
     },
     async herinner(id: string, op: Date | null) {
       if (!(await doe(() => herinner(id, op)))) return;
-      toast.success(op ? `Herinnering ${toonMoment(op)}: dan staat hij in "Wacht op jou".` : "Herinnering weggehaald.");
+      toast.success(
+        op
+          ? `Herinnering ${toonMoment(op)}: dan staat hij in "Wacht op jou".`
+          : "Herinnering weggehaald.",
+      );
     },
   };
   return acties;
@@ -1732,13 +1896,18 @@ function Leesvenster({
     qc.setQueryData<Bericht | null>(["bericht", m.id], (oud) => (oud ? { ...oud, gelezen } : oud));
     qc.setQueriesData<InfiniteData<BerichtRegel[]>>({ queryKey: ["berichten"] }, (oud) =>
       oud
-        ? { ...oud, pages: oud.pages.map((p) => p.map((r) => (r.id === m.id ? { ...r, gelezen } : r))) }
+        ? {
+            ...oud,
+            pages: oud.pages.map((p) => p.map((r) => (r.id === m.id ? { ...r, gelezen } : r))),
+          }
         : oud,
     );
     if (m.richting === "in") {
       qc.setQueryData<MailMap[]>(["mail-mappen"], (oud) =>
         oud?.map((map) =>
-          map.id === m.map_id ? { ...map, ongelezen: Math.max(0, map.ongelezen + (gelezen ? -1 : 1)) } : map,
+          map.id === m.map_id
+            ? { ...map, ongelezen: Math.max(0, map.ongelezen + (gelezen ? -1 : 1)) }
+            : map,
         ),
       );
     }
@@ -1760,7 +1929,12 @@ function Leesvenster({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bericht.data, kanSchrijven]);
 
-  async function doe<T>(id: string, actie: () => Promise<T>, gelukt: (uit: T) => void, opnieuwLaden = true) {
+  async function doe<T>(
+    id: string,
+    actie: () => Promise<T>,
+    gelukt: (uit: T) => void,
+    opnieuwLaden = true,
+  ) {
     setBezigMet(id);
     try {
       const uit = await actie();
@@ -1781,12 +1955,14 @@ function Leesvenster({
       </div>
     );
   }
-  if (bericht.isLoading) return <p className="p-5 text-[13px] text-muted-foreground">Even ophalen…</p>;
+  if (bericht.isLoading)
+    return <p className="p-5 text-[13px] text-muted-foreground">Even ophalen…</p>;
   if (bericht.isError) {
     return <p className="p-5 text-[13px] text-tint-rood-ink">Deze mail kon niet geladen worden.</p>;
   }
   const b = bericht.data;
-  if (!b) return <p className="p-5 text-[13px] text-muted-foreground">Deze mail is er niet meer.</p>;
+  if (!b)
+    return <p className="p-5 text-[13px] text-muted-foreground">Deze mail is er niet meer.</p>;
 
   // De map van de mail zelf, niet van de lijst: in "Wacht op jou" staat een
   // mail die in het postvak zit.
@@ -1811,7 +1987,11 @@ function Leesvenster({
           disabled={!kanSchrijven || bezigMet === b.id}
           onClick={() => void lijstActies.afhandelen(b.id, !b.afgehandeld_op)}
         >
-          {b.afgehandeld_op ? <RotateCcw className="size-3.5" /> : <CircleCheck className="size-3.5" />}
+          {b.afgehandeld_op ? (
+            <RotateCcw className="size-3.5" />
+          ) : (
+            <CircleCheck className="size-3.5" />
+          )}
           {b.afgehandeld_op ? "Weer openzetten" : "Afgehandeld"}
         </Button>
       )}
@@ -1824,7 +2004,11 @@ function Leesvenster({
           <ReplyAll className="size-3.5" />
         </IcoonKnop>
       )}
-      <IcoonKnop label="Doorsturen" disabled={!kanSchrijven} onClick={() => onOpstellen(doorstuurOpzet(b))}>
+      <IcoonKnop
+        label="Doorsturen"
+        disabled={!kanSchrijven}
+        onClick={() => onOpstellen(doorstuurOpzet(b))}
+      >
         <Forward className="size-3.5" />
       </IcoonKnop>
       <DropdownMenu>
@@ -1846,7 +2030,10 @@ function Leesvenster({
             .map((m) => {
               const Icoon = MAP_ICOON[m.rol];
               return (
-                <DropdownMenuItem key={m.id} onSelect={() => void lijstActies.verplaats(b.id, b.map_id, m, mappen)}>
+                <DropdownMenuItem
+                  key={m.id}
+                  onSelect={() => void lijstActies.verplaats(b.id, b.map_id, m, mappen)}
+                >
                   <Icoon className="size-4" /> {mapNaam(m)}
                 </DropdownMenuItem>
               );
@@ -1855,11 +2042,19 @@ function Leesvenster({
       </DropdownMenu>
       {b.richting === "in" &&
         (mappen.find((m) => m.id === b.map_id)?.rol === "spam" ? (
-          <IcoonKnop label="Geen spam" disabled={!kanSchrijven} onClick={() => void lijstActies.geenSpam(b.id, b.map_id, mappen)}>
+          <IcoonKnop
+            label="Geen spam"
+            disabled={!kanSchrijven}
+            onClick={() => void lijstActies.geenSpam(b.id, b.map_id, mappen)}
+          >
             <ShieldCheck className="size-3.5" />
           </IcoonKnop>
         ) : (
-          <IcoonKnop label="Spam melden" disabled={!kanSchrijven} onClick={() => void lijstActies.spam(b.id, b.map_id, mappen)}>
+          <IcoonKnop
+            label="Spam melden"
+            disabled={!kanSchrijven}
+            onClick={() => void lijstActies.spam(b.id, b.map_id, mappen)}
+          >
             <ShieldAlert className="size-3.5" />
           </IcoonKnop>
         ))}
@@ -1880,7 +2075,10 @@ function Leesvenster({
           <Button
             size="icon"
             variant="outline"
-            className={cn("size-8 rounded-full", b.herinner_op && "border-tint-amber-ink/40 text-tint-amber-ink")}
+            className={cn(
+              "size-8 rounded-full",
+              b.herinner_op && "border-tint-amber-ink/40 text-tint-amber-ink",
+            )}
             aria-label={b.herinner_op ? `Herinnering ${toonMoment(b.herinner_op)}` : "Herinner me"}
             title={b.herinner_op ? `Herinnering ${toonMoment(b.herinner_op)}` : "Herinner me"}
             disabled={!kanSchrijven}
@@ -1894,7 +2092,11 @@ function Leesvenster({
         disabled={!kanSchrijven}
         onClick={() => void lijstActies.markeer(b.id, !b.gemarkeerd)}
       >
-        {b.gemarkeerd ? <FlagOff className="size-3.5 text-tint-rood-ink" /> : <Flag className="size-3.5" />}
+        {b.gemarkeerd ? (
+          <FlagOff className="size-3.5 text-tint-rood-ink" />
+        ) : (
+          <Flag className="size-3.5" />
+        )}
       </IcoonKnop>
       {b.gelezen && b.richting === "in" && (
         <Button
@@ -1924,10 +2126,14 @@ function Leesvenster({
           className="rounded-full"
           disabled={!kanSchrijven || bezigMet === b.id}
           onClick={() =>
-            void doe(b.id, () => zetTerug(b.id), () => {
-              toast.success("Teruggezet.");
-              onWeg(b.id);
-            })
+            void doe(
+              b.id,
+              () => zetTerug(b.id),
+              () => {
+                toast.success("Teruggezet.");
+                onWeg(b.id);
+              },
+            )
           }
         >
           <Undo2 className="size-3.5" /> Terugzetten
@@ -1939,24 +2145,30 @@ function Leesvenster({
           className="rounded-full text-muted-foreground hover:text-destructive"
           disabled={!kanSchrijven || bezigMet === b.id}
           onClick={() =>
-            void doe(b.id, () => gooiWeg(b.id), (uit) => {
-              onWeg(b.id);
-              // Gaf de server de nieuwe plek nog niet, dan kan terugzetten pas
-              // na de volgende ophaalronde. Dan ook geen knop die dat belooft.
-              if (!uit.verplaatst) {
-                toast.success("Naar de prullenbak.");
-                return;
-              }
-              toast.success("Naar de prullenbak.", {
-                action: {
-                  label: "Ongedaan maken",
-                  onClick: () =>
-                    void zetTerug(b.id)
-                      .then(ververs)
-                      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e))),
-                },
-              });
-            })
+            void doe(
+              b.id,
+              () => gooiWeg(b.id),
+              (uit) => {
+                onWeg(b.id);
+                // Gaf de server de nieuwe plek nog niet, dan kan terugzetten pas
+                // na de volgende ophaalronde. Dan ook geen knop die dat belooft.
+                if (!uit.verplaatst) {
+                  toast.success("Naar de prullenbak.");
+                  return;
+                }
+                toast.success("Naar de prullenbak.", {
+                  action: {
+                    label: "Ongedaan maken",
+                    onClick: () =>
+                      void zetTerug(b.id)
+                        .then(ververs)
+                        .catch((e: unknown) =>
+                          toast.error(e instanceof Error ? e.message : String(e)),
+                        ),
+                  },
+                });
+              },
+            )
           }
         >
           <Trash2 className="size-3.5" /> Weggooien
@@ -1970,7 +2182,13 @@ function Leesvenster({
       b={b}
       acties={acties}
       gesprek={<Gesprek berichtId={b.id} onOpen={onOpen} />}
-      paaltje={<PaaltjeKaart b={b} kanSchrijven={kanSchrijven} onBeantwoord={(begin) => onBeantwoord(b, begin)} />}
+      paaltje={
+        <PaaltjeKaart
+          b={b}
+          kanSchrijven={kanSchrijven}
+          onBeantwoord={(begin) => onBeantwoord(b, begin)}
+        />
+      }
       klant={<KlantKaart b={b} kanSchrijven={kanSchrijven} />}
       onTerug={onTerug}
     />
@@ -2061,12 +2279,20 @@ function Mailweergave({
             </p>
             {naar && <p className="truncate text-muted-foreground">Aan: {naar}</p>}
           </div>
-          <span className="hidden shrink-0 text-[12px] text-muted-foreground sm:block">{datum}</span>
+          <span className="hidden shrink-0 text-[12px] text-muted-foreground sm:block">
+            {datum}
+          </span>
         </div>
         {b.bijlagen.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {b.bijlagen.map((a, i) => (
-              <BijlageKnop key={`${a.naam}-${i}`} berichtId={b.id} index={i} naam={a.naam} grootte={a.grootte} />
+              <BijlageKnop
+                key={`${a.naam}-${i}`}
+                berichtId={b.id}
+                index={i}
+                naam={a.naam}
+                grootte={a.grootte}
+              />
             ))}
           </div>
         )}
@@ -2087,7 +2313,9 @@ function Mailweergave({
             <MailHtml html={b.html} meegroeien />
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 max-lg:overflow-visible max-lg:px-4">
-              <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed">{b.tekst}</p>
+              <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed">
+                {b.tekst}
+              </p>
             </div>
           )}
         </div>
@@ -2124,9 +2352,14 @@ function BijlageKnop({
       const url = URL.createObjectURL(b.blob);
       // Alleen typen die geen script kunnen draaien. Een SVG ("image/svg+xml")
       // of html zou in een eigen tabblad als Wooshy zelf meedoen: die downloaden.
-      const bekijkbaar = ["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "text/plain"].includes(
-        b.type.toLowerCase(),
-      );
+      const bekijkbaar = [
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+        "text/plain",
+      ].includes(b.type.toLowerCase());
       if (bekijkbaar && venster) {
         venster.location.href = url;
       } else {
@@ -2152,7 +2385,11 @@ function BijlageKnop({
       title="Openen"
       className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-[12px] hover:border-ring disabled:opacity-60"
     >
-      {bezig ? <Loader2 className="size-3 animate-spin" /> : <Paperclip className="size-3 text-muted-foreground" />}
+      {bezig ? (
+        <Loader2 className="size-3 animate-spin" />
+      ) : (
+        <Paperclip className="size-3 text-muted-foreground" />
+      )}
       <span className="max-w-[180px] truncate">{naam}</span>
       <span className="text-muted-foreground">{grootte(bytes)}</span>
     </button>
@@ -2178,13 +2415,23 @@ function grootte(bytes: number): string {
  * zelf mogen niet (de CSP laat alleen het script met de juiste nonce toe), en
  * het kader blijft afgesloten van de app (geen allow-same-origin).
  */
-export function MailHtml({ html, className, meegroeien }: { html: string; className?: string; meegroeien?: boolean }) {
+export function MailHtml({
+  html,
+  className,
+  meegroeien,
+}: {
+  html: string;
+  className?: string;
+  meegroeien?: boolean;
+}) {
   const kader = useRef<HTMLIFrameElement>(null);
   const [hoogte, setHoogte] = useState<number | null>(null);
   const doc = useMemo(() => {
     // getRandomValues werkt ook via gewoon http (dev-server op de telefoon).
     const nonce = meegroeien
-      ? Array.from(crypto.getRandomValues(new Uint8Array(16)), (x) => x.toString(16).padStart(2, "0")).join("")
+      ? Array.from(crypto.getRandomValues(new Uint8Array(16)), (x) =>
+          x.toString(16).padStart(2, "0"),
+        ).join("")
       : "";
     // De hoogte van de inhoud zelf, niet van het venster: zo kan het kader ook
     // weer krimpen. Alleen opnieuw meten als de breedte verandert; een mail met
@@ -2221,9 +2468,15 @@ export function MailHtml({ html, className, meegroeien }: { html: string; classN
       ref={kader}
       title="Inhoud van de mail"
       srcDoc={doc}
-      sandbox={meegroeien ? "allow-scripts allow-popups allow-popups-to-escape-sandbox" : "allow-popups allow-popups-to-escape-sandbox"}
+      sandbox={
+        meegroeien
+          ? "allow-scripts allow-popups allow-popups-to-escape-sandbox"
+          : "allow-popups allow-popups-to-escape-sandbox"
+      }
       referrerPolicy="no-referrer"
-      style={meegroeien ? ({ "--mail-hoogte": `${hoogte ?? 320}px` } as React.CSSProperties) : undefined}
+      style={
+        meegroeien ? ({ "--mail-hoogte": `${hoogte ?? 320}px` } as React.CSSProperties) : undefined
+      }
       className={cn(
         "min-h-0 w-full flex-1 bg-white",
         meegroeien && "max-lg:h-[var(--mail-hoogte)] max-lg:flex-none",

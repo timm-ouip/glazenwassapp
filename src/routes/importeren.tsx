@@ -272,9 +272,9 @@ function leesTabblad(
     if (wordt === "straat" && m && Number(m[1]) === tabIndex) aangewezen.add(Number(m[3]));
   }
   // Terugval: geen kleuren gevonden → eerste kolom met tekst + nummers
-  const kolommen = [
-    ...new Set([...(grijsBekend ? kopKolommen : [range.s.c]), ...aangewezen]),
-  ].sort((a, b) => a - b);
+  const kolommen = [...new Set([...(grijsBekend ? kopKolommen : [range.s.c]), ...aangewezen])].sort(
+    (a, b) => a - b,
+  );
 
   const rijen: RijPreview[] = [];
   const bronnen: Record<string, Bron> = {};
@@ -691,7 +691,10 @@ function ImportPagina() {
   const samengevoegd = useMemo(() => lijst.filter(uitTweeMaanden).length, [lijst]);
 
   const nakijken = useMemo(
-    () => nakijkpunten(lijst, officieel, kaarten).filter((p) => !nietMelden.has(`${p.rijId}|${p.reden}`)),
+    () =>
+      nakijkpunten(lijst, officieel, kaarten).filter(
+        (p) => !nietMelden.has(`${p.rijId}|${p.reden}`),
+      ),
     [lijst, officieel, kaarten, nietMelden],
   );
   const nakijkRijen = useMemo(() => new Set(nakijken.map((p) => p.rijId)), [nakijken]);
@@ -945,7 +948,10 @@ function ImportPagina() {
       .map((c) => c.tekst);
     const opTeZoeken = [
       ...new Map(
-        [...[...perStraat.values()].map((s) => s.naam), ...misschien].map((n) => [straatSleutel(n), n]),
+        [...[...perStraat.values()].map((s) => s.naam), ...misschien].map((n) => [
+          straatSleutel(n),
+          n,
+        ]),
       ).values(),
     ];
 
@@ -958,7 +964,8 @@ function ImportPagina() {
       });
       if (!actueel()) return;
       opties = uitkomst.opties;
-      if (uitkomst.afgebroken) fout = "Het adressenregister deed niet mee; de straatnamen kun je later nog opzoeken.";
+      if (uitkomst.afgebroken)
+        fout = "Het adressenregister deed niet mee; de straatnamen kun je later nog opzoeken.";
     }
     const registerNu: Record<string, string[]> = {};
     for (const [naam, lijst] of opties) registerNu[straatSleutel(naam)] = lijst;
@@ -995,7 +1002,17 @@ function ImportPagina() {
         const k = kandidaatVan.get(c.id);
         if (!k) continue;
         if (c.zeker) nieuweKeuze[c.id] = c.wordt;
-        nieuw.push({ id: `cel-${c.id}`, soort: "cel", celId: c.id, tekst: k.tekst, wordt: c.wordt, bron: k.bron, zeker: c.zeker, reden: c.reden, toegepast: c.zeker });
+        nieuw.push({
+          id: `cel-${c.id}`,
+          soort: "cel",
+          celId: c.id,
+          tekst: k.tekst,
+          wordt: c.wordt,
+          bron: k.bron,
+          zeker: c.zeker,
+          reden: c.reden,
+          toegepast: c.zeker,
+        });
       }
       antwoord.zelfde_straat.forEach((g, i) => {
         if (g.zeker) {
@@ -1003,7 +1020,15 @@ function ImportPagina() {
             if (straatSleutel(n) !== straatSleutel(g.naam)) nieuwVervang[straatSleutel(n)] = g.naam;
           }
         }
-        nieuw.push({ id: `zelfde-${i}`, soort: "zelfde", namen: g.namen, naam: g.naam, zeker: g.zeker, reden: g.reden, toegepast: g.zeker });
+        nieuw.push({
+          id: `zelfde-${i}`,
+          soort: "zelfde",
+          namen: g.namen,
+          naam: g.naam,
+          zeker: g.zeker,
+          reden: g.reden,
+          toegepast: g.zeker,
+        });
       });
       antwoord.officieel.forEach((o, i) => {
         const k = straatSleutel(o.straat);
@@ -1012,7 +1037,15 @@ function ImportPagina() {
         else delete officieelNu[k];
         // "Zwaanwijck heet officieel Zwaanwijck" is geen nieuws.
         if (o.zeker && straatSleutel(o.naam) === k) return;
-        nieuw.push({ id: `officieel-${i}`, soort: "officieel", straat: o.straat, naam: o.naam, zeker: o.zeker, reden: o.reden, toegepast: o.zeker });
+        nieuw.push({
+          id: `officieel-${i}`,
+          soort: "officieel",
+          straat: o.straat,
+          naam: o.naam,
+          zeker: o.zeker,
+          reden: o.reden,
+          toegepast: o.zeker,
+        });
       });
     } catch (e) {
       if (!actueel()) return;
@@ -1034,7 +1067,13 @@ function ImportPagina() {
     setVoorstellen(nieuw);
 
     // Tot slot de huisnummers: welke bestaan er, en met welke postcode.
-    const namen = [...new Set(Object.values(officieelNu).map((o) => o.naam).filter(Boolean))];
+    const namen = [
+      ...new Set(
+        Object.values(officieelNu)
+          .map((o) => o.naam)
+          .filter(Boolean),
+      ),
+    ];
     if (plaatsNu && namen.length > 0) {
       setMeekijk({ stap: "huisnummers", gedaan: 0, totaal: namen.length, fout });
       const uitkomst = await zoekHuisnummers(namen, plaatsNu, (gedaan, totaal) => {
@@ -1265,10 +1304,12 @@ function ImportPagina() {
             .order("id")
             .range(van, tot),
         );
-        for (const c of al) bestaat.set(adresSleutel(c.street_id, c.house_number, c.addition), c.id);
+        for (const c of al)
+          bestaat.set(adresSleutel(c.street_id, c.house_number, c.addition), c.id);
       }
       const nieuwInLijst = lijst.filter(
-        (r) => !bestaat.has(adresSleutel(map.get(straatSleutel(r.straat))!, r.huisnummer, r.toevoeging)),
+        (r) =>
+          !bestaat.has(adresSleutel(map.get(straatSleutel(r.straat))!, r.huisnummer, r.toevoeging)),
       );
       const overgeslagen = lijst.length - nieuwInLijst.length;
 
@@ -1300,7 +1341,10 @@ function ImportPagina() {
       const sleutelVan = (straat: string, nummer: number, toevoeging: string | null) =>
         `${straat}|${nummer}|${(toevoeging ?? "").trim().toLowerCase()}`;
       const prijsVan = new Map(
-        lijst.map((r) => [sleutelVan(map.get(straatSleutel(r.straat))!, r.huisnummer, r.toevoeging), r.prijs]),
+        lijst.map((r) => [
+          sleutelVan(map.get(straatSleutel(r.straat))!, r.huisnummer, r.toevoeging),
+          r.prijs,
+        ]),
       );
       const prijzen = (ingevoegd ?? []).map((c) => ({
         customer_id: c.id,
@@ -1650,7 +1694,9 @@ function ImportPagina() {
                     <tr
                       key={r.id}
                       className={nakijkRijen.has(r.id) ? "bg-tint-roze/60" : undefined}
-                      title={nakijkRijen.has(r.id) ? "Kijk dit adres even na, zie hierboven" : undefined}
+                      title={
+                        nakijkRijen.has(r.id) ? "Kijk dit adres even na, zie hierboven" : undefined
+                      }
                     >
                       <td className="px-2 py-1">
                         <InlineCel
@@ -1956,7 +2002,9 @@ function PaaltjePaneel({
           <div className="divide-y divide-border rounded-[14px] ring-1 ring-inset ring-border">
             {straten.map((s) => {
               const auto = s.gekozen && s.gekozen.hoe !== "jij" && s.gekozen.naam;
-              const opties = [...new Set([...s.opties, ...(s.gekozen?.naam ? [s.gekozen.naam] : [])])];
+              const opties = [
+                ...new Set([...s.opties, ...(s.gekozen?.naam ? [s.gekozen.naam] : [])]),
+              ];
               return (
                 <div
                   key={s.sleutel}
@@ -2156,43 +2204,43 @@ function BronVenster({
           }`}
         />
         <PopupBody>
-        {bruikbaar.length > 1 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant={naast ? "default" : "outline"}
-              onClick={() => setNaast(true)}
-            >
-              Naast elkaar
-            </Button>
-            {bruikbaar.map((b, i) => (
+          {bruikbaar.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2">
               <Button
-                key={b.tabblad}
                 size="sm"
-                variant={!naast && i === index ? "default" : "outline"}
-                onClick={() => {
-                  setNaast(false);
-                  setActief(i);
-                }}
+                variant={naast ? "default" : "outline"}
+                onClick={() => setNaast(true)}
               >
-                {b.tabblad}
+                Naast elkaar
               </Button>
-            ))}
-          </div>
-        )}
-
-        <div className="flex gap-3 overflow-x-auto">
-          {(bruikbaar.length > 1 && naast ? bruikbaar : bruikbaar.slice(index, index + 1)).map(
-            (b) => (
-              <BronRaster key={b.tabblad} bron={b} grid={grids[b.tabblad]!} />
-            ),
+              {bruikbaar.map((b, i) => (
+                <Button
+                  key={b.tabblad}
+                  size="sm"
+                  variant={!naast && i === index ? "default" : "outline"}
+                  onClick={() => {
+                    setNaast(false);
+                    setActief(i);
+                  }}
+                >
+                  {b.tabblad}
+                </Button>
+              ))}
+            </div>
           )}
-        </div>
 
-        <PopupHint>
-          Zo staat het in je Excel-bestand, met de originele kleuren. Het oranje omlijnde vakje is
-          wat de app heeft ingelezen.
-        </PopupHint>
+          <div className="flex gap-3 overflow-x-auto">
+            {(bruikbaar.length > 1 && naast ? bruikbaar : bruikbaar.slice(index, index + 1)).map(
+              (b) => (
+                <BronRaster key={b.tabblad} bron={b} grid={grids[b.tabblad]!} />
+              ),
+            )}
+          </div>
+
+          <PopupHint>
+            Zo staat het in je Excel-bestand, met de originele kleuren. Het oranje omlijnde vakje is
+            wat de app heeft ingelezen.
+          </PopupHint>
         </PopupBody>
       </PopupKader>
     </Dialog>

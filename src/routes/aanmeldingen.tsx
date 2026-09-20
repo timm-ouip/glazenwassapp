@@ -344,7 +344,10 @@ function AutomatischKaart({
             className="rounded-full text-tint-amber-ink hover:bg-card/60"
             disabled={bezig}
             onClick={() =>
-              void doe(() => aanmeldingTerugdraaien(aanmelding.id), "Teruggedraaid: het adres is weer leeg.")
+              void doe(
+                () => aanmeldingTerugdraaien(aanmelding.id),
+                "Teruggedraaid: het adres is weer leeg.",
+              )
             }
           >
             <Undo2 className="size-4" /> Ongedaan maken

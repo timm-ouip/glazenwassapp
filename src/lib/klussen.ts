@@ -20,6 +20,14 @@ export interface Klus {
   gepland_op: string | null;
   /** De dag waarop je hem afvinkte; leeg is: nog te doen. */
   gedaan_op: string | null;
+  /** Hoe lang hij duurt, in minuten voor één persoon; leeg = nog niet ingevuld. */
+  duur_min?: number | null;
+  /** Zelf ingevuld? Dan laat een nieuw uurtarief hem met rust. */
+  duur_zelf?: boolean;
+  /** Bij welke ploeg van die dag hij hoort, en waar in de rij. */
+  ploeg_nr?: number | null;
+  volgorde?: number | null;
+  vaste_start?: string | null;
 }
 
 /**
@@ -56,7 +64,8 @@ export function blijvenLiggen(k: Klus, nu = vandaag()): boolean {
   return !k.gedaan_op && !!k.gepland_op && k.gepland_op < nu;
 }
 
-const VELDEN = "id,customer_id,omschrijving,gepland_op,gedaan_op,klus_prijzen(prijs)";
+const VELDEN =
+  "id,customer_id,omschrijving,gepland_op,gedaan_op,duur_min,duur_zelf,ploeg_nr,volgorde,vaste_start,klus_prijzen(prijs)";
 
 /**
  * Alles wat openstaat, plus wat er al afgevinkt is binnen een periode — dat
@@ -81,10 +90,16 @@ export async function fetchKlussen(vanaf?: string, tot?: string): Promise<Klus[]
   const uit: Klus[] = [];
   for (const { data, error } of uitkomsten) {
     if (error) throw error;
-    for (const rij of (data ?? []) as unknown as (Omit<Klus, "prijs"> & { klus_prijzen: { prijs: number } | { prijs: number }[] | null })[]) {
+    for (const rij of (data ?? []) as unknown as (Omit<Klus, "prijs"> & {
+      klus_prijzen: { prijs: number } | { prijs: number }[] | null;
+    })[]) {
       // Het bedrag staat in klus_prijzen; zonder het recht "prijzen zien" is dat 0.
       const { klus_prijzen, ...rest } = rij;
-      uit.push({ ...rest, prijs: Number(eenVan(klus_prijzen)?.prijs ?? 0) });
+      uit.push({
+        ...rest,
+        prijs: Number(eenVan(klus_prijzen)?.prijs ?? 0),
+        vaste_start: rest.vaste_start ? rest.vaste_start.slice(0, 5) : null,
+      });
     }
   }
   return uit;
@@ -103,14 +118,29 @@ export async function nieuweKlus(
   if (error) throw error;
   const id = (data as { id: string }).id;
   // De database zette de prijs op 0; wie prijzen mag zien, zet hier het bedrag.
-  const { error: prijsFout } = await supabase.from("klus_prijzen").upsert({ klus_id: id, prijs }, { onConflict: "klus_id" });
+  const { error: prijsFout } = await supabase
+    .from("klus_prijzen")
+    .upsert({ klus_id: id, prijs }, { onConflict: "klus_id" });
   if (prijsFout && prijsFout.code !== "42501") throw prijsFout;
   return id;
 }
 
 export async function patchKlus(
   id: string,
-  patch: Partial<Pick<Klus, "omschrijving" | "prijs" | "gepland_op" | "gedaan_op">>,
+  patch: Partial<
+    Pick<
+      Klus,
+      | "omschrijving"
+      | "prijs"
+      | "gepland_op"
+      | "gedaan_op"
+      | "duur_min"
+      | "duur_zelf"
+      | "ploeg_nr"
+      | "volgorde"
+      | "vaste_start"
+    >
+  >,
 ) {
   const { prijs, ...rest } = patch;
   if (Object.keys(rest).length > 0) {
@@ -118,14 +148,23 @@ export async function patchKlus(
     if (error) throw error;
   }
   if (prijs !== undefined) {
-    const { error } = await supabase.from("klus_prijzen").upsert({ klus_id: id, prijs }, { onConflict: "klus_id" });
+    const { error } = await supabase
+      .from("klus_prijzen")
+      .upsert({ klus_id: id, prijs }, { onConflict: "klus_id" });
     if (error) throw error;
   }
 }
 
 /** Op een dag zetten, of er met `null` weer af halen. */
-export async function zetKlusOpDag(id: string, datum: string | null) {
-  await patchKlus(id, { gepland_op: datum });
+export async function zetKlusOpDag(id: string, datum: string | null, ploegNr?: number | null) {
+  // De ploeg en de volgorde horen bij de dag waar hij vandaan komt: op een
+  // andere dag bestaat die ploeg misschien niet eens.
+  await patchKlus(id, {
+    gepland_op: datum,
+    ploeg_nr: ploegNr ?? null,
+    volgorde: null,
+    vaste_start: null,
+  });
 }
 
 /**

@@ -49,8 +49,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WhatsAppGesprekken } from "@/components/whatsapp/WhatsAppGesprekken";
 import { datumVoluit, fetchSjablonen, fetchWhatsAppKoppeling } from "@/lib/whatsapp";
-import { toonMaand } from "@/lib/klanten";
-import { datumSleutel, fetchWasdagen, toonDatum, vandaag } from "@/lib/wasdag";
+import { fetchCustomersMetInactief, fetchDistricts, fetchStreets, toonMaand } from "@/lib/klanten";
+import { datumSleutel, fetchWasdag, fetchWasdagen, toonDatum, vandaag } from "@/lib/wasdag";
+import { fetchKlussen } from "@/lib/klussen";
+import { fetchDagPloegen } from "@/lib/ploegen";
+import { usePlanningInstellingen } from "@/lib/planninginstellingen";
+import { klussenVanDag, maakBouwstenen, maandVan, tijdvakkenVoorDag } from "@/lib/dagbouwstenen";
+import { fetchSjablonen as fetchBerichtSjablonen, standaardVan } from "@/lib/sjablonen";
 import {
   bewaarAfzender,
   controleerVerbinding,
@@ -202,26 +207,28 @@ function Mailing() {
           <>
             <div className="mb-3 flex items-center gap-2">
               {toonGesprekken ? (
-              <div className="flex flex-1 rounded-full bg-card p-[3px] shadow-card">
-                {(
-                  [
-                    ["gesprekken", Messages, "Gesprekken"],
-                    ["postvak", Inbox, "Postvak"],
-                  ] as const
-                ).map(([w, Icoon, label]) => (
-                  <button
-                    key={w}
-                    type="button"
-                    onClick={() => kiesWeergave(w)}
-                    aria-pressed={weergave === w}
-                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-[14px] ${
-                      weergave === w ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground"
-                    }`}
-                  >
-                    <Icoon className="size-4" /> {label}
-                  </button>
-                ))}
-              </div>
+                <div className="flex flex-1 rounded-full bg-card p-[3px] shadow-card">
+                  {(
+                    [
+                      ["gesprekken", Messages, "Gesprekken"],
+                      ["postvak", Inbox, "Postvak"],
+                    ] as const
+                  ).map(([w, Icoon, label]) => (
+                    <button
+                      key={w}
+                      type="button"
+                      onClick={() => kiesWeergave(w)}
+                      aria-pressed={weergave === w}
+                      className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-[14px] ${
+                        weergave === w
+                          ? "bg-primary font-medium text-primary-foreground"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      <Icoon className="size-4" /> {label}
+                    </button>
+                  ))}
+                </div>
               ) : (
                 <div className="flex-1" />
               )}
@@ -337,6 +344,27 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
   const [datum, setDatum] = useState(beginDag ?? vandaag());
   const [onderwerp, setOnderwerp] = useState("Morgen wassen wij uw ramen");
   const [tekst, setTekst] = useState(VOORBEELDTEKST);
+  /** Welk sjabloon je gekozen hebt; leeg tot ze geladen zijn. */
+  const [berichtSjabloon, setBerichtSjabloon] = useState("");
+  const berichtSjablonen = useQuery({
+    queryKey: ["bericht-sjablonen"],
+    queryFn: fetchBerichtSjablonen,
+  });
+  const aankondigingen = useMemo(
+    () => (berichtSjablonen.data ?? []).filter((x) => x.soort === "aankondiging"),
+    [berichtSjablonen.data],
+  );
+  // De standaardtekst staat er meteen in; kies je een ander sjabloon, dan
+  // vervangt dat wat je nog niet zelf hebt aangepast.
+  const [zelfGetypt, setZelfGetypt] = useState(false);
+  useEffect(() => {
+    if (zelfGetypt || aankondigingen.length === 0) return;
+    const standaard = standaardVan(berichtSjablonen.data ?? [], "aankondiging");
+    if (!standaard) return;
+    setBerichtSjabloon(standaard.id);
+    setOnderwerp(standaard.onderwerp || "Morgen wassen wij uw ramen");
+    setTekst(standaard.tekst);
+  }, [aankondigingen.length, berichtSjablonen.data, zelfGetypt]);
   const [bezig, setBezig] = useState(false);
   const { employee: ik } = useAuth();
   // WhatsApp erbij, als het gekoppeld is.
@@ -349,6 +377,78 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
     queryFn: fetchSjablonen,
     enabled: waAan,
   });
+
+  // Het tijdvak dat grote panden beloofd krijgen: alleen als die instelling
+  // aanstaat, en met dezelfde rekenkern als de dagweergave.
+  const planInstellingen = usePlanningInstellingen();
+  const metTijdvak = planInstellingen.tijdlijn && planInstellingen.tijdvakMailen;
+  const adressenVoorTijd = useQuery({
+    queryKey: ["customers", "met-inactief"],
+    queryFn: fetchCustomersMetInactief,
+    enabled: metTijdvak,
+  });
+  const stratenVoorTijd = useQuery({
+    queryKey: ["streets"],
+    queryFn: fetchStreets,
+    enabled: metTijdvak,
+  });
+  const wijkenVoorTijd = useQuery({
+    queryKey: ["districts"],
+    queryFn: fetchDistricts,
+    enabled: metTijdvak,
+  });
+  const wasdagVoorTijd = useQuery({
+    queryKey: ["wasdag", datum],
+    queryFn: () => fetchWasdag(datum),
+    enabled: metTijdvak,
+  });
+  const klussenVoorTijd = useQuery({
+    queryKey: ["klussen", datum, datum],
+    queryFn: () => fetchKlussen(datum, datum),
+    enabled: metTijdvak,
+  });
+  const ploegenVoorTijd = useQuery({
+    queryKey: ["dag-ploegen", datum, datum],
+    queryFn: () => fetchDagPloegen(datum, datum),
+    enabled: metTijdvak,
+  });
+
+  const tijdvakken = useMemo(() => {
+    if (!metTijdvak) return {};
+    const bouwstenen = maakBouwstenen(
+      adressenVoorTijd.data ?? [],
+      stratenVoorTijd.data ?? [],
+      wijkenVoorTijd.data ?? [],
+      maandVan(datum),
+      planInstellingen,
+    );
+    const regels = (wasdagVoorTijd.data ?? [])
+      .filter((r) => r.customer_id)
+      .map((r) => ({
+        customer_id: r.customer_id!,
+        ploeg_nr: r.ploeg_nr ?? null,
+        volgorde: r.volgorde ?? null,
+        rest: r.rest ?? false,
+        vaste_start: r.vaste_start ?? null,
+      }));
+    return tijdvakkenVoorDag(
+      regels,
+      klussenVanDag(klussenVoorTijd.data ?? [], datum),
+      bouwstenen,
+      ploegenVoorTijd.data?.get(datum) ?? [],
+      planInstellingen,
+    );
+  }, [
+    metTijdvak,
+    adressenVoorTijd.data,
+    stratenVoorTijd.data,
+    wijkenVoorTijd.data,
+    wasdagVoorTijd.data,
+    klussenVoorTijd.data,
+    ploegenVoorTijd.data,
+    datum,
+    planInstellingen,
+  ]);
   const goedgekeurd = (sjablonen.data ?? []).filter((x) => x.status === "goedgekeurd");
   const [sjabloonId, setSjabloonId] = useState("");
   const sjabloon = goedgekeurd.find((x) => x.id === sjabloonId) ?? null;
@@ -439,6 +539,7 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
           ? { proefTelefoon: proefTelefoon.trim() }
           : {}),
         ...(toch ? { toch: true } : {}),
+        ...(Object.keys(tijdvakken).length > 0 ? { tijdvakken } : {}),
       });
       const samen = [
         uit.verstuurd > 0 ? `${uit.verstuurd} ${uit.verstuurd === 1 ? "mail" : "mails"}` : "",
@@ -472,9 +573,12 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
       }
       const tekst = e instanceof Error ? e.message : String(e);
       // "Misschien toch verstuurd" is geen mislukking; dan niet zo noemen.
-      toast.error(tekst.includes("misschien toch verstuurd") ? tekst : "Versturen mislukte: " + tekst, {
-        duration: 15000,
-      });
+      toast.error(
+        tekst.includes("misschien toch verstuurd") ? tekst : "Versturen mislukte: " + tekst,
+        {
+          duration: 15000,
+        },
+      );
     } finally {
       setBezig(false);
     }
@@ -587,10 +691,45 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
 
         {metMail && (
           <Kaart titel="Het bericht">
+            {aankondigingen.length > 1 && (
+              <>
+                <label
+                  htmlFor="sjabloonkeuze"
+                  className="block text-[12px] font-medium text-muted-foreground"
+                >
+                  Sjabloon
+                </label>
+                <select
+                  id="sjabloonkeuze"
+                  value={berichtSjabloon}
+                  className="mt-1 mb-3 h-9 w-full rounded-[10px] border border-border bg-card px-2.5 text-sm"
+                  onChange={(e) => {
+                    const gekozen = aankondigingen.find((x) => x.id === e.target.value);
+                    if (!gekozen) return;
+                    setBerichtSjabloon(gekozen.id);
+                    setOnderwerp(gekozen.onderwerp);
+                    setTekst(gekozen.tekst);
+                    // Een gekozen sjabloon telt niet als zelf getypt: kies je
+                    // er zo nog een, dan wisselt hij gewoon mee.
+                    setZelfGetypt(false);
+                  }}
+                >
+                  {aankondigingen.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.naam}
+                      {x.standaard ? " (standaard)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
             <label className="block text-[12px] font-medium text-muted-foreground">Onderwerp</label>
             <Input
               value={onderwerp}
-              onChange={(e) => setOnderwerp(e.target.value)}
+              onChange={(e) => {
+                setOnderwerp(e.target.value);
+                setZelfGetypt(true);
+              }}
               maxLength={200}
               className="mt-1"
             />
@@ -599,7 +738,10 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
             </label>
             <Textarea
               value={tekst}
-              onChange={(e) => setTekst(e.target.value)}
+              onChange={(e) => {
+                setTekst(e.target.value);
+                setZelfGetypt(true);
+              }}
               rows={14}
               className="mt-1 font-[inherit] text-[13.5px] leading-relaxed"
             />

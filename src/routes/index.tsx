@@ -111,14 +111,9 @@ import { DubbeleStraten } from "@/components/DubbeleStraten";
 
 import { WijkKiezer } from "@/components/WijkKiezer";
 import { useBevestig } from "@/components/Bevestig";
+import { DuurCel } from "@/components/DuurCel";
 import { InlineCel } from "@/components/InlineCel";
-import {
-  laatsteUndo,
-  pushUndo,
-  undoKnop,
-  undoMetMelding,
-  useLaatsteUndoLabel,
-} from "@/lib/undo";
+import { laatsteUndo, pushUndo, undoKnop, undoMetMelding, useLaatsteUndoLabel } from "@/lib/undo";
 import { OverslaanKnop } from "@/components/OverslaanKnop";
 import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
 import { NotitieCel } from "@/components/NotitieCel";
@@ -301,6 +296,9 @@ function Index() {
   const ronde = isKalendermaand(filter) ? filter : maandSleutel(new Date());
   const [zoektermen, setZoektermen] = useState<string[]>([]);
   const [prijzenTonen, setPrijzenTonen] = useState(true);
+  // Standaard uit: de kolom kost ruimte van de notitie, en je zet hem aan
+  // als je met de planning bezig bent.
+  const [duurTonen, setDuurTonen] = useState(false);
   // Wat je ziet en wat je mag, per recht. De database dwingt het af; dit
   // zorgt dat er geen velden of knoppen staan die toch niets opslaan.
   const prijzenZien = useRecht("prijzen_zien");
@@ -1802,7 +1800,9 @@ function Index() {
           // met de straat mee (cascade). Dan naar de prullenbak, terug te halen.
           if (!(await gooiLegeStraatWeg(nieuwId))) {
             await legWeg("streets", [nieuwId]);
-            toast(`"${naam.trim()}" had al adressen: de straat staat met die adressen in de prullenbak.`);
+            toast(
+              `"${naam.trim()}" had al adressen: de straat staat met die adressen in de prullenbak.`,
+            );
           }
           herlaad();
         },
@@ -2313,6 +2313,7 @@ function Index() {
       totaal={g.totaal}
       sort={g.street.sort_desc ? "desc" : "asc"}
       prijzenTonen={toonPrijzen}
+      duurTonen={duurTonen}
       magKlanten={magKlanten}
       magPlannen={magPlannen}
       quickNotes={quickNotes}
@@ -2493,6 +2494,8 @@ function Index() {
                 prijzenZien={prijzenZien}
                 prijzenTonen={prijzenTonen}
                 onPrijzenTonen={setPrijzenTonen}
+                duurTonen={duurTonen}
+                onDuurTonen={setDuurTonen}
                 undoLabel={undoLabel}
                 onUndo={() => void doeUndo()}
                 printSearch={{
@@ -2610,6 +2613,12 @@ function Index() {
               </Label>
             </div>
           )}
+          <div className="hidden items-center gap-2 md:flex">
+            <Switch id="duur" checked={duurTonen} onCheckedChange={setDuurTonen} />
+            <Label htmlFor="duur" className="text-sm text-muted-foreground">
+              Duur
+            </Label>
+          </div>
         </div>
 
         {selectie.length > 1 && (
@@ -2676,6 +2685,7 @@ function Index() {
                   klantIds={sec.klantIds}
                   ingeklapt={!zoekt && ingeklapt.has(groepSleutel(sec.groep.id))}
                   prijzenTonen={toonPrijzen}
+                  duurTonen={duurTonen}
                   magPlannen={magPlannen}
                   planmodus={selecteren}
                   dagKlaar={dagKlaar}
@@ -2918,6 +2928,7 @@ interface SectieProps {
   totaal: number;
   ingeklapt: boolean;
   prijzenTonen: boolean;
+  duurTonen: boolean;
   /** Zonder planning: alleen kijken, niets verslepen, hernoemen of weggooien. */
   magPlannen: boolean;
   planmodus: boolean;
@@ -3130,6 +3141,7 @@ interface BlokProps {
   totaal: number;
   sort: "asc" | "desc";
   prijzenTonen: boolean;
+  duurTonen: boolean;
   /** Adressen toevoegen, stoppen en weggooien; huisnummer en prijs wijzigen. */
   magKlanten: boolean;
   /** Kleur, overslaan, notitie, frequentie en volgorde bijwerken. */
@@ -3573,6 +3585,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
               <span className="w-11">nr</span>
               <span className="min-w-0 flex-1 truncate">notitie</span>
               {p.prijzenTonen && <span className="w-12 text-right">prijs</span>}
+              {p.duurTonen && <span className="w-12 text-right">duur</span>}
               <span className="min-w-[3.25rem] max-w-[5.5rem] pl-1 text-center">freq.</span>
               <span className="w-4" />
             </div>
@@ -3625,6 +3638,7 @@ const StraatKolom = memo(function StraatKolom({
             key={c.id}
             customer={c}
             prijzenTonen={p.prijzenTonen}
+            duurTonen={p.duurTonen}
             magKlanten={p.magKlanten}
             magPlannen={p.magPlannen}
             quickNotes={p.quickNotes}
@@ -3662,6 +3676,7 @@ const StraatKolom = memo(function StraatKolom({
 interface RijProps {
   customer: Customer;
   prijzenTonen: boolean;
+  duurTonen: boolean;
   magKlanten: boolean;
   magPlannen: boolean;
   quickNotes: QuickNote[];
@@ -3867,6 +3882,7 @@ type InhoudProps = Pick<
   RijProps,
   | "customer"
   | "prijzenTonen"
+  | "duurTonen"
   | "magKlanten"
   | "magPlannen"
   | "quickNotes"
@@ -3886,6 +3902,7 @@ type InhoudProps = Pick<
 const KlantRijInhoud = memo(function KlantRijInhoud({
   customer: c,
   prijzenTonen,
+  duurTonen,
   magKlanten,
   magPlannen,
   quickNotes,
@@ -3979,6 +3996,16 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
             ronde={dezeMaand}
             onPatch={(patch) => onPatch(c, patch)}
             alleenLezen={!magKlanten}
+          />
+        </div>
+      )}
+      {duurTonen && (
+        <div className="w-12 shrink-0">
+          <DuurCel
+            customer={c}
+            ronde={dezeMaand}
+            onPatch={(patch) => onPatch(c, patch)}
+            alleenLezen={!magKlanten && !magPlannen}
           />
         </div>
       )}
@@ -4136,6 +4163,7 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
         <KlantRijInhoud
           customer={c}
           prijzenTonen={p.prijzenTonen}
+          duurTonen={p.duurTonen}
           magKlanten={p.magKlanten}
           magPlannen={p.magPlannen}
           quickNotes={p.quickNotes}
@@ -4227,6 +4255,8 @@ function MeerKnoppen({
   prijzenZien,
   prijzenTonen,
   onPrijzenTonen,
+  duurTonen,
+  onDuurTonen,
   undoLabel,
   onUndo,
   printSearch,
@@ -4239,6 +4269,8 @@ function MeerKnoppen({
   prijzenZien: boolean;
   prijzenTonen: boolean;
   onPrijzenTonen: (aan: boolean) => void;
+  duurTonen: boolean;
+  onDuurTonen: (aan: boolean) => void;
   undoLabel: string | null;
   onUndo: () => void;
   printSearch: { wijk: string; maand: string; prijzen: boolean; liggend: boolean };
@@ -4268,6 +4300,9 @@ function MeerKnoppen({
             Prijzen tonen
           </DropdownMenuCheckboxItem>
         )}
+        <DropdownMenuCheckboxItem checked={duurTonen} onCheckedChange={onDuurTonen}>
+          Duur tonen
+        </DropdownMenuCheckboxItem>
         <DropdownMenuItem disabled={!undoLabel} onSelect={onUndo}>
           <Undo2 className="size-4" />
           <span className="truncate">

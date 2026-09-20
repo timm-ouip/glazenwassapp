@@ -156,7 +156,9 @@ async function zoekAdresRegel(
       .from("customers")
       // Alleen adressen in een straat en wijk die er nog zijn: de adressen van
       // een weggegooide wijk blijven zelf staan en telden anders nog mee.
-      .select("id,house_number,addition,postcode,klant_id,aangemeld_op,inactief_op,inactief_reden,streets!inner(deleted_at,districts!inner(deleted_at))")
+      .select(
+        "id,house_number,addition,postcode,klant_id,aangemeld_op,inactief_op,inactief_reden,streets!inner(deleted_at,districts!inner(deleted_at))",
+      )
       .eq("company_id", companyId)
       .eq("house_number", velden.nummer)
       .is("deleted_at", null)
@@ -362,10 +364,15 @@ export const dienGegevensIn = createServerFn({ method: "POST" })
             })
             .eq("id", adres.id)
             .eq("company_id", bedrijf.id);
-          vraag = adres.klant_id ? vraag.eq("klant_id", adres.klant_id) : vraag.is("klant_id", null);
+          vraag = adres.klant_id
+            ? vraag.eq("klant_id", adres.klant_id)
+            : vraag.is("klant_id", null);
           const { data: geraakt, error } = await vraag.select("id");
           if (error || (geraakt ?? []).length === 0) {
-            console.error("aanmelding: adres koppelen", error?.message ?? "adres was intussen veranderd");
+            console.error(
+              "aanmelding: adres koppelen",
+              error?.message ?? "adres was intussen veranderd",
+            );
             kon = false;
           }
         }

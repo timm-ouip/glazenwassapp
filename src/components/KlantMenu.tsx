@@ -262,93 +262,93 @@ function KlantMenuVol({
         )}
         {!alleenLezen && (
           <>
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => wisselMaand(komende)}>
-          <CalendarOff className="size-4" />
-          {overslaan.includes(komende) ? `${toonMaand(komende)} toch doen` : "Overslaan"}
-        </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={() => wisselMaand(komende)}>
+              <CalendarOff className="size-4" />
+              {overslaan.includes(komende) ? `${toonMaand(komende)} toch doen` : "Overslaan"}
+            </ContextMenuItem>
 
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <CalendarOff className="size-4" /> Overslaan in…
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="max-h-72 overflow-y-auto">
-            {maanden.map((m, i) => (
-              <Fragment key={m}>
-                {jaarwissel(m, i) && <ContextMenuSeparator />}
-                <ContextMenuCheckboxItem
-                  checked={overslaan.includes(m)}
-                  onSelect={(e) => {
-                    // Openhouden: meestal vink je er meer dan één aan.
-                    e.preventDefault();
-                    vinkMaand(m);
-                  }}
-                >
-                  <span className="capitalize">{toonMaand(m)}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
-                </ContextMenuCheckboxItem>
-              </Fragment>
-            ))}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <CalendarOff className="size-4" /> Overslaan in…
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="max-h-72 overflow-y-auto">
+                {maanden.map((m, i) => (
+                  <Fragment key={m}>
+                    {jaarwissel(m, i) && <ContextMenuSeparator />}
+                    <ContextMenuCheckboxItem
+                      checked={overslaan.includes(m)}
+                      onSelect={(e) => {
+                        // Openhouden: meestal vink je er meer dan één aan.
+                        e.preventDefault();
+                        vinkMaand(m);
+                      }}
+                    >
+                      <span className="capitalize">{toonMaand(m)}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
+                    </ContextMenuCheckboxItem>
+                  </Fragment>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
 
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <CalendarOff className="size-4" /> Overslaan t/m…
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="max-h-72 overflow-y-auto">
-            {maanden.map((m, i) => (
-              <Fragment key={m}>
-                {jaarwissel(m, i) && <ContextMenuSeparator />}
-                <ContextMenuItem onSelect={() => slaOverTot(m)}>
-                  <span className="capitalize">{toonMaand(m)}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
-                </ContextMenuItem>
-              </Fragment>
-            ))}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <CalendarOff className="size-4" /> Overslaan t/m…
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="max-h-72 overflow-y-auto">
+                {maanden.map((m, i) => (
+                  <Fragment key={m}>
+                    {jaarwissel(m, i) && <ContextMenuSeparator />}
+                    <ContextMenuItem onSelect={() => slaOverTot(m)}>
+                      <span className="capitalize">{toonMaand(m)}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
+                    </ContextMenuItem>
+                  </Fragment>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
 
-        {overslaan.length > 0 && (
-          <ContextMenuItem
-            onSelect={() => {
-              zetWachtend(null);
-              onPatch({ overslaan: [] });
-            }}
-          >
-            <CircleSlash className="size-4" /> Niets meer overslaan ({overslaan.length})
-          </ContextMenuItem>
-        )}
+            {overslaan.length > 0 && (
+              <ContextMenuItem
+                onSelect={() => {
+                  zetWachtend(null);
+                  onPatch({ overslaan: [] });
+                }}
+              >
+                <CircleSlash className="size-4" /> Niets meer overslaan ({overslaan.length})
+              </ContextMenuItem>
+            )}
 
-        {/* Vanaf wanneer hij meedoet hoort bij overslaan: allebei gaan ze over
+            {/* Vanaf wanneer hij meedoet hoort bij overslaan: allebei gaan ze over
             de maanden waarin je hier langskomt. Zonder maand in de naam — die
             is meestal al voorbij, en zolang hij nog moet beginnen staat hij in
             de regel zelf als "vanaf okt". */}
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <Flag className="size-4" /> Nieuw vanaf:
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="max-h-72 overflow-y-auto">
-            {maanden.map((m, i) => (
-              <Fragment key={m}>
-                {jaarwissel(m, i) && <ContextMenuSeparator />}
-                <ContextMenuItem onSelect={() => onPatch({ start_maand: m })}>
-                  <span className="capitalize">{toonMaand(m)}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <Flag className="size-4" /> Nieuw vanaf:
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="max-h-72 overflow-y-auto">
+                {maanden.map((m, i) => (
+                  <Fragment key={m}>
+                    {jaarwissel(m, i) && <ContextMenuSeparator />}
+                    <ContextMenuItem onSelect={() => onPatch({ start_maand: m })}>
+                      <span className="capitalize">{toonMaand(m)}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
+                    </ContextMenuItem>
+                  </Fragment>
+                ))}
+                <ContextMenuSeparator />
+                <ContextMenuItem onSelect={() => onPatch({ start_maand: vorigeMaand() })}>
+                  <CircleSlash className="size-4" /> Niet nieuw, al langer klant
                 </ContextMenuItem>
-              </Fragment>
-            ))}
-            <ContextMenuSeparator />
-            <ContextMenuItem onSelect={() => onPatch({ start_maand: vorigeMaand() })}>
-              <CircleSlash className="size-4" /> Niet nieuw, al langer klant
-            </ContextMenuItem>
-            {c.start_maand && (
-              <ContextMenuItem onSelect={() => onPatch({ start_maand: "" })}>
-                <CircleSlash className="size-4" /> Meteen (aanmaakmaand)
-              </ContextMenuItem>
-            )}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
+                {c.start_maand && (
+                  <ContextMenuItem onSelect={() => onPatch({ start_maand: "" })}>
+                    <CircleSlash className="size-4" /> Meteen (aanmaakmaand)
+                  </ContextMenuItem>
+                )}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
           </>
         )}
 
@@ -366,40 +366,42 @@ function KlantMenuVol({
 
         {!alleenLezen && (
           <>
-        <ContextMenuSeparator />
-        <ContextMenuLabel>Kleur op printlijst</ContextMenuLabel>
-        {markeringen.length === 0 && (
-          <ContextMenuLabel className="font-normal text-muted-foreground">
-            Nog geen kleuren — maak ze bij Instellingen
-          </ContextMenuLabel>
-        )}
-        {markeringen.map((m) => (
-          <ContextMenuItem key={m.id} onSelect={() => zetKleur(m.sleutel)}>
-            <span className={`size-3 rounded-full ring-1 ring-inset ${tintStip[m.tint]}`} />
-            {m.naam}
-            {c.markering === m.sleutel && <Check className="ml-auto size-4" />}
-          </ContextMenuItem>
-        ))}
-        {c.markering ? (
-          <ContextMenuItem onSelect={() => onPatch({ markering: "" })}>
-            <CircleSlash className="size-4" /> Kleur weghalen
-          </ContextMenuItem>
-        ) : (
-          nieuwDezeMaand && (
-            // Anders zoek je je scheel naar de kleur die je nooit gezet hebt.
-            <ContextMenuLabel className="font-normal text-muted-foreground">
-              Al groen: nieuw vanaf {toonMaand(start)}
-            </ContextMenuLabel>
-          )
-        )}
+            <ContextMenuSeparator />
+            <ContextMenuLabel>Kleur op printlijst</ContextMenuLabel>
+            {markeringen.length === 0 && (
+              <ContextMenuLabel className="font-normal text-muted-foreground">
+                Nog geen kleuren — maak ze bij Instellingen
+              </ContextMenuLabel>
+            )}
+            {markeringen.map((m) => (
+              <ContextMenuItem key={m.id} onSelect={() => zetKleur(m.sleutel)}>
+                <span className={`size-3 rounded-full ring-1 ring-inset ${tintStip[m.tint]}`} />
+                {m.naam}
+                {c.markering === m.sleutel && <Check className="ml-auto size-4" />}
+              </ContextMenuItem>
+            ))}
+            {c.markering ? (
+              <ContextMenuItem onSelect={() => onPatch({ markering: "" })}>
+                <CircleSlash className="size-4" /> Kleur weghalen
+              </ContextMenuItem>
+            ) : (
+              nieuwDezeMaand && (
+                // Anders zoek je je scheel naar de kleur die je nooit gezet hebt.
+                <ContextMenuLabel className="font-normal text-muted-foreground">
+                  Al groen: nieuw vanaf {toonMaand(start)}
+                </ContextMenuLabel>
+              )
+            )}
 
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={onHoekadres}>
-          <CornerDownRight className="size-4" /> Hoekadres…
-          {c.hoek_straat && (
-            <span className="ml-auto truncate text-xs text-muted-foreground">{c.hoek_straat}</span>
-          )}
-        </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={onHoekadres}>
+              <CornerDownRight className="size-4" /> Hoekadres…
+              {c.hoek_straat && (
+                <span className="ml-auto truncate text-xs text-muted-foreground">
+                  {c.hoek_straat}
+                </span>
+              )}
+            </ContextMenuItem>
           </>
         )}
       </ContextMenuContent>

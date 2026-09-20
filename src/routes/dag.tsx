@@ -21,7 +21,7 @@ import {
 import { toast } from "sonner";
 import { dagVast, zetDagVast } from "@/lib/dagslot";
 
-import { requireSession, useRequireAuth } from "@/lib/auth";
+import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
 import { Cijferkaarten } from "@/components/Cijferkaarten";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,10 @@ import {
   type Customer,
 } from "@/lib/klanten";
 import { useRecht } from "@/lib/rechten";
+import { useBevestig } from "@/components/Bevestig";
+import { eigenTeamlid, fetchDagPloegen, fetchTeamleden, ploegNaam, ploegVan } from "@/lib/ploegen";
+import { useAankondigingen } from "@/lib/aankondigingen";
+import { WijzigingsberichtDialog } from "@/components/WijzigingsberichtDialog";
 import { useKlachtenBijAdres } from "@/lib/klachten";
 import {
   datumSleutel,
@@ -63,13 +67,7 @@ import {
   type Klus,
 } from "@/lib/klussen";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  laatsteUndo,
-  pushUndo,
-  undoKnop,
-  undoMetMelding,
-  useLaatsteUndoLabel,
-} from "@/lib/undo";
+import { laatsteUndo, pushUndo, undoKnop, undoMetMelding, useLaatsteUndoLabel } from "@/lib/undo";
 import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
 import { redenLabel } from "@/lib/stoppen";
 import { verplaatsWasdag } from "@/lib/wasdag";
@@ -144,6 +142,8 @@ interface Straat {
   klanten: Customer[];
   bedrag: number;
   klantIds: string[];
+  /** Waar deze straat in de rij staat volgens de dagweergave; leeg = achteraan. */
+  volgorde?: number;
 }
 
 /** Wat er op de regel van deze dag staat: het bedrag en wat er anders ging. */
@@ -170,11 +170,27 @@ type Blok =
  */
 function DagPagina() {
   useRequireAuth();
+  const { employee } = useAuth();
   const navigate = useNavigate();
   const { datum: datumUitUrl } = Route.useSearch();
   const datum = datumUitUrl ?? vandaag();
   // Zonder dit recht zijn alle bedragen 0; dan laten we ze helemaal weg.
   const prijzenZien = useRecht("prijzen_zien");
+
+  // Wie er die dag werken, en in welke ploeg jij zit: de dagpagina toont
+  // standaard alleen jouw eigen route.
+  const teamledenQuery = useQuery({ queryKey: ["teamleden"], queryFn: fetchTeamleden });
+  const ploegenQuery = useQuery({
+    queryKey: ["dag-ploegen", datum, datum],
+    queryFn: () => fetchDagPloegen(datum, datum),
+  });
+  // Alleen om ⏰ te kunnen tonen bij een pand dat een tijdvak beloofd kreeg.
+  const beloofdQuery = useAankondigingen(datum, datum);
+  const [alleenEigen, setAlleenEigen] = useState(true);
+  /** De adressen waarvoor je een "we komen later"-bericht opstelt. */
+  const [wijziging, setWijziging] = useState<string[] | null>(null);
+  const magVersturen = useRecht("mail_versturen");
+  const bevestig = useBevestig();
 
   const wasdagQuery = useQuery({
     queryKey: ["wasdag", datum],
@@ -303,8 +319,32 @@ function DagPagina() {
    * doen alsof je de hele groep verplaatst terwijl de rest ergens anders
    * staat, en dus blijven die straten los.
    */
+  const dagPloegen = useMemo(() => ploegenQuery.data?.get(datum) ?? [], [ploegenQuery.data, datum]);
+  const eigenPloeg = useMemo(() => {
+    const ik = eigenTeamlid(teamledenQuery.data ?? [], employee?.id);
+    return ploegVan(dagPloegen, ik?.id);
+  }, [teamledenQuery.data, employee?.id, dagPloegen]);
+
+  /** Wat er op het scherm staat: jouw ploeg, of alles van de dag. */
+  const zichtbareRegels = useMemo(() => {
+    const alles = wasdagQuery.data ?? [];
+    if (!alleenEigen || eigenPloeg === null) return alles;
+    return alles.filter((r) => (r.ploeg_nr ?? null) === eigenPloeg);
+  }, [wasdagQuery.data, alleenEigen, eigenPloeg]);
+
+  /** Het tijdvak dat een adres beloofd kreeg, om ⏰ bij te zetten. */
+  const beloofdTijdvak = useMemo(() => {
+    const kaart = new Map<string, string>();
+    for (const rij of beloofdQuery.data ?? []) {
+      if (rij.aangekondigd_voor === datum && rij.tijdvak_van && rij.tijdvak_tot) {
+        kaart.set(rij.customer_id, `${rij.tijdvak_van}–${rij.tijdvak_tot}`);
+      }
+    }
+    return kaart;
+  }, [beloofdQuery.data, datum]);
+
   const perWijk = useMemo(() => {
-    const regels = wasdagQuery.data ?? [];
+    const regels = zichtbareRegels;
     const adres = new Map((adressenQuery.data ?? []).map((c) => [c.id, c]));
     const straat = new Map((streetsQuery.data ?? []).map((s) => [s.id, s]));
     const wijkIndex = new Map((districtsQuery.data ?? []).map((d, i) => [d.id, i]));
@@ -365,6 +405,11 @@ function DagPagina() {
       };
       rij.klanten.push(c);
       rij.bedrag += Number(r.prijs);
+      // De volgorde die in de dagweergave is neergezet; zonder dat blijft hij
+      // leeg en valt de straat achteraan, op alfabet.
+      if (r.volgorde !== null && r.volgorde !== undefined) {
+        rij.volgorde = rij.volgorde === undefined ? r.volgorde : Math.min(rij.volgorde, r.volgorde);
+      }
       wijk.straten.set(s.id, rij);
       wijk.groepVan.set(s.id, s.groep_id ?? null);
       wijken.set(s.district_id, wijk);
@@ -373,11 +418,26 @@ function DagPagina() {
     // Van kop naar adressen: waar de streek en de klik hun id's vandaan halen.
     const idsVan = new Map<string, string[]>();
 
+    /** De vroegste plek in de rij die deze wijk die dag heeft. */
+    const wijkVolgorde = (w: Wijk) =>
+      Math.min(
+        ...[...w.straten.values()].map((s) => s.volgorde ?? Number.MAX_SAFE_INTEGER),
+        Number.MAX_SAFE_INTEGER,
+      );
+
     const wijkenUit = [...wijken.values()]
-      .sort((a, b) => (wijkIndex.get(a.id) ?? 0) - (wijkIndex.get(b.id) ?? 0))
+      .sort(
+        (a, b) =>
+          wijkVolgorde(a) - wijkVolgorde(b) ||
+          (wijkIndex.get(a.id) ?? 0) - (wijkIndex.get(b.id) ?? 0),
+      )
       .map((w) => {
         const straten = [...w.straten.values()]
-          .sort((a, b) => a.naam.localeCompare(b.naam, "nl"))
+          .sort(
+            (a, b) =>
+              (a.volgorde ?? Number.MAX_SAFE_INTEGER) - (b.volgorde ?? Number.MAX_SAFE_INTEGER) ||
+              a.naam.localeCompare(b.naam, "nl"),
+          )
           // Huisnummers in dezelfde volgorde als op de wijklijst.
           .map((s) => {
             const klanten = sortCustomers(s.klanten);
@@ -435,14 +495,14 @@ function DagPagina() {
 
     return { wijken: wijkenUit, kwijt, regelVan, idsVan };
   }, [
-    wasdagQuery.data,
+    zichtbareRegels,
     adressenQuery.data,
     streetsQuery.data,
     districtsQuery.data,
     groepenQuery.data,
   ]);
 
-  const regels = wasdagQuery.data ?? [];
+  const regels = zichtbareRegels;
   const bedrag =
     regels.reduce((sum, r) => sum + Number(r.prijs), 0) +
     klussen.reduce((sum, k) => sum + k.prijs, 0);
@@ -685,6 +745,27 @@ function DagPagina() {
       duration: 10000,
       action: undoKnop(),
     });
+
+    // Deze klanten kregen te horen dat je vandaag zou komen. Vraag of ze het
+    // mogen weten — alleen aan wie mail mag versturen.
+    if (magVersturen && toevoegen.length > 0) {
+      // Alleen de klanten die te horen kregen dat we vandaag zouden komen:
+      // wie nooit bericht kreeg, hoeft ook geen wijziging.
+      const aangekondigd = new Set(
+        (beloofdQuery.data ?? [])
+          .filter((r) => r.aangekondigd_voor === datum)
+          .map((r) => r.customer_id),
+      );
+      const wie = toevoegen.map((r) => r.customer_id).filter((id) => aangekondigd.has(id));
+      if (wie.length === 0) return;
+      const ja = await bevestig({
+        titel: `${wie.length === 1 ? "De klant" : `${wie.length} klanten`} laten weten dat je later komt?`,
+        tekst: `Ze kregen een bericht over vandaag. Je kunt ze nu een bericht sturen met ${toonDatum(nieuw)} erin.`,
+        bevestigLabel: "Bericht opstellen",
+        annuleerLabel: "Niet nu",
+      });
+      if (ja) setWijziging(wie);
+    }
   }
 
   /** Eén regel die zegt waar je vandaag heen gaat. */
@@ -905,12 +986,45 @@ function DagPagina() {
             <Button size="sm" className="rounded-full" asChild disabled={regels.length === 0}>
               <Link
                 to="/printen"
-                search={{ wijk: "", maand, prijzen: false, liggend: true, dag: datum }}
+                search={{
+                  wijk: "",
+                  maand,
+                  prijzen: false,
+                  liggend: true,
+                  dag: datum,
+                  ...(dagPloegen.length > 0 ? { perPloeg: true } : {}),
+                }}
               >
                 <Printer className="size-4" /> Printlijst
               </Link>
             </Button>
           </span>
+
+          {/* Werk je die dag in ploegen, dan zie je standaard je eigen route.
+              Met "Alles" zie je de hele dag, bijvoorbeeld om te helpen. */}
+          {eigenPloeg !== null && dagPloegen.length > 1 && (
+            <span className="flex items-center gap-0.5 rounded-full border border-border bg-card p-1">
+              {[true, false].map((eigen) => (
+                <button
+                  key={String(eigen)}
+                  type="button"
+                  aria-pressed={alleenEigen === eigen}
+                  onClick={() => setAlleenEigen(eigen)}
+                  className={`rounded-full px-3 py-1 text-[12.5px] font-medium transition-colors ${
+                    alleenEigen === eigen
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:bg-surface hover:text-foreground"
+                  }`}
+                >
+                  {eigen
+                    ? (dagPloegen.find((pl) => pl.nr === eigenPloeg)?.leden.length ?? 0) > 1
+                      ? "Jouw ploeg"
+                      : "Jouw route"
+                    : "Alles"}
+                </button>
+              ))}
+            </span>
+          )}
 
           {selecteren && (
             <>
@@ -1051,6 +1165,7 @@ function DagPagina() {
                             keuze={keuze}
                             vakKnop={vakKnop}
                             onAdres={setBewerkt}
+                            beloofd={beloofdTijdvak}
                           />
                         ))}
                       </div>
@@ -1064,6 +1179,7 @@ function DagPagina() {
                         keuze={keuze}
                         vakKnop={vakKnop}
                         onAdres={setBewerkt}
+                        beloofd={beloofdTijdvak}
                       />
                     ),
                   )}
@@ -1215,6 +1331,15 @@ function DagPagina() {
               if (bewerkt) void bewaarDag(bewerkt.customer, prijs, notitie);
             }}
           />
+
+          {wijziging && (
+            <WijzigingsberichtDialog
+              open
+              onOpenChange={(o) => !o && setWijziging(null)}
+              customerIds={wijziging}
+              soort="niet_af"
+            />
+          )}
         </div>
       )}
     </AppLayout>
@@ -1308,6 +1433,7 @@ function StraatRij({
   keuze,
   vakKnop,
   onAdres,
+  beloofd,
 }: {
   straat: Straat;
   maand: string;
@@ -1317,6 +1443,8 @@ function StraatRij({
   vakKnop: (vak: string) => Knop;
   /** Klikken buiten de selecteerstand opent het schermpje van dit adres. */
   onAdres: (keuze: { customer: Customer; straat: string }) => void;
+  /** Het tijdvak dat een adres beloofd kreeg ("10:00–12:00"). */
+  beloofd: Map<string, string>;
 }) {
   const prijzenZien = useRecht("prijzen_zien");
   const klachtenBij = useKlachtenBijAdres();
@@ -1402,6 +1530,16 @@ function StraatRij({
               {c.inactief_op && (
                 <span className="shrink-0 rounded-full bg-surface px-2 py-[1px] text-[10.5px] text-muted-foreground">
                   {redenLabel(c.inactief_reden)}
+                </span>
+              )}
+              {/* Een pand dat een tijdvak beloofd kreeg: dat moet je weten
+                  voordat je de volgorde omgooit. */}
+              {beloofd.get(c.id) && (
+                <span
+                  className="shrink-0 rounded-full bg-tint-blauw px-2 py-[1px] text-[10.5px] font-medium text-tint-blauw-ink"
+                  title={`De klant kreeg te horen dat we tussen ${beloofd.get(c.id)} komen`}
+                >
+                  ⏰ {beloofd.get(c.id)}
                 </span>
               )}
               <span

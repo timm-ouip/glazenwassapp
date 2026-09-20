@@ -56,7 +56,8 @@ export function KlantTegel({ telefoon, klantId }: { telefoon: string; klantId: s
     void qc.invalidateQueries({ queryKey: ["customers"] });
   };
 
-  if (klanten.isLoading) return <p className="text-[12.5px] text-muted-foreground">Klant zoeken…</p>;
+  if (klanten.isLoading)
+    return <p className="text-[12.5px] text-muted-foreground">Klant zoeken…</p>;
 
   if (klanten.isError) {
     return (
@@ -69,7 +70,14 @@ export function KlantTegel({ telefoon, klantId }: { telefoon: string; klantId: s
   const lijst = klanten.data ?? [];
   const appjes = gegevens.data ?? [];
   const vakjes = appjes.map((b) => (
-    <WooshyVakje key={b.id} b={b} klanten={lijst} uit={!magBewerken} onKlaar={ververs} acties={WA_ACTIES} />
+    <WooshyVakje
+      key={b.id}
+      b={b}
+      klanten={lijst}
+      uit={!magBewerken}
+      onKlaar={ververs}
+      acties={WA_ACTIES}
+    />
   ));
 
   if (lijst.length === 0) {
@@ -83,7 +91,8 @@ export function KlantTegel({ telefoon, klantId }: { telefoon: string; klantId: s
           <p className="mt-1 break-words text-[12px] leading-snug text-muted-foreground">
             {toonNummer(telefoon)} hoort nog bij geen klant.
             {/* Alleen Nederlandse nummers koppelt Wooshy aan een klant. */}
-            {telefoonSleutel(telefoon) && " Zet het nummer bij een klant, dan herkent Wooshy het vanzelf."}
+            {telefoonSleutel(telefoon) &&
+              " Zet het nummer bij een klant, dan herkent Wooshy het vanzelf."}
           </p>
         </div>
       </div>
@@ -94,7 +103,9 @@ export function KlantTegel({ telefoon, klantId }: { telefoon: string; klantId: s
   // klant die op dat appje staat.
   const metAnders = appjes.find((b) => b.klantgegevens.anders);
   const doel = metAnders
-    ? (lijst.find((k) => k.id === (metAnders.klant_id ?? metAnders.klantgegevens.toegevoegd?.klant_id)) ?? lijst[0]!)
+    ? (lijst.find(
+        (k) => k.id === (metAnders.klant_id ?? metAnders.klantgegevens.toegevoegd?.klant_id),
+      ) ?? lijst[0]!)
     : null;
 
   return (
@@ -103,7 +114,9 @@ export function KlantTegel({ telefoon, klantId }: { telefoon: string; klantId: s
       {lijst.map((k) => (
         <KlantBlok key={k.id} k={k} />
       ))}
-      {metAnders && doel && <AndersVakje b={metAnders} klant={doel} uit={!magBewerken} soort="appje" />}
+      {metAnders && doel && (
+        <AndersVakje b={metAnders} klant={doel} uit={!magBewerken} soort="appje" />
+      )}
     </div>
   );
 }
