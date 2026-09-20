@@ -89,16 +89,23 @@ export async function stuurMail(
 ): Promise<{ ok: true; id: string } | { ok: false; fout: string }> {
   const body: Record<string, unknown> = {
     sender: { name: afzender.naam, email: afzender.email },
-    to: [{ email: mail.naar.email, name: mail.naar.naam || mail.naar.email }],
+    to: [
+      {
+        email: mail.naar.email,
+        name: mail.naar.naam || mail.naar.email,
+        // Geen toestemming om te volgen: Brevo maakt het openen dan anoniem,
+        // zodat wij niet weten wie een mail opende. Dat bijhouden mag alleen
+        // met toestemming van de klant (de cookieregels, art. 11.7a
+        // Telecommunicatiewet). Of de mail is afgeleverd weet de mailserver
+        // zelf; daar is geen pixel voor nodig. Het veld hoort per ontvanger
+        // en werkt zodra "per-contact pixel tracking consent" in het
+        // Brevo-account aanstaat; staat dat uit, dan negeert Brevo het.
+        contactPixelTrackingConsent: false,
+      },
+    ],
     subject: mail.onderwerp,
     htmlContent: mail.html ?? alsHtml(mail.tekst),
     textContent: mail.tekst,
-    // Geen volgpixel: bijhouden of iemand een mail opent mag alleen met zijn
-    // toestemming (de cookieregels, art. 11.7a Telecommunicatiewet). Of de
-    // mail is afgeleverd, weten we van de mailserver zelf — daar is geen
-    // pixel voor nodig. Werkt zodra "per-contact pixel tracking consent" in
-    // het Brevo-account aanstaat; staat dat uit, dan negeert Brevo dit veld.
-    contactPixelTrackingConsent: false,
   };
   if (mail.antwoordNaar) body["replyTo"] = { email: mail.antwoordNaar, name: afzender.naam };
 

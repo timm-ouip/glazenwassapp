@@ -105,8 +105,9 @@ function Privacy() {
           <p>
             We houden bij of dat bericht is aangekomen: de mailserver van je provider laat weten of
             hij de mail heeft aangenomen of geweigerd, en bij WhatsApp zien we de vinkjes die je
-            zelf aan hebt staan. We meten <strong>niet</strong> of je een mail opent: daar zou een
-            onzichtbaar volgpixeltje voor nodig zijn, en dat gebruiken we niet.
+            zelf aan hebt staan. We houden <strong>niet</strong> bij of jíj een mail opent. Onze
+            mailprovider telt hooguit anoniem hoe vaak mails geopend worden; wij vragen hem
+            uitdrukkelijk dat niet aan jouw adres te koppelen.
           </p>
         </Blok>
 

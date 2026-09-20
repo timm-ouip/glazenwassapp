@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { netjesEmail } from "@/lib/schoonschrift";
 import { getRequest } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -116,7 +117,9 @@ export const inviteEmployee = createServerFn({ method: "POST" })
       throw new Error("Alleen de eigenaar kan medewerkers uitnodigen");
     }
 
-    const email = data.email.trim();
+    // Kleine letters: anders staat dezelfde persoon twee keer in de lijst
+    // als iemand hem een keer met een hoofdletter uitnodigt.
+    const email = netjesEmail(data.email);
     if (!email) throw new Error("E-mailadres is verplicht");
 
     const request = getRequest();

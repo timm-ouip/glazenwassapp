@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { netjesPostcode, netjesStraat, netjesVeld } from "@/lib/schoonschrift";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { eenVan } from "@/lib/embed";
 import { haalAllePaginas } from "@/lib/pagineren";
@@ -590,16 +591,16 @@ export async function fetchKlanten(): Promise<Klant[]> {
 /** Nieuwe klant bij `id === null`, anders bijwerken. Geeft de rij terug. */
 export async function bewaarKlant(id: string | null, velden: KlantVelden): Promise<Klant> {
   const payload = {
-    naam: velden.naam.trim(),
-    email: velden.email.trim(),
-    email2: velden.email2.trim(),
-    telefoon: velden.telefoon.trim(),
-    telefoon2: velden.telefoon2.trim(),
-    straat: velden.straat.trim(),
-    huisnummer: velden.huisnummer.trim(),
-    postcode: velden.postcode.trim(),
-    plaats: velden.plaats.trim(),
-    notitie: velden.notitie.trim(),
+    naam: netjesVeld("naam", velden.naam),
+    email: netjesVeld("email", velden.email),
+    email2: netjesVeld("email2", velden.email2),
+    telefoon: netjesVeld("telefoon", velden.telefoon),
+    telefoon2: netjesVeld("telefoon2", velden.telefoon2),
+    straat: netjesVeld("straat", velden.straat),
+    huisnummer: netjesVeld("huisnummer", velden.huisnummer),
+    postcode: netjesVeld("postcode", velden.postcode),
+    plaats: netjesVeld("plaats", velden.plaats),
+    notitie: netjesVeld("notitie", velden.notitie),
   };
   const query = id
     ? supabase.from("klanten").update(payload).eq("id", id)
@@ -613,7 +614,7 @@ export async function bewaarKlant(id: string | null, velden: KlantVelden): Promi
 export async function updateKlant(id: string, patch: Partial<KlantVelden>): Promise<void> {
   const schoon: Partial<KlantVelden> = {};
   for (const veld of Object.keys(patch) as (keyof KlantVelden)[]) {
-    schoon[veld] = (patch[veld] ?? "").trim();
+    schoon[veld] = netjesVeld(veld, patch[veld] ?? "");
   }
   const { error } = await supabase.from("klanten").update(schoon).eq("id", id);
   if (error) throw error;
@@ -717,7 +718,12 @@ export async function zorgVoorAdres(
   if (!streetId) {
     const { data, error } = await supabase
       .from("streets")
-      .insert({ name: naam, volledige_naam: naam, district_id: districtId, sort_order: 100 })
+      .insert({
+        name: netjesStraat(naam),
+        volledige_naam: netjesStraat(naam),
+        district_id: districtId,
+        sort_order: 100,
+      })
       .select("id")
       .single();
     if (error) throw error;
@@ -769,9 +775,19 @@ export async function zorgVoorAdres(
 
 /** Slaat opgehaalde postcodes op voor een groep adressen tegelijk. */
 export async function persistPostcodes(adressen: { id: string; postcode: string }[]) {
-  await Promise.all(
-    adressen.map((a) => supabase.from("customers").update({ postcode: a.postcode }).eq("id", a.id)),
+  const uitkomsten = await Promise.all(
+    adressen.map((a) =>
+      supabase
+        .from("customers")
+        .update({ postcode: netjesPostcode(a.postcode) })
+        .eq("id", a.id),
+    ),
   );
+  // Weigert de database er één, dan hoort dat gemeld te worden: anders zegt
+  // de lijst "postcodes ingevuld" en biedt hij ongedaan maken aan terwijl er
+  // niets veranderd is.
+  const fout = uitkomsten.find((u) => u.error)?.error;
+  if (fout) throw fout;
 }
 
 /**
@@ -785,6 +801,9 @@ export function alsRij(
   // De prijs en de meerprijzen horen niet in deze tabel (zie slaAdresPrijzenOp).
   const { price: _prijs, inactief_op: _i, inactief_reden: _r, ...rest } = patch;
   const rij: Record<string, unknown> = { ...rest };
+  // Eén plek waar alle adreswijzigingen langskomen, dus ook de plek om de
+  // postcode netjes weg te schrijven: "1234ab" wordt "1234 AB".
+  if (typeof rest.postcode === "string") rij["postcode"] = netjesPostcode(rest.postcode);
   if (patch.maandwerk) rij["maandwerk"] = patch.maandwerk.map(({ extra: _extra, ...w }) => w);
   return rij as unknown as Database["public"]["Tables"]["customers"]["Update"];
 }
@@ -827,7 +846,7 @@ export async function patchCustomer(id: string, patch: Partial<Customer>) {
  * wint het register.
  */
 export async function vulPostcodeAan(customerId: string, postcode: string) {
-  const schoon = postcode.trim();
+  const schoon = netjesPostcode(postcode);
   if (!schoon) return;
   const { data } = await supabase
     .from("customers")
@@ -846,7 +865,10 @@ export async function vulPostcodeAan(customerId: string, postcode: string) {
 export async function persistVolledigeNamen(namen: { id: string; volledige_naam: string }[]) {
   const uitkomsten = await Promise.all(
     namen.map((n) =>
-      supabase.from("streets").update({ volledige_naam: n.volledige_naam.trim() }).eq("id", n.id),
+      supabase
+        .from("streets")
+        .update({ volledige_naam: netjesStraat(n.volledige_naam) })
+        .eq("id", n.id),
     ),
   );
   const fout = uitkomsten.find((u) => u.error)?.error;

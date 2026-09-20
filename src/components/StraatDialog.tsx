@@ -22,6 +22,7 @@ import {
 import { nieuweStraatGroep, type StraatGroep, type Street } from "@/lib/klanten";
 import { zoekStraten } from "@/lib/postcode";
 import { opslaanBijEnter } from "@/lib/dialoog";
+import { netjesStraat } from "@/lib/schoonschrift";
 import {
   PopupBlok,
   PopupBody,
@@ -126,8 +127,8 @@ export function StraatDialog({
     }
 
     const payload = {
-      name: name.trim(),
-      volledige_naam: volledig.trim(),
+      name: netjesStraat(name),
+      volledige_naam: netjesStraat(volledig),
       groep_id: groepId,
       doorlopend,
     };

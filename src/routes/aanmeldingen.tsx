@@ -12,6 +12,7 @@
  *  - een adres dat niet op de lijst staat (daar horen een wijk en een prijs
  *    bij, en die weet de klant niet).
  */
+import { netjesVeld } from "@/lib/schoonschrift";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -413,8 +414,12 @@ function WijzigingKaart({
     { veld: "telefoon", label: "Telefoon", nieuw: aanmelding.telefoon },
     { veld: "email", label: "E-mail", nieuw: aanmelding.email },
   ];
+  // Vergelijken zoals het straks opgeslagen wordt: een mailadres dat vroeger
+  // met een hoofdletter in de database kwam is hetzelfde adres, en hoort hier
+  // niet rood-doorgestreept als "wijziging" te staan.
   const anders = velden.filter(
-    (v) => v.nieuw.trim() && v.nieuw.trim() !== (huidig?.[v.veld] ?? ""),
+    (v) =>
+      v.nieuw.trim() && netjesVeld(v.veld, v.nieuw) !== netjesVeld(v.veld, huidig?.[v.veld] ?? ""),
   );
 
   async function overnemen(patch: Partial<KlantVelden>) {

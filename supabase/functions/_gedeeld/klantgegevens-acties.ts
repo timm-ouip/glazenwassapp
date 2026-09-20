@@ -231,15 +231,33 @@ export async function draaiKlantgegevensTerug(db: Db, bereik: Bereik, id: string
 
   const bleven: Veld[] = [];
   if (toegevoegd && UUID.test(String(toegevoegd.klant_id))) {
+    // Wat er nu staat, om te zien of het nog van Paaltje is. Niet letterlijk
+    // vergelijken: de app schrijft een adres netjes weg, dus Paaltjes
+    // "kerkstraat" kan intussen "Kerkstraat" heten en "1234ab" "1234 AB".
+    // Dat is dezelfde waarde, en die hoort gewoon teruggedraaid te worden.
+    const { data: nu, error: leesFout } = await db
+      .from("klanten")
+      .select(VELDEN.join(","))
+      .eq("id", toegevoegd.klant_id)
+      .eq("company_id", bereik.companyId)
+      .maybeSingle();
+    if (leesFout) throw new Error(`Terugdraaien: ${leesFout.message}`);
+    const kaal = (t: unknown) => String(t ?? "").replace(/\s+/g, "").toLowerCase();
+    const rij = (nu ?? {}) as Record<string, unknown>;
+
     for (const veld of VELDEN) {
       const waarde = toegevoegd.velden?.[veld];
       if (typeof waarde !== "string" || !waarde) continue;
+      if (!nu || kaal(rij[veld]) !== kaal(waarde)) {
+        bleven.push(veld);
+        continue;
+      }
       const { data, error: veldFout } = await db
         .from("klanten")
         .update({ [veld]: "" })
         .eq("id", toegevoegd.klant_id)
         .eq("company_id", bereik.companyId)
-        .eq(veld, waarde)
+        .eq(veld, String(rij[veld] ?? ""))
         .select("id");
       if (veldFout) throw new Error(`Terugdraaien (${veld}): ${veldFout.message}`);
       if (!data?.length) bleven.push(veld);

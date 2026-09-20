@@ -18,6 +18,7 @@
  *     "is dit adres klant bij jullie". Zou de pagina dat verschil laten zien,
  *     dan kan iedereen met een postcodeboek de klantenlijst nalopen.
  */
+import { netjesEmail, netjesPostcode, netjesStraat } from "@/lib/schoonschrift";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -217,11 +218,14 @@ export const dienGegevensIn = createServerFn({ method: "POST" })
     // hem verraadde. Hij krijgt hetzelfde bedankje als een mens, en wij niks.
     if ((data.val ?? "").trim() !== "") return { ok: true as const };
 
+    // Wat een klant zelf typt, schrijven we net zo netjes weg als wat wij
+    // zelf invullen: "1234ab" wordt "1234 AB", "kerkstraat" wordt
+    // "Kerkstraat" en een e-mailadres gaat in kleine letters.
     const naam = kort(data.naam, MAXIMA.naam);
-    const email = kort(data.email, MAXIMA.email);
+    const email = netjesEmail(kort(data.email, MAXIMA.email));
     const telefoon = kort(data.telefoon, MAXIMA.telefoon);
-    const postcode = kort(data.postcode, MAXIMA.postcode);
-    const straat = kort(data.straat, MAXIMA.straat);
+    const postcode = netjesPostcode(kort(data.postcode, MAXIMA.postcode));
+    const straat = netjesStraat(kort(data.straat, MAXIMA.straat));
     const huisnummer = kort(data.huisnummer, MAXIMA.huisnummer);
     const plaats = kort(data.plaats, MAXIMA.plaats);
 

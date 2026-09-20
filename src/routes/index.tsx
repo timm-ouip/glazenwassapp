@@ -25,6 +25,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
+import { netjesStraat } from "@/lib/schoonschrift";
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import { naarDagBijOpstarten } from "@/lib/dagslot";
 import { Button } from "@/components/ui/button";
@@ -1557,8 +1558,8 @@ function Index() {
     const { data, error } = await supabase
       .from("streets")
       .insert({
-        name: naam,
-        volledige_naam: volledig,
+        name: netjesStraat(naam),
+        volledige_naam: netjesStraat(volledig),
         district_id: bron.district_id,
         groep_id: bron.groep_id,
         // Hetzelfde stuk straat: dan hoort het ook op dezelfde manier
@@ -1784,7 +1785,7 @@ function Index() {
     const max = Math.max(0, ...streets.map((s) => s.sort_order));
     const { data, error } = await supabase
       .from("streets")
-      .insert({ name: naam.trim(), sort_order: max + 1, district_id: actieveWijk })
+      .insert({ name: netjesStraat(naam), sort_order: max + 1, district_id: actieveWijk })
       .select("id")
       .single();
     if (error) {
@@ -4435,7 +4436,10 @@ function NieuweStraat({ onSubmit }: { onSubmit: (naam: string) => void }) {
   return (
     <div className="mb-3 break-inside-avoid-column rounded border border-dashed border-border bg-card/50">
       <input
-        className="w-full bg-transparent px-2 py-2 text-[13px] uppercase tracking-wide text-muted-foreground placeholder:normal-case placeholder:tracking-normal placeholder:text-muted-foreground/70 focus:bg-accent/40 focus:outline-none"
+        // Geen uppercase meer: je typt "Kerkstraat" en dan hoort er ook
+        // "Kerkstraat" te staan. Dat het veld je invoer in hoofdletters
+        // toonde was alleen opmaak, maar het leest als caps lock.
+        className="w-full bg-transparent px-2 py-2 text-[13px] tracking-wide text-muted-foreground placeholder:tracking-normal placeholder:text-muted-foreground/70 focus:bg-accent/40 focus:outline-none"
         placeholder="+ nieuwe straat"
         value={waarde}
         onChange={(e) => setWaarde(e.target.value)}

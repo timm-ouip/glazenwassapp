@@ -8,6 +8,8 @@
  * we willen — liever niks invullen dan een verkeerde postcode.
  */
 
+import { netjesPostcode } from "@/lib/schoonschrift";
+
 /** De velden die we bij de Locatieserver opvragen (`fl=`). */
 interface PdokDoc {
   postcode?: string;
@@ -57,12 +59,6 @@ export interface AdresVraag {
 export interface AdresTreffer {
   postcode: string;
   plaats: string;
-}
-
-/** "3811CV" → "3811 CV"; dat is hoe mensen het op post schrijven. */
-function netjes(postcode: string) {
-  const p = postcode.replace(/\s+/g, "").toUpperCase();
-  return /^\d{4}[A-Z]{2}$/.test(p) ? `${p.slice(0, 4)} ${p.slice(4)}` : postcode;
 }
 
 /**
@@ -123,7 +119,10 @@ export async function zoekAdres(
 
   const treffer = kandidaten[0]!;
   if (!treffer.postcode) return null;
-  return { postcode: netjes(treffer.postcode), plaats: treffer.woonplaatsnaam ?? plaats.trim() };
+  return {
+    postcode: netjesPostcode(treffer.postcode),
+    plaats: treffer.woonplaatsnaam ?? plaats.trim(),
+  };
 }
 
 export interface PostcodeTreffer {
@@ -188,7 +187,7 @@ export async function zoekOpPostcode(
   return {
     straat: treffer.straatnaam,
     plaats: treffer.woonplaatsnaam,
-    postcode: netjes(treffer.postcode ?? p),
+    postcode: netjesPostcode(treffer.postcode ?? p),
   };
 }
 
@@ -289,7 +288,7 @@ export async function zoekStraatPostcodes(
     for (const d of docs) {
       if (d.huisnummer === undefined || !d.postcode) continue;
       const toevoeging = `${d.huisletter ?? ""}${d.huisnummertoevoeging ?? ""}`;
-      uit.set(nummerSleutel(d.huisnummer, toevoeging), netjes(d.postcode));
+      uit.set(nummerSleutel(d.huisnummer, toevoeging), netjesPostcode(d.postcode));
     }
 
     start += PER_KEER;
