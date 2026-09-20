@@ -89,7 +89,10 @@ export async function fetchOpenKlachten(): Promise<OpenKlacht[]> {
  * Open klachten bij een adres: die met precies dit adres, en die van de klant
  * waar nog geen adres bij gekozen is (die gelden voor al zijn adressen).
  */
-export function useKlachtenBijAdres(): (adres: { id: string; klant_id: string | null }) => OpenKlacht[] {
+export function useKlachtenBijAdres(): (adres: {
+  id: string;
+  klant_id: string | null;
+}) => OpenKlacht[] {
   const { data } = useQuery({ queryKey: ["open-klachten"], queryFn: fetchOpenKlachten });
   return useMemo(() => {
     const perAdres = new Map<string, OpenKlacht[]>();

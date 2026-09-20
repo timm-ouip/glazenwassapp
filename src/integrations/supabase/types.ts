@@ -73,6 +73,15 @@ export type Database = {
       };
       companies: {
         Row: {
+          plan_tarief_uur: number;
+          plan_begin: string;
+          plan_eind: string;
+          plan_pauze_van: string;
+          plan_pauze_min: number;
+          plan_rijtijd_min: number;
+          plan_groot_pand_min: number;
+          plan_tijdlijn: boolean;
+          plan_tijdvak_mailen: boolean;
           wa_wachttijd_min: number;
           wa_antwoord_van: string;
           wa_antwoord_tot: string;
@@ -96,6 +105,15 @@ export type Database = {
           werkdagen: number[];
         };
         Insert: {
+          plan_tarief_uur?: number;
+          plan_begin?: string;
+          plan_eind?: string;
+          plan_pauze_van?: string;
+          plan_pauze_min?: number;
+          plan_rijtijd_min?: number;
+          plan_groot_pand_min?: number;
+          plan_tijdlijn?: boolean;
+          plan_tijdvak_mailen?: boolean;
           wa_wachttijd_min?: number;
           wa_antwoord_van?: string;
           wa_antwoord_tot?: string;
@@ -119,6 +137,15 @@ export type Database = {
           werkdagen?: number[];
         };
         Update: {
+          plan_tarief_uur?: number;
+          plan_begin?: string;
+          plan_eind?: string;
+          plan_pauze_van?: string;
+          plan_pauze_min?: number;
+          plan_rijtijd_min?: number;
+          plan_groot_pand_min?: number;
+          plan_tijdlijn?: boolean;
+          plan_tijdvak_mailen?: boolean;
           wa_wachttijd_min?: number;
           wa_antwoord_van?: string;
           wa_antwoord_tot?: string;
@@ -145,6 +172,9 @@ export type Database = {
       };
       customers: {
         Row: {
+          duur_min: number | null;
+          duur_zelf: boolean;
+          eigen_blok: boolean | null;
           inactief_op: string | null;
           inactief_reden: string | null;
           aangemeld_op: string | null;
@@ -174,6 +204,9 @@ export type Database = {
           street_id: string;
         };
         Insert: {
+          duur_min?: number | null;
+          duur_zelf?: boolean;
+          eigen_blok?: boolean | null;
           inactief_op?: string | null;
           inactief_reden?: string | null;
           aangemeld_op?: string | null;
@@ -203,6 +236,9 @@ export type Database = {
           street_id: string;
         };
         Update: {
+          duur_min?: number | null;
+          duur_zelf?: boolean;
+          eigen_blok?: boolean | null;
           inactief_op?: string | null;
           inactief_reden?: string | null;
           aangemeld_op?: string | null;
@@ -533,6 +569,11 @@ export type Database = {
       };
       klussen: {
         Row: {
+          duur_min: number | null;
+          duur_zelf: boolean;
+          ploeg_nr: number | null;
+          volgorde: number | null;
+          vaste_start: string | null;
           company_id: string;
           created_at: string;
           customer_id: string;
@@ -543,6 +584,11 @@ export type Database = {
           omschrijving: string;
         };
         Insert: {
+          duur_min?: number | null;
+          duur_zelf?: boolean;
+          ploeg_nr?: number | null;
+          volgorde?: number | null;
+          vaste_start?: string | null;
           company_id?: string;
           created_at?: string;
           customer_id: string;
@@ -553,6 +599,11 @@ export type Database = {
           omschrijving: string;
         };
         Update: {
+          duur_min?: number | null;
+          duur_zelf?: boolean;
+          ploeg_nr?: number | null;
+          volgorde?: number | null;
+          vaste_start?: string | null;
           company_id?: string;
           created_at?: string;
           customer_id?: string;
@@ -581,6 +632,10 @@ export type Database = {
       };
       mail_ontvangers: {
         Row: {
+          message_id: string;
+          wa_id: string;
+          bezorgstatus: string;
+          status_op: string | null;
           kanaal: string;
           telefoon: string;
           adressen: string;
@@ -595,6 +650,10 @@ export type Database = {
           status: string;
         };
         Insert: {
+          message_id?: string;
+          wa_id?: string;
+          bezorgstatus?: string;
+          status_op?: string | null;
           kanaal?: string;
           telefoon?: string;
           adressen?: string;
@@ -609,6 +668,10 @@ export type Database = {
           status?: string;
         };
         Update: {
+          message_id?: string;
+          wa_id?: string;
+          bezorgstatus?: string;
+          status_op?: string | null;
           kanaal?: string;
           telefoon?: string;
           adressen?: string;
@@ -732,6 +795,7 @@ export type Database = {
       };
       mailingen: {
         Row: {
+          soort: string;
           kanaal: string;
           sjabloon_id: string | null;
           aantal_whatsapp: number;
@@ -747,6 +811,7 @@ export type Database = {
           verzonden_door: string | null;
         };
         Insert: {
+          soort?: string;
           kanaal?: string;
           sjabloon_id?: string | null;
           aantal_whatsapp?: number;
@@ -762,6 +827,7 @@ export type Database = {
           verzonden_door?: string | null;
         };
         Update: {
+          soort?: string;
           kanaal?: string;
           sjabloon_id?: string | null;
           aantal_whatsapp?: number;
@@ -981,8 +1047,209 @@ export type Database = {
           },
         ];
       };
+      teamleden: {
+        Row: {
+          id: string;
+          company_id: string;
+          naam: string;
+          employee_id: string | null;
+          uitgenodigd_user_id: string | null;
+          deleted_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id?: string;
+          naam: string;
+          employee_id?: string | null;
+          uitgenodigd_user_id?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          company_id?: string;
+          naam?: string;
+          employee_id?: string | null;
+          uitgenodigd_user_id?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      dag_ploegen: {
+        Row: {
+          company_id: string;
+          datum: string;
+          nr: number;
+          begin_tijd: string | null;
+          eind_tijd: string | null;
+          pauze_van: string | null;
+          pauze_min: number | null;
+          created_at: string;
+        };
+        Insert: {
+          company_id?: string;
+          datum: string;
+          nr: number;
+          begin_tijd?: string | null;
+          eind_tijd?: string | null;
+          pauze_van?: string | null;
+          pauze_min?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          company_id?: string;
+          datum?: string;
+          nr?: number;
+          begin_tijd?: string | null;
+          eind_tijd?: string | null;
+          pauze_van?: string | null;
+          pauze_min?: number | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      dag_ploeg_leden: {
+        Row: {
+          company_id: string;
+          datum: string;
+          nr: number;
+          teamlid_id: string;
+        };
+        Insert: {
+          company_id?: string;
+          datum: string;
+          nr: number;
+          teamlid_id: string;
+        };
+        Update: {
+          company_id?: string;
+          datum?: string;
+          nr?: number;
+          teamlid_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "dag_ploeg_leden_teamlid_id_fkey";
+            columns: ["teamlid_id"];
+            isOneToOne: false;
+            referencedRelation: "teamleden";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      aankondiging_adressen: {
+        Row: {
+          id: string;
+          company_id: string;
+          ontvanger_id: string;
+          customer_id: string | null;
+          datum: string;
+          tijdvak_van: string | null;
+          tijdvak_tot: string | null;
+          soort: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id?: string;
+          ontvanger_id: string;
+          customer_id?: string | null;
+          datum: string;
+          tijdvak_van?: string | null;
+          tijdvak_tot?: string | null;
+          soort?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          company_id?: string;
+          ontvanger_id?: string;
+          customer_id?: string | null;
+          datum?: string;
+          tijdvak_van?: string | null;
+          tijdvak_tot?: string | null;
+          soort?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      bericht_sjablonen: {
+        Row: {
+          id: string;
+          company_id: string;
+          soort: string;
+          naam: string;
+          onderwerp: string;
+          tekst: string;
+          wa_sjabloon_id: string | null;
+          standaard: boolean;
+          sort_order: number;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id?: string;
+          soort: string;
+          naam: string;
+          onderwerp?: string;
+          tekst: string;
+          wa_sjabloon_id?: string | null;
+          standaard?: boolean;
+          sort_order?: number;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          company_id?: string;
+          soort?: string;
+          naam?: string;
+          onderwerp?: string;
+          tekst?: string;
+          wa_sjabloon_id?: string | null;
+          standaard?: boolean;
+          sort_order?: number;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      snelle_redenen: {
+        Row: {
+          id: string;
+          company_id: string;
+          tekst: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          company_id?: string;
+          tekst: string;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          company_id?: string;
+          tekst?: string;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       wasdag_regels: {
         Row: {
+          ploeg_nr: number | null;
+          volgorde: number | null;
+          rest: boolean;
+          vaste_start: string | null;
           company_id: string;
           created_at: string;
           customer_id: string | null;
@@ -991,6 +1258,10 @@ export type Database = {
           notitie: string | null;
         };
         Insert: {
+          ploeg_nr?: number | null;
+          volgorde?: number | null;
+          rest?: boolean;
+          vaste_start?: string | null;
           company_id?: string;
           created_at?: string;
           customer_id?: string | null;
@@ -999,6 +1270,10 @@ export type Database = {
           notitie?: string | null;
         };
         Update: {
+          ploeg_nr?: number | null;
+          volgorde?: number | null;
+          rest?: boolean;
+          vaste_start?: string | null;
           company_id?: string;
           created_at?: string;
           customer_id?: string | null;
@@ -1954,6 +2229,36 @@ export type Database = {
       paaltje_verbruik_tellen: {
         Args: { bedrijf: string; invoer: number; uitvoer: number; extra_bericht?: number };
         Returns: number;
+      };
+      duren_herberekenen: {
+        Args: { tarief: number; ook_zelf?: boolean };
+        Returns: Json;
+      };
+      duren_terugzetten: {
+        Args: { kenmerk: string };
+        Returns: number;
+      };
+      dag_ploegen_zetten: {
+        Args: { dag: string; ploegen: Json };
+        Returns: number;
+      };
+      dag_volgorde_zetten: {
+        Args: { dag: string; blokken: Json };
+        Returns: number;
+      };
+      aankondigingen_voor: {
+        Args: { vanaf: string; tot: string };
+        Returns: {
+          customer_id: string;
+          kanaal: string;
+          soort: string;
+          aangekondigd_voor: string;
+          tijdvak_van: string | null;
+          tijdvak_tot: string | null;
+          status: string;
+          bezorgstatus: string;
+          verstuurd_op: string;
+        }[];
       };
       wasdag_weghalen: {
         Args: { dag: string; adressen?: string[] };

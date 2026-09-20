@@ -20,7 +20,15 @@ import { toast } from "sonner";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PopupBody, PopupHint, PopupKader, PopupKop, PopupVeld, PopupVoet, popupInvoer } from "@/components/Popup";
+import {
+  PopupBody,
+  PopupHint,
+  PopupKader,
+  PopupKop,
+  PopupVeld,
+  PopupVoet,
+  popupInvoer,
+} from "@/components/Popup";
 import { zoekAdresOfKlant, type AdresKeuze, type Bericht } from "@/lib/berichten";
 import { bewaarKlant, koppelKlant as hangKlantAanAdres } from "@/lib/klanten";
 import { koppelKlant } from "@/lib/mailacties";
@@ -84,7 +92,9 @@ export function KoppelAanAdresDialog({ open, onOpenChange, b, onKlaar }: Props) 
       }
       if (!klantId) return;
       await koppelKlant(b.id, klantId);
-      toast.success(`${b.van_email || "De mail"} hoort nu bij ${naam || "deze klant"}. Paaltje leest de mail opnieuw.`);
+      toast.success(
+        `${b.van_email || "De mail"} hoort nu bij ${naam || "deze klant"}. Paaltje leest de mail opnieuw.`,
+      );
       onOpenChange(false);
       onKlaar();
     } catch (e) {
@@ -99,7 +109,11 @@ export function KoppelAanAdresDialog({ open, onOpenChange, b, onKlaar }: Props) 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <PopupKader>
-        <PopupKop icoon={<Link2 className="size-5" />} titel="Koppelen aan adres" subtitel={b.van_naam || b.van_email} />
+        <PopupKop
+          icoon={<Link2 className="size-5" />}
+          titel="Koppelen aan adres"
+          subtitel={b.van_naam || b.van_email}
+        />
         <PopupBody>
           <div className="flex flex-col gap-2">
             <PopupVeld icoon={<Search className="size-4" />}>
@@ -118,7 +132,9 @@ export function KoppelAanAdresDialog({ open, onOpenChange, b, onKlaar }: Props) 
             {term.length < 2 ? null : treffers.isLoading ? (
               <p className="text-[13px] text-muted-foreground">Zoeken…</p>
             ) : treffers.isError ? (
-              <p className="text-[13px] text-tint-rood-ink">Zoeken lukte niet. Probeer het zo nog eens.</p>
+              <p className="text-[13px] text-tint-rood-ink">
+                Zoeken lukte niet. Probeer het zo nog eens.
+              </p>
             ) : lijst.length === 0 ? (
               <p className="text-[13px] text-muted-foreground">Niets gevonden.</p>
             ) : (
@@ -141,7 +157,9 @@ export function KoppelAanAdresDialog({ open, onOpenChange, b, onKlaar }: Props) 
                     <UserRound className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                   )}
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px] font-medium">{k.adres || k.klantNaam}</span>
+                    <span className="block truncate text-[13.5px] font-medium">
+                      {k.adres || k.klantNaam}
+                    </span>
                     <span className="block truncate text-[12px] text-muted-foreground">
                       {k.inactief
                         ? "Inactief (gestopt of verhuisd)"

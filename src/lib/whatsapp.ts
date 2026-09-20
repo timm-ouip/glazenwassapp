@@ -254,16 +254,22 @@ export async function fetchWaKlantgegevens(telefoon: string): Promise<WaKlantgeg
     .order("ontvangen_op", { ascending: false })
     .limit(50);
   if (error) throw error;
-  return ((data ?? []) as unknown as WaKlantgegevens[])
-    .map((r) => ({ ...r, klantgegevens: (r.klantgegevens ?? {}) as KlantGegevens }))
-    .filter((r) => {
-      const kg = r.klantgegevens;
-      return !!(kg.herkend || kg.toegevoegd || kg.anders || kg.teruggedraaid);
-    })
-    // Wat nog terug te draaien is gaat voor: dat mag niet uit beeld raken
-    // door nieuwere appjes met alleen "anders" of een oude terugdraaiing.
-    .sort((a, b) => Number(!!(b.klantgegevens.herkend || b.klantgegevens.toegevoegd)) - Number(!!(a.klantgegevens.herkend || a.klantgegevens.toegevoegd)))
-    .slice(0, 5);
+  return (
+    ((data ?? []) as unknown as WaKlantgegevens[])
+      .map((r) => ({ ...r, klantgegevens: (r.klantgegevens ?? {}) as KlantGegevens }))
+      .filter((r) => {
+        const kg = r.klantgegevens;
+        return !!(kg.herkend || kg.toegevoegd || kg.anders || kg.teruggedraaid);
+      })
+      // Wat nog terug te draaien is gaat voor: dat mag niet uit beeld raken
+      // door nieuwere appjes met alleen "anders" of een oude terugdraaiing.
+      .sort(
+        (a, b) =>
+          Number(!!(b.klantgegevens.herkend || b.klantgegevens.toegevoegd)) -
+          Number(!!(a.klantgegevens.herkend || a.klantgegevens.toegevoegd)),
+      )
+      .slice(0, 5)
+  );
 }
 
 /** "Klopt": dit appje (en dit nummer) hoort bij deze klant. */
@@ -272,7 +278,9 @@ export function bevestigWaKlant(berichtId: string, klantId: string): Promise<{ o
 }
 
 /** "Ongedaan maken": terugdraaien wat Wooshy uit dit appje bij de klant zette. */
-export function draaiWaKlantgegevensTerug(berichtId: string): Promise<{ ok: true; bleven: string[] }> {
+export function draaiWaKlantgegevensTerug(
+  berichtId: string,
+): Promise<{ ok: true; bleven: string[] }> {
   return roep({ actie: "klantgegevens_terugdraaien", bericht_id: berichtId });
 }
 

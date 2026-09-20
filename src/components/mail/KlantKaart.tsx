@@ -25,7 +25,12 @@ import {
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 
-import { fetchKlantBijEmail, type Bericht, type KlantBijMail, type KlantVeld } from "@/lib/berichten";
+import {
+  fetchKlantBijEmail,
+  type Bericht,
+  type KlantBijMail,
+  type KlantVeld,
+} from "@/lib/berichten";
 import { draaiKlantgegevensTerug, koppelKlant } from "@/lib/mailacties";
 import { formatPrice, klantAdres, ritmeLabel, updateKlant } from "@/lib/klanten";
 import { toonDatum, vandaag } from "@/lib/wasdag";
@@ -79,7 +84,8 @@ export function KlantKaart({ b, kanSchrijven }: { b: Bericht; kanSchrijven: bool
     void qc.invalidateQueries({ queryKey: ["klanten"] });
   };
 
-  if (klanten.isLoading) return <p className="text-[12.5px] text-muted-foreground">Klant zoeken…</p>;
+  if (klanten.isLoading)
+    return <p className="text-[12.5px] text-muted-foreground">Klant zoeken…</p>;
 
   if (klanten.isError) {
     return (
@@ -180,12 +186,18 @@ export function KlantBlok({ k }: { k: KlantBijMail }) {
     <div className="rounded-[14px] bg-tint-groen p-3 text-tint-groen-ink">
       <div className="flex items-start gap-1.5">
         <p className="flex min-w-0 flex-1 items-center gap-1.5 text-[13.5px] font-semibold">
-          <UserRound className="size-3.5 shrink-0" /> <span className="truncate">{k.naam || "Zonder naam"}</span>
+          <UserRound className="size-3.5 shrink-0" />{" "}
+          <span className="truncate">{k.naam || "Zonder naam"}</span>
         </p>
         {/* Het poppetje: het dossier, hier ter plekke. Bij één pand hier; bij
             meer staat er een naast elk pand, want het dossier gaat over één pand. */}
         {magKlantenZien && k.adressen.length === 1 && (
-          <DossierKnop klantId={k.id} customerId={k.adressen[0]!.id} naam={k.naam} className="-mr-1 -mt-1" />
+          <DossierKnop
+            klantId={k.id}
+            customerId={k.adressen[0]!.id}
+            naam={k.naam}
+            className="-mr-1 -mt-1"
+          />
         )}
       </div>
       {klantAdres(k) && <p className="mt-1 text-[12.5px]">{klantAdres(k)}</p>}
@@ -210,26 +222,38 @@ export function KlantBlok({ k }: { k: KlantBijMail }) {
         </p>
         <p className="flex items-center gap-1.5">
           <CalendarDays className="size-3" />
-          {k.volgendeWasdag ? `Volgende wasdag: ${toonDatum(k.volgendeWasdag)}` : "Nog niet ingepland"}
+          {k.volgendeWasdag
+            ? `Volgende wasdag: ${toonDatum(k.volgendeWasdag)}`
+            : "Nog niet ingepland"}
         </p>
       </div>
       {/* Per adres wat het kost en wat erbij staat. Bij één adres zonder
           straatnaam erboven: dat is het adres hierboven al. Geen prijs (0)
           laten we weg. */}
-      {(k.adressen.length > 1 || k.adressen.some((a) => (prijzenZien && !!a.prijs) || a.notitie)) && (
+      {(k.adressen.length > 1 ||
+        k.adressen.some((a) => (prijzenZien && !!a.prijs) || a.notitie)) && (
         <ul className="mt-2 space-y-1.5 border-t border-tint-groen-ink/15 pt-2 text-[12px]">
           {k.adressen.map((a) => (
             <li key={a.id} className="min-w-0">
               <div className="flex items-center gap-2">
-                {k.adressen.length > 1 && <span className="min-w-0 flex-1 truncate">{a.adres}</span>}
+                {k.adressen.length > 1 && (
+                  <span className="min-w-0 flex-1 truncate">{a.adres}</span>
+                )}
                 {prijzenZien && !!a.prijs && (
                   <span className="font-medium tabular-nums">{formatPrice(a.prijs)}</span>
                 )}
                 {magKlantenZien && k.adressen.length > 1 && (
-                  <DossierKnop klantId={k.id} customerId={a.id} naam={k.naam} className="-my-1 -mr-1 size-6" />
+                  <DossierKnop
+                    klantId={k.id}
+                    customerId={a.id}
+                    naam={k.naam}
+                    className="-my-1 -mr-1 size-6"
+                  />
                 )}
               </div>
-              {a.notitie && <p className="break-words italic leading-snug opacity-85">{a.notitie}</p>}
+              {a.notitie && (
+                <p className="break-words italic leading-snug opacity-85">{a.notitie}</p>
+              )}
             </li>
           ))}
         </ul>
@@ -249,7 +273,11 @@ export interface VakjesActies {
   soort: "mail" | "appje";
 }
 
-const MAIL_ACTIES: VakjesActies = { klopt: koppelKlant, terug: draaiKlantgegevensTerug, soort: "mail" };
+const MAIL_ACTIES: VakjesActies = {
+  klopt: koppelKlant,
+  terug: draaiKlantgegevensTerug,
+  soort: "mail",
+};
 
 /** Wat Wooshy zelf deed, geel zodat het opvalt, met Ongedaan maken. */
 export function WooshyVakje({
@@ -268,9 +296,9 @@ export function WooshyVakje({
   const hier = acties.soort === "mail" ? "deze mail" : "dit appje";
   const [bezig, setBezig] = useState<"terug" | "klopt" | null>(null);
   const kg = b.klantgegevens;
-  const velden = (Object.entries(kg.toegevoegd?.velden ?? {}) as [KlantVeld, string | undefined][]).filter(
-    (x): x is [KlantVeld, string] => !!x[1] && x[0] in VELD_NAAM,
-  );
+  const velden = (
+    Object.entries(kg.toegevoegd?.velden ?? {}) as [KlantVeld, string | undefined][]
+  ).filter((x): x is [KlantVeld, string] => !!x[1] && x[0] in VELD_NAAM);
 
   if (!kg.herkend && velden.length === 0) {
     if (!kg.teruggedraaid) return null;
@@ -290,13 +318,16 @@ export function WooshyVakje({
   }
 
   const naam =
-    klanten.find((k) => k.id === (kg.herkend?.klant_id ?? kg.toegevoegd?.klant_id))?.naam || "deze klant";
+    klanten.find((k) => k.id === (kg.herkend?.klant_id ?? kg.toegevoegd?.klant_id))?.naam ||
+    "deze klant";
 
   async function klopt(klantId: string) {
     setBezig("klopt");
     try {
       await acties.klopt(b.id, klantId);
-      toast.success(`Bevestigd. Paaltje leest ${acties.soort === "mail" ? "de mail" : "het appje"} opnieuw.`);
+      toast.success(
+        `Bevestigd. Paaltje leest ${acties.soort === "mail" ? "de mail" : "het appje"} opnieuw.`,
+      );
       onKlaar();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -340,11 +371,12 @@ export function WooshyVakje({
           ) : (
             <>
               Herkend als <strong>{naam}</strong> aan{" "}
-              {kg.herkend.via === "telefoon" ? "het telefoonnummer" : "het adres en de naam"} in {hier}
+              {kg.herkend.via === "telefoon" ? "het telefoonnummer" : "het adres en de naam"} in{" "}
+              {hier}
             </>
           )}
-          {kg.herkend.email ? `; ${kg.herkend.email} hoort nu bij deze klant` : ""}. Tot je dit bevestigt voert
-          Paaltje voor deze klant niets zelf door.
+          {kg.herkend.email ? `; ${kg.herkend.email} hoort nu bij deze klant` : ""}. Tot je dit
+          bevestigt voert Paaltje voor deze klant niets zelf door.
         </p>
       )}
       {velden.length > 0 && (
@@ -353,7 +385,8 @@ export function WooshyVakje({
           <ul className="mt-0.5 space-y-0.5">
             {velden.map(([veld, waarde]) => (
               <li key={veld} className="min-w-0 break-words">
-                <span className="opacity-75">{VELD_NAAM[veld]}:</span> <span className="font-medium">{waarde}</span>
+                <span className="opacity-75">{VELD_NAAM[veld]}:</span>{" "}
+                <span className="font-medium">{waarde}</span>
               </li>
             ))}
           </ul>
@@ -367,7 +400,11 @@ export function WooshyVakje({
             disabled={uit || bezig !== null}
             onClick={() => void klopt(kg.herkend!.klant_id)}
           >
-            {bezig === "klopt" ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+            {bezig === "klopt" ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <Check className="size-3" />
+            )}
             Klopt
           </Button>
         )}
@@ -378,7 +415,11 @@ export function WooshyVakje({
           disabled={uit || bezig !== null}
           onClick={() => void terug()}
         >
-          {bezig === "terug" ? <Loader2 className="size-3 animate-spin" /> : <Undo2 className="size-3" />}
+          {bezig === "terug" ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <Undo2 className="size-3" />
+          )}
           Ongedaan maken
         </Button>
       </div>
@@ -406,12 +447,15 @@ export function AndersVakje({
 
   // Staat het intussen al bij de klant (iemand nam het over), dan hoeft het niet meer.
   const telefoon =
-    anders.telefoon && ![klant.telefoon, klant.telefoon2].some((t) => zelfdeNummer(t, anders.telefoon!))
+    anders.telefoon &&
+    ![klant.telefoon, klant.telefoon2].some((t) => zelfdeNummer(t, anders.telefoon!))
       ? anders.telefoon
       : "";
   const email =
     anders.email &&
-    ![klant.email, klant.email2].some((e) => e.trim().toLowerCase() === anders.email!.trim().toLowerCase())
+    ![klant.email, klant.email2].some(
+      (e) => e.trim().toLowerCase() === anders.email!.trim().toLowerCase(),
+    )
       ? anders.email
       : "";
   if (!telefoon && !email && !anders.adres) return null;
@@ -429,15 +473,18 @@ export function AndersVakje({
     try {
       await updateKlant(klant.id, { [vak]: waarde });
       herlaad();
-      toast.success(oud ? `${oud} is vervangen door ${waarde}.` : `${waarde} staat nu bij de klant.`, {
-        action: {
-          label: "Ongedaan maken",
-          onClick: () =>
-            void updateKlant(klant.id, { [vak]: oud })
-              .then(herlaad)
-              .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e))),
+      toast.success(
+        oud ? `${oud} is vervangen door ${waarde}.` : `${waarde} staat nu bij de klant.`,
+        {
+          action: {
+            label: "Ongedaan maken",
+            onClick: () =>
+              void updateKlant(klant.id, { [vak]: oud })
+                .then(herlaad)
+                .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e))),
+          },
         },
-      });
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -457,7 +504,9 @@ export function AndersVakje({
           onClick={() => void zet(vak, waarde)}
         >
           <span className="truncate">
-            {klant[vak].trim() ? `Vervang ${klant[vak]}` : `Als ${i === 0 ? "eerste" : "tweede"} ${soort}`}
+            {klant[vak].trim()
+              ? `Vervang ${klant[vak]}`
+              : `Als ${i === 0 ? "eerste" : "tweede"} ${soort}`}
           </span>
         </Button>
       ))}
@@ -466,7 +515,9 @@ export function AndersVakje({
 
   return (
     <div className="rounded-[14px] bg-tint-blauw/70 p-3 text-[12.5px] text-tint-blauw-ink">
-      <p className="text-[13px] font-semibold">Anders in {soort === "mail" ? "de mail" : "het appje"}</p>
+      <p className="text-[13px] font-semibold">
+        Anders in {soort === "mail" ? "de mail" : "het appje"}
+      </p>
       {telefoon && (
         <div className="mt-1.5">
           <p className="break-words">
@@ -485,8 +536,8 @@ export function AndersVakje({
       )}
       {anders.adres && (
         <p className="mt-2 break-words leading-snug">
-          Adres: <span className="font-medium">{anders.adres}</span>. Is dat een ander pand of een verhuizing? Pas het
-          aan bij de klant.
+          Adres: <span className="font-medium">{anders.adres}</span>. Is dat een ander pand of een
+          verhuizing? Pas het aan bij de klant.
         </p>
       )}
     </div>

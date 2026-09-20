@@ -23,7 +23,13 @@ import {
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FrequentieKeuze } from "@/components/FrequentieKiezer";
 import {
   PopupBlok,
@@ -137,7 +143,9 @@ export function KlantUitMailDialog({ open, onOpenChange, b, onKlaar }: Props) {
       // Hoort het adres al bij iemand, dan geen tweede klant erop zetten.
       const bestaande = await klantVanAdres(customerId);
       if (bestaande) {
-        toast.error(`Dit adres hoort al bij ${bestaande.naam || "een klant"}. Gebruik "Koppelen aan adres".`);
+        toast.error(
+          `Dit adres hoort al bij ${bestaande.naam || "een klant"}. Gebruik "Koppelen aan adres".`,
+        );
         return;
       }
       await patchCustomer(customerId, {
@@ -166,7 +174,9 @@ export function KlantUitMailDialog({ open, onOpenChange, b, onKlaar }: Props) {
       }
       try {
         await koppelKlant(b.id, klant.id);
-        toast.success(`${klant.naam || "De klant"} staat in het klantenbestand en hoort bij deze mail.`);
+        toast.success(
+          `${klant.naam || "De klant"} staat in het klantenbestand en hoort bij deze mail.`,
+        );
       } catch (e) {
         toast.error(
           `De klant is toegevoegd, maar aan de mail koppelen lukte niet: ${e instanceof Error ? e.message : String(e)}`,
@@ -193,7 +203,12 @@ export function KlantUitMailDialog({ open, onOpenChange, b, onKlaar }: Props) {
         <PopupBody>
           <PopupBlok label="De klant">
             <PopupVeld icoon={<User className="size-4" />}>
-              <Input className={popupInvoer} value={naam} onChange={(e) => setNaam(e.target.value)} placeholder="Naam" />
+              <Input
+                className={popupInvoer}
+                value={naam}
+                onChange={(e) => setNaam(e.target.value)}
+                placeholder="Naam"
+              />
             </PopupVeld>
             <PopupPaar>
               <PopupVeld icoon={<Mail className="size-4" />}>
@@ -258,10 +273,20 @@ export function KlantUitMailDialog({ open, onOpenChange, b, onKlaar }: Props) {
           <PopupBlok label="Adres">
             <PopupPaar smal>
               <PopupVeld icoon={<House className="size-4" />}>
-                <Input className={popupInvoer} value={straat} onChange={(e) => setStraat(e.target.value)} placeholder="Straat" />
+                <Input
+                  className={popupInvoer}
+                  value={straat}
+                  onChange={(e) => setStraat(e.target.value)}
+                  placeholder="Straat"
+                />
               </PopupVeld>
               <PopupVeld icoon={<Hash className="size-4" />}>
-                <Input className={popupInvoer} value={nummer} onChange={(e) => setNummer(e.target.value)} placeholder="12" />
+                <Input
+                  className={popupInvoer}
+                  value={nummer}
+                  onChange={(e) => setNummer(e.target.value)}
+                  placeholder="12"
+                />
               </PopupVeld>
             </PopupPaar>
             <PopupPaar>
@@ -274,7 +299,12 @@ export function KlantUitMailDialog({ open, onOpenChange, b, onKlaar }: Props) {
                 />
               </PopupVeld>
               <PopupVeld>
-                <Input className={popupInvoer} value={plaats} onChange={(e) => setPlaats(e.target.value)} placeholder="Plaats" />
+                <Input
+                  className={popupInvoer}
+                  value={plaats}
+                  onChange={(e) => setPlaats(e.target.value)}
+                  placeholder="Plaats"
+                />
               </PopupVeld>
             </PopupPaar>
           </PopupBlok>

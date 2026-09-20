@@ -7,12 +7,32 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth, type Employee } from "@/lib/auth";
 
 export const RECHTEN = [
-  { sleutel: "planning", label: "Planning & wijken", uitleg: "Wijken, planning en de dag bekijken en bijwerken" },
-  { sleutel: "klanten_bekijken", label: "Klanten bekijken", uitleg: "Klanten en hun adressen zien" },
-  { sleutel: "klanten_bewerken", label: "Klanten bewerken", uitleg: "Klanten toevoegen, wijzigen en weggooien; aanmeldingen" },
-  { sleutel: "prijzen_zien", label: "Prijzen zien", uitleg: "Prijzen en omzet; zonder dit recht ziet hij nergens een bedrag" },
+  {
+    sleutel: "planning",
+    label: "Planning & wijken",
+    uitleg: "Wijken, planning en de dag bekijken en bijwerken",
+  },
+  {
+    sleutel: "klanten_bekijken",
+    label: "Klanten bekijken",
+    uitleg: "Klanten en hun adressen zien",
+  },
+  {
+    sleutel: "klanten_bewerken",
+    label: "Klanten bewerken",
+    uitleg: "Klanten toevoegen, wijzigen en weggooien; aanmeldingen",
+  },
+  {
+    sleutel: "prijzen_zien",
+    label: "Prijzen zien",
+    uitleg: "Prijzen en omzet; zonder dit recht ziet hij nergens een bedrag",
+  },
   { sleutel: "mail_lezen", label: "Mail lezen", uitleg: "Het postvak en wat Paaltje klaarzette" },
-  { sleutel: "mail_versturen", label: "Mail versturen", uitleg: "Antwoorden en aankondigingen versturen" },
+  {
+    sleutel: "mail_versturen",
+    label: "Mail versturen",
+    uitleg: "Antwoorden en aankondigingen versturen",
+  },
   { sleutel: "instellingen_team", label: "Team bekijken", uitleg: "Zien wie er in het team zit" },
 ] as const;
 
@@ -37,11 +57,20 @@ export function useRecht(...rechten: Recht[]): boolean {
  * lege pagina.
  */
 export function rechtenVoorPad(pad: string): Recht[] | null {
-  if (pad === "/" || pad.startsWith("/planning") || pad.startsWith("/dag") || pad.startsWith("/printen")) {
+  if (
+    pad === "/" ||
+    pad.startsWith("/planning") ||
+    pad.startsWith("/dag") ||
+    pad.startsWith("/printen")
+  ) {
     return ["planning"];
   }
   if (pad.startsWith("/klanten")) return ["klanten_bekijken"];
-  if (pad.startsWith("/aanmeldingen") || pad.startsWith("/importeren") || pad.startsWith("/prullenbak")) {
+  if (
+    pad.startsWith("/aanmeldingen") ||
+    pad.startsWith("/importeren") ||
+    pad.startsWith("/prullenbak")
+  ) {
     return ["klanten_bewerken"];
   }
   if (pad.startsWith("/mailing")) return ["mail_lezen", "mail_versturen"];
@@ -73,7 +102,11 @@ export async function fetchRollen(): Promise<Rol[]> {
   }));
 }
 
-export async function bewaarRol(rol: { id?: string; naam: string; rechten: Recht[] }): Promise<void> {
+export async function bewaarRol(rol: {
+  id?: string;
+  naam: string;
+  rechten: Recht[];
+}): Promise<void> {
   const naam = rol.naam.trim();
   if (!naam) throw new Error("Geef de rol een naam.");
   const rechten = RECHTEN.map((r) => r.sleutel).filter((s) => rol.rechten.includes(s));

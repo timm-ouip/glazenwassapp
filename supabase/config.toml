@@ -63,3 +63,8 @@ verify_jwt = false
 # van jouw bedrijf is.
 [functions.team-uitnodiging]
 verify_jwt = true
+
+# Wat Brevo terugmeldt over een verstuurde mail (afgeleverd, gebounced).
+# Geen gebruiker; het slot is het geheim BREVO_WEBHOOK_SLEUTEL.
+[functions.brevo-webhook]
+verify_jwt = false

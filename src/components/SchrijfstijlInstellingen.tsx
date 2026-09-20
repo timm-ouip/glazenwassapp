@@ -12,11 +12,7 @@ import { IconSparkles as Sparkles } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/lib/auth";
-import {
-  aantalVerstuurdeAntwoorden,
-  bewaarSchrijfstijl,
-  fetchSchrijfstijl,
-} from "@/lib/mailing";
+import { aantalVerstuurdeAntwoorden, bewaarSchrijfstijl, fetchSchrijfstijl } from "@/lib/mailing";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -62,8 +58,8 @@ export function SchrijfstijlInstellingen({ isEigenaar }: { isEigenaar: boolean }
   return (
     <div className="space-y-2">
       <p className="text-[12.5px] text-muted-foreground">
-        Hoe moeten de antwoorden klinken die Paaltje voor je klaarzet? Bijvoorbeeld:
-        &ldquo;u-vorm, kort, afsluiten met Groet, Timmie&rdquo;.
+        Hoe moeten de antwoorden klinken die Paaltje voor je klaarzet? Bijvoorbeeld: &ldquo;u-vorm,
+        kort, afsluiten met Groet, Timmie&rdquo;.
       </p>
       <Textarea
         value={stijl}

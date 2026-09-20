@@ -118,7 +118,10 @@ export async function draaiStoppenTerug(u: StopUitkomst): Promise<number> {
 }
 
 /** Een aanmelding op een bekend adres overnemen, in één stap. Geeft de klant. */
-export async function bekendAdresOvernemen(aanmeldingId: string, metVorigeKlant: boolean): Promise<string> {
+export async function bekendAdresOvernemen(
+  aanmeldingId: string,
+  metVorigeKlant: boolean,
+): Promise<string> {
   const { data, error } = await supabase.rpc("bekend_adres_overnemen", {
     aanmelding: aanmeldingId,
     met_vorige_klant: metVorigeKlant,
@@ -147,7 +150,9 @@ export async function fetchInactieveAdressen(): Promise<InactiefAdres[]> {
   const data = await haalAllePaginas((van, tot) =>
     supabase
       .from("customers")
-      .select("id,street_id,house_number,addition,klant_id,note,interval_maanden,ritme,inactief_op,inactief_reden,adres_prijzen(prijs)")
+      .select(
+        "id,street_id,house_number,addition,klant_id,note,interval_maanden,ritme,inactief_op,inactief_reden,adres_prijzen(prijs)",
+      )
       .is("deleted_at", null)
       .not("inactief_op", "is", null)
       .order("inactief_op", { ascending: false })

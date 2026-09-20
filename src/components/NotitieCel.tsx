@@ -8,6 +8,7 @@ import {
   EVEN_MAANDEN,
   formatPrice,
   isGeweest,
+  leesDuur,
   maandwerkMaanden,
   noteTokens,
   ONEVEN_MAANDEN,
@@ -29,6 +30,9 @@ interface Regel {
   jaar?: number;
   notitie: string;
   extra: string;
+  /** Minuten, als tekst terwijl je typt. */
+  duur: string;
+  duurZelf: boolean;
 }
 
 function naarRegels(werk: Maandwerk[] | undefined): Regel[] {
@@ -38,6 +42,8 @@ function naarRegels(werk: Maandwerk[] | undefined): Regel[] {
     ...(w.jaar !== undefined ? { jaar: w.jaar } : {}),
     notitie: w.notitie,
     extra: w.extra === null ? "" : String(w.extra).replace(".", ","),
+    duur: w.duur === null || w.duur === undefined ? "" : String(w.duur),
+    duurZelf: w.duur_zelf === true,
   }));
 }
 
@@ -48,12 +54,17 @@ function naarMaandwerk(regels: Regel[]): Maandwerk[] {
       .filter((r) => r.maanden.length > 0)
       .map((r) => {
         const getal = Number(r.extra.replace(",", ".").replace(/[^\d.]/g, ""));
+        const minuten = leesDuur(r.duur);
         return {
           ...(r.id ? { id: r.id } : {}),
           maanden: r.maanden,
           ...(r.jaar !== undefined ? { jaar: r.jaar } : {}),
           notitie: r.notitie.trim(),
           extra: r.extra.trim() === "" || Number.isNaN(getal) ? null : getal,
+          // De duur gaat altijd mee terug: laat je hem weg, dan wist elke
+          // bewerking wat de database had ingevuld.
+          duur: minuten === undefined ? null : minuten,
+          duur_zelf: r.duurZelf,
         };
       })
   );
@@ -377,7 +388,9 @@ export function NotitieCel({
                             type="button"
                             onClick={() => wisselMaand(i, m)}
                             title={
-                              erbij ? undefined : "Komt dan niet langs — aanvinken is een extra beurt"
+                              erbij
+                                ? undefined
+                                : "Komt dan niet langs — aanvinken is een extra beurt"
                             }
                             className={`rounded border px-1 py-0.5 text-[10px] font-medium capitalize transition-colors ${
                               aan
@@ -446,16 +459,28 @@ export function NotitieCel({
                       apart te staan van wat het pand normaal kost. Zonder
                       recht op prijzen geen bedragveld. */}
                   {prijzenZien && (
+                    <Input
+                      value={regel.extra}
+                      placeholder="+ €"
+                      title="Wat dit werk extra kost, bovenop de vaste prijs"
+                      inputMode="decimal"
+                      className="h-8 w-16 shrink-0 text-xs pointer-coarse:w-20"
+                      onChange={(e) => pasAan(i, { extra: e.target.value })}
+                      onKeyDown={sluitBijEnter}
+                    />
+                  )}
+                  {/* Hoeveel langer je die keer bezig bent. De app vult hem
+                      één keer uit de meerprijs; typ je zelf iets, dan blijft
+                      dat staan als het uurtarief verandert. */}
                   <Input
-                    value={regel.extra}
-                    placeholder="+ €"
-                    title="Wat dit werk extra kost, bovenop de vaste prijs"
-                    inputMode="decimal"
-                    className="h-8 w-16 shrink-0 text-xs pointer-coarse:w-20"
-                    onChange={(e) => pasAan(i, { extra: e.target.value })}
+                    value={regel.duur}
+                    placeholder="+ min"
+                    title="Hoeveel minuten dit werk extra kost"
+                    inputMode="numeric"
+                    className="h-8 w-14 shrink-0 text-xs pointer-coarse:w-16"
+                    onChange={(e) => pasAan(i, { duur: e.target.value, duurZelf: true })}
                     onKeyDown={sluitBijEnter}
                   />
-                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -472,7 +497,12 @@ export function NotitieCel({
               size="sm"
               variant="outline"
               className="h-8 w-full text-xs"
-              onClick={() => setWerk([...werk, { maanden: [], notitie: "", extra: "" }])}
+              onClick={() =>
+                setWerk([
+                  ...werk,
+                  { maanden: [], notitie: "", extra: "", duur: "", duurZelf: false },
+                ])
+              }
             >
               <Plus className="size-3.5" /> Maanden toevoegen
             </Button>

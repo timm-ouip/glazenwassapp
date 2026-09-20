@@ -1,13 +1,17 @@
 import * as React from "react";
 
 /** Hier kun je niet mee slepen: je wilt erop klikken of erin typen. */
-const NIET_SLEPEN = "button, a, input, textarea, select, label, [role='tab'], [contenteditable='true']";
+const NIET_SLEPEN =
+  "button, a, input, textarea, select, label, [role='tab'], [contenteditable='true']";
 
 /** Zoveel pixels moet de muis bewegen voor het een sleep is en geen klik. */
 const DREMPEL = 4;
 
 type SleepHandlers = Required<
-  Pick<React.HTMLAttributes<HTMLElement>, "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel">
+  Pick<
+    React.HTMLAttributes<HTMLElement>,
+    "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel"
+  >
 >;
 
 /**

@@ -46,6 +46,7 @@ import {
 import { toast } from "sonner";
 import {
   IconCalendar as CalendarDays,
+  IconClock as Clock,
   IconCalendarOff as CalendarOff,
   IconChevronLeft as ChevronLeft,
   IconChevronRight as ChevronRight,
@@ -91,6 +92,7 @@ import {
   type Customer,
   type District,
   type Klant,
+  leesDuur,
   type Maandwerk,
   type Markering,
   type QuickNote,
@@ -161,6 +163,11 @@ interface Props {
  */
 interface Pand {
   price: string;
+  /** Hoe lang dit adres duurt, in minuten; leeg is: nog niet ingevuld. */
+  duur: string;
+  duurZelf: boolean;
+  /** Eigen blok in de dagweergave: null = automatisch (op de duur). */
+  eigenBlok: boolean | null;
   interval_maanden: number;
   ritme: number;
   note: string;
@@ -172,6 +179,9 @@ interface Pand {
 
 const LEEG_PAND: Pand = {
   price: "",
+  duur: "",
+  duurZelf: false,
+  eigenBlok: null,
   interval_maanden: 1,
   ritme: 1,
   note: "",
@@ -184,6 +194,9 @@ const LEEG_PAND: Pand = {
 function pandVan(c: Customer): Pand {
   return {
     price: c.price ? String(c.price) : "",
+    duur: c.duur_min === null || c.duur_min === undefined ? "" : String(c.duur_min),
+    duurZelf: c.duur_zelf ?? false,
+    eigenBlok: c.eigen_blok ?? null,
     interval_maanden: c.interval_maanden || 1,
     ritme: c.ritme || 1,
     note: c.note ?? "",
@@ -543,6 +556,10 @@ export function KlantgegevensDialog({
           adresId,
           schuifStartOp(dossierCustomer ?? { start_maand: "", created_at: nu, overslaan: [] }, {
             ...(prijzenZien ? { price: prijsGetal(pand.price) } : {}),
+            ...(leesDuur(pand.duur) !== undefined
+              ? { duur_min: leesDuur(pand.duur) ?? null, duur_zelf: pand.duurZelf }
+              : {}),
+            eigen_blok: pand.eigenBlok,
             note: pand.note.trim(),
             // De postcode hoort bij het pand, niet bij de bewoner — en de
             // klantenlijst leest hem daar ook vandaan.
@@ -884,6 +901,22 @@ export function KlantgegevensDialog({
                     />
                   </PopupVeld>
                 )}
+                <PopupVeld icoon={<Clock className="size-4" />}>
+                  <Input
+                    id="duur"
+                    inputMode="numeric"
+                    className={`${popupInvoer} tabular-nums`}
+                    placeholder="duur in minuten"
+                    title="Hoe lang dit adres duurt, voor één persoon"
+                    value={pand.duur}
+                    disabled={!magBewerken}
+                    onChange={(e) =>
+                      setPand((p) => ({ ...p, duur: e.target.value, duurZelf: true }))
+                    }
+                  />
+                </PopupVeld>
+              </PopupPaar>
+              <PopupPaar>
                 <PopupVeld icoon={<CalendarDays className="size-4" />}>
                   <Select
                     disabled={!magBewerken}
@@ -930,6 +963,34 @@ export function KlantgegevensDialog({
                   })}
                 </div>
               )}
+
+              {/* Grote panden staan in de dagweergave als eigen blok, en
+                    alleen zij kunnen een tijdvak in de aankondiging krijgen.
+                    Automatisch gaat op de duur; hier zet je het zelf vast. */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[12px] text-muted-foreground">Eigen blok op de dag:</span>
+                {(
+                  [
+                    [null, "Automatisch"],
+                    [true, "Altijd"],
+                    [false, "Nooit"],
+                  ] as const
+                ).map(([waarde, label]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    disabled={!magBewerken}
+                    onClick={() => setPand((p) => ({ ...p, eigenBlok: waarde }))}
+                    className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                      pand.eigenBlok === waarde
+                        ? "border-transparent bg-tint-amber text-tint-amber-ink"
+                        : "border-border bg-card text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </PopupBlok>
 
             <PopupBlok label={prijzenZien ? "Notitie en meerwerk" : "Notitie"}>
@@ -1297,32 +1358,30 @@ export function KlantgegevensDialog({
 
   const mobielDossier =
     stap === "blad" ? (
-      <PopupKader
-        className="bottom-0 left-0 top-auto max-h-[85dvh] max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] data-[state=open]:slide-in-from-bottom-10 data-[state=open]:zoom-in-100 data-[state=closed]:slide-out-to-bottom data-[state=closed]:zoom-out-100 [&>button:last-child]:hidden"
-      >
+      <PopupKader className="bottom-0 left-0 top-auto max-h-[85dvh] max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] data-[state=open]:slide-in-from-bottom-10 data-[state=open]:zoom-in-100 data-[state=closed]:slide-out-to-bottom data-[state=closed]:zoom-out-100 [&>button:last-child]:hidden">
         <div className="flex flex-col gap-3.5 overflow-y-auto px-4 pb-4">
           {/* Het greepje en de titel zijn om te slepen: omhoog opent het hele
               dossier, omlaag sluit het blad. */}
           <div className="-mx-4 flex touch-none flex-col gap-3.5 px-4 pt-2.5" {...bladSleep}>
-          <div className="mx-auto h-1 w-9 rounded-full bg-border" />
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <DialogTitle className="truncate font-display text-[20px] font-semibold leading-tight tracking-[-0.02em]">
-                {titelTekst}
-              </DialogTitle>
-              <DialogDescription className="truncate text-[13px]">
-                {onderregel || "Nog geen gegevens"}
-              </DialogDescription>
+            <div className="mx-auto h-1 w-9 rounded-full bg-border" />
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="truncate font-display text-[20px] font-semibold leading-tight tracking-[-0.02em]">
+                  {titelTekst}
+                </DialogTitle>
+                <DialogDescription className="truncate text-[13px]">
+                  {onderregel || "Nog geen gegevens"}
+                </DialogDescription>
+              </div>
+              <button
+                type="button"
+                onClick={() => void sluitMetVraag()}
+                aria-label="Sluiten"
+                className="-mr-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-muted"
+              >
+                <X className="size-5" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => void sluitMetVraag()}
-              aria-label="Sluiten"
-              className="-mr-1 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-muted"
-            >
-              <X className="size-5" />
-            </button>
-          </div>
           </div>
           {snelleKnoppen}
           {notitieTekst && (
@@ -1529,7 +1588,13 @@ function stripId(k: Klant) {
  * De verschuiving gaat rechtstreeks op het blad, niet via React-state: anders
  * wordt het hele dossier bij elke millimeter opnieuw opgebouwd.
  */
-function useSleepBlad({ onOmhoog, onOmlaag }: { onOmhoog: () => void; onOmlaag: () => Promise<unknown> | void }) {
+function useSleepBlad({
+  onOmhoog,
+  onOmlaag,
+}: {
+  onOmhoog: () => void;
+  onOmlaag: () => Promise<unknown> | void;
+}) {
   const start = useRef<{ y: number; t: number; id: number; blad: HTMLElement } | null>(null);
 
   function zet(blad: HTMLElement, dy: number, glijden: boolean) {

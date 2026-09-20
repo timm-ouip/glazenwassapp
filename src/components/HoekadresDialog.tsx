@@ -105,7 +105,9 @@ export function HoekadresDialog({ open, onOpenChange, customer, straten, onOpsla
                 <option key={s.id} value={s.name} />
               ))}
             </datalist>
-            <PopupHint>Zoals hij op de lijst staat — kort, want hij komt op de printlijst.</PopupHint>
+            <PopupHint>
+              Zoals hij op de lijst staat — kort, want hij komt op de printlijst.
+            </PopupHint>
           </PopupBlok>
 
           <PopupBlok label="Volledige straatnaam">
@@ -148,9 +150,7 @@ export function HoekadresDialog({ open, onOpenChange, customer, straten, onOpsla
               <Button
                 variant="ghost"
                 className="rounded-full text-muted-foreground"
-                onClick={() =>
-                  bewaar({ hoek_straat: "", hoek_straat_volledig: "", hoek_kant: "" })
-                }
+                onClick={() => bewaar({ hoek_straat: "", hoek_straat_volledig: "", hoek_kant: "" })}
               >
                 Hoekadres weghalen
               </Button>

@@ -32,7 +32,10 @@ export interface MailCategorie {
 /** Hoe een niveau op het scherm heet, en wat het betekent. */
 export const ZELFSTANDIGHEID: Record<Zelfstandigheid, { naam: string; uitleg: string }> = {
   niets: { naam: "Alleen indelen", uitleg: "Paaltje zet de mail in deze categorie, verder niets." },
-  concept: { naam: "Antwoord klaarzetten", uitleg: "Paaltje schrijft een antwoord; jij verstuurt het." },
+  concept: {
+    naam: "Antwoord klaarzetten",
+    uitleg: "Paaltje schrijft een antwoord; jij verstuurt het.",
+  },
   concept_voorstel: {
     naam: "Antwoord + voorstel",
     uitleg: "Paaltje schrijft een antwoord en zet klaar wat er moet gebeuren; jij klikt.",
@@ -90,16 +93,21 @@ export async function fetchCategorieen(): Promise<MailCategorie[]> {
 
 export async function wijzigCategorie(
   id: string,
-  patch: Partial<Pick<MailCategorie, "naam" | "omschrijving" | "zelfstandigheid" | "zelf_antwoorden_whatsapp">>,
+  patch: Partial<
+    Pick<MailCategorie, "naam" | "omschrijving" | "zelfstandigheid" | "zelf_antwoorden_whatsapp">
+  >,
 ): Promise<void> {
   const { error } = await supabase.from("mail_categorieen").update(patch).eq("id", id);
   if (error) throw error;
 }
 
 export async function nieuweCategorie(naam: string, omschrijving: string): Promise<void> {
-  const { error } = await supabase
-    .from("mail_categorieen")
-    .insert({ naam: naam.trim(), omschrijving: omschrijving.trim(), zelfstandigheid: "niets", volgorde: 80 });
+  const { error } = await supabase.from("mail_categorieen").insert({
+    naam: naam.trim(),
+    omschrijving: omschrijving.trim(),
+    zelfstandigheid: "niets",
+    volgorde: 80,
+  });
   if (error) throw error;
 }
 

@@ -33,7 +33,14 @@ import { Dialog, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { PopupBody, PopupKader, PopupKop, PopupVoet, popupInvoer, PopupVeld } from "@/components/Popup";
+import {
+  PopupBody,
+  PopupKader,
+  PopupKop,
+  PopupVoet,
+  popupInvoer,
+  PopupVeld,
+} from "@/components/Popup";
 
 export interface Opzet {
   aan: string;
@@ -169,7 +176,9 @@ export function MailOpstellen({
       ...(opzet?.antwoordOp ? { antwoordOp: opzet.antwoordOp } : {}),
       ...(opzet?.klantId ? { klantId: opzet.klantId } : {}),
       ...(opzet?.bijlagenVan && meeVan.length > 0 ? { bijlagenVan: opzet.bijlagenVan } : {}),
-      ...(bijlagen.length ? { bijlagen: bijlagen.map(({ naam, type, inhoud }) => ({ naam, type, inhoud })) } : {}),
+      ...(bijlagen.length
+        ? { bijlagen: bijlagen.map(({ naam, type, inhoud }) => ({ naam, type, inhoud })) }
+        : {}),
     };
     try {
       if (later) {
@@ -210,12 +219,22 @@ export function MailOpstellen({
         <form onSubmit={(e) => void verstuur(e)} className="flex max-h-[90vh] flex-col">
           <PopupKop
             icoon={<SquarePen className="size-5" />}
-            titel={isAntwoord ? (opzet?.cc ? "Allen beantwoorden" : "Beantwoorden") : isDoorsturen ? "Doorsturen" : "Nieuwe mail"}
+            titel={
+              isAntwoord
+                ? opzet?.cc
+                  ? "Allen beantwoorden"
+                  : "Beantwoorden"
+                : isDoorsturen
+                  ? "Doorsturen"
+                  : "Nieuwe mail"
+            }
             subtitel={UITLEG}
           />
           <PopupBody className="gap-2.5">
             {opzet?.opmerking && (
-              <p className="rounded-[10px] bg-tint-geel px-3 py-1.5 text-[12px] text-tint-geel-ink">{opzet.opmerking}</p>
+              <p className="rounded-[10px] bg-tint-geel px-3 py-1.5 text-[12px] text-tint-geel-ink">
+                {opzet.opmerking}
+              </p>
             )}
             <PopupVeld icoon={<span className="block w-[4.5rem] text-[12.5px]">Aan</span>}>
               <Input
@@ -338,7 +357,11 @@ export function MailOpstellen({
               Annuleren
             </Button>
             <div className="flex">
-              <Button type="submit" className="rounded-l-full rounded-r-none" disabled={bezig || teLang}>
+              <Button
+                type="submit"
+                className="rounded-l-full rounded-r-none"
+                disabled={bezig || teLang}
+              >
                 {bezig ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                 {bezig ? "Bezig…" : "Versturen"}
               </Button>

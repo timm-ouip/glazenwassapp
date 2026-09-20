@@ -13,7 +13,9 @@ export function AccountMenu() {
   return (
     <div className="flex items-center gap-2 text-sm">
       <div className="hidden text-right sm:block">
-        <p className="font-medium leading-tight text-foreground">{employee.naam || employee.email}</p>
+        <p className="font-medium leading-tight text-foreground">
+          {employee.naam || employee.email}
+        </p>
         <p className="text-xs text-muted-foreground">{rolLabel(employee)}</p>
       </div>
       {heeftRecht(employee, "instellingen_team") && (

@@ -23,7 +23,8 @@ export function SpamAfzenders({ kanSchrijven }: { kanSchrijven: boolean }) {
         onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 px-1 text-left text-[11.5px] text-muted-foreground hover:text-foreground"
       >
-        <ShieldAlert className="size-3.5" /> {lijst.length} {lijst.length === 1 ? "afzender" : "afzenders"} altijd naar spam
+        <ShieldAlert className="size-3.5" /> {lijst.length}{" "}
+        {lijst.length === 1 ? "afzender" : "afzenders"} altijd naar spam
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <PopupKader className="sm:max-w-md" aria-describedby="spam-afzenders-uitleg">
@@ -37,7 +38,10 @@ export function SpamAfzenders({ kanSchrijven }: { kanSchrijven: boolean }) {
           />
           <PopupBody className="gap-1.5">
             {lijst.map((email) => (
-              <div key={email} className="flex items-center gap-2 rounded-xl border border-input px-3 py-2 text-[13px]">
+              <div
+                key={email}
+                className="flex items-center gap-2 rounded-xl border border-input px-3 py-2 text-[13px]"
+              >
                 <span className="min-w-0 flex-1 truncate">{email}</span>
                 <button
                   type="button"
@@ -48,7 +52,9 @@ export function SpamAfzenders({ kanSchrijven }: { kanSchrijven: boolean }) {
                         toast.success(`${email} gaat niet meer vanzelf naar spam.`);
                         void qc.invalidateQueries({ queryKey: ["spam-regels"] });
                       })
-                      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)))
+                      .catch((e: unknown) =>
+                        toast.error(e instanceof Error ? e.message : String(e)),
+                      )
                   }
                   className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-destructive disabled:opacity-50"
                 >
@@ -56,7 +62,9 @@ export function SpamAfzenders({ kanSchrijven }: { kanSchrijven: boolean }) {
                 </button>
               </div>
             ))}
-            <PopupHint>Mail die al in de spammap staat blijft daar; zet die zelf terug met "Geen spam".</PopupHint>
+            <PopupHint>
+              Mail die al in de spammap staat blijft daar; zet die zelf terug met "Geen spam".
+            </PopupHint>
           </PopupBody>
         </PopupKader>
       </Dialog>

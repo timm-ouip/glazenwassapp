@@ -219,9 +219,10 @@ export function KlantDialog({
                     <SelectItem key={s.id} value={s.id}>
                       {volledig(s)}
                       {/* De werknaam erachter als hij anders is: zo herken je de straat van de lijst. */}
-                      {s.volledige_naam.trim() && s.volledige_naam.trim().toLowerCase() !== s.name.trim().toLowerCase() && (
-                        <span className="ml-1.5 text-muted-foreground">({s.name})</span>
-                      )}
+                      {s.volledige_naam.trim() &&
+                        s.volledige_naam.trim().toLowerCase() !== s.name.trim().toLowerCase() && (
+                          <span className="ml-1.5 text-muted-foreground">({s.name})</span>
+                        )}
                     </SelectItem>
                   ))}
                 </SelectContent>

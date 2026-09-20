@@ -47,7 +47,10 @@ export function zetGelezen(berichtId: string, gelezen: boolean): Promise<{ ok: t
 }
 
 /** Naar een andere map: een eigen map, spam ("spam melden") of het postvak ("geen spam"). */
-export function verplaatsNaar(berichtId: string, mapId: string): Promise<{ ok: true; verplaatst: boolean }> {
+export function verplaatsNaar(
+  berichtId: string,
+  mapId: string,
+): Promise<{ ok: true; verplaatst: boolean }> {
   return roep({ actie: "verplaatsen", bericht_id: berichtId, map_id: mapId });
 }
 
@@ -96,7 +99,9 @@ export function koppelKlant(berichtId: string, klantId: string): Promise<{ ok: t
  * ingevulde velden weer leeg, een zelf gekoppeld mailadres eraf. `bleven` zijn
  * velden die intussen door iemand gewijzigd waren; die blijven staan.
  */
-export function draaiKlantgegevensTerug(berichtId: string): Promise<{ ok: true; bleven: string[] }> {
+export function draaiKlantgegevensTerug(
+  berichtId: string,
+): Promise<{ ok: true; bleven: string[] }> {
   return roep({ actie: "klantgegevens-terugdraaien", bericht_id: berichtId });
 }
 
@@ -106,13 +111,23 @@ export function stoppenDoorvoeren(
   reden: "verhuisd" | "gestopt",
   planningWeg: boolean,
 ): Promise<{ ok: true; aangepast: number }> {
-  return roep({ actie: "stoppen-doorvoeren", bericht_id: berichtId, reden, planning_weg: planningWeg });
+  return roep({
+    actie: "stoppen-doorvoeren",
+    bericht_id: berichtId,
+    reden,
+    planning_weg: planningWeg,
+  });
 }
 
 /** De wasdagen (vanaf morgen) waarop de adressen van een stopvoorstel nog staan.
  *  `dagen` is hooguit de eerste tien; `aantal` is het totaal. */
-export async function stoppenPlanning(berichtId: string): Promise<{ dagen: string[]; aantal: number }> {
-  const uit = await roep<{ aantal: number; dagen: string[] }>({ actie: "stoppen-planning", bericht_id: berichtId });
+export async function stoppenPlanning(
+  berichtId: string,
+): Promise<{ dagen: string[]; aantal: number }> {
+  const uit = await roep<{ aantal: number; dagen: string[] }>({
+    actie: "stoppen-planning",
+    bericht_id: berichtId,
+  });
   return { dagen: uit.dagen ?? [], aantal: uit.aantal ?? 0 };
 }
 
@@ -165,7 +180,8 @@ export function annuleerGepland(id: string): Promise<{ ok: true }> {
   return roep({ actie: "gepland-annuleren", gepland_id: id });
 }
 
-export type BulkDoe = "gelezen" | "ongelezen" | "vlag" | "vlag-eraf" | "afhandelen" | "weggooien" | "verplaatsen";
+export type BulkDoe =
+  "gelezen" | "ongelezen" | "vlag" | "vlag-eraf" | "afhandelen" | "weggooien" | "verplaatsen";
 
 /** Hetzelfde met meerdere mails tegelijk. */
 export function bulkActie(
@@ -177,12 +193,23 @@ export function bulkActie(
 }
 
 /** Een bijlage van de server halen, om te openen of te bewaren. */
-export async function haalBijlage(berichtId: string, index: number): Promise<{ naam: string; type: string; blob: Blob }> {
-  const uit = await roep<{ bijlage: NieuweBijlage }>({ actie: "bijlage", bericht_id: berichtId, index });
+export async function haalBijlage(
+  berichtId: string,
+  index: number,
+): Promise<{ naam: string; type: string; blob: Blob }> {
+  const uit = await roep<{ bijlage: NieuweBijlage }>({
+    actie: "bijlage",
+    bericht_id: berichtId,
+    index,
+  });
   const binair = atob(uit.bijlage.inhoud);
   const bytes = new Uint8Array(binair.length);
   for (let i = 0; i < binair.length; i++) bytes[i] = binair.charCodeAt(i);
-  return { naam: uit.bijlage.naam, type: uit.bijlage.type, blob: new Blob([bytes], { type: uit.bijlage.type }) };
+  return {
+    naam: uit.bijlage.naam,
+    type: uit.bijlage.type,
+    blob: new Blob([bytes], { type: uit.bijlage.type }),
+  };
 }
 
 /** Deze afzender voortaan altijd naar spam (en deze mail er nu heen). */
@@ -228,7 +255,8 @@ export function leesAdressen(tekst: string): { email: string; naam?: string }[] 
     if (teken === '"') inAanhalingstekens = !inAanhalingstekens;
     if (teken === "<") inHaken = true;
     if (teken === ">") inHaken = false;
-    const scheiding = (teken === "," || teken === ";" || teken === "\n") && !inAanhalingstekens && !inHaken;
+    const scheiding =
+      (teken === "," || teken === ";" || teken === "\n") && !inAanhalingstekens && !inHaken;
     if (scheiding) {
       stukken.push(huidig);
       huidig = "";

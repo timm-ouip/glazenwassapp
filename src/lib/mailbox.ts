@@ -87,7 +87,8 @@ export async function fetchMappen(): Promise<MailMap[]> {
   if (error) throw error;
   const mappen = (data ?? []) as MailMap[];
   return mappen.sort(
-    (a, b) => MAP_VOLGORDE.indexOf(a.rol) - MAP_VOLGORDE.indexOf(b.rol) || a.pad.localeCompare(b.pad),
+    (a, b) =>
+      MAP_VOLGORDE.indexOf(a.rol) - MAP_VOLGORDE.indexOf(b.rol) || a.pad.localeCompare(b.pad),
   );
 }
 

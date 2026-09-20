@@ -252,6 +252,57 @@ async function verwerk(
       .update({ wa_status: nieuw.waarde })
       .eq("id", bericht.id);
     if (statusFout) console.error("whatsapp-webhook status bijwerken:", statusFout.message);
+
+    // Was dit een aankondiging of een wijziging, dan hoort de planning het
+    // ook te weten: daar staat het vinkje naast het adres.
+    await bezorgstatusBijwerken(db, koppeling.company_id, s.wa_id, nieuw.waarde);
+  }
+}
+
+/** Van de WhatsApp-status naar wat de planning erover toont. */
+const WA_BEZORGSTATUS: Record<string, string> = {
+  afgeleverd: "afgeleverd",
+  gelezen: "gelezen",
+  mislukt: "gebounced",
+};
+const BEZORG_RANG: Record<string, number> = {
+  "": 0,
+  vertraagd: 1,
+  afgeleverd: 2,
+  gelezen: 3,
+  spam: 4,
+  ongeldig: 5,
+  geblokkeerd: 6,
+  gebounced: 7,
+};
+
+/** Het appje bij de verstuurde aankondiging, als het er een was. */
+async function bezorgstatusBijwerken(
+  db: Db,
+  companyId: string,
+  waId: string,
+  waStatus: string,
+) {
+  const status = WA_BEZORGSTATUS[waStatus];
+  if (!status) return;
+  // Deze functie draait met de service-sleutel, dus langs de vaste regels
+  // heen: het bedrijf moet er zelf bij.
+  const { data: rijen, error } = await db
+    .from("mail_ontvangers")
+    .select("id,bezorgstatus")
+    .eq("company_id", companyId)
+    .eq("wa_id", waId);
+  if (error) {
+    console.error("whatsapp-webhook ontvanger zoeken:", error.message);
+    return;
+  }
+  for (const rij of rijen ?? []) {
+    if ((BEZORG_RANG[status] ?? 0) <= (BEZORG_RANG[String(rij.bezorgstatus ?? "")] ?? 0)) continue;
+    const { error: schrijfFout } = await db
+      .from("mail_ontvangers")
+      .update({ bezorgstatus: status, status_op: new Date().toISOString() })
+      .eq("id", rij.id);
+    if (schrijfFout) console.error("whatsapp-webhook bezorgstatus:", schrijfFout.message);
   }
 }
 

@@ -1049,10 +1049,13 @@ function Klanten() {
       });
 
       const dagen = kenmerken.length;
-      toast(`${adres} verwijderd${dagen ? ` en van ${dagen} ${dagen === 1 ? "dag" : "dagen"} op de planning gehaald` : ""}`, {
-        duration: 12000,
-        action: undoKnop(),
-      });
+      toast(
+        `${adres} verwijderd${dagen ? ` en van ${dagen} ${dagen === 1 ? "dag" : "dagen"} op de planning gehaald` : ""}`,
+        {
+          duration: 12000,
+          action: undoKnop(),
+        },
+      );
     } catch (e) {
       // Eerst het adres terug: een weggegooid adres komt niet terug op een
       // dag in de toekomst, en dan waren die dagen voorgoed weg.

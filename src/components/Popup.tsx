@@ -3,12 +3,7 @@ import { IconInfoCircle as Info } from "@tabler/icons-react";
 
 import { cn } from "@/lib/utils";
 import { DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
  * De vaste indeling van elk schermpje in deze app.

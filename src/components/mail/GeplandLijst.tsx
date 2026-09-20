@@ -17,8 +17,14 @@ export function GeplandLijst({ kanSchrijven }: { kanSchrijven: boolean }) {
   const qc = useQueryClient();
   const lijst = useQuery({ queryKey: ["gepland"], queryFn: fetchGepland, refetchInterval: 60_000 });
 
-  if (lijst.isLoading) return <p className="p-4 text-[13px] text-muted-foreground">Even ophalen…</p>;
-  if (lijst.isError) return <p className="p-4 text-[13px] text-tint-rood-ink">De geplande mail kon niet geladen worden.</p>;
+  if (lijst.isLoading)
+    return <p className="p-4 text-[13px] text-muted-foreground">Even ophalen…</p>;
+  if (lijst.isError)
+    return (
+      <p className="p-4 text-[13px] text-tint-rood-ink">
+        De geplande mail kon niet geladen worden.
+      </p>
+    );
   if (!lijst.data?.length) {
     return (
       <p className="p-6 text-center text-[13px] text-muted-foreground">
@@ -42,9 +48,13 @@ export function GeplandLijst({ kanSchrijven }: { kanSchrijven: boolean }) {
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13.5px]">{g.aan_tekst || "?"}</span>
-            <span className="block truncate text-[13px] text-foreground/80">{g.onderwerp || "(geen onderwerp)"}</span>
+            <span className="block truncate text-[13px] text-foreground/80">
+              {g.onderwerp || "(geen onderwerp)"}
+            </span>
             <span className="block text-[12px] text-muted-foreground">
-              {g.status === "mislukt" ? `Niet verstuurd: ${g.fout}` : `Gaat weg ${toonMoment(g.versturen_op)}`}
+              {g.status === "mislukt"
+                ? `Niet verstuurd: ${g.fout}`
+                : `Gaat weg ${toonMoment(g.versturen_op)}`}
             </span>
           </span>
           {g.status === "wacht" && (

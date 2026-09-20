@@ -51,7 +51,13 @@ export interface KapsoTerug {
   foutcode?: string;
 }
 
-export function WhatsAppInstellingen({ isEigenaar, kapsoTerug }: { isEigenaar: boolean; kapsoTerug?: KapsoTerug }) {
+export function WhatsAppInstellingen({
+  isEigenaar,
+  kapsoTerug,
+}: {
+  isEigenaar: boolean;
+  kapsoTerug?: KapsoTerug;
+}) {
   const qc = useQueryClient();
   const bevestig = useBevestig();
   const navigate = useNavigate();
@@ -259,11 +265,16 @@ export function WhatsAppInstellingen({ isEigenaar, kapsoTerug }: { isEigenaar: b
         <div className="space-y-3">
           <p className="text-[13px] text-muted-foreground">
             Koppel het nummer van je WhatsApp Business-app. Het blijft gewoon werken op je telefoon;
-            Wooshy leest mee en je kunt vanuit hier antwoorden. Na het koppelen kun je uitzendlijsten
-            in de app niet meer versturen.
+            Wooshy leest mee en je kunt vanuit hier antwoorden. Na het koppelen kun je
+            uitzendlijsten in de app niet meer versturen.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" className="rounded-full" disabled={bezig} onClick={() => void naarKapso()}>
+            <Button
+              size="sm"
+              className="rounded-full"
+              disabled={bezig}
+              onClick={() => void naarKapso()}
+            >
               {bezig ? "Bezig…" : "Koppelen via Kapso"}
             </Button>
             <Button
@@ -290,9 +301,9 @@ export function WhatsAppInstellingen({ isEigenaar, kapsoTerug }: { isEigenaar: b
       {isEigenaar && formulierOpen && (!gekoppeld || k?.aanbieder !== "kapso") && (
         <form onSubmit={(e) => void koppel(e)} className="space-y-3">
           <p className="text-[12.5px] text-muted-foreground">
-            Voor het testnummer van Meta. Je vindt deze gegevens in de Meta-app van Wooshy
-            onder WhatsApp → API-instellingen. Zet daar bij Webhook dit adres neer, met het
-            controlewoord dat ik je gaf, en vink <em>messages</em> aan:
+            Voor het testnummer van Meta. Je vindt deze gegevens in de Meta-app van Wooshy onder
+            WhatsApp → API-instellingen. Zet daar bij Webhook dit adres neer, met het controlewoord
+            dat ik je gaf, en vink <em>messages</em> aan:
           </p>
           <code className="block break-all rounded-[10px] bg-muted px-2.5 py-1.5 text-[12px]">
             {WEBHOOK_URL}

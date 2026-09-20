@@ -44,7 +44,7 @@ interface Verzoek {
    * `controle` kijkt alleen of de verbinding met Brevo klopt, en
    * `terugdraaien` haalt een aanpassing uit het rapport weer weg.
    */
-  actie: "tellen" | "versturen" | "controle" | "terugdraaien";
+  actie: "tellen" | "versturen" | "controle" | "terugdraaien" | "wijziging_tellen" | "wijziging";
   /** De wasdag waarvan de adressen komen, als 'jjjj-mm-dd'. */
   datum: string;
   onderwerp: string;
@@ -61,6 +61,43 @@ interface Verzoek {
   sjabloon_id?: string;
   /** Proef via WhatsApp naar dit nummer. */
   proef_telefoon?: string;
+  /** Het beloofde tijdvak per adres: { "<customer-id>": { van, tot } }. */
+  tijdvakken?: Record<string, { van?: string; tot?: string }>;
+  /** Bij een wijziging: welke adressen het betreft. */
+  customer_ids?: string[];
+  /** "wijziging" of "niet_af". */
+  soort?: string;
+  /** Waarom de planning verandert ("Door de regen"). */
+  reden?: string;
+}
+
+/** Een tijdvak zoals het in het bericht komt. */
+interface Tijdvak {
+  van: string;
+  tot: string;
+}
+
+const TIJD = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** De tijdvakken uit het verzoek, alleen wat er als tijd uitziet. */
+function leesTijdvakken(rauw: unknown): Map<string, Tijdvak> {
+  const uit = new Map<string, Tijdvak>();
+  if (!rauw || typeof rauw !== "object") return uit;
+  for (const [id, waarde] of Object.entries(rauw as Record<string, unknown>)) {
+    if (!UUID_RE.test(id) || !waarde || typeof waarde !== "object") continue;
+    const van = String((waarde as Record<string, unknown>)["van"] ?? "");
+    const tot = String((waarde as Record<string, unknown>)["tot"] ?? "");
+    if (TIJD.test(van) && TIJD.test(tot)) uit.set(id, { van, tot });
+  }
+  return uit;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** De zin die onder de tekst komt als een klant een tijdvak beloofd krijgt. */
+function tijdvakZin(tijdvak: Tijdvak | undefined, adres: string): string {
+  if (!tijdvak) return "";
+  return `Voor ${adres} komen we tussen ${tijdvak.van} en ${tijdvak.tot}.`;
 }
 
 type Kanaal = "mail" | "whatsapp" | "beide" | "voorkeur";
@@ -70,6 +107,9 @@ interface WaOntvanger {
   naam: string;
   klant_id: string | null;
   adressen: string[];
+  customer_ids: string[];
+  oudeDatum?: string;
+  nieuweDatum?: string;
 }
 
 interface Sjabloon {
@@ -88,6 +128,9 @@ interface Ontvanger {
   naam: string;
   klant_id: string | null;
   adressen: string[];
+  customer_ids: string[];
+  oudeDatum?: string;
+  nieuweDatum?: string;
 }
 
 const MAX_ONDERWERP = 200;
@@ -147,7 +190,9 @@ Deno.serve(async (req) => {
   // Tellen, versturen en de controle van de verbinding: het recht om mail te
   // versturen. Terugdraaien blijft hieronder bij de eigenaar.
   if (
-    ["tellen", "versturen", "controle"].includes(String(verzoek.actie)) &&
+    ["tellen", "versturen", "controle", "wijziging_tellen", "wijziging"].includes(
+      String(verzoek.actie),
+    ) &&
     !(await heeftRecht(beheerder, medewerker, "mail_versturen"))
   ) {
     return antwoord({ fout: "Je hebt geen recht om mail te versturen." }, 403);
@@ -171,6 +216,12 @@ Deno.serve(async (req) => {
       medewerker.id,
     );
     return uit.ok ? antwoord({ ok: true }) : antwoord({ fout: uit.fout }, 400);
+  }
+
+  // "De planning is veranderd": naar de klanten van een paar adressen, met de
+  // oude en de nieuwe dag erin.
+  if (verzoek.actie === "wijziging_tellen" || verzoek.actie === "wijziging") {
+    return await wijzigingsbericht(beheerder, bedrijf, medewerker, verzoek, brevo);
   }
 
   if (verzoek.actie !== "tellen" && verzoek.actie !== "versturen") {
@@ -331,6 +382,7 @@ Deno.serve(async (req) => {
             naam: voorbeeldKlant?.naam || medewerker.naam || proefAdres,
             klant_id: null,
             adressen: voorbeeldKlant?.adressen ?? ["Voorbeeldstraat 1"],
+            customer_ids: [],
           },
         ]
       : echt;
@@ -343,6 +395,7 @@ Deno.serve(async (req) => {
             naam: voorbeeldKlant?.naam || medewerker.naam || "Klant",
             klant_id: null,
             adressen: voorbeeldKlant?.adressen ?? ["Voorbeeldstraat 1"],
+            customer_ids: [],
           },
         ]
       : echtWa;
@@ -429,15 +482,32 @@ Deno.serve(async (req) => {
     mailing = data;
   }
 
+  const tijdvakken = leesTijdvakken(verzoek.tijdvakken);
+
   const uitslag = await perGroepje(teVersturen, 6, async (o) => {
-    const velden = { naam: o.naam || "buurtbewoner", adres: o.adressen.join(" en ") };
+    // Het tijdvak van dit bericht: het eerste adres van deze klant waarvoor
+    // er een tijdvak gepland staat. Zo'n belofte hoort bij een groot pand,
+    // dus in de praktijk is dat er hooguit een.
+    const metTijd = o.customer_ids.find((id) => tijdvakken.has(id));
+    const tijdvak = metTijd ? tijdvakken.get(metTijd) : undefined;
+    const velden = {
+      naam: o.naam || "buurtbewoner",
+      adres: o.adressen.join(" en "),
+      datum: datumVoluit(datum),
+      tijdvak: tijdvakZin(tijdvak, o.adressen[0] ?? "uw adres"),
+    };
+    // Staat {{tijdvak}} niet in de tekst, dan komt de zin er onderaan bij:
+    // anders belooft de app iets wat de klant nooit leest.
+    const basis = vulIn(tekst, velden);
+    const heeftPlek = /\{\{\s*tijdvak\s*\}\}/.test(tekst);
+    const volledig = !tijdvak || heeftPlek ? basis : `${basis}\n\n${velden.tijdvak}`;
     const res = await stuurMail(brevo.trim(), afzender, {
       naar: { email: o.email, naam: o.naam },
       onderwerp: (test ? "[PROEF] " : "") + vulIn(onderwerp, velden),
-      tekst: vulIn(tekst, velden),
+      tekst: volledig,
       antwoordNaar,
     });
-    return { o, res };
+    return { o, res, tijdvak };
   });
 
   const rijen = uitslag.map(({ o, res }) => ({
@@ -451,6 +521,10 @@ Deno.serve(async (req) => {
     adressen: o.adressen.join(", "),
     status: res.ok ? "verzonden" : "mislukt",
     fout: res.ok ? "" : res.fout,
+    // Het kenmerk van Brevo: daarmee vindt de webhook deze ontvanger terug
+    // als de mailserver van de klant zich later meldt.
+    message_id: res.ok ? res.id : "",
+    wa_id: "",
   }));
 
   // De appjes: per klant het sjabloon, met zijn naam, adres en de dag.
@@ -474,6 +548,8 @@ Deno.serve(async (req) => {
       adressen: o.adressen.join(", "),
       status: res.ok ? "verzonden" : "mislukt",
       fout: res.ok ? "" : res.fout.slice(0, 300),
+      message_id: "",
+      wa_id: res.ok ? (res as { waId: string }).waId : "",
     });
   }
   // Wat via WhatsApp wegging, staat ook in het gesprek met de klant.
@@ -502,11 +578,58 @@ Deno.serve(async (req) => {
   }
 
   let opslagFout = "";
+  // Per ontvanger de adressen van die dag, zodat de planning kan tonen wat er
+  // verstuurd is en wat er beloofd is. Een proef niet: die ging naar jezelf.
+  //
+  // Op adres en niet op volgorde: de database mag zijn rijen teruggeven in de
+  // volgorde die hem uitkomt, en dan zou het tijdvak van de een bij het adres
+  // van de ander belanden.
+  const adresBij = new Map<string, { customer_ids: string[]; tijdvak?: Tijdvak | undefined }>();
+  for (const { o, tijdvak } of uitslag) {
+    adresBij.set(`mail:${o.email.toLowerCase()}`, { customer_ids: o.customer_ids, tijdvak });
+  }
+  for (const { o } of waUitslag) {
+    adresBij.set(`whatsapp:${o.wa}`, { customer_ids: o.customer_ids });
+  }
   for (const stuk of inStukjes(rijen, 200)) {
-    const { error } = await beheerder.from("mail_ontvangers").insert(stuk);
+    const { data: gemaakt, error } = await beheerder
+      .from("mail_ontvangers")
+      .insert(stuk)
+      .select("id,kanaal,email,telefoon");
     if (error) {
       console.error("ontvangers opslaan:", error.message);
       opslagFout = "Verstuurd, maar de lijst met ontvangers kon niet bewaard worden.";
+      continue;
+    }
+    if (!test) {
+      const koppels: Record<string, unknown>[] = [];
+      for (const rij of (gemaakt ?? []) as {
+        id: string;
+        kanaal: string;
+        email: string;
+        telefoon: string;
+      }[]) {
+        const sleutel =
+          rij.kanaal === "whatsapp"
+            ? `whatsapp:${rij.telefoon}`
+            : `mail:${(rij.email ?? "").toLowerCase()}`;
+        const bij = adresBij.get(sleutel);
+        for (const customerId of bij?.customer_ids ?? []) {
+          koppels.push({
+            company_id: bedrijf.id,
+            ontvanger_id: rij.id,
+            customer_id: customerId,
+            datum,
+            tijdvak_van: bij?.tijdvak?.van ?? null,
+            tijdvak_tot: bij?.tijdvak?.tot ?? null,
+            soort: "aankondiging",
+          });
+        }
+      }
+      for (const brok of inStukjes(koppels, 200)) {
+        const { error: koppelFout } = await beheerder.from("aankondiging_adressen").insert(brok);
+        if (koppelFout) console.error("aankondiging per adres opslaan:", koppelFout.message);
+      }
     }
   }
 
@@ -531,6 +654,332 @@ Deno.serve(async (req) => {
     eersteFout: rijen.find((r) => r.status === "mislukt")?.fout ?? opslagFout,
   });
 });
+
+/**
+ * "De planning is veranderd" — het bericht bij een verschoven dag of bij werk
+ * dat niet af kwam.
+ *
+ * Het gaat over een paar adressen, niet over een hele dag. Per adres zoekt de
+ * server zelf op wat er eerder aangekondigd was (de oude dag) en waar het nu
+ * staat (de nieuwe dag); de app hoeft alleen te zeggen wélke adressen het
+ * betreft. Zo kan niemand een bericht met een verzonnen datum laten sturen.
+ */
+// deno-lint-ignore no-explicit-any
+async function wijzigingsbericht(
+  db: any,
+  bedrijf: { id: string; name: string; mail_afzender_naam: string | null; mail_afzender_email: string | null },
+  medewerker: { id: string; naam: string; email: string },
+  verzoek: Verzoek,
+  brevo: string,
+): Promise<Response> {
+  const soort = verzoek.soort === "niet_af" ? "niet_af" : "wijziging";
+  const ids = (verzoek.customer_ids ?? []).filter((id) => UUID_RE.test(id)).slice(0, 500);
+  if (ids.length === 0) return antwoord({ fout: "Geen adressen meegegeven." }, 400);
+
+  const vandaag = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Amsterdam" }))
+    .toISOString()
+    .slice(0, 10);
+
+  // Waar staan deze adressen nu? De eerstvolgende dag vanaf vandaag. Alleen
+  // vanaf vandaag: de geschiedenis van een jaar wassen loopt zo tegen de
+  // duizend rijen per opvraging aan, en dan zou juist de dag die nog moet
+  // komen wegvallen — en beloven we een datum die allang geweest is.
+  const nieuweDatum = new Map<string, string>();
+  for (const stuk of inStukjes(ids)) {
+    const { data } = await db
+      .from("wasdag_regels")
+      .select("customer_id,datum")
+      .eq("company_id", bedrijf.id)
+      .in("customer_id", stuk)
+      .gte("datum", vandaag)
+      .order("datum", { ascending: true });
+    for (const r of data ?? []) {
+      const id = r["customer_id"] as string;
+      const datum = r["datum"] as string;
+      const was = nieuweDatum.get(id);
+      if (!was || datum < was) nieuweDatum.set(id, datum);
+    }
+  }
+
+  // En waarvoor was het aangekondigd? De laatste zending per adres. Ook hier
+  // alleen het recente verleden; oudere rondes zeggen niets meer.
+  const oudeDatum = new Map<string, string>();
+  const sinds = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  for (const stuk of inStukjes(ids)) {
+    const { data } = await db
+      .from("aankondiging_adressen")
+      .select("customer_id,datum,created_at")
+      .eq("company_id", bedrijf.id)
+      .in("customer_id", stuk)
+      .gte("datum", sinds)
+      .order("created_at", { ascending: true });
+    for (const r of data ?? []) oudeDatum.set(r["customer_id"] as string, r["datum"] as string);
+  }
+
+  // De klanten erbij. De maand van de nieuwe dag telt voor "slaat over".
+  const maand = (nieuweDatum.values().next().value ?? vandaag).slice(0, 7);
+  const klanten = await klantenVoorAdressen(db, bedrijf.id, ids, maand);
+  for (const k of klanten) {
+    const metDatum = k.customer_ids.find((id) => nieuweDatum.has(id));
+    const metOud = k.customer_ids.find((id) => oudeDatum.has(id));
+    k.nieuweDatum = metDatum ? nieuweDatum.get(metDatum) : undefined;
+    k.oudeDatum = metOud ? oudeDatum.get(metOud) : undefined;
+  }
+
+  // Zonder WhatsApp-sjabloon gaat alles per mail: een appje kan alleen met een
+  // sjabloon dat Meta heeft goedgekeurd.
+  let sjabloon: Sjabloon | null = null;
+  if (verzoek.sjabloon_id) {
+    const { data } = await db
+      .from("wa_sjablonen")
+      .select("id,titel,meta_naam,categorie,tekst,variabelen,status")
+      .eq("company_id", bedrijf.id)
+      .eq("id", String(verzoek.sjabloon_id))
+      .is("deleted_at", null)
+      .maybeSingle();
+    sjabloon = (data as Sjabloon | null) ?? null;
+  }
+  // Wie nooit iets over deze dag hoorde, krijgt ook geen wijziging: dan zou
+  // er "we komen niet op , maar op donderdag" staan. En wie nergens meer op
+  // de planning staat evenmin: dan is er geen nieuwe dag om te noemen.
+  const metBericht = klanten.filter((k) => !!k.oudeDatum && !!k.nieuweDatum);
+  const zonderAankondiging = klanten.length - metBericht.length;
+  const verdeling = verdeel(metBericht, sjabloon ? "voorkeur" : "mail", false);
+  const zonderContact = metBericht.filter(
+    (k) => !k.email && !verdeling.whatsapp.some((w) => w.klant_id === k.klant_id),
+  ).length;
+
+  if (verzoek.actie === "wijziging_tellen") {
+    return antwoord({
+      aantal: verdeling.mail.length,
+      aantalWhatsApp: verdeling.whatsapp.length,
+      zonderContact,
+      zonderAankondiging,
+      voorbeeld: [...verdeling.mail, ...verdeling.whatsapp].slice(0, 5).map((o) => ({
+        naam: o.naam,
+        adressen: o.adressen,
+        oudeDatum: o.oudeDatum ? datumVoluit(o.oudeDatum) : "nog niet aangekondigd",
+        nieuweDatum: o.nieuweDatum ? datumVoluit(o.nieuweDatum) : "geen nieuwe dag",
+      })),
+    });
+  }
+
+  // Twee keer op Versturen (of twee tabbladen) hoort niet twee berichten te
+  // geven. Kreeg een van deze adressen het afgelopen uur al ditzelfde soort
+  // bericht, dan vragen we het eerst.
+  if (verzoek.toch !== true) {
+    const eenUur = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    for (const stuk of inStukjes(ids)) {
+      const { data: recent } = await db
+        .from("aankondiging_adressen")
+        .select("customer_id")
+        .eq("company_id", bedrijf.id)
+        .eq("soort", soort)
+        .in("customer_id", stuk)
+        .gte("created_at", eenUur)
+        .limit(1);
+      if ((recent ?? []).length > 0) {
+        return antwoord(
+          {
+            fout: "Deze adressen kregen het afgelopen uur al zo'n bericht.",
+            al_verstuurd: true,
+          },
+          409,
+        );
+      }
+    }
+  }
+
+  const onderwerp = String(verzoek.onderwerp ?? "").trim().slice(0, MAX_ONDERWERP);
+  const tekst = String(verzoek.tekst ?? "").trim().slice(0, MAX_TEKST);
+  const reden = String(verzoek.reden ?? "").trim().slice(0, 120);
+  if (!onderwerp || !tekst) return antwoord({ fout: "Vul een onderwerp en een tekst in." }, 400);
+  if (verdeling.mail.length === 0 && verdeling.whatsapp.length === 0) {
+    return antwoord(
+      {
+        fout:
+          zonderAankondiging > 0
+            ? "Deze adressen hebben nog geen bericht gehad over deze dag, of staan nergens meer ingepland; er valt dus niets te wijzigen."
+            : "Van deze adressen is niemand te bereiken.",
+      },
+      400,
+    );
+  }
+
+  const afzenderEmail = (bedrijf.mail_afzender_email ?? "").trim();
+  if (verdeling.mail.length > 0) {
+    const vooraf = await afzenderFout(db, bedrijf.id, brevo, afzenderEmail);
+    if (vooraf) return antwoord({ fout: vooraf }, 400);
+  }
+  const afzender = {
+    naam: (bedrijf.mail_afzender_naam ?? "").trim() || bedrijf.name,
+    email: afzenderEmail,
+  };
+  const antwoordNaar = antwoordAdres(await mailboxAdresVan(db, bedrijf.id));
+
+  // De dag die in het logboek komt: de nieuwe dag als die voor iedereen
+  // dezelfde is, anders leeg — dan gaat het over meer dagen tegelijk.
+  const nieuweDagen = [...new Set([...nieuweDatum.values()])];
+  const { data: mailingRij, error: mailingFout } = await db
+    .from("mailingen")
+    .insert({
+      company_id: bedrijf.id,
+      datum: nieuweDagen.length === 1 ? nieuweDagen[0] : null,
+      onderwerp,
+      tekst,
+      test: false,
+      kanaal: sjabloon ? "voorkeur" : "mail",
+      soort,
+      sjabloon_id: sjabloon?.id ?? null,
+      verzonden_door: medewerker.id,
+    })
+    .select("id")
+    .single();
+  if (mailingFout || !mailingRij) {
+    return antwoord({ fout: "Kon de verzending niet vastleggen." }, 500);
+  }
+
+  function velden(o: Ontvanger | WaOntvanger) {
+    return {
+      naam: o.naam || "buurtbewoner",
+      adres: o.adressen.join(" en "),
+      datum: o.oudeDatum ? datumVoluit(o.oudeDatum) : "",
+      "nieuwe datum": o.nieuweDatum ? datumVoluit(o.nieuweDatum) : "",
+      reden,
+      tijdvak: "",
+    };
+  }
+
+  const uitslag = await perGroepje(verdeling.mail, 6, async (o) => {
+    const v = velden(o);
+    const res = await stuurMail(brevo.trim(), afzender, {
+      naar: { email: o.email, naam: o.naam },
+      onderwerp: vulIn(onderwerp, v),
+      tekst: vulIn(tekst, v),
+      antwoordNaar,
+    });
+    return { o, res };
+  });
+
+  const waUitslag = sjabloon
+    ? await perGroepje(verdeling.whatsapp, 4, async (o) => {
+        const v = velden(o);
+        const parameters = (sjabloon!.variabelen ?? []).map(
+          (naam) => (v as Record<string, string>)[naam] ?? "",
+        );
+        const koppeling = await waToegang(db, bedrijf.id);
+        const res = koppeling
+          ? await verstuurSjabloon(koppeling.toegang, koppeling.phoneNumberId, o.wa, sjabloon!.meta_naam, parameters)
+          : { ok: false as const, fout: "WhatsApp is niet gekoppeld." };
+        return { o, res };
+      })
+    : [];
+
+  const rijen = [
+    ...uitslag.map(({ o, res }) => ({
+      company_id: bedrijf.id,
+      mailing_id: mailingRij.id,
+      klant_id: o.klant_id,
+      kanaal: "mail",
+      email: o.email,
+      telefoon: "",
+      naam: o.naam,
+      adressen: o.adressen.join(", "),
+      status: res.ok ? "verzonden" : "mislukt",
+      fout: res.ok ? "" : res.fout.slice(0, 300),
+      message_id: res.ok ? res.id : "",
+      wa_id: "",
+    })),
+    ...waUitslag.map(({ o, res }) => ({
+      company_id: bedrijf.id,
+      mailing_id: mailingRij.id,
+      klant_id: o.klant_id,
+      kanaal: "whatsapp",
+      email: "",
+      telefoon: o.wa,
+      naam: o.naam,
+      adressen: o.adressen.join(", "),
+      status: res.ok ? "verzonden" : "mislukt",
+      fout: res.ok ? "" : String(res.fout).slice(0, 300),
+      message_id: "",
+      wa_id: res.ok ? (res as { waId: string }).waId : "",
+    })),
+  ];
+  // Ook hier op adres koppelen, niet op volgorde.
+  const bijSleutel = new Map<string, Ontvanger | WaOntvanger>();
+  for (const { o } of uitslag) bijSleutel.set(`mail:${o.email.toLowerCase()}`, o);
+  for (const { o } of waUitslag) bijSleutel.set(`whatsapp:${o.wa}`, o);
+
+  for (const stuk of inStukjes(rijen, 200)) {
+    const { data: gemaakt, error } = await db
+      .from("mail_ontvangers")
+      .insert(stuk)
+      .select("id,kanaal,email,telefoon");
+    if (error) {
+      console.error("wijziging opslaan:", error.message);
+      continue;
+    }
+    const koppels: Record<string, unknown>[] = [];
+    for (const rij of (gemaakt ?? []) as {
+      id: string;
+      kanaal: string;
+      email: string;
+      telefoon: string;
+    }[]) {
+      const o = bijSleutel.get(
+        rij.kanaal === "whatsapp"
+          ? `whatsapp:${rij.telefoon}`
+          : `mail:${(rij.email ?? "").toLowerCase()}`,
+      );
+      for (const customerId of o?.customer_ids ?? []) {
+        const dag = nieuweDatum.get(customerId) ?? o?.nieuweDatum;
+        if (!dag) continue;
+        koppels.push({
+          company_id: bedrijf.id,
+          ontvanger_id: rij.id,
+          customer_id: customerId,
+          datum: dag,
+          soort,
+        });
+      }
+    }
+    for (const brok of inStukjes(koppels, 200)) {
+      const { error: koppelFout } = await db.from("aankondiging_adressen").insert(brok);
+      if (koppelFout) console.error("wijziging per adres opslaan:", koppelFout.message);
+    }
+  }
+
+  const gelukt = (k: string) => rijen.filter((r) => r.kanaal === k && r.status === "verzonden").length;
+  const mislukt = rijen.filter((r) => r.status === "mislukt").length;
+  await db
+    .from("mailingen")
+    .update({ aantal: gelukt("mail"), aantal_whatsapp: gelukt("whatsapp"), mislukt })
+    .eq("id", mailingRij.id);
+
+  return antwoord({
+    mailing_id: mailingRij.id,
+    verstuurd: gelukt("mail"),
+    verstuurdWhatsApp: gelukt("whatsapp"),
+    mislukt,
+    eersteFout: rijen.find((r) => r.status === "mislukt")?.fout ?? "",
+  });
+}
+
+/** De WhatsApp-koppeling van dit bedrijf, als die er is en werkt. */
+// deno-lint-ignore no-explicit-any
+async function waToegang(
+  db: any,
+  companyId: string,
+): Promise<{ phoneNumberId: string; toegang: Toegang } | null> {
+  const { data: koppeling } = await db
+    .from("whatsapp_koppelingen")
+    .select("id,phone_number_id,status")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!koppeling || koppeling["status"] === "uit") return null;
+  const toegang = await toegangVan(db, koppeling["id"] as string, ontsleutel);
+  return toegang ? { phoneNumberId: koppeling["phone_number_id"] as string, toegang } : null;
+}
 
 /**
  * Staat alles klaar om te kunnen versturen?
@@ -719,6 +1168,8 @@ function antwoordAdres(mailboxAdres: string): string | undefined {
 /** Eén klant op de dag, met alles wat nodig is om te kiezen waarlangs hij bericht krijgt. */
 interface KlantOpDag {
   klant_id: string;
+  /** De adres-id's van die dag: nodig om per adres te bewaren wat er beloofd is. */
+  customer_ids: string[];
   naam: string;
   email: string;
   /** Als WhatsApp-nummer ("316…"), leeg als hij geen 06-nummer heeft. */
@@ -728,6 +1179,9 @@ interface KlantOpDag {
   marketing: boolean;
   afgemeld: boolean;
   adressen: string[];
+  /** Bij een wijziging: de dag waarvoor het al aangekondigd was, en de nieuwe. */
+  oudeDatum?: string;
+  nieuweDatum?: string;
 }
 
 /**
@@ -754,9 +1208,24 @@ async function klantenVoorDag(
   const ids = (regels ?? [])
     .map((r) => r["customer_id"] as string | null)
     .filter((id): id is string => !!id);
+  return await klantenVoorAdressen(db, companyId, ids, maand);
+}
+
+/**
+ * Dezelfde klanten, maar dan bij een lijst adressen in plaats van bij een dag.
+ * Het wijzigingsbericht gebruikt dit: dat gaat over de adressen die je hebt
+ * verplaatst, niet over alles van die dag.
+ */
+async function klantenVoorAdressen(
+  db: ReturnType<typeof createClient>,
+  companyId: string,
+  ids: string[],
+  maand: string,
+): Promise<KlantOpDag[]> {
   if (ids.length === 0) return [];
 
   const adressen: {
+    id: string;
     klant_id: string | null;
     huis: number;
     toevoeging: string;
@@ -775,6 +1244,7 @@ async function klantenVoorDag(
     for (const c of data ?? []) {
       if (((c["overslaan"] as string[] | null) ?? []).includes(maand)) continue;
       adressen.push({
+        id: c["id"] as string,
         klant_id: c["klant_id"] as string | null,
         huis: c["house_number"] as number,
         toevoeging: (c["addition"] as string) ?? "",
@@ -814,6 +1284,7 @@ async function klantenVoorDag(
       const voorkeur = String(k["kanaal_voorkeur"] ?? "mail");
       klanten.set(k["id"] as string, {
         klant_id: k["id"] as string,
+        customer_ids: [],
         naam: (k["naam"] as string) ?? "",
         email: ((k["email"] as string) ?? "").trim(),
         wa: mobielAlsWa(String(k["telefoon"] ?? "")) || mobielAlsWa(String(k["telefoon2"] ?? "")),
@@ -832,6 +1303,7 @@ async function klantenVoorDag(
     if (!klant) continue;
     const adres = `${straatNaam.get(a.street_id) ?? ""} ${a.huis}${a.toevoeging}`.trim();
     if (!klant.adressen.includes(adres)) klant.adressen.push(adres);
+    if (!klant.customer_ids.includes(a.id)) klant.customer_ids.push(a.id);
   }
 
   return [...klanten.values()]
@@ -869,16 +1341,34 @@ function verdeel(
       const bestaand = perEmail.get(sleutel);
       if (bestaand) {
         for (const a of k.adressen) if (!bestaand.adressen.includes(a)) bestaand.adressen.push(a);
+        for (const id of k.customer_ids) if (!bestaand.customer_ids.includes(id)) bestaand.customer_ids.push(id);
       } else {
-        perEmail.set(sleutel, { email: k.email, naam: k.naam, klant_id: k.klant_id, adressen: [...k.adressen] });
+        perEmail.set(sleutel, {
+          email: k.email,
+          naam: k.naam,
+          klant_id: k.klant_id,
+          adressen: [...k.adressen],
+          customer_ids: [...k.customer_ids],
+          ...(k.oudeDatum ? { oudeDatum: k.oudeDatum } : {}),
+          ...(k.nieuweDatum ? { nieuweDatum: k.nieuweDatum } : {}),
+        });
       }
     }
     if (doeWa) {
       const bestaand = perNummer.get(k.wa);
       if (bestaand) {
         for (const a of k.adressen) if (!bestaand.adressen.includes(a)) bestaand.adressen.push(a);
+        for (const id of k.customer_ids) if (!bestaand.customer_ids.includes(id)) bestaand.customer_ids.push(id);
       } else {
-        perNummer.set(k.wa, { wa: k.wa, naam: k.naam, klant_id: k.klant_id, adressen: [...k.adressen] });
+        perNummer.set(k.wa, {
+          wa: k.wa,
+          naam: k.naam,
+          klant_id: k.klant_id,
+          adressen: [...k.adressen],
+          customer_ids: [...k.customer_ids],
+          ...(k.oudeDatum ? { oudeDatum: k.oudeDatum } : {}),
+          ...(k.nieuweDatum ? { nieuweDatum: k.nieuweDatum } : {}),
+        });
       }
     }
   }

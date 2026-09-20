@@ -73,9 +73,7 @@ export function BevestigProvider({ children }: { children: ReactNode }) {
           <div
             data-sleepgreep=""
             className={`cursor-grab touch-none px-6 py-5 active:cursor-grabbing ${
-              gevaarlijk
-                ? "bg-tint-rood text-tint-rood-ink"
-                : "bg-accent text-accent-foreground"
+              gevaarlijk ? "bg-tint-rood text-tint-rood-ink" : "bg-accent text-accent-foreground"
             }`}
           >
             <AlertDialogHeader className="space-y-0 text-left">
@@ -111,7 +109,9 @@ export function BevestigProvider({ children }: { children: ReactNode }) {
             <AlertDialogAction
               onClick={() => sluit(true)}
               className={`rounded-full ${
-                gevaarlijk ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""
+                gevaarlijk
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : ""
               }`}
             >
               {vraag?.bevestigLabel ?? "Verwijderen"}

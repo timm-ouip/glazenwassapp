@@ -15,6 +15,14 @@ export interface WasdagRegel {
   /** Leeg als het adres later definitief uit de prullenbak gewist is. */
   customer_id: string | null;
   prijs: number;
+  /** Bij welke ploeg van die dag dit adres hoort; leeg = nog niet ingedeeld. */
+  ploeg_nr?: number | null;
+  /** Waar het blok in de rij staat; alle adressen van een blok delen dit. */
+  volgorde?: number | null;
+  /** Dit is de rest van een straat die op een andere dag begon. */
+  rest?: boolean;
+  /** Vastgezet op een tijd; anders rekent de app hem uit. */
+  vaste_start?: string | null;
   /**
    * Wat er die dag anders ging dan anders — "alleen de voorkant", "kon er
    * niet bij". Leeg is: gewoon zoals altijd. Hoort bij de dag en niet bij het
@@ -54,13 +62,29 @@ export function toonDatum(datum: string): string {
 export async function fetchWasdag(datum: string): Promise<WasdagRegel[]> {
   const { data, error } = await supabase
     .from("wasdag_regels")
-    .select("customer_id,notitie,wasdag_prijzen(prijs)")
+    .select("customer_id,notitie,ploeg_nr,volgorde,rest,vaste_start,wasdag_prijzen(prijs)")
     .eq("datum", datum);
   if (error) throw error;
   // Het bedrag staat in wasdag_prijzen; zonder het recht "prijzen zien" is dat 0.
-  return ((data ?? []) as unknown as { customer_id: string | null; notitie: string | null; wasdag_prijzen: { prijs: number } | { prijs: number }[] | null }[]).map(
-    (r) => ({ customer_id: r.customer_id, notitie: r.notitie, prijs: Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0) }),
-  );
+  return (
+    (data ?? []) as unknown as {
+      customer_id: string | null;
+      notitie: string | null;
+      ploeg_nr: number | null;
+      volgorde: number | null;
+      rest: boolean | null;
+      vaste_start: string | null;
+      wasdag_prijzen: { prijs: number } | { prijs: number }[] | null;
+    }[]
+  ).map((r) => ({
+    customer_id: r.customer_id,
+    notitie: r.notitie,
+    prijs: Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0),
+    ploeg_nr: r.ploeg_nr,
+    volgorde: r.volgorde,
+    rest: r.rest ?? false,
+    vaste_start: r.vaste_start ? r.vaste_start.slice(0, 5) : null,
+  }));
 }
 
 /** Eén regel met de dag erbij, voor het maandoverzicht. */
@@ -75,16 +99,32 @@ export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagD
   const data = await haalAllePaginas((van, totRij) =>
     supabase
       .from("wasdag_regels")
-      .select("id,datum,customer_id,wasdag_prijzen(prijs)")
+      .select("id,datum,customer_id,ploeg_nr,volgorde,rest,vaste_start,wasdag_prijzen(prijs)")
       .gte("datum", vanaf)
       .lte("datum", tot)
       .order("datum", { ascending: true })
       .order("id", { ascending: true })
       .range(van, totRij),
   );
-  return (data as unknown as { datum: string; customer_id: string | null; wasdag_prijzen: { prijs: number } | { prijs: number }[] | null }[]).map(
-    (r) => ({ datum: r.datum, customer_id: r.customer_id, prijs: Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0) }),
-  );
+  return (
+    data as unknown as {
+      datum: string;
+      customer_id: string | null;
+      ploeg_nr: number | null;
+      volgorde: number | null;
+      rest: boolean | null;
+      vaste_start: string | null;
+      wasdag_prijzen: { prijs: number } | { prijs: number }[] | null;
+    }[]
+  ).map((r) => ({
+    datum: r.datum,
+    customer_id: r.customer_id,
+    prijs: Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0),
+    ploeg_nr: r.ploeg_nr,
+    volgorde: r.volgorde,
+    rest: r.rest ?? false,
+    vaste_start: r.vaste_start ? r.vaste_start.slice(0, 5) : null,
+  }));
 }
 
 /**
@@ -95,6 +135,8 @@ export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagD
 export async function voegToeAanWasdag(
   datum: string,
   regels: { customer_id: string; prijs: number; notitie?: string | null }[],
+  /** Bij welke ploeg en waar in de rij; weglaten = nog niet ingedeeld. */
+  plek?: { ploeg_nr?: number | null; volgorde?: number | null; rest?: boolean },
 ) {
   if (regels.length === 0) return;
   const { data, error } = await supabase
@@ -106,6 +148,9 @@ export async function voegToeAanWasdag(
         // Verhuist een adres naar een andere dag, dan gaat wat er die keer
         // anders ging mee. Anders zou het bij het opschuiven verdwijnen.
         notitie: r.notitie ?? null,
+        ...(plek?.ploeg_nr !== undefined ? { ploeg_nr: plek.ploeg_nr } : {}),
+        ...(plek?.volgorde !== undefined ? { volgorde: plek.volgorde } : {}),
+        ...(plek?.rest !== undefined ? { rest: plek.rest } : {}),
       })),
       { onConflict: "company_id,datum,customer_id" },
     )
@@ -116,9 +161,14 @@ export async function voegToeAanWasdag(
   // de prijs van dat moment; wie prijzen mag zien, zet hier het bedrag dat hij
   // meegaf. Zonder dat recht weigert de database, en blijft de momentopname.
   const prijsVan = new Map(regels.map((r) => [r.customer_id, r.prijs]));
-  const prijzen = (data ?? []).map((d) => ({ regel_id: d.id, prijs: prijsVan.get(d.customer_id ?? "") ?? 0 }));
+  const prijzen = (data ?? []).map((d) => ({
+    regel_id: d.id,
+    prijs: prijsVan.get(d.customer_id ?? "") ?? 0,
+  }));
   if (prijzen.length > 0) {
-    const { error: prijsFout } = await supabase.from("wasdag_prijzen").upsert(prijzen, { onConflict: "regel_id" });
+    const { error: prijsFout } = await supabase
+      .from("wasdag_prijzen")
+      .upsert(prijzen, { onConflict: "regel_id" });
     if (prijsFout && prijsFout.code !== "42501") throw prijsFout;
   }
 }
@@ -177,6 +227,34 @@ export async function werkWasdagRegelBij(
 }
 
 /**
+ * Zet van een paar adressen op een dag bij welke ploeg ze horen, en of ze de
+ * rest van een straat zijn. Gebruikt na "Verplaats naar…": op de nieuwe dag
+ * staan ze dan als eigen blok "(rest)" bij de goede ploeg.
+ */
+export async function zetPloegEnRest(
+  datum: string,
+  customerIds: string[],
+  plek: { ploeg_nr?: number | null; rest?: boolean; volgorde?: number | null },
+) {
+  if (customerIds.length === 0) return;
+  const patch = {
+    ...(plek.ploeg_nr !== undefined ? { ploeg_nr: plek.ploeg_nr } : {}),
+    ...(plek.rest !== undefined ? { rest: plek.rest } : {}),
+    ...(plek.volgorde !== undefined ? { volgorde: plek.volgorde } : {}),
+  };
+  if (Object.keys(patch).length === 0) return;
+  const PER_KEER = 80;
+  for (let i = 0; i < customerIds.length; i += PER_KEER) {
+    const { error } = await supabase
+      .from("wasdag_regels")
+      .update(patch)
+      .eq("datum", datum)
+      .in("customer_id", customerIds.slice(i, i + PER_KEER));
+    if (error) throw error;
+  }
+}
+
+/**
  * Verplaatst adressen van de ene dag naar de andere. Het blijft dezelfde
  * regel: alleen de datum verandert, dus het bedrag van die keer (en de
  * notitie) gaat mee. Ook als wie verschuift geen prijzen mag zien: een
@@ -210,7 +288,11 @@ export async function verplaatsWasdag(
     if (vrij.length > 0) {
       const { data: verzet, error } = await supabase
         .from("wasdag_regels")
-        .update({ datum: naar })
+        // De indeling van de oude dag geldt daar niet: die ploeg bestaat op de
+        // nieuwe dag misschien niet eens, en een vastgezette tijd van dinsdag
+        // zegt niets over donderdag. Het werk komt dus binnen als "nog niet
+        // ingedeeld".
+        .update({ datum: naar, ploeg_nr: null, volgorde: null, vaste_start: null })
         .eq("datum", van)
         .in("customer_id", vrij)
         .select("customer_id");
@@ -264,8 +346,12 @@ export async function alDichtbij(
 ): Promise<Map<string, string>> {
   const uit = new Map<string, string>();
   const d = new Date(`${datum}T12:00:00`);
-  const vanaf = datumSleutel(new Date(d.getFullYear(), d.getMonth(), d.getDate() - DUBBEL_BINNEN_DAGEN));
-  const tot = datumSleutel(new Date(d.getFullYear(), d.getMonth(), d.getDate() + DUBBEL_BINNEN_DAGEN));
+  const vanaf = datumSleutel(
+    new Date(d.getFullYear(), d.getMonth(), d.getDate() - DUBBEL_BINNEN_DAGEN),
+  );
+  const tot = datumSleutel(
+    new Date(d.getFullYear(), d.getMonth(), d.getDate() + DUBBEL_BINNEN_DAGEN),
+  );
   // In stukjes, om dezelfde reden als bij haalUitWasdag: de id's gaan in de URL.
   const PER_KEER = 80;
   for (let i = 0; i < customerIds.length; i += PER_KEER) {
@@ -314,7 +400,10 @@ export function dubbelVraag(dichtbij: Map<string, string>) {
  * database bewaren wat er wegging, mét het bedrag van die keer. Geeft het
  * kenmerk om het terug te zetten, of null als er niets weg hoefde.
  */
-export async function haalUitWasdagBewaard(datum: string, customerIds?: string[]): Promise<string | null> {
+export async function haalUitWasdagBewaard(
+  datum: string,
+  customerIds?: string[],
+): Promise<string | null> {
   if (customerIds && customerIds.length === 0) return null;
   const { data, error } = await supabase.rpc(
     "wasdag_weghalen",

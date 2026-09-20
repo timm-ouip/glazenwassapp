@@ -43,7 +43,12 @@ export interface BerichtRegel {
 }
 
 export interface Voorstel {
-  overslaan?: { maanden: string[]; adressen: string[]; doorgevoerd?: boolean; teruggedraaid?: boolean };
+  overslaan?: {
+    maanden: string[];
+    adressen: string[];
+    doorgevoerd?: boolean;
+    teruggedraaid?: boolean;
+  };
   stoppen?: { adressen: string[]; doorgevoerd?: boolean };
   /** Waarom Paaltje de bevestiging niet (zeker) kon versturen. */
   bevestiging_fout?: string;
@@ -71,9 +76,22 @@ export type KlantVeld =
  */
 export interface KlantGegevens {
   /** Wat Paaltje in de mail vond over de afzender. */
-  gevonden?: { naam: string; straat: string; huisnummer: string; postcode: string; plaats: string; telefoon: string };
+  gevonden?: {
+    naam: string;
+    straat: string;
+    huisnummer: string;
+    postcode: string;
+    plaats: string;
+    telefoon: string;
+  };
   /** Herkend aan telefoon of adres; het mailadres is toen aan de klant gekoppeld. */
-  herkend?: { klant_id: string; via: "telefoon" | "adres"; email: string; aangemaakt?: boolean; customer_id?: string };
+  herkend?: {
+    klant_id: string;
+    via: "telefoon" | "adres";
+    email: string;
+    aangemaakt?: boolean;
+    customer_id?: string;
+  };
   /** Lege velden die Wooshy bij deze klant invulde. */
   toegevoegd?: { klant_id: string; velden: Partial<Record<KlantVeld, string>> };
   /** Wat in de mail anders is dan bij de klant, en niet meer in een leeg vak paste. */
@@ -83,7 +101,13 @@ export interface KlantGegevens {
   teruggedraaid?: {
     op: string;
     velden: Partial<Record<KlantVeld, string>>;
-    herkend?: { klant_id: string; via: "telefoon" | "adres"; email: string; aangemaakt?: boolean; customer_id?: string };
+    herkend?: {
+      klant_id: string;
+      via: "telefoon" | "adres";
+      email: string;
+      aangemaakt?: boolean;
+      customer_id?: string;
+    };
     /** Velden die intussen door iemand gewijzigd waren en dus bleven staan. */
     bleven: KlantVeld[];
   };
@@ -187,7 +211,9 @@ function alsRegel(r: RegelRij): BerichtRegel {
     categorie_ids: (r.bericht_categorieen ?? []).map((c) => c.categorie_id),
     herinner_op: r.herinner_op,
     wacht:
-      (r.is_klantmail === true && !r.afgehandeld_op && (r.concept !== "" || heeftIets(r.voorstel))) ||
+      (r.is_klantmail === true &&
+        !r.afgehandeld_op &&
+        (r.concept !== "" || heeftIets(r.voorstel))) ||
       (!!r.herinner_op && new Date(r.herinner_op) <= new Date()),
   };
 }
@@ -211,7 +237,10 @@ export async function fetchBerichten(
 ): Promise<BerichtRegel[]> {
   const kolommen =
     bron.soort === "categorie"
-      ? REGEL_KOLOMMEN.replace("bericht_categorieen(categorie_id)", "bericht_categorieen!inner(categorie_id)")
+      ? REGEL_KOLOMMEN.replace(
+          "bericht_categorieen(categorie_id)",
+          "bericht_categorieen!inner(categorie_id)",
+        )
       : REGEL_KOLOMMEN;
 
   let query = supabase
@@ -238,7 +267,9 @@ export async function fetchBerichten(
       if (bron.prullenbakId) query = query.neq("map_id", bron.prullenbakId);
       break;
     case "categorie":
-      query = query.eq("map_id", bron.postvakId).eq("bericht_categorieen.categorie_id", bron.categorieId);
+      query = query
+        .eq("map_id", bron.postvakId)
+        .eq("bericht_categorieen.categorie_id", bron.categorieId);
       break;
   }
 
@@ -311,7 +342,11 @@ const BERICHT_KOLOMMEN = `${REGEL_KOLOMMEN},cc,antwoord_naar,tekst,html,afgekapt
  * bewaart Wooshy voor de klant.
  */
 export async function fetchBericht(id: string, ookUitMailbox = false): Promise<Bericht | null> {
-  let query = supabase.from("berichten").select(BERICHT_KOLOMMEN).eq("id", id).is("deleted_at", null);
+  let query = supabase
+    .from("berichten")
+    .select(BERICHT_KOLOMMEN)
+    .eq("id", id)
+    .is("deleted_at", null);
   if (!ookUitMailbox) query = query.eq("op_server", true);
   const { data, error } = await query.maybeSingle();
   if (error) throw error;
@@ -406,7 +441,11 @@ export async function fetchGepland(): Promise<GeplandeMail[]> {
 
 /** De afzenders die altijd naar spam gaan. */
 export async function fetchSpamRegels(): Promise<string[]> {
-  const { data, error } = await supabase.from("mail_regels").select("van_email").eq("actie", "spam").order("van_email");
+  const { data, error } = await supabase
+    .from("mail_regels")
+    .select("van_email")
+    .eq("actie", "spam")
+    .order("van_email");
   if (error) throw error;
   return (data ?? []).map((r) => r.van_email);
 }
@@ -564,7 +603,9 @@ export async function klantenMetAdressen(ids: string[], vandaag: string): Promis
     (klanten ?? []).map(async (k) => {
       const { data: adressen, error: adresFout } = await supabase
         .from("customers")
-        .select("id,interval_maanden,ritme,house_number,addition,note,streets(name,volledige_naam),adres_prijzen(prijs)")
+        .select(
+          "id,interval_maanden,ritme,house_number,addition,note,streets(name,volledige_naam),adres_prijzen(prijs)",
+        )
         .eq("klant_id", k.id)
         .is("deleted_at", null)
         .is("inactief_op", null);
@@ -593,7 +634,8 @@ export async function klantenMetAdressen(ids: string[], vandaag: string): Promis
             id: a.id,
             interval_maanden: a.interval_maanden ?? 1,
             ritme: a.ritme ?? 1,
-            adres: `${straat?.volledige_naam || straat?.name || ""} ${a.house_number}${a.addition ?? ""}`.trim(),
+            adres:
+              `${straat?.volledige_naam || straat?.name || ""} ${a.house_number}${a.addition ?? ""}`.trim(),
             prijs: prijsRij ? Number(prijsRij.prijs) : null,
             notitie: (a.note ?? "").trim(),
           };
@@ -628,7 +670,8 @@ type AdresRij = {
   klanten: { naam: string; deleted_at: string | null } | null;
 };
 
-const ADRES_KOLOMMEN = "id,house_number,addition,klant_id,inactief_op,streets(name,volledige_naam),klanten(naam,deleted_at)";
+const ADRES_KOLOMMEN =
+  "id,house_number,addition,klant_id,inactief_op,streets(name,volledige_naam),klanten(naam,deleted_at)";
 
 function alsKeuze(c: AdresRij): AdresKeuze {
   const straat = c.streets ? c.streets.volledige_naam || c.streets.name : "";
@@ -651,7 +694,10 @@ function alsKeuze(c: AdresRij): AdresKeuze {
  */
 export async function zoekAdresOfKlant(zoek: string): Promise<AdresKeuze[]> {
   // Tekens die de filtertaal van PostgREST zelf gebruikt, eruit.
-  const term = zoek.replace(/[%,()*"\\]/g, " ").replace(/\s+/g, " ").trim();
+  const term = zoek
+    .replace(/[%,()*"\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (term.length < 2) return [];
   const uit: AdresKeuze[] = [];
 
@@ -669,7 +715,11 @@ export async function zoekAdresOfKlant(zoek: string): Promise<AdresKeuze[]> {
     if (error) throw error;
     const ids = (straten ?? []).map((s) => s.id);
     if (ids.length > 0) {
-      let query = supabase.from("customers").select(ADRES_KOLOMMEN).in("street_id", ids).is("deleted_at", null);
+      let query = supabase
+        .from("customers")
+        .select(ADRES_KOLOMMEN)
+        .in("street_id", ids)
+        .is("deleted_at", null);
       if (nummer !== null) query = query.eq("house_number", nummer);
       const { data, error: adresFout } = await query.order("house_number").limit(20);
       if (adresFout) throw adresFout;
@@ -717,18 +767,26 @@ export async function zoekAdresOfKlant(zoek: string): Promise<AdresKeuze[]> {
   }
 
   const gezien = new Set<string>();
-  return uit.filter((k) => (gezien.has(k.sleutel) ? false : (gezien.add(k.sleutel), true))).slice(0, 25);
+  return uit
+    .filter((k) => (gezien.has(k.sleutel) ? false : (gezien.add(k.sleutel), true)))
+    .slice(0, 25);
 }
 
 /** De klant die al aan een adres hangt, als die er is (niet weggelegd). */
-export async function klantVanAdres(customerId: string): Promise<{ id: string; naam: string } | null> {
+export async function klantVanAdres(
+  customerId: string,
+): Promise<{ id: string; naam: string } | null> {
   const { data, error } = await supabase
     .from("customers")
     .select("klant_id,klanten(id,naam,deleted_at)")
     .eq("id", customerId)
     .maybeSingle();
   if (error) throw error;
-  const k = (data as unknown as { klanten: { id: string; naam: string; deleted_at: string | null } | null } | null)?.klanten;
+  const k = (
+    data as unknown as {
+      klanten: { id: string; naam: string; deleted_at: string | null } | null;
+    } | null
+  )?.klanten;
   return k && !k.deleted_at ? { id: k.id, naam: k.naam } : null;
 }
 
@@ -769,7 +827,9 @@ export function veiligeMailHtml(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
   // noscript ook: hier wordt het als html gelezen, in een kader waar scripts
   // mogen als platte tekst. Met dat verschil kan een mail er iets langs smokkelen.
-  doc.querySelectorAll("script, noscript, base, meta, link, form, iframe, object, embed").forEach((el) => el.remove());
+  doc
+    .querySelectorAll("script, noscript, base, meta, link, form, iframe, object, embed")
+    .forEach((el) => el.remove());
   doc.querySelectorAll("a, area").forEach((el) => {
     const href = (el.getAttribute("href") ?? "").trim();
     if (!/^(https?:|mailto:|tel:)/i.test(href)) {
