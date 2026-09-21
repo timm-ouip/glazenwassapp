@@ -36,6 +36,7 @@ import {
   IconHammer as Hammer,
   IconListCheck as ListChecks,
   IconSquareCheck as CheckSquare,
+  IconArrowBackUp as Undo2,
   IconDots as MoreHorizontal,
   IconMail as Mail,
   IconRoute as Route2,
@@ -59,7 +60,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { pushUndo, undoKnop } from "@/lib/undo";
+import { laatsteUndo, pushUndo, undoKnop, undoMetMelding, useLaatsteUndoLabel } from "@/lib/undo";
 import {
   aanDeBeurt,
   fetchCustomers,
@@ -166,6 +167,7 @@ const PLANNING_SNELTOETSEN: [string, string][] = [
   ["u", "Adressen uitklappen / inklappen"],
   ["i", "Teams indelen"],
   ["r", "Naar de route van die dag"],
+  ["⌘ / Ctrl + Z", "Ongedaan maken"],
   ["?", "Dit lijstje"],
 ];
 
@@ -657,6 +659,11 @@ function Planning() {
    * zelf een open-stand bij te houden: zo kan het menu nooit uit de pas lopen
    * met de knop waar het bij hoort.
    */
+  const undoLabel = useLaatsteUndoLabel();
+  function doeUndo() {
+    return undoMetMelding(laatsteUndo(), "Niets om terug te draaien");
+  }
+
   const sneltoets = useRef<(e: KeyboardEvent) => void>(() => {});
   sneltoets.current = (e: KeyboardEvent) => {
     const doel = e.target as HTMLElement | null;
@@ -668,6 +675,14 @@ function Planning() {
       )
     )
       return;
+    // Zoals op de wijkenpagina: de laatste stap terug, ook als de melding met
+    // zijn eigen knop al weg is.
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      // Toets ingedrukt houden draait niet stap na stap alles terug.
+      if (!e.repeat) void doeUndo();
+      return;
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const doe = (actie: () => void) => {
       e.preventDefault();
@@ -2053,8 +2068,8 @@ function Planning() {
     qc.invalidateQueries({ queryKey: ["wasdagen"] });
     qc.invalidateQueries({ queryKey: ["wasdag", gekozenDag] });
 
-    // Deze pagina heeft geen Ongedaan-knop in de balk zoals de wijkenpagina,
-    // dus zonder deze melding is het terugdraaien nergens te vinden. Ruim
+    // Terugdraaien kan ook met de knop "Ongedaan" in de balk, maar de melding
+    // zegt meteen wat er gebeurde en heeft de knop vlak bij de hand. Ruim
     // langer in beeld dan standaard: vier seconden is te kort om te beslissen.
     toast(`${terug.length} adressen van ${toonDatum(gekozenDag)} gehaald`, {
       duration: 12000,
@@ -2276,6 +2291,24 @@ function Planning() {
                   title="Slepen over het werk om het aan te wijzen"
                 >
                   <CheckSquare className="size-4" /> Selecteren
+                </Button>
+              )}
+
+              {/* De melding na een stap heeft zijn eigen knop, maar die is na
+                  een paar seconden weg. Deze blijft staan, net als op de
+                  wijkenpagina. */}
+              {magPlannen && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full"
+                  disabled={!undoLabel}
+                  onClick={() => void doeUndo()}
+                  aria-label="Ongedaan maken"
+                  title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
+                >
+                  <Undo2 className="size-4" />
+                  <span className="hidden sm:inline">Ongedaan</span>
                 </Button>
               )}
 

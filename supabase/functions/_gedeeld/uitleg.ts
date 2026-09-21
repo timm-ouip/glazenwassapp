@@ -173,7 +173,9 @@ wordt, vooruit gepland en achteraf geteld.
 Rechtsboven de kalender staat een knopje met maand / week / dag. De maand
 blijft staan waar hij stond; week en dag gaan over de gekozen dag. De pijltjes
 ernaast volgen die keuze: in de maand blader je per maand, in de week per week
-en in de dag per dag. Met "Vandaag" spring je terug.
+en in de dag per dag. Met "Vandaag" spring je terug. Naast "Selecteren" staat
+de knop "Ongedaan" (ook met ⌘/Ctrl+Z): die draait je laatste stap terug, ook
+als de melding met zijn eigen knop al weg is.
 
 De weekweergave: een kolom per werkdag, en daarin een kaartje per team met
 de straten, hoe laat elke straat aan de beurt is, een balkje dat laat zien hoe
@@ -240,8 +242,9 @@ adres:
   plannen". Een extra opdracht staat daarna weer open.
 - "Overslaan in <maand>" — het adres slaat die maand over (zoals Overslaan op
   de wijkenpagina) en gaat meteen van de dag af. Niet bij een extra opdracht.
-Allebei kun je direct terugdraaien met "Ongedaan maken" in de melding. Heb je
-adressen geselecteerd, dan staan ze ook bovenin het menu voor de hele selectie.
+Allebei kun je terugdraaien met "Ongedaan maken" in de melding of met de knop
+"Ongedaan" bovenin. Heb je adressen geselecteerd, dan staan ze ook bovenin het
+menu voor de hele selectie.
 
 Staat de tijdlijn aan, dan kun je per team een begin- en eindtijd invullen
 en rekent de app uit hoe vol de dag zit. Die duur komt uit de prijs. Staat de

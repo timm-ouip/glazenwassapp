@@ -8,8 +8,14 @@ export interface UndoActie {
 
 const stack: UndoActie[] = [];
 const listeners = new Set<() => void>();
+/** Telt elke verandering, ook als de stapel vol is en even lang blijft. */
+let versie = 0;
+/** Loopt er al een terugdraai-stap? Dan wacht een volgende niet in de rij,
+ *  maar valt weg: twee stappen tegelijk kunnen elkaars dagen raken. */
+let bezig = false;
 
 function meld() {
+  versie++;
   listeners.forEach((l) => l());
 }
 
@@ -30,11 +36,12 @@ export function laatsteUndo(): UndoActie | null {
  * zodat je het nog eens kunt proberen, en gaat de fout door naar de aanroeper.
  */
 export async function undoActie(actie: UndoActie | null): Promise<string | null> {
-  if (!actie) return null;
+  if (!actie || bezig) return null;
   const plek = stack.lastIndexOf(actie);
   if (plek === -1) return null;
   stack.splice(plek, 1);
   meld();
+  bezig = true;
   try {
     await actie.undo();
   } catch (e) {
@@ -47,6 +54,8 @@ export async function undoActie(actie: UndoActie | null): Promise<string | null>
       meld();
     }
     throw e;
+  } finally {
+    bezig = false;
   }
   return actie.label;
 }
@@ -66,6 +75,9 @@ export function undoLaatste(): Promise<string | null> {
 
 /** Terugdraaien met een melding van wat er gebeurde, ook als het mislukt. */
 export async function undoMetMelding(actie: UndoActie | null, legeMelding?: string) {
+  // Nog een stap bezig (dubbelklik, toets te lang ingedrukt): stil negeren,
+  // niet melden dat er niets terug te draaien is.
+  if (bezig) return;
   try {
     const label = await undoActie(actie);
     if (label) toast.success("Teruggedraaid: " + label);
@@ -91,7 +103,9 @@ export function useUndoStack() {
       listeners.add(l);
       return () => listeners.delete(l);
     },
-    () => stack.length,
+    // Niet het aantal: bij een volle stapel blijft dat 50, en dan zou de
+    // knop de naam van een oudere stap blijven tonen.
+    () => versie,
     () => 0,
   );
 }
