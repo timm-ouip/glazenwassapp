@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { fetchAfmeldstatus, isAfgemeld } from "@/lib/dagklaar";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
@@ -396,6 +397,20 @@ function Planning() {
     queryKey: ["wasdagen", sleutel(van), sleutel(tot)],
     queryFn: () => fetchWasdagen(sleutel(van), sleutel(tot)),
   });
+  // Welke dagen die voorbij zijn nog niet met "Dag klaar" zijn afgemeld: daar
+  // staat nog niets open bij de klant, dus die krijgen een stipje.
+  const magAfmeldenZien = useRecht("planning");
+  const afmeldQuery = useQuery({
+    // Onder "wasdagen": elke wijziging in de planning ververst deze mee.
+    queryKey: ["wasdagen", "afmeldstatus", sleutel(van), sleutel(tot)],
+    queryFn: () => fetchAfmeldstatus(sleutel(van), sleutel(tot)),
+    enabled: magAfmeldenZien,
+  });
+  const nietAfgemeld = useMemo(() => {
+    const dagen = new Set<string>();
+    for (const s of afmeldQuery.data ?? []) if (!isAfgemeld(s)) dagen.add(s.datum);
+    return dagen;
+  }, [afmeldQuery.data]);
   // Deze twee staan meestal al in de cache van de wijkenpagina; ze zijn hier
   // alleen nodig om te laten zien wélke straten er op een dag staan.
   const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
@@ -3019,6 +3034,13 @@ function Planning() {
                                     >
                                       {format(d, "d")}
                                     </span>
+                                    {k < nu && !buitenMaand && nietAfgemeld.has(k) && (
+                                      <span
+                                        className="absolute left-8 top-[13px] size-1.5 rounded-full bg-tint-oranje-ink"
+                                        title="Nog niet afgemeld met Dag klaar: dit werk staat nog niet open bij de klant"
+                                        aria-label="Nog niet afgemeld"
+                                      />
+                                    )}
 
                                     {info && (
                                       <>

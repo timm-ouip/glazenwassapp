@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
+  IconCash as Cash,
   IconCheck as Check,
   IconMap as Map,
   IconMapPin as MapPin,
@@ -48,6 +50,9 @@ import {
 import { pushUndo, undoKnop } from "@/lib/undo";
 import { zoekWoonplaatsen } from "@/lib/postcode";
 import { useBevestig } from "@/components/Bevestig";
+import { BetaalwijzeKiezer } from "@/components/betalingen/BetaalwijzeKiezer";
+import { useAuth } from "@/lib/auth";
+import { zetWijkBetaalmethode, type Betaalmethode } from "@/lib/betalingen";
 import { opslaanBijEnter } from "@/lib/dialoog";
 
 interface Props {
@@ -182,7 +187,7 @@ export function WijkKiezer({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
             <DropdownMenuItem onSelect={() => setHernoemOpen(true)}>
-              <Pencil className="size-4" /> Wijk hernoemen…
+              <Pencil className="size-4" /> Wijkinstellingen…
             </DropdownMenuItem>
             {onStraatnamen &&
               (straatnamenNodig > 0 ? (
@@ -237,14 +242,19 @@ function WijkDialoog({
   const [naam, setNaam] = useState("");
   const [plaats, setPlaats] = useState("");
   const [plaatsSuggesties, setPlaatsSuggesties] = useState<string[]>([]);
+  const [methode, setMethode] = useState<Betaalmethode>("contant");
   const [bezig, setBezig] = useState(false);
   const nieuw = wijk === null;
+  // De betaalmethode en de beginstand zijn van de eigenaar; wie plant mag
+  // een wijk wel hernoemen.
+  const isEigenaar = useAuth().employee?.rol === "eigenaar";
 
   // Bij elke keer openen opnieuw invullen.
   useEffect(() => {
     if (!open) return;
     setNaam(wijk?.name ?? "");
     setPlaats(wijk?.plaats ?? standaardPlaats);
+    setMethode(wijk?.betaalmethode ?? "contant");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -272,12 +282,18 @@ function WijkDialoog({
     try {
       if (nieuw) {
         const gemaakt = await addDistrict(naam.trim(), plaats);
+        if (isEigenaar && methode !== gemaakt.betaalmethode) {
+          await zetWijkBetaalmethode(gemaakt.id, methode);
+        }
         onOpgeslagen(gemaakt.id);
         toast.success("Wijk toegevoegd");
       } else {
         await renameDistrict(wijk.id, naam.trim(), plaats);
+        if (isEigenaar && methode !== wijk.betaalmethode) {
+          await zetWijkBetaalmethode(wijk.id, methode);
+        }
         onOpgeslagen(wijk.id);
-        toast.success("Wijk hernoemd");
+        toast.success("Wijk opgeslagen");
       }
       onOpenChange(false);
     } catch (e) {
@@ -292,7 +308,7 @@ function WijkDialoog({
       <PopupKader className="sm:max-w-sm" onKeyDown={opslaanBijEnter(opslaan)}>
         <PopupKop
           icoon={<Map className="size-[22px]" />}
-          titel={nieuw ? "Wijk toevoegen" : "Wijk hernoemen"}
+          titel={nieuw ? "Wijk toevoegen" : "Wijkinstellingen"}
           subtitel={plaats.trim() || "Een ronde die je in één keer rijdt"}
         />
         <PopupBody>
@@ -327,6 +343,34 @@ function WijkDialoog({
               ))}
             </datalist>
           </PopupBlok>
+          {isEigenaar && (
+            <PopupBlok
+              label="Betalen"
+              info="Hoe de klanten hier standaard betalen. Bij een adres kun je het anders zetten, voor de paar overmakers in een contante wijk."
+            >
+              <BetaalwijzeKiezer waarde={methode} onChange={(m) => m && setMethode(m)} />
+              {!nieuw && methode === "contant" && (
+                <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+                  <Cash className="size-4 shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    {wijk.geld_klaar_op
+                      ? "Beginstand klaar: deze wijk kan vrijgegeven worden voor geldlopen."
+                      : wijk.geld_peildatum
+                        ? "De beginstand is nog niet helemaal ingevuld."
+                        : "De pof van de kaarten staat er nog niet in."}
+                  </span>
+                  <Link
+                    to="/betalingen"
+                    search={{ tab: "beginstand", wijk: wijk.id }}
+                    className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    {wijk.geld_klaar_op ? "Bekijken" : "Invullen"}
+                  </Link>
+                </div>
+              )}
+            </PopupBlok>
+          )}
         </PopupBody>
         <PopupVoet>
           <Button variant="outline" className="rounded-full" onClick={() => onOpenChange(false)}>

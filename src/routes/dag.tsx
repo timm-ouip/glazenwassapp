@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { VerplaatsNaarKnop } from "@/components/VerplaatsNaarKnop";
 import { OverslaanKnop } from "@/components/OverslaanKnop";
 import { DagAdresDialog } from "@/components/DagAdresDialog";
+import { DagKlaar } from "@/components/DagKlaar";
 import {
   fetchCustomers,
   fetchCustomersMetInactief,
@@ -324,6 +325,15 @@ function DagPagina() {
     const ik = eigenTeamlid(teamledenQuery.data ?? [], employee?.id);
     return ploegVan(dagPloegen, ik?.id);
   }, [teamledenQuery.data, employee?.id, dagPloegen]);
+
+  const adresOpId = useMemo(
+    () => new Map((adressenQuery.data ?? []).map((c) => [c.id, c])),
+    [adressenQuery.data],
+  );
+  const straatOpId = useMemo(
+    () => new Map((streetsQuery.data ?? []).map((s) => [s.id, s])),
+    [streetsQuery.data],
+  );
 
   /** Wat er op het scherm staat: jouw ploeg, of alles van de dag. */
   const zichtbareRegels = useMemo(() => {
@@ -1103,6 +1113,20 @@ function DagPagina() {
       ) : (
         <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_19rem]">
           <div className="min-w-0 space-y-3">
+            {/* Aan het eind van de dag: afmelden wat gedaan is. Pas dan staat
+                het open bij de klant (en kan de geldloper het ophalen). */}
+            <DagKlaar
+              datum={datum}
+              groepen={
+                alleenEigen && eigenPloeg !== null
+                  ? [eigenPloeg]
+                  : [...new Set((wasdagQuery.data ?? []).map((r) => r.ploeg_nr ?? null))]
+              }
+              regels={wasdagQuery.data ?? []}
+              adressen={adresOpId}
+              straten={straatOpId}
+              ploegen={dagPloegen}
+            />
             {perWijk.wijken.map((w) => {
               const eropWijk = w.klantIds.filter((id) => keuze.has(id)).length;
               const { className: wijkKnop, ...wijkRest } = vakKnop(`w:${w.id}`) as {

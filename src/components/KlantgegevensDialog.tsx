@@ -12,6 +12,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { BetaalwijzeKiezer } from "@/components/betalingen/BetaalwijzeKiezer";
+import { DossierGeld } from "@/components/dossier/DossierGeld";
+import { GeldloopWijzigingenVak } from "@/components/betalingen/GeldloopWijzigingenVak";
+import type { Betaalmethode } from "@/lib/betalingen";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useBevestig } from "@/components/Bevestig";
 import {
@@ -53,6 +57,7 @@ import {
   IconFlag as Flag,
   IconHammer as Hammer,
   IconMessageExclamation as MessageSquareWarning,
+  IconCash as Cash,
   IconHash as Hash,
   IconHome as House,
   IconLink as Link2,
@@ -175,6 +180,8 @@ interface Pand {
   overslaan: string[];
   start_maand: string;
   markering: Markering;
+  /** Contant of overmaken; leeg = zoals de wijk. */
+  betaalmethode: Betaalmethode | null;
 }
 
 const LEEG_PAND: Pand = {
@@ -189,6 +196,7 @@ const LEEG_PAND: Pand = {
   overslaan: [],
   start_maand: "",
   markering: "",
+  betaalmethode: null,
 };
 
 function pandVan(c: Customer): Pand {
@@ -206,6 +214,7 @@ function pandVan(c: Customer): Pand {
     overslaan: [...(c.overslaan ?? [])].sort(),
     start_maand: c.start_maand ?? "",
     markering: c.markering ?? "",
+    betaalmethode: c.betaalmethode ?? null,
   };
 }
 
@@ -257,7 +266,9 @@ export function KlantgegevensDialog({
    *  of de klachten. Korte schermen in plaats van één lange lap om doorheen te
    *  scrollen. Mail en klachten horen bij de persoon, dus die zijn er alleen
    *  als er een klant is. */
-  const [tab, setTab] = useState<"klant" | "adres" | "werk" | "mail" | "klachten">("klant");
+  const [tab, setTab] = useState<"klant" | "adres" | "werk" | "mail" | "klachten" | "geld">(
+    "klant",
+  );
   const mobiel = useIsMobile();
   const bevestig = useBevestig();
   /** Op de telefoon: het onderblad, het overzicht, of één onderdeel. */
@@ -570,6 +581,11 @@ export function KlantgegevensDialog({
             overslaan: [...pand.overslaan].sort(),
             start_maand: pand.start_maand,
             markering: pand.markering,
+            // Alleen meesturen als het verandert: de database laat dit alleen
+            // toe voor wie klanten bewerkt.
+            ...(pand.betaalmethode !== (dossierCustomer?.betaalmethode ?? null)
+              ? { betaalmethode: pand.betaalmethode }
+              : {}),
           }),
         );
       } else if (adresId && bestaandePostcode === "" && velden.postcode.trim()) {
@@ -651,6 +667,9 @@ export function KlantgegevensDialog({
 
   const tabInhoud = (
     <>
+      {dossierCustomer && (tab === "klant" || tab === "adres") && (
+        <GeldloopWijzigingenVak adresId={dossierCustomer.id} />
+      )}
       {!magBewerken && (
         <p className="mb-3 rounded-[12px] bg-accent/50 px-3 py-2 text-[12.5px] text-muted-foreground">
           Je kunt dit dossier bekijken, maar je rol mag het niet wijzigen.
@@ -993,6 +1012,18 @@ export function KlantgegevensDialog({
               </div>
             </PopupBlok>
 
+            <PopupBlok
+              label="Betalen"
+              info="Contant: de geldloper haalt het op. Overmaken: deze klant staat grijs op de lijst van de geldloper."
+            >
+              <BetaalwijzeKiezer
+                waarde={pand.betaalmethode}
+                wijk={districts.find((d) => d.id === wijkId)?.betaalmethode ?? "contant"}
+                disabled={!magBewerken}
+                onChange={(m) => setPand((p) => ({ ...p, betaalmethode: m }))}
+              />
+            </PopupBlok>
+
             <PopupBlok label={prijzenZien ? "Notitie en meerwerk" : "Notitie"}>
               {/* Hetzelfde veld met snelkeuzes als op de wijkenpagina, nu
                     inclusief het werk dat er in bepaalde maanden bij komt en
@@ -1188,6 +1219,9 @@ export function KlantgegevensDialog({
           </MailLaadFout>
         </div>
       )}
+      {tab === "geld" && dossierCustomer && prijzenZien && (
+        <DossierGeld adresId={dossierCustomer.id} />
+      )}
       {tab === "klachten" && klant && (
         <DossierKlachten
           klantId={klant.id}
@@ -1244,6 +1278,7 @@ export function KlantgegevensDialog({
     werk: "Werk",
     mail: "Berichten",
     klachten: "Klachten",
+    geld: "Geld",
   };
   const titelTekst = dossierCustomer
     ? adresTekst(dossierCustomer)
@@ -1464,6 +1499,9 @@ export function KlantgegevensDialog({
                     <MessageSquareWarning className="size-[18px]" />,
                     telBolletje(openKlachten, true),
                   )}
+                {dossierCustomer &&
+                  prijzenZien &&
+                  lijstRij("geld", <Cash className="size-[18px]" />)}
               </div>
             </div>
           </div>
@@ -1544,6 +1582,15 @@ export function KlantgegevensDialog({
                     telletje={openKlachten}
                   >
                     Klachten
+                  </PopupTab>
+                )}
+                {dossierCustomer && prijzenZien && (
+                  <PopupTab
+                    actief={tab === "geld"}
+                    onClick={() => setTab("geld")}
+                    icoon={<Cash className="size-[15px]" />}
+                  >
+                    Geld
                   </PopupTab>
                 )}
               </>

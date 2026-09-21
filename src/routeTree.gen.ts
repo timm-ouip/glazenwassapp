@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AanmeldenRouteImport } from './routes/aanmelden'
 import { Route as AanmeldingenRouteImport } from './routes/aanmeldingen'
 import { Route as BerichtenRouteImport } from './routes/berichten'
+import { Route as BetalingenRouteImport } from './routes/betalingen'
 import { Route as DagRouteImport } from './routes/dag'
 import { Route as ImporterenRouteImport } from './routes/importeren'
 import { Route as InstellingenRouteImport } from './routes/instellingen'
@@ -45,6 +46,11 @@ const AanmeldingenRoute = AanmeldingenRouteImport.update({
 const BerichtenRoute = BerichtenRouteImport.update({
   id: '/berichten',
   path: '/berichten',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BetalingenRoute = BetalingenRouteImport.update({
+  id: '/betalingen',
+  path: '/betalingen',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DagRoute = DagRouteImport.update({
@@ -118,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/aanmelden': typeof AanmeldenRoute
   '/aanmeldingen': typeof AanmeldingenRoute
   '/berichten': typeof BerichtenRoute
+  '/betalingen': typeof BetalingenRoute
   '/dag': typeof DagRoute
   '/importeren': typeof ImporterenRoute
   '/instellingen': typeof InstellingenRoute
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   '/aanmelden': typeof AanmeldenRoute
   '/aanmeldingen': typeof AanmeldingenRoute
   '/berichten': typeof BerichtenRoute
+  '/betalingen': typeof BetalingenRoute
   '/dag': typeof DagRoute
   '/importeren': typeof ImporterenRoute
   '/instellingen': typeof InstellingenRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/aanmelden': typeof AanmeldenRoute
   '/aanmeldingen': typeof AanmeldingenRoute
   '/berichten': typeof BerichtenRoute
+  '/betalingen': typeof BetalingenRoute
   '/dag': typeof DagRoute
   '/importeren': typeof ImporterenRoute
   '/instellingen': typeof InstellingenRoute
@@ -178,6 +187,7 @@ export interface FileRouteTypes {
     | '/aanmelden'
     | '/aanmeldingen'
     | '/berichten'
+    | '/betalingen'
     | '/dag'
     | '/importeren'
     | '/instellingen'
@@ -197,6 +207,7 @@ export interface FileRouteTypes {
     | '/aanmelden'
     | '/aanmeldingen'
     | '/berichten'
+    | '/betalingen'
     | '/dag'
     | '/importeren'
     | '/instellingen'
@@ -216,6 +227,7 @@ export interface FileRouteTypes {
     | '/aanmelden'
     | '/aanmeldingen'
     | '/berichten'
+    | '/betalingen'
     | '/dag'
     | '/importeren'
     | '/instellingen'
@@ -236,6 +248,7 @@ export interface RootRouteChildren {
   AanmeldenRoute: typeof AanmeldenRoute
   AanmeldingenRoute: typeof AanmeldingenRoute
   BerichtenRoute: typeof BerichtenRoute
+  BetalingenRoute: typeof BetalingenRoute
   DagRoute: typeof DagRoute
   ImporterenRoute: typeof ImporterenRoute
   InstellingenRoute: typeof InstellingenRoute
@@ -279,6 +292,13 @@ declare module '@tanstack/react-router' {
       path: '/berichten'
       fullPath: '/berichten'
       preLoaderRoute: typeof BerichtenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/betalingen': {
+      id: '/betalingen'
+      path: '/betalingen'
+      fullPath: '/betalingen'
+      preLoaderRoute: typeof BetalingenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dag': {
@@ -380,6 +400,7 @@ const rootRouteChildren: RootRouteChildren = {
   AanmeldenRoute: AanmeldenRoute,
   AanmeldingenRoute: AanmeldingenRoute,
   BerichtenRoute: BerichtenRoute,
+  BetalingenRoute: BetalingenRoute,
   DagRoute: DagRoute,
   ImporterenRoute: ImporterenRoute,
   InstellingenRoute: InstellingenRoute,

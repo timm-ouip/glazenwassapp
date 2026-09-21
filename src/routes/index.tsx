@@ -26,7 +26,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/supabase/client";
 import { netjesStraat } from "@/lib/schoonschrift";
-import { requireSession, useRequireAuth } from "@/lib/auth";
+import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { naarDagBijOpstarten } from "@/lib/dagslot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -190,7 +190,7 @@ import {
   type StraatGroep,
   type Street,
 } from "@/lib/klanten";
-import { useRecht } from "@/lib/rechten";
+import { heeftRecht, useRecht } from "@/lib/rechten";
 import { StopDialog } from "@/components/StopDialog";
 import {
   draaiStoppenTerug,
@@ -286,6 +286,14 @@ function Index() {
     // Alleen bij het openen van de pagina.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Een geldloper heeft hier niets te zoeken (geen planning): meteen naar
+  // zijn lijst in Betalingen, in plaats van "Geen toegang".
+  const { employee: ik } = useAuth();
+  useEffect(() => {
+    if (ik && !heeftRecht(ik, "planning") && heeftRecht(ik, "geldlopen")) {
+      void navigate({ to: "/betalingen", search: { tab: "lopen" }, replace: true });
+    }
+  }, [ik, navigate]);
   // Telefoon en computer hebben elk hun eigen zoekbalk. Wissel je (tablet
   // draaien), dan begint de nieuwe leeg — dan hoort de lijst ook niet meer
   // op het oude woord gefilterd te staan.

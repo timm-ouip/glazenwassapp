@@ -73,6 +73,7 @@ export type Database = {
       };
       companies: {
         Row: {
+          geldloop_eindtijd: string;
           plan_tarief_uur: number;
           plan_begin: string;
           plan_eind: string;
@@ -105,6 +106,7 @@ export type Database = {
           werkdagen: number[];
         };
         Insert: {
+          geldloop_eindtijd?: string;
           plan_tarief_uur?: number;
           plan_begin?: string;
           plan_eind?: string;
@@ -137,6 +139,7 @@ export type Database = {
           werkdagen?: number[];
         };
         Update: {
+          geldloop_eindtijd?: string;
           plan_tarief_uur?: number;
           plan_begin?: string;
           plan_eind?: string;
@@ -172,6 +175,7 @@ export type Database = {
       };
       customers: {
         Row: {
+          betaalmethode: "contant" | "overmaken" | null;
           duur_min: number | null;
           duur_zelf: boolean;
           eigen_blok: boolean | null;
@@ -204,6 +208,7 @@ export type Database = {
           street_id: string;
         };
         Insert: {
+          betaalmethode?: "contant" | "overmaken" | null;
           duur_min?: number | null;
           duur_zelf?: boolean;
           eigen_blok?: boolean | null;
@@ -236,6 +241,7 @@ export type Database = {
           street_id: string;
         };
         Update: {
+          betaalmethode?: "contant" | "overmaken" | null;
           duur_min?: number | null;
           duur_zelf?: boolean;
           eigen_blok?: boolean | null;
@@ -293,6 +299,10 @@ export type Database = {
       };
       districts: {
         Row: {
+          betaalmethode: "contant" | "overmaken";
+          geld_peildatum: string | null;
+          geld_klaar_op: string | null;
+          geld_klaar_door: string | null;
           company_id: string;
           created_at: string;
           deleted_at: string | null;
@@ -303,6 +313,10 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          betaalmethode?: "contant" | "overmaken";
+          geld_peildatum?: string | null;
+          geld_klaar_op?: string | null;
+          geld_klaar_door?: string | null;
           company_id?: string;
           created_at?: string;
           deleted_at?: string | null;
@@ -313,6 +327,10 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          betaalmethode?: "contant" | "overmaken";
+          geld_peildatum?: string | null;
+          geld_klaar_op?: string | null;
+          geld_klaar_door?: string | null;
           company_id?: string;
           created_at?: string;
           deleted_at?: string | null;
@@ -1244,8 +1262,57 @@ export type Database = {
         };
         Relationships: [];
       };
+      betaal_gebeurtenissen: {
+        Row: {
+          id: string;
+          company_id: string;
+          customer_id: string;
+          adres: string;
+          soort: "beginstand" | "betaald" | "korting" | "niet_thuis" | "geen_geld" | "ongedaan";
+          bedrag: number;
+          aantal: number | null;
+          peildatum: string | null;
+          maanden: string[] | null;
+          reden: string;
+          vaste_korting_id: string | null;
+          herroept_id: string | null;
+          vrijgave_id: string | null;
+          bron: "geldloop" | "dag" | "kantoor";
+          door: string | null;
+          door_naam: string;
+          op: string;
+          ontvangen_op: string;
+          getoond_open: number | null;
+          botsing_met: string | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      dag_afmeldingen: {
+        Row: {
+          id: string;
+          company_id: string;
+          datum: string;
+          ploeg_nr: number | null;
+          door: string | null;
+          door_naam: string;
+          op: string;
+          gedaan: number;
+          weg: number;
+          weg_kenmerk: string | null;
+          heropend_op: string | null;
+          heropend_door: string | null;
+          heropend_naam: string | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       wasdag_regels: {
         Row: {
+          gedaan_op: string | null;
+          gedaan_door: string | null;
           ploeg_nr: number | null;
           volgorde: number | null;
           rest: boolean;
@@ -1258,6 +1325,8 @@ export type Database = {
           notitie: string | null;
         };
         Insert: {
+          gedaan_op?: string | null;
+          gedaan_door?: string | null;
           ploeg_nr?: number | null;
           volgorde?: number | null;
           rest?: boolean;
@@ -1270,6 +1339,8 @@ export type Database = {
           notitie?: string | null;
         };
         Update: {
+          gedaan_op?: string | null;
+          gedaan_door?: string | null;
           ploeg_nr?: number | null;
           volgorde?: number | null;
           rest?: boolean;
@@ -1684,7 +1755,7 @@ export type Database = {
           door_paaltje: boolean;
           gemaakt_door: string | null;
           id: string;
-          klant_id: string;
+          klant_id: string | null;
           omschrijving: string;
           ontvangen_op: string;
           status: string;
@@ -1699,7 +1770,7 @@ export type Database = {
           door_paaltje?: boolean;
           gemaakt_door?: string | null;
           id?: string;
-          klant_id: string;
+          klant_id?: string | null;
           omschrijving: string;
           ontvangen_op?: string;
           status?: string;
@@ -1714,7 +1785,7 @@ export type Database = {
           door_paaltje?: boolean;
           gemaakt_door?: string | null;
           id?: string;
-          klant_id?: string;
+          klant_id?: string | null;
           omschrijving?: string;
           ontvangen_op?: string;
           status?: string;
@@ -2205,6 +2276,137 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      dag_geld_stand: {
+        Args: { adres_id: string };
+        Returns: Json;
+      };
+      geldloop_dossier: {
+        Args: { adres_id: string };
+        Returns: Json;
+      };
+      geldloop_dossier_bewaren: {
+        Args: { adres_id: string; wijzigingen: Json };
+        Returns: Json;
+      };
+      geldloop_stoppen: {
+        Args: { adres_id: string; reden: string; planning_weg: boolean };
+        Returns: Json;
+      };
+      geldloop_wijziging_terugdraaien: {
+        Args: { wijziging: string };
+        Returns: undefined;
+      };
+      geldloop_wijzigingen_van: {
+        Args: { adres_id?: string | null; datum?: string | null };
+        Returns: Json;
+      };
+      geld_avond: {
+        Args: { datum: string };
+        Returns: Json;
+      };
+      geld_pof: {
+        Args: { wijken?: string[] | null };
+        Returns: Json;
+      };
+      geld_kaart: {
+        Args: { straat: string; jaar: number };
+        Returns: Json;
+      };
+      geld_adres: {
+        Args: { adres: string };
+        Returns: Json;
+      };
+      geldloop_vrijgeven: {
+        Args: { datum: string; wijken: string[]; lopers: string[]; eind?: string | null };
+        Returns: Json;
+      };
+      geldloop_intrekken: {
+        Args: { vrijgave: string };
+        Returns: undefined;
+      };
+      geldloop_eind_wijzigen: {
+        Args: { vrijgave: string; eind: string };
+        Returns: undefined;
+      };
+      geldloop_vrijgaven_vanaf: {
+        Args: { vanaf: string };
+        Returns: Json;
+      };
+      geldloop_mogelijke_lopers: {
+        Args: Record<string, never>;
+        Returns: Json;
+      };
+      geldloop_niet_afgemeld: {
+        Args: { wijken: string[] };
+        Returns: Json;
+      };
+      mijn_geldloop: {
+        Args: Record<string, never>;
+        Returns: Json;
+      };
+      geldloop_lijst: {
+        Args: { vrijgave: string };
+        Returns: Json;
+      };
+      geld_boeken: {
+        Args: {
+          id: string;
+          adres_id: string;
+          soort: string;
+          bedrag?: number;
+          reden?: string;
+          vaste_korting?: string | null;
+          herroept?: string | null;
+          op?: string | null;
+          getoond_open?: number | null;
+          bron?: string;
+        };
+        Returns: Json;
+      };
+      geld_vaste_korting: {
+        Args: { adres: string; naam: string; bedrag: number };
+        Returns: string;
+      };
+      geld_vaste_korting_weg: {
+        Args: { korting: string };
+        Returns: undefined;
+      };
+      geldloop_klacht: {
+        Args: { adres: string; omschrijving: string };
+        Returns: string;
+      };
+      geld_wijk_starten: {
+        Args: { wijk: string; peildatum: string };
+        Returns: undefined;
+      };
+      geld_beginstand_zetten: {
+        Args: { adres_id: string; bedrag: number; aantal?: number; maanden?: string[] | null };
+        Returns: undefined;
+      };
+      geld_wijk_klaar: {
+        Args: { wijk: string; klaar: boolean };
+        Returns: undefined;
+      };
+      geld_stand_wijk: {
+        Args: { wijk: string };
+        Returns: Json;
+      };
+      dag_afmelden: {
+        Args: { dag: string; ploeg: number | null; weg?: string[] };
+        Returns: Json;
+      };
+      dag_heropenen: {
+        Args: { dag: string; ploeg: number | null };
+        Returns: number;
+      };
+      dag_afmelden_terugdraaien: {
+        Args: { afmelding: string };
+        Returns: undefined;
+      };
+      dag_afmeldstatus: {
+        Args: { vanaf: string; tot: string };
+        Returns: Json;
+      };
       gesprek_van: {
         Args: { bericht: string };
         Returns: {

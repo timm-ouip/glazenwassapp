@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { eenVan } from "@/lib/embed";
 import type { Ploeg, PloegLid } from "@/lib/dagplanning";
 
 /**
@@ -20,13 +21,29 @@ export interface Teamlid {
 }
 
 export async function fetchTeamleden(): Promise<Teamlid[]> {
-  const { data, error } = await supabase
-    .from("teamleden")
-    .select("id,naam,employee_id,uitgenodigd_user_id")
-    .is("deleted_at", null)
-    .order("naam", { ascending: true });
-  if (error) throw error;
-  return data ?? [];
+  const [leden, mensen] = await Promise.all([
+    supabase
+      .from("teamleden")
+      .select("id,naam,employee_id,uitgenodigd_user_id")
+      .is("deleted_at", null)
+      .order("naam", { ascending: true }),
+    supabase.from("employees").select("id,rol,rollen(rechten)"),
+  ]);
+  if (leden.error) throw leden.error;
+  // Geldlopers die niet wassen (wel "geld lopen", geen planning) horen niet
+  // in de teams van overdag. Lukt het opvragen van de rollen niet, dan
+  // gewoon iedereen.
+  const alleenGeld = new Set(
+    (mensen.data ?? [])
+      .filter((e) => {
+        const rechten = eenVan(e.rollen)?.rechten ?? [];
+        return (
+          e.rol !== "eigenaar" && rechten.includes("geldlopen") && !rechten.includes("planning")
+        );
+      })
+      .map((e) => e.id),
+  );
+  return (leden.data ?? []).filter((l) => !l.employee_id || !alleenGeld.has(l.employee_id));
 }
 
 export async function maakTeamlid(naam: string): Promise<string> {

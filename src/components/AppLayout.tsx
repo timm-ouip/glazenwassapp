@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
+import { WachtrijVerzender } from "@/components/betalingen/WachtrijVerzender";
 import { useRouterState } from "@tanstack/react-router";
 import { IconLock as Lock } from "@tabler/icons-react";
 
@@ -172,6 +173,8 @@ export function AppLayout({
       </div>
       <Tabbalk boven={mag ? onderbalk : undefined} />
       {employee && <PaaltjeKnop />}
+      {/* Tikken van een geldloper die nog op de telefoon staan: overal versturen. */}
+      {employee && <WachtrijVerzender />}
     </div>
   );
 }

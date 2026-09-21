@@ -12,7 +12,10 @@ import { heeftRecht, rolLabel } from "@/lib/rechten";
 
 /** Wat je op de telefoon het vaakst opent, staat los in de balk. De rest zit
  *  achter "Meer" — net als in een bank- of fotoapp. */
-const VAST = ["/", "/planning", "/klanten", "/mailing"];
+const VAST = ["/", "/planning", "/klanten", "/mailing", "/betalingen"];
+/** Meer dan dit past niet naast "Meer". De eigenaar houdt zo zijn vier vaste
+ *  tabs; een geldloper, die alleen Betalingen heeft, krijgt die als tab. */
+const MAX_TABS = 4;
 /** Korter op een tab dan in het menu. */
 const TABNAAM: Record<string, string> = { "/mailing": "Mail" };
 
@@ -51,8 +54,8 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
   }, []);
 
   const alles = [...werk, ...beheer];
-  const tabs = alles.filter((p) => VAST.includes(p.to));
-  const meer = alles.filter((p) => !VAST.includes(p.to));
+  const tabs = alles.filter((p) => VAST.includes(p.to)).slice(0, MAX_TABS);
+  const meer = alles.filter((p) => !tabs.includes(p));
   const meerActief = meer.some(isActief);
 
   const tabKlassen = (actief: boolean) =>

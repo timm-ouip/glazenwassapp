@@ -91,6 +91,14 @@ export interface District {
   /** Woonplaats van de wijk. Een wijknaam zegt daar niets over: "Madestein"
    *  ligt in 's-Gravenhage. Zonder plaats is geen postcode op te zoeken. */
   plaats: string;
+  /** Hoe de adressen hier standaard betalen. Een adres kan het zelf anders
+   *  hebben (Customer.betaalmethode). */
+  betaalmethode: "contant" | "overmaken";
+  /** Tot en met deze dag staat de pof in de beginstand; daarna telt de app
+   *  zelf. Leeg = de wijk doet nog niet mee met Betalingen. */
+  geld_peildatum: string | null;
+  /** Beginstand klaar: pas dan kan de wijk vrijgegeven worden voor geldlopen. */
+  geld_klaar_op: string | null;
 }
 
 /**
@@ -187,6 +195,8 @@ export interface Customer {
    *  adres nog niet nagekeken — en bij een nieuw adres staat de prijs nog op
    *  nul. Het stempel gaat weg zodra je het gezien hebt. */
   aangemeld_op: string | null;
+  /** Contant of overmaken; leeg = zoals de wijk. */
+  betaalmethode: "contant" | "overmaken" | null;
 }
 
 /**
@@ -432,7 +442,7 @@ export function wijkVlak(indexen: number[]): string {
 export async function fetchDistricts(): Promise<District[]> {
   const { data, error } = await supabase
     .from("districts")
-    .select("id,name,sort_order,plaats")
+    .select("id,name,sort_order,plaats,betaalmethode,geld_peildatum,geld_klaar_op")
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
@@ -446,7 +456,7 @@ export async function addDistrict(name: string, plaats = ""): Promise<District> 
   const { data, error } = await supabase
     .from("districts")
     .insert({ name: name.trim(), plaats: plaats.trim(), sort_order: 100 })
-    .select("id,name,sort_order,plaats")
+    .select("id,name,sort_order,plaats,betaalmethode,geld_peildatum,geld_klaar_op")
     .single();
   if (error) throw error;
   return data as District;
@@ -536,7 +546,7 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
       // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
       // met een samengestelde string lukt dat niet meer.
       .select(
-        "id,street_id,house_number,addition,note,note_even,note_oneven,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op,inactief_op,inactief_reden,duur_min,duur_zelf,eigen_blok,adres_prijzen(prijs,maandwerk_extra)",
+        "id,street_id,house_number,addition,note,note_even,note_oneven,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op,inactief_op,inactief_reden,duur_min,duur_zelf,eigen_blok,betaalmethode,adres_prijzen(prijs,maandwerk_extra)",
       )
       .is("deleted_at", null);
     // Inactief (gestopt of verhuisd) hoort niet op de wijklijst, de planning
@@ -568,6 +578,7 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
     duur_min: c.duur_min ?? null,
     duur_zelf: c.duur_zelf ?? false,
     eigen_blok: c.eigen_blok ?? null,
+    betaalmethode: c.betaalmethode ?? null,
   })) as Customer[];
 }
 

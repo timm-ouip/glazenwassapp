@@ -28,7 +28,8 @@ import {
   ritmeLabel,
   type Customer,
 } from "@/lib/klanten";
-import { toonDatum } from "@/lib/wasdag";
+import { toonDatum, vandaag } from "@/lib/wasdag";
+import { DagContant } from "@/components/betalingen/DagContant";
 import { useRecht } from "@/lib/rechten";
 
 interface Props {
@@ -146,6 +147,9 @@ export function DagAdresDialog({
               </PopupVeld>
             </PopupBlok>
           )}
+
+          {/* Vandaag: heeft de klant contant aan jou betaald? */}
+          {datum === vandaag() && <DagContant adres={c.id} />}
 
           <PopupBlok label="Wat ging er anders?">
             <PopupVeld className="items-start py-2.5" icoon={<MessageSquare className="size-4" />}>

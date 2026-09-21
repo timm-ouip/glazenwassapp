@@ -223,7 +223,16 @@ function Prullenbak() {
       herlaad();
       toast.success(`${r.omschrijving} definitief verwijderd`);
     } catch (e) {
-      toast.error("Verwijderen mislukt: " + (e as Error).message);
+      const tekst = (e as Error).message;
+      // Een adres met betalingen in het logboek gaat niet echt weg: dat geld
+      // moet terug te vinden blijven. Dan geen databasefout, maar uitleg.
+      if (tekst.includes("betaal_gebeurtenissen")) {
+        toast.error(
+          "Dit kan niet definitief weg: er staan betalingen of een beginstand bij een adres. Die blijven bewaard, zodat je altijd kunt terugzien wat er betaald is.",
+        );
+        return;
+      }
+      toast.error("Verwijderen mislukt: " + tekst);
     }
   }
 

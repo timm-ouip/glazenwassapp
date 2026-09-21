@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   IconLogout as LogOut,
   IconCalendar as CalendarDays,
+  IconCash as Cash,
   IconMap as Map,
   IconHistory as History,
   IconInbox as Inbox,
@@ -39,6 +40,8 @@ const WERK: Pagina[] = [
   { label: "Klanten", to: "/klanten", icon: Users, recht: ["klanten_bekijken"] },
   { label: "Aanmeldingen", to: "/aanmeldingen", icon: Inbox, recht: ["klanten_bewerken"] },
   { label: "Mailing", to: "/mailing", icon: Mail, recht: ["mail_lezen", "mail_versturen"] },
+  // Geldlopers zien hier alleen iets als de eigenaar hun wijk vrijgaf.
+  { label: "Betalingen", to: "/betalingen", icon: Cash, recht: ["geldlopen", "prijzen_zien"] },
   { label: "Importeren", to: "/importeren", icon: Upload, recht: ["klanten_bewerken"] },
 ];
 

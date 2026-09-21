@@ -34,6 +34,12 @@ export const RECHTEN = [
     uitleg: "Antwoorden en aankondigingen versturen",
   },
   { sleutel: "instellingen_team", label: "Team bekijken", uitleg: "Zien wie er in het team zit" },
+  {
+    sleutel: "geldlopen",
+    label: "Geld lopen",
+    uitleg:
+      "Contant geld ophalen in een wijk die de eigenaar voor die avond vrijgeeft; alleen dan ziet hij adressen en bedragen",
+  },
 ] as const;
 
 export type Recht = (typeof RECHTEN)[number]["sleutel"];
@@ -75,6 +81,7 @@ export function rechtenVoorPad(pad: string): Recht[] | null {
   }
   if (pad.startsWith("/mailing")) return ["mail_lezen", "mail_versturen"];
   if (pad.startsWith("/berichten")) return ["mail_lezen"];
+  if (pad.startsWith("/betalingen")) return ["geldlopen", "prijzen_zien"];
   return null;
 }
 

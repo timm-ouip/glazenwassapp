@@ -73,6 +73,7 @@ import {
   updateMyProfile,
 } from "@/lib/team.functions";
 import { AanmeldInstellingen } from "@/components/AanmeldInstellingen";
+import { bewaarEindtijd, fetchEindtijd } from "@/lib/geldlopen";
 import { RollenBeheer } from "@/components/RollenBeheer";
 import { fetchRollen } from "@/lib/rechten";
 import { MailboxInstellingen } from "@/components/MailboxInstellingen";
@@ -1243,6 +1244,52 @@ function WerkdagenKaart() {
  * worden. Duren die je zelf invulde blijven standaard staan, en bijwerken kun
  * je meteen ongedaan maken.
  */
+/** Tot hoe laat een vrijgegeven wijk open blijft voor de geldlopers. */
+function GeldlopenKaart() {
+  const { employee, company } = useAuth();
+  const isEigenaar = employee?.rol === "eigenaar";
+  const qc = useQueryClient();
+  const eind = useQuery({
+    queryKey: ["geldloop-eindtijd", company?.id],
+    queryFn: () => fetchEindtijd(company!.id),
+    enabled: !!company && isEigenaar,
+  });
+  const [waarde, setWaarde] = useState("");
+  useEffect(() => {
+    if (eind.data) setWaarde(eind.data);
+  }, [eind.data]);
+  if (!isEigenaar) return null;
+
+  async function bewaar(nieuw: string) {
+    if (!company || !nieuw || nieuw === eind.data) return;
+    try {
+      await bewaarEindtijd(company.id, nieuw);
+      void qc.invalidateQueries({ queryKey: ["geldloop-eindtijd"] });
+      toast.success(`Een vrijgegeven wijk blijft voortaan open tot ${nieuw}`);
+    } catch (e) {
+      toast.error("Opslaan mislukt: " + (e as Error).message);
+    }
+  }
+
+  return (
+    <Kaart
+      titel="Geld lopen"
+      uitleg="Tot hoe laat een wijk die je vrijgeeft open blijft voor de geldlopers. Daarna zien ze niets meer; wat ze ingetikt hebben blijft bewaard. Een avond die al loopt verandert niet mee."
+    >
+      <label className="flex items-center gap-2 text-[13px]">
+        Open tot
+        <Input
+          type="time"
+          className="w-32 rounded-full"
+          value={waarde}
+          onChange={(e) => setWaarde(e.target.value)}
+          onBlur={(e) => void bewaar(e.target.value)}
+        />
+      </label>
+    </Kaart>
+  );
+}
+
 function PlanningKaart() {
   const { employee, company } = useAuth();
   const isEigenaar = employee?.rol === "eigenaar";
@@ -1518,6 +1565,7 @@ function WijkenTab() {
     <div className="space-y-4">
       <WerkdagenKaart />
       <PlanningKaart />
+      <GeldlopenKaart />
       <Kaart
         titel="Volgorde van de wijken"
         uitleg="De ronde die je rijdt. Deze volgorde bepaalt de kleuren op de kalender en welke wijk de app voorstelt als eerstvolgende."
@@ -1553,7 +1601,18 @@ function WijkenTab() {
                     style={{ background: wijkKleur(i) }}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{d.name}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-medium">{d.name}</span>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 text-[10.5px] font-medium ${
+                          d.betaalmethode === "contant"
+                            ? "bg-tint-groen text-tint-groen-ink"
+                            : "bg-tint-blauw text-tint-blauw-ink"
+                        }`}
+                      >
+                        {d.betaalmethode}
+                      </span>
+                    </span>
                     <span className="block truncate text-[12px] text-muted-foreground">
                       {adressenPerWijk.get(d.id) ?? 0} adressen ·{" "}
                       {!prijzenZien
