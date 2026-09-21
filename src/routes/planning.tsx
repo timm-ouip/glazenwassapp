@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -20,6 +20,7 @@ import {
   endOfMonth,
   endOfWeek,
   format,
+  getISOWeek,
   isSameMonth,
   startOfMonth,
   startOfWeek,
@@ -37,6 +38,8 @@ import {
   IconListCheck as ListChecks,
   IconSquareCheck as CheckSquare,
   IconArrowBackUp as Undo2,
+  IconKeyboard as Keyboard,
+  IconAlertTriangle as AlertTriangle,
   IconDots as MoreHorizontal,
   IconMail as Mail,
   IconRoute as Route2,
@@ -116,7 +119,7 @@ import {
   voegToeAanWasdag,
   werkdagenVerder,
 } from "@/lib/wasdag";
-import { alDichtbij, dubbelVraag, verplaatsWasdag } from "@/lib/wasdag";
+import { alDichtbij, dubbelVraag, HalfVerplaatst, verplaatsWasdag } from "@/lib/wasdag";
 import { isWerkdag, useWerkdagen } from "@/lib/werkdagen";
 import { usePlanningInstellingen } from "@/lib/planninginstellingen";
 import {
@@ -126,7 +129,7 @@ import {
   zetDagVolgorde,
   type VolgordeBlok,
 } from "@/lib/ploegen";
-import { maakBouwstenen, klussenVanDag, maandVan } from "@/lib/dagbouwstenen";
+import { maakBouwstenen, klussenVanDag, maandVan, tijdvakkenVoorDag } from "@/lib/dagbouwstenen";
 import { ploegNaam } from "@/lib/ploegen";
 import {
   duurTekst,
@@ -138,7 +141,7 @@ import {
   type Blok,
   type Ploeg,
 } from "@/lib/dagplanning";
-import { perAdres, useAankondigingen } from "@/lib/aankondigingen";
+import { perAdres, statusVan, useAankondigingen } from "@/lib/aankondigingen";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchKlanten, duurVoorMaand, patchCustomer, toonMaand } from "@/lib/klanten";
 import { zetPloegEnRest } from "@/lib/wasdag";
@@ -148,6 +151,7 @@ import { OverslaanKnop } from "@/components/OverslaanKnop";
 import { VerplaatsNaarKnop } from "@/components/VerplaatsNaarKnop";
 import { telAdressen, wisOverslaanVanSelectie, zetOverslaan } from "@/lib/overslaan-keuze";
 import { SneltoetsenHulp } from "@/components/mail/Sneltoetsen";
+import { DagVerplaatsenDialog } from "@/components/planning/DagVerplaatsenDialog";
 import { PloegenDialog } from "@/components/planning/PloegenDialog";
 import { WijzigingsberichtDialog } from "@/components/WijzigingsberichtDialog";
 import { haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
@@ -202,8 +206,22 @@ export const Route = createFileRoute("/planning")({
   component: Planning,
 });
 
+/** Of dit apparaat een muis heeft (en dus kan zweven en precies wijzen). */
+function useHeeftMuis(): boolean {
+  const [muis, setMuis] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const zet = () => setMuis(mq.matches);
+    zet();
+    mq.addEventListener("change", zet);
+    return () => mq.removeEventListener("change", zet);
+  }, []);
+  return muis;
+}
+
 /**
- * Eén dagvakje als doel om een opdracht op los te laten.
+ * Eén dagvakje als doel om een opdracht op los te laten, en om de hele dag
+ * mee op te pakken en op een andere dag te zetten.
  *
  * Waarom een eigen component en geen `useDroppable` in de lus: een hook mag
  * niet in een lus staan. Het vakje zelf blijft wat het was — deze schil geeft
@@ -211,13 +229,42 @@ export const Route = createFileRoute("/planning")({
  */
 function DagDrop({
   datum,
+  sleepbaar = false,
   children,
 }: {
   datum: string;
-  children: (setRef: (el: HTMLElement | null) => void, erboven: boolean) => ReactNode;
+  /** Mag deze hele dag naar een andere dag gesleept worden? */
+  sleepbaar?: boolean;
+  children: (
+    setRef: (el: HTMLElement | null) => void,
+    erboven: boolean,
+    sleep: Partial<Pick<ReturnType<typeof useDraggable>, "attributes" | "listeners">> & {
+      isDragging: boolean;
+    },
+  ) => ReactNode;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `d:${datum}` });
-  return <>{children(setNodeRef, isOver)}</>;
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `d:${datum}` });
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setSleepRef,
+    isDragging,
+  } = useDraggable({ id: `dag:${datum}`, disabled: !sleepbaar, data: { soort: "dag", datum } });
+  const setRef = (el: HTMLElement | null) => {
+    setDropRef(el);
+    setSleepRef(el);
+  };
+  // Alleen een dag die je echt kunt oppakken krijgt de sleep-eigenschappen;
+  // anders noemt een schermlezer elke dag "draggable, uitgeschakeld".
+  return (
+    <>
+      {children(
+        setRef,
+        isOver,
+        sleepbaar ? { attributes, listeners, isDragging } : { isDragging: false },
+      )}
+    </>
+  );
 }
 
 /** Een opdracht in de strook: vastpakken om hem op een dag te zetten. */
@@ -547,8 +594,19 @@ function Planning() {
     dagKlussen.reduce((sum, k) => sum + k.prijs, 0);
 
   const [sleep, setSleep] = useState<Klus | null>(null);
+  /** Een hele dag die je in de maand versleept. */
+  const [sleepDag, setSleepDag] = useState<string | null>(null);
+  /** De vraag als je een dag laat vallen op een dag waar al werk staat. */
+  const [dagVraag, setDagVraag] = useState<{
+    van: string;
+    naar: string;
+    opVan: string;
+    opNaar: string;
+  } | null>(null);
   const [klusOpen, setKlusOpen] = useState(false);
   const mobiel = useIsMobile();
+  /** Is er een muis? Op een tablet begint lang indrukken anders een sleep. */
+  const muis = useHeeftMuis();
 
   // --- week- en dagweergave -------------------------------------------
   // Alles wat met tijd te maken heeft: de instellingen, wie er die dagen
@@ -562,7 +620,8 @@ function Planning() {
     queryFn: () => fetchDagPloegen(sleutel(van), sleutel(tot)),
   });
   const klantenQuery = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten });
-  const aankondigingenQuery = useAankondigingen(sleutel(van), sleutel(tot), weergave === "dag");
+  // Ook in de maand: het paneel rechts biedt "Wijzigingen sturen" voor de dag.
+  const aankondigingenQuery = useAankondigingen(sleutel(van), sleutel(tot));
   /** Voor welke dag je de ploegen indeelt; leeg = dicht. */
   const [ploegenVoor, setPloegenVoor] = useState<string | null>(null);
   const [hulpOpen, setHulpOpen] = useState(false);
@@ -605,6 +664,35 @@ function Planning() {
     }
     return kaart;
   }, [regels]);
+
+  /**
+   * Op welke dag een adres nu staat. "Naar team" hoort bij de dag waar dat
+   * adres op staat en niet bij de dag die je toevallig open hebt — anders
+   * verhuis je iets op een heel andere dag.
+   */
+  const dagenVanAdres = useMemo(() => {
+    const kaart = new Map<string, string[]>();
+    for (const r of regels) {
+      if (!r.customer_id) continue;
+      kaart.set(r.customer_id, [...(kaart.get(r.customer_id) ?? []), r.datum]);
+    }
+    return kaart;
+  }, [regels]);
+
+  /**
+   * Staat dit adres op die dag gepland? Voor de envelopjes: een planningsmail
+   * voor een beurt die er gewoon nog staat, is niet "verplaatst".
+   */
+  const staatOp = useMemo(() => {
+    const eerste = sleutel(van);
+    const laatste = sleutel(tot);
+    // Een dag buiten wat er geladen is, weten we niet: dan geloven we de mail.
+    return (customerId: string, datum: string) =>
+      datum < eerste || datum > laatste
+        ? true
+        : (dagenVanAdres.get(customerId)?.includes(datum) ?? false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dagenVanAdres, sleutel(van), sleutel(tot)]);
 
   /** Heeft de klant van dit adres een mailadres of een 06? */
   const heeftContact = useMemo(() => {
@@ -652,6 +740,51 @@ function Planning() {
   const dagWeergaveKlussen = useMemo(
     () => klussenVanDag(klussen, gekozenDag),
     [klussen, gekozenDag],
+  );
+
+  /**
+   * Wie van deze adressen op zijn dag anders staat dan in zijn planningsmail:
+   * een andere dag, of (bij een groot pand) een ander tijdvak. Die horen een
+   * wijziging te krijgen, en de rest juist niet. Het tijdvak rekent zoals de
+   * mail zelf, zodat het klopt met het driehoekje in de dag en de week.
+   */
+  function verplaatstNaMail(perDag: Map<string, string[]>): string[] {
+    const uit: string[] = [];
+    for (const [datum, ids] of perDag) {
+      const tijdvakken = tijdvakkenVoorDag(
+        dagRegelsVan(datum),
+        klussenVanDag(klussen, datum),
+        bouwstenen,
+        ploegenQuery.data?.get(datum) ?? [],
+        instellingen,
+      );
+      for (const id of ids) {
+        const stand = statusVan(aankondigingen.get(id), datum, {
+          heeftContact: heeftContact(id),
+          tijdvak: tijdvakken[id] ?? null,
+          staatOp: (dag) => staatOp(id, dag),
+        });
+        if (stand.stand === "verplaatst") uit.push(id);
+      }
+    }
+    return uit;
+  }
+
+  /** Van de gekozen dag: wie een wijziging hoort te krijgen. */
+  const wijzigingenVanDag = useMemo(
+    () => verplaatstNaMail(new Map([[gekozenDag, dagWeergaveRegels.map((r) => r.customer_id)]])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      gekozenDag,
+      dagWeergaveRegels,
+      aankondigingen,
+      heeftContact,
+      staatOp,
+      bouwstenen,
+      ploegenQuery.data,
+      instellingen,
+      klussen,
+    ],
   );
 
   /**
@@ -1005,8 +1138,303 @@ function Planning() {
     );
   }
 
+  /** Wat er op een dag staat, in woorden: "3 adressen en 1 extra opdracht". */
+  function werkOp(datum: string): string {
+    const adressen = (regelsPerDag.get(datum) ?? []).filter((r) => r.customer_id).length;
+    const opdrachten = klussen.filter((k) => k.gepland_op === datum && !k.gedaan_op).length;
+    const delen = [
+      ...(adressen > 0 ? [telAdressen(adressen)] : []),
+      ...(opdrachten > 0
+        ? [`${opdrachten} extra ${opdrachten === 1 ? "opdracht" : "opdrachten"}`]
+        : []),
+    ];
+    return delen.join(" en ");
+  }
+
+  /** Een hele dag losgelaten op een andere: meteen doen, of eerst vragen. */
+  function laatDagLos(van: string, naar: string) {
+    if (van === naar) return;
+    const opVan = werkOp(van);
+    if (!opVan) return;
+    const opNaar = werkOp(naar);
+    if (opNaar) setDagVraag({ van, naar, opVan, opNaar });
+    else void verplaatsHeleDag(van, naar, "samen");
+  }
+
+  type DagRij = (typeof regels)[number] & { customer_id: string };
+
+  /**
+   * Team, volgorde, rest en vaste tijd weer op regels zetten, per groepje dat
+   * hetzelfde heeft: één verzoek per blok in plaats van één per adres.
+   */
+  async function zetPlekken(datum: string, rijen: DagRij[], metTijd: boolean) {
+    const groepen = new Map<string, { ids: string[]; r: DagRij }>();
+    for (const r of rijen) {
+      const sleutel = [
+        r.ploeg_nr ?? "",
+        r.volgorde ?? "",
+        r.rest ? 1 : 0,
+        metTijd ? (r.vaste_start ?? "") : "",
+      ].join("|");
+      const groep = groepen.get(sleutel) ?? { ids: [], r };
+      groep.ids.push(r.customer_id);
+      groepen.set(sleutel, groep);
+    }
+    for (const { ids, r } of groepen.values()) {
+      await zetPloegEnRest(datum, ids, {
+        ploeg_nr: r.ploeg_nr ?? null,
+        volgorde: r.volgorde ?? null,
+        rest: r.rest ?? false,
+        ...(metTijd ? { vaste_start: r.vaste_start ?? null } : {}),
+      });
+    }
+  }
+
+  /**
+   * Een hele dag naar een andere dag: de adressen, de extra opdrachten en de
+   * teams. "samen" zet alles erbij; "wissel" ruilt de twee dagen om.
+   *
+   * Het blijven dezelfde regels met een andere datum, dus het bedrag en de
+   * notitie van die keer gaan mee. De teams gaan mee als de nieuwe dag er nog
+   * geen had (bij omwisselen ruilen ze); dan houdt het werk ook zijn team en
+   * volgorde. Had de nieuwe dag al teams, dan komt het binnen als "nog niet
+   * ingedeeld". Ongedaan maken zet alles terug zoals het stond, met vaste
+   * tijden erbij.
+   */
+  async function verplaatsHeleDag(van: string, naar: string, manier: "samen" | "wissel") {
+    const opDag = (datum: string) => ({
+      regels: (regelsPerDag.get(datum) ?? []).filter((r): r is DagRij => Boolean(r.customer_id)),
+      klussen: klussen.filter((k) => k.gepland_op === datum && !k.gedaan_op),
+      ploegen: ploegenQuery.data?.get(datum) ?? [],
+    });
+    const a = opDag(van);
+    const b = opDag(naar);
+    const opA = new Set(a.regels.map((r) => r.customer_id));
+    const opB = new Set(b.regels.map((r) => r.customer_id));
+    // Alle opdrachten van de twee dagen, ook de afgevinkte: een andere indeling
+    // van de teams kan ook hun team leegmaken, en terug hoort terug.
+    const alleOpdrachten = klussen.filter((k) => k.gepland_op === van || k.gepland_op === naar);
+    // Samenvoegen: alles van de oude dag gaat, ook wat al op de nieuwe stond
+    // (die dubbele regel wordt bewaard weggehaald). Omwisselen: wat op allebei
+    // staat, blijft op allebei staan.
+    const heen = manier === "samen" ? a.regels : a.regels.filter((r) => !opB.has(r.customer_id));
+    const terug = manier === "wissel" ? b.regels.filter((r) => !opA.has(r.customer_id)) : [];
+    const teamsWissel = manier === "wissel" && (a.ploegen.length > 0 || b.ploegen.length > 0);
+    const teamsMee = manier === "samen" && b.ploegen.length === 0 && a.ploegen.length > 0;
+    const plekMee = manier === "wissel" || teamsMee;
+
+    // Wat er al gebeurd is, zodat terugdraaien precies dat terugdraait — ook
+    // als het halverwege misging.
+    const gedaan = {
+      heen: [] as string[],
+      terug: [] as string[],
+      kenmerken: [] as string[],
+      teams: false,
+      klussen: false,
+    };
+
+    // Terug in vaste stappen die elk één keer lopen: mislukt het terugzetten
+    // halverwege en probeer je het nog eens, dan gaat het verder waar het bleef.
+    let stap = 0;
+    const terugdraaien = async () => {
+      const stappen: (() => Promise<void>)[] = [
+        async () => {
+          await verplaatsWasdag(naar, van, gedaan.heen);
+          await verplaatsWasdag(van, naar, gedaan.terug);
+        },
+        // Eerst de teams: die halen werk uit teams die niet meer bestaan, dus
+        // de plek van elk adres komt daarna.
+        async () => {
+          if (!gedaan.teams) return;
+          await zetDagPloegen(van, a.ploegen);
+          await zetDagPloegen(naar, b.ploegen);
+        },
+        async () => {
+          for (const kenmerk of gedaan.kenmerken) await zetWasdagTerug(kenmerk);
+        },
+        // Wat verhuisde weer op zijn eigen plek. Wisselden de teams, dan ook
+        // alles wat bleef liggen (dat kan zijn team kwijt zijn); anders alleen
+        // wat op allebei stond bij omwisselen. Werk dat niet geraakt werd, en
+        // dat je daarna misschien zelf nog aanpaste, blijft zoals het is.
+        async () => {
+          const heenTerug = new Set(gedaan.heen);
+          const terugTerug = new Set(gedaan.terug);
+          const ookBlijvers = gedaan.teams;
+          const gedeeld = (r: DagRij) =>
+            manier === "wissel" && opA.has(r.customer_id) && opB.has(r.customer_id);
+          await zetPlekken(
+            van,
+            a.regels.filter((r) => heenTerug.has(r.customer_id) || ookBlijvers || gedeeld(r)),
+            true,
+          );
+          await zetPlekken(
+            naar,
+            b.regels.filter((r) => terugTerug.has(r.customer_id) || ookBlijvers || gedeeld(r)),
+            true,
+          );
+        },
+        async () => {
+          if (!gedaan.klussen && !gedaan.teams) return;
+          // Verhuisde opdrachten altijd; de rest alleen als de teams wisselden.
+          const verhuisd = new Set([
+            ...a.klussen.map((k) => k.id),
+            ...(manier === "wissel" ? b.klussen.map((k) => k.id) : []),
+          ]);
+          for (const k of alleOpdrachten) {
+            if (!gedaan.teams && !verhuisd.has(k.id)) continue;
+            await patchKlus(k.id, {
+              gepland_op: k.gepland_op,
+              ploeg_nr: k.ploeg_nr ?? null,
+              volgorde: k.volgorde ?? null,
+              vaste_start: k.vaste_start ?? null,
+            });
+          }
+        },
+      ];
+      while (stap < stappen.length) {
+        await stappen[stap]!();
+        stap++;
+      }
+      await ververs();
+      await qc.invalidateQueries({ queryKey: ["dag-ploegen"] });
+    };
+
+    /** Wat `verplaatsWasdag` wél deed, ook als hij halverwege misging. */
+    const verhuis = async (van_: string, naar_: string, ids: string[], lijst: "heen" | "terug") => {
+      try {
+        const uit = await verplaatsWasdag(van_, naar_, ids);
+        gedaan[lijst] = uit.verplaatst;
+        gedaan.kenmerken.push(...uit.kenmerken);
+      } catch (e) {
+        if (e instanceof HalfVerplaatst) {
+          gedaan[lijst] = e.verplaatst;
+          gedaan.kenmerken.push(...e.kenmerken);
+        }
+        throw e;
+      }
+    };
+
+    try {
+      await verhuis(
+        van,
+        naar,
+        heen.map((r) => r.customer_id),
+        "heen",
+      );
+      await verhuis(
+        naar,
+        van,
+        terug.map((r) => r.customer_id),
+        "terug",
+      );
+
+      if (teamsWissel || teamsMee) {
+        gedaan.teams = true;
+        await zetDagPloegen(naar, a.ploegen);
+        await zetDagPloegen(van, teamsWissel ? b.ploegen : []);
+      }
+      if (plekMee) {
+        const heenGelukt = new Set(gedaan.heen);
+        const terugGelukt = new Set(gedaan.terug);
+        await zetPlekken(
+          naar,
+          heen.filter((r) => heenGelukt.has(r.customer_id)),
+          false,
+        );
+        await zetPlekken(
+          van,
+          terug.filter((r) => terugGelukt.has(r.customer_id)),
+          false,
+        );
+      }
+      if (manier === "wissel") {
+        // Wat op allebei stond bleef liggen, maar de teams wisselden: het krijgt
+        // de plek die het op de andere dag had.
+        // Een vaste tijd van de ene dag zegt niets over de andere: die gaat eraf,
+        // net als bij het werk dat verhuisde.
+        await zetPlekken(
+          van,
+          b.regels.filter((r) => opA.has(r.customer_id)).map((r) => ({ ...r, vaste_start: null })),
+          true,
+        );
+        await zetPlekken(
+          naar,
+          a.regels.filter((r) => opB.has(r.customer_id)).map((r) => ({ ...r, vaste_start: null })),
+          true,
+        );
+      }
+      const opdrachten = [
+        ...a.klussen.map((k) => ({ k, naar })),
+        ...(manier === "wissel" ? b.klussen.map((k) => ({ k, naar: van })) : []),
+      ];
+      for (const { k, naar: dag } of opdrachten) {
+        gedaan.klussen = true;
+        await patchKlus(k.id, {
+          gepland_op: dag,
+          ploeg_nr: plekMee ? (k.ploeg_nr ?? null) : null,
+          volgorde: plekMee ? (k.volgorde ?? null) : null,
+          vaste_start: null,
+        });
+      }
+    } catch (e) {
+      toast.error("Verplaatsen mislukt: " + (e instanceof Error ? e.message : String(e)));
+      try {
+        await terugdraaien();
+      } catch {
+        // Dan in elk geval op de Ongedaan-knop, om het nog eens te proberen.
+        pushUndo({ label: `Half verplaatste dag ${toonDatum(van)}`, undo: terugdraaien });
+        toast.error(
+          "Let op: de dag is maar voor een deel verplaatst. Probeer het terugzetten nog eens met Ongedaan.",
+        );
+      }
+      await ververs();
+      await qc.invalidateQueries({ queryKey: ["dag-ploegen"] });
+      return;
+    }
+
+    pushUndo({
+      label:
+        manier === "wissel"
+          ? `${toonDatum(van)} en ${toonDatum(naar)} omgewisseld`
+          : `Werk van ${toonDatum(van)} naar ${toonDatum(naar)}`,
+      undo: terugdraaien,
+    });
+    toast(
+      manier === "wissel"
+        ? `${toonDatum(van)} en ${toonDatum(naar)} zijn omgewisseld`
+        : `Het werk van ${toonDatum(van)} staat nu op ${toonDatum(naar)}`,
+      { duration: 12000, action: undoKnop() },
+    );
+    await ververs();
+    await qc.invalidateQueries({ queryKey: ["dag-ploegen"] });
+
+    // Klanten die al een planningsmail kregen, staan nu op een andere dag. Dat
+    // hoort niet stil te blijven: vraag of ze bericht krijgen.
+    if (magVersturen) {
+      const aangekondigd = await aangekondigdVan([...gedaan.heen, ...gedaan.terug]);
+      if (aangekondigd.length > 0) {
+        const ja = await bevestig({
+          titel: `${aangekondigd.length} ${aangekondigd.length === 1 ? "klant kreeg" : "klanten kregen"} al een planningsmail`,
+          tekst: "Hun dag is nu veranderd. Wil je ze een bericht sturen met de nieuwe dag erin?",
+          bevestigLabel: "Bericht opstellen",
+          annuleerLabel: "Niet nu",
+        });
+        if (ja) setWijziging({ customerIds: aangekondigd, soort: "wijziging" });
+      }
+    }
+  }
+
   function opSleepStart(e: DragStartEvent) {
     const id = String(e.active.id);
+    if (id.startsWith("dag:")) {
+      // Een hele dag uit de maand.
+      setSleepDag(id.slice("dag:".length));
+      setSleep(null);
+      setSleepBlok(null);
+      return;
+    }
+    // Voor de zekerheid: een eerder afgebroken dag-sleep hoort hier niet meer mee.
+    setSleepDag(null);
     if (id.startsWith("blok:")) {
       // Een blok uit de dagweergave. Wat we nodig hebben komt mee in de
       // sleep zelf: de blokken worden daar gemaakt en staan hier niet.
@@ -1027,10 +1455,17 @@ function Planning() {
   function opSleepEinde(e: DragEndEvent) {
     const bezig = sleep;
     const blok = sleepBlok;
+    const dag = sleepDag;
     setSleep(null);
     setSleepBlok(null);
+    setSleepDag(null);
     if (!e.over) return;
     const doel = String(e.over.id);
+    // Een hele dag uit de maand, losgelaten op een andere dag.
+    if (dag) {
+      if (doel.startsWith("d:")) laatDagLos(dag, doel.slice(2));
+      return;
+    }
     // Op een straat laten vallen: hij komt daarvóór te staan en de rest
     // schuift op. Geen vaste tijd, alleen de volgorde.
     if (doel.startsWith("voor|")) {
@@ -1666,20 +2101,6 @@ function Planning() {
   }
 
   /**
-   * Op welke dag een adres nu staat. "Naar team" hoort bij de dag waar dat
-   * adres op staat en niet bij de dag die je toevallig open hebt — anders
-   * verhuis je iets op een heel andere dag.
-   */
-  const dagenVanAdres = useMemo(() => {
-    const kaart = new Map<string, string[]>();
-    for (const r of regels) {
-      if (!r.customer_id) continue;
-      kaart.set(r.customer_id, [...(kaart.get(r.customer_id) ?? []), r.datum]);
-    }
-    return kaart;
-  }, [regels]);
-
-  /**
    * De adressen op een hoop per dag. De dag die je aanwees telt; anders de dag
    * van het blok dat je sleepte, anders de enige dag waarop hij staat. Nooit
    * álle dagen tegelijk: een adres kan deze maand twee keer aan de beurt zijn,
@@ -1913,6 +2334,24 @@ function Planning() {
     return maanden.length === 1 ? ` in ${toonMaand(maanden[0]!)}` : "";
   }
 
+  /** Wie in de selectie een wijziging hoort te krijgen, voor de knop in de balk. */
+  const wijzigingenVanSelectie = useMemo(
+    () => (magVersturen && gekozen.size > 0 ? verplaatstNaMail(groepeerPerDag([...gekozen])) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      magVersturen,
+      gekozen,
+      regelsPerDag,
+      aankondigingen,
+      heeftContact,
+      staatOp,
+      bouwstenen,
+      ploegenQuery.data,
+      instellingen,
+      klussen,
+    ],
+  );
+
   /** Wat er in het rechtermuismenu bij komt als je op de selectie klikt. */
   function selectieActies(ids: string[]) {
     if (gekozen.size === 0 || !ids.some((id) => gekozen.has(id))) return [];
@@ -1928,6 +2367,19 @@ function Planning() {
         label: `${lijst.length} uit het team halen`,
         doe: () => void selectieNaarPloeg(lijst, null),
       },
+      ...(() => {
+        if (!magVersturen) return [];
+        const anders = verplaatstNaMail(groepeerPerDag(lijst));
+        return anders.length > 0
+          ? [
+              {
+                sleutel: "sel-wijziging",
+                label: `Wijziging sturen (${anders.length})`,
+                doe: () => setWijziging({ customerIds: anders, soort: "wijziging" }),
+              },
+            ]
+          : [];
+      })(),
       {
         sleutel: "sel-uitplanning",
         label: `${lijst.length} uit planning halen`,
@@ -2098,9 +2550,10 @@ function Planning() {
     : weekdagen;
   const zichtbareNrs = new Set(kolommen.map(weekdagNr));
   const toonDagen = mobiel ? dagen.filter((d) => zichtbareNrs.has(weekdagNr(d))) : dagen;
-  const raster = mobiel
-    ? { gridTemplateColumns: `repeat(${kolommen.length}, minmax(0, 1fr))` }
-    : undefined;
+  // Links een smalle kolom met het weeknummer; daarna de dagen.
+  const raster = {
+    gridTemplateColumns: `${mobiel ? "1.25rem" : "1.75rem"} repeat(${kolommen.length}, minmax(0, 1fr))`,
+  };
   const aantalOpdrachten = strook.lijst.length + strook.wachten.length;
 
   return (
@@ -2142,8 +2595,18 @@ function Planning() {
                 {dagRegels.length > 0 && (
                   <DropdownMenuItem asChild>
                     <Link to="/mailing" search={{ dag: gekozenDag }}>
-                      <Mail className="size-4" /> Deze dag aankondigen
+                      <Mail className="size-4" /> Planningsmail sturen
                     </Link>
+                  </DropdownMenuItem>
+                )}
+                {magVersturen && wijzigingenVanDag.length > 0 && (
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      setWijziging({ customerIds: wijzigingenVanDag, soort: "wijziging" })
+                    }
+                  >
+                    <AlertTriangle className="size-4" /> Wijzigingen sturen (
+                    {wijzigingenVanDag.length})
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onSelect={() => setKlusOpen(true)}>
@@ -2204,6 +2667,7 @@ function Planning() {
         onDragCancel={() => {
           setSleep(null);
           setSleepBlok(null);
+          setSleepDag(null);
         }}
       >
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -2312,6 +2776,18 @@ function Planning() {
                 </Button>
               )}
 
+              {/* Het lijstje met sneltoetsen; ook met "?". Alleen op een groot
+                  scherm, want op een telefoon is er geen toetsenbord. */}
+              <button
+                type="button"
+                onClick={() => setHulpOpen(true)}
+                aria-label="Sneltoetsen"
+                title="Sneltoetsen (?)"
+                className="hidden size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
+              >
+                <Keyboard className="size-4" />
+              </button>
+
               {/* Maand, week of dag. De maand blijft wat hij was; week en dag
                   gaan over de gekozen dag. */}
               <div className="ml-auto flex items-center gap-0.5 rounded-full border border-border bg-card p-1 shadow-card">
@@ -2392,6 +2868,21 @@ function Planning() {
                   onOverslaan={(maanden) => void selectieOverslaan(maanden)}
                   onNietsOverslaan={() => void selectieOverslaan([])}
                 />
+                {/* Alleen als er in de selectie iemand anders staat dan in zijn
+                    planningsmail: die krijgen samen één keer een wijziging. */}
+                {magVersturen && wijzigingenVanSelectie.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() =>
+                      setWijziging({ customerIds: wijzigingenVanSelectie, soort: "wijziging" })
+                    }
+                  >
+                    <AlertTriangle className="size-4 text-tint-oranje-ink" /> Wijziging sturen (
+                    {wijzigingenVanSelectie.length})
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
@@ -2405,7 +2896,10 @@ function Planning() {
 
             {weergave === "maand" && (
               <>
-                <div className="grid grid-cols-7 px-1.5 pt-1.5" style={raster}>
+                <div className="grid px-1.5 pt-1.5" style={raster}>
+                  <div className="py-2 text-center text-[10.5px] font-medium text-muted-foreground/60">
+                    wk
+                  </div>
                   {kolommen.map((d) => (
                     <div
                       key={d.toISOString()}
@@ -2416,9 +2910,12 @@ function Planning() {
                   ))}
                 </div>
 
-                <div className="grid grid-cols-7 gap-1.5 p-1.5 max-md:gap-1" style={raster}>
-                  {toonDagen.map((d) => {
+                <div className="grid gap-1.5 p-1.5 max-md:gap-1" style={raster}>
+                  {toonDagen.map((d, i) => {
                     const k = sleutel(d);
+                    // Het begin van een rij: daar staat het weeknummer voor.
+                    const rij =
+                      i % kolommen.length === 0 ? toonDagen.slice(i, i + kolommen.length) : null;
                     const info = perDag.get(k);
                     const buitenMaand = !isSameMonth(d, maand);
                     const isVandaag = k === nu;
@@ -2436,238 +2933,297 @@ function Planning() {
                     const inkt =
                       vlak && indexen[0] !== undefined ? wijkInkt(indexen[0]) : undefined;
                     return (
-                      <DagDrop key={k} datum={k}>
-                        {(setDropRef, erboven) => (
-                          // Het knopje naar inplannen ligt naast de dag en niet erin:
-                          // een knop in een knop kan niet, en zo vangt hij geen
-                          // klikken of dubbelklikken van de dag zelf af.
-                          <div className="group/dag relative">
-                            <ContextMenu>
-                              <ContextMenuTrigger asChild>
-                                <button
-                                  // De ref van dnd-kit erbij; het contextmenu hangt via
-                                  // `asChild` zijn eigen ref aan dezelfde knop en Radix
-                                  // voegt die twee samen.
-                                  ref={setDropRef}
-                                  onClick={() => kiesDag(d)}
-                                  // Dubbelklikken opent de dagplanning: de route van die dag.
-                                  // Aanvinken in de wijken zit onder het knopje rechtsboven.
-                                  onDoubleClick={() =>
-                                    void navigate({ to: "/dag", search: { datum: k } })
-                                  }
-                                  title="Klik om te bekijken, dubbelklik voor de dagplanning"
-                                  aria-current={isVandaag ? "date" : undefined}
-                                  aria-pressed={isGekozen}
-                                  // Het hele vakje krijgt de pastelkleur van de wijk die er
-                                  // die dag aan de beurt is; zo zie je een maand aan de
-                                  // kleuren, zonder namen te lezen.
-                                  style={vlak ? { background: vlak } : undefined}
-                                  className={`relative flex h-full min-h-[4.5rem] w-full flex-col rounded-[12px] p-1.5 text-left transition-colors max-md:min-h-[3.25rem] max-md:select-none max-md:[-webkit-touch-callout:none] md:min-h-[6.25rem] ${
-                                    buitenMaand
-                                      ? "bg-transparent"
-                                      : vlak
-                                        ? ""
-                                        : "bg-surface/70 hover:bg-surface"
-                                  } ${isGekozen ? "outline outline-2 -outline-offset-2 outline-brand" : ""} ${
-                                    isGekozen && !vlak ? "bg-brand/10" : ""
-                                  } ${erboven ? "outline outline-2 -outline-offset-2 outline-brand ring-2 ring-brand/30" : ""}`}
-                                >
-                                  <span
-                                    className={`self-start rounded-md px-1 text-[12px] font-semibold leading-5 tabular-nums ${
-                                      isVandaag
-                                        ? "bg-brand text-brand-foreground"
-                                        : buitenMaand
-                                          ? "text-muted-foreground/70"
-                                          : "text-foreground"
+                      <Fragment key={k}>
+                        {rij && (
+                          <button
+                            type="button"
+                            // Naar de week, op een dag van die week die in deze
+                            // maand valt: dan blijft de maand erboven dezelfde.
+                            onClick={() =>
+                              void navigate({
+                                to: "/planning",
+                                search: {
+                                  dag: sleutel(rij.find((x) => isSameMonth(x, maand)) ?? rij[0]!),
+                                  weergave: "week",
+                                },
+                                replace: true,
+                              })
+                            }
+                            title={`Week ${getISOWeek(d)} bekijken`}
+                            aria-label={`Week ${getISOWeek(d)} bekijken`}
+                            className="flex items-start justify-center rounded-[10px] pt-2 text-[10.5px] font-medium tabular-nums text-muted-foreground/70 transition-colors hover:bg-surface hover:text-foreground"
+                          >
+                            {getISOWeek(d)}
+                          </button>
+                        )}
+                        <DagDrop
+                          datum={k}
+                          // Alleen met een muis: op een telefoon of tablet is lang indrukken
+                          // het menu, en een dag zonder werk valt niets te verslepen.
+                          sleepbaar={magPlannen && muis && !buitenMaand && Boolean(info)}
+                        >
+                          {(setDropRef, erboven, dagSleep) => (
+                            // Het knopje naar inplannen ligt naast de dag en niet erin:
+                            // een knop in een knop kan niet, en zo vangt hij geen
+                            // klikken of dubbelklikken van de dag zelf af.
+                            <div className="group/dag relative">
+                              <ContextMenu>
+                                <ContextMenuTrigger asChild>
+                                  <button
+                                    // Oppakken om de hele dag te verslepen. Eerst, zodat
+                                    // de eigen eigenschappen van de knop hieronder winnen.
+                                    {...dagSleep.attributes}
+                                    {...dagSleep.listeners}
+                                    // De ref van dnd-kit erbij; het contextmenu hangt via
+                                    // `asChild` zijn eigen ref aan dezelfde knop en Radix
+                                    // voegt die twee samen.
+                                    ref={setDropRef}
+                                    onClick={() => kiesDag(d)}
+                                    // Dubbelklikken opent de dagweergave (het tijdraster).
+                                    // De dagplanning en inplannen zitten onder de knopjes
+                                    // rechtsboven.
+                                    onDoubleClick={() =>
+                                      void navigate({
+                                        to: "/planning",
+                                        search: { dag: k, weergave: "dag" },
+                                        replace: true,
+                                      })
+                                    }
+                                    title="Klik om te bekijken, dubbelklik voor de dagweergave"
+                                    aria-current={isVandaag ? "date" : undefined}
+                                    aria-pressed={isGekozen}
+                                    // Het hele vakje krijgt de pastelkleur van de wijk die er
+                                    // die dag aan de beurt is; zo zie je een maand aan de
+                                    // kleuren, zonder namen te lezen.
+                                    style={vlak ? { background: vlak } : undefined}
+                                    className={`relative flex h-full min-h-[4.5rem] w-full flex-col rounded-[12px] p-1.5 text-left transition-colors max-md:min-h-[3.25rem] max-md:select-none max-md:[-webkit-touch-callout:none] md:min-h-[6.25rem] ${
+                                      buitenMaand
+                                        ? "bg-transparent"
+                                        : vlak
+                                          ? ""
+                                          : "bg-surface/70 hover:bg-surface"
+                                    } ${isGekozen ? "outline outline-2 -outline-offset-2 outline-brand" : ""} ${
+                                      isGekozen && !vlak ? "bg-brand/10" : ""
+                                    } ${erboven ? "outline outline-2 -outline-offset-2 outline-brand ring-2 ring-brand/30" : ""} ${
+                                      dagSleep.isDragging ? "opacity-40" : ""
                                     }`}
                                   >
-                                    {format(d, "d")}
-                                  </span>
+                                    <span
+                                      className={`self-start rounded-md px-1 text-[12px] font-semibold leading-5 tabular-nums ${
+                                        isVandaag
+                                          ? "bg-brand text-brand-foreground"
+                                          : buitenMaand
+                                            ? "text-muted-foreground/70"
+                                            : "text-foreground"
+                                      }`}
+                                    >
+                                      {format(d, "d")}
+                                    </span>
 
-                                  {info && (
-                                    <>
-                                      {/* De wijk staat boven het bedrag: dat is waar je heen
+                                    {info && (
+                                      <>
+                                        {/* De wijk staat boven het bedrag: dat is waar je heen
                             rijdt. Elke wijk heeft zijn eigen kleur, zodat je
                             een maand in één oogopslag ziet. */}
-                                      {info.wijken.length > 0 && (
-                                        <span
-                                          style={inkt ? { color: inkt } : undefined}
-                                          // Op de telefoon zegt de kleur van het vakje al welke wijk het is.
-                                          className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] font-medium max-md:hidden"
-                                        >
+                                        {info.wijken.length > 0 && (
                                           <span
-                                            className="size-1.5 shrink-0 rounded-full"
-                                            style={{
-                                              background: wijkInfo.get(info.wijken[0]!)?.kleur,
-                                            }}
-                                          />
-                                          <span className="truncate">
-                                            {wijkInfo.get(info.wijken[0]!)?.naam ??
-                                              "Onbekende wijk"}
-                                            {info.wijken.length > 1 &&
-                                              ` +${info.wijken.length - 1}`}
-                                          </span>
-                                        </span>
-                                      )}
-                                      {prijzenZien && (
-                                        <span
-                                          style={inkt ? { color: inkt } : undefined}
-                                          className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.03em] tabular-nums max-md:mt-auto md:text-[15px] ${
-                                            info.wijken.length > 0 ? "mt-0.5" : "mt-auto"
-                                          }`}
-                                        >
-                                          {/* Op de telefoon zonder centen: "€ 593,50" past niet. */}
-                                          {mobiel
-                                            ? `€${Math.round(info.bedrag)}`
-                                            : formatPrice(info.bedrag)}
-                                        </span>
-                                      )}
-                                      <span className="mt-1 hidden truncate text-[10.5px] text-muted-foreground md:block">
-                                        {info.straten.size > 0
-                                          ? `${info.straten.size} ${info.straten.size === 1 ? "straat" : "straten"} · ${info.aantal}×`
-                                          : `${info.aantal}×`}
-                                      </span>
-                                      <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
-                                        <span
-                                          className={`block h-full rounded-full ${
-                                            inkt ? "" : isGedaan ? "bg-tint-groen-ink" : "bg-brand"
-                                          }`}
-                                          style={{
-                                            width: `${Math.round(((prijzenZien ? info.bedrag : info.aantal) / drukste) * 100)}%`,
-                                            ...(inkt
-                                              ? { background: inkt, opacity: isGedaan ? 1 : 0.5 }
-                                              : {}),
-                                          }}
-                                        />
-                                      </span>
-                                    </>
-                                  )}
-
-                                  {/* Staat er nog niets op deze dag, dan zegt de app welke
-                            wijk er volgens de ronde aan de beurt is. Zacht en
-                            cursief, want het is een voorstel en geen planning. */}
-                                  {!info && !buitenMaand && voorstel.get(k) && (
-                                    <span className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] italic text-muted-foreground/70">
-                                      <span
-                                        className="size-1.5 shrink-0 rounded-full opacity-60"
-                                        style={{
-                                          background: wijkInfo.get(voorstel.get(k)!.wijkId)?.kleur,
-                                        }}
-                                      />
-                                      <span className="truncate">
-                                        {voorstel.get(k)!.naam}
-                                        {voorstel.get(k)!.van > 1 &&
-                                          ` ${voorstel.get(k)!.deel}/${voorstel.get(k)!.van}`}
-                                      </span>
-                                    </span>
-                                  )}
-                                </button>
-                              </ContextMenuTrigger>
-                              {/* Rechtermuisknop op een dag: een hele wijk erop zetten
-                        zonder eerst naar de wijklijst te gaan. De wijken staan
-                        in de volgorde die je in de instellingen hebt gezet. */}
-                              <ContextMenuContent className="w-56">
-                                <ContextMenuLabel className="capitalize">
-                                  {toonDatum(k)}
-                                </ContextMenuLabel>
-                                <ContextMenuSub>
-                                  <ContextMenuSubTrigger>
-                                    <CalendarPlus className="size-4" /> Hele wijk inplannen
-                                  </ContextMenuSubTrigger>
-                                  <ContextMenuSubContent className="max-h-72 w-52 overflow-y-auto">
-                                    {(districtsQuery.data ?? []).map((w) => (
-                                      <ContextMenuItem
-                                        key={w.id}
-                                        onSelect={() => void planWijk(k, w)}
-                                      >
-                                        <span
-                                          className="size-2 shrink-0 rounded-full"
-                                          style={{ background: wijkInfo.get(w.id)?.kleur }}
-                                        />
-                                        <span className="truncate">{w.name}</span>
-                                        {/* De wijk die volgens de ronde aan de beurt is
-                                  staat gewoon op zijn plek in de lijst, met een
-                                  merkje — verspringen zou je laten misklikken. */}
-                                        {voorstel.get(k)?.wijkId === w.id && (
-                                          <span className="ml-auto shrink-0 text-[10.5px] text-muted-foreground">
-                                            aan de beurt
+                                            style={inkt ? { color: inkt } : undefined}
+                                            // Op de telefoon zegt de kleur van het vakje al welke wijk het is.
+                                            className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] font-medium max-md:hidden"
+                                          >
+                                            <span
+                                              className="size-1.5 shrink-0 rounded-full"
+                                              style={{
+                                                background: wijkInfo.get(info.wijken[0]!)?.kleur,
+                                              }}
+                                            />
+                                            <span className="truncate">
+                                              {wijkInfo.get(info.wijken[0]!)?.naam ??
+                                                "Onbekende wijk"}
+                                              {info.wijken.length > 1 &&
+                                                ` +${info.wijken.length - 1}`}
+                                            </span>
                                           </span>
                                         )}
-                                      </ContextMenuItem>
-                                    ))}
-                                    {(districtsQuery.data ?? []).length === 0 && (
-                                      <ContextMenuLabel className="font-normal text-muted-foreground">
-                                        Nog geen wijken
-                                      </ContextMenuLabel>
+                                        {prijzenZien && (
+                                          <span
+                                            style={inkt ? { color: inkt } : undefined}
+                                            className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.03em] tabular-nums max-md:mt-auto md:text-[15px] ${
+                                              info.wijken.length > 0 ? "mt-0.5" : "mt-auto"
+                                            }`}
+                                          >
+                                            {/* Op de telefoon zonder centen: "€ 593,50" past niet. */}
+                                            {mobiel
+                                              ? `€${Math.round(info.bedrag)}`
+                                              : formatPrice(info.bedrag)}
+                                          </span>
+                                        )}
+                                        <span className="mt-1 hidden truncate text-[10.5px] text-muted-foreground md:block">
+                                          {info.straten.size > 0
+                                            ? `${info.straten.size} ${info.straten.size === 1 ? "straat" : "straten"} · ${info.aantal}×`
+                                            : `${info.aantal}×`}
+                                        </span>
+                                        <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
+                                          <span
+                                            className={`block h-full rounded-full ${
+                                              inkt
+                                                ? ""
+                                                : isGedaan
+                                                  ? "bg-tint-groen-ink"
+                                                  : "bg-brand"
+                                            }`}
+                                            style={{
+                                              width: `${Math.round(((prijzenZien ? info.bedrag : info.aantal) / drukste) * 100)}%`,
+                                              ...(inkt
+                                                ? { background: inkt, opacity: isGedaan ? 1 : 0.5 }
+                                                : {}),
+                                            }}
+                                          />
+                                        </span>
+                                      </>
                                     )}
-                                  </ContextMenuSubContent>
-                                </ContextMenuSub>
-                                <ContextMenuSub>
-                                  <ContextMenuSubTrigger>
-                                    <ChevronsRight className="size-4" /> Planning vanaf hier
-                                    opschuiven
-                                  </ContextMenuSubTrigger>
-                                  <ContextMenuSubContent className="w-56">
-                                    {[1, 2, 3].map((n) => (
-                                      <ContextMenuItem key={n} onSelect={() => void schuifOp(k, n)}>
-                                        {n} {n === 1 ? "werkdag" : "werkdagen"} later
-                                      </ContextMenuItem>
-                                    ))}
-                                    <ContextMenuSeparator />
-                                    <ContextMenuLabel className="font-normal text-muted-foreground">
-                                      Alles t/m het eind van de maand schuift mee. Dagen waarop je
-                                      niet werkt slaan we over.
-                                    </ContextMenuLabel>
-                                  </ContextMenuSubContent>
-                                </ContextMenuSub>
 
-                                <ContextMenuSeparator />
-                                <ContextMenuItem onSelect={() => kiesDag(d)}>
-                                  <CalendarCheck className="size-4" /> Deze dag bekijken
-                                </ContextMenuItem>
-                                <ContextMenuItem
-                                  onSelect={() =>
-                                    void navigate({ to: "/dag", search: { datum: k } })
-                                  }
-                                >
-                                  <ListChecks className="size-4" /> Dagplanning
-                                </ContextMenuItem>
-                                <ContextMenuItem
-                                  onSelect={() => void navigate({ to: "/", search: { dag: k } })}
-                                >
-                                  <CalendarPlus className="size-4" /> Werk inplannen
-                                </ContextMenuItem>
-                                <ContextMenuItem
-                                  onSelect={() =>
-                                    void navigate({ to: "/mailing", search: { dag: k } })
-                                  }
-                                >
-                                  <Mail className="size-4" /> Deze dag aankondigen
-                                </ContextMenuItem>
-                              </ContextMenuContent>
-                            </ContextMenu>
-                            {/* Rechtsboven: meteen naar de wijken om voor deze dag aan
-                            te vinken. Alleen met een muis, en pas zichtbaar als je
+                                    {/* Staat er nog niets op deze dag, dan zegt de app welke
+                            wijk er volgens de ronde aan de beurt is. Zacht en
+                            cursief, want het is een voorstel en geen planning. */}
+                                    {!info && !buitenMaand && voorstel.get(k) && (
+                                      <span className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] italic text-muted-foreground/70">
+                                        <span
+                                          className="size-1.5 shrink-0 rounded-full opacity-60"
+                                          style={{
+                                            background: wijkInfo.get(voorstel.get(k)!.wijkId)
+                                              ?.kleur,
+                                          }}
+                                        />
+                                        <span className="truncate">
+                                          {voorstel.get(k)!.naam}
+                                          {voorstel.get(k)!.van > 1 &&
+                                            ` ${voorstel.get(k)!.deel}/${voorstel.get(k)!.van}`}
+                                        </span>
+                                      </span>
+                                    )}
+                                  </button>
+                                </ContextMenuTrigger>
+                                {/* Rechtermuisknop op een dag: een hele wijk erop zetten
+                        zonder eerst naar de wijklijst te gaan. De wijken staan
+                        in de volgorde die je in de instellingen hebt gezet. */}
+                                <ContextMenuContent className="w-56">
+                                  <ContextMenuLabel className="capitalize">
+                                    {toonDatum(k)}
+                                  </ContextMenuLabel>
+                                  <ContextMenuSub>
+                                    <ContextMenuSubTrigger>
+                                      <CalendarPlus className="size-4" /> Hele wijk inplannen
+                                    </ContextMenuSubTrigger>
+                                    <ContextMenuSubContent className="max-h-72 w-52 overflow-y-auto">
+                                      {(districtsQuery.data ?? []).map((w) => (
+                                        <ContextMenuItem
+                                          key={w.id}
+                                          onSelect={() => void planWijk(k, w)}
+                                        >
+                                          <span
+                                            className="size-2 shrink-0 rounded-full"
+                                            style={{ background: wijkInfo.get(w.id)?.kleur }}
+                                          />
+                                          <span className="truncate">{w.name}</span>
+                                          {/* De wijk die volgens de ronde aan de beurt is
+                                  staat gewoon op zijn plek in de lijst, met een
+                                  merkje — verspringen zou je laten misklikken. */}
+                                          {voorstel.get(k)?.wijkId === w.id && (
+                                            <span className="ml-auto shrink-0 text-[10.5px] text-muted-foreground">
+                                              aan de beurt
+                                            </span>
+                                          )}
+                                        </ContextMenuItem>
+                                      ))}
+                                      {(districtsQuery.data ?? []).length === 0 && (
+                                        <ContextMenuLabel className="font-normal text-muted-foreground">
+                                          Nog geen wijken
+                                        </ContextMenuLabel>
+                                      )}
+                                    </ContextMenuSubContent>
+                                  </ContextMenuSub>
+                                  <ContextMenuSub>
+                                    <ContextMenuSubTrigger>
+                                      <ChevronsRight className="size-4" /> Planning vanaf hier
+                                      opschuiven
+                                    </ContextMenuSubTrigger>
+                                    <ContextMenuSubContent className="w-56">
+                                      {[1, 2, 3].map((n) => (
+                                        <ContextMenuItem
+                                          key={n}
+                                          onSelect={() => void schuifOp(k, n)}
+                                        >
+                                          {n} {n === 1 ? "werkdag" : "werkdagen"} later
+                                        </ContextMenuItem>
+                                      ))}
+                                      <ContextMenuSeparator />
+                                      <ContextMenuLabel className="font-normal text-muted-foreground">
+                                        Alles t/m het eind van de maand schuift mee. Dagen waarop je
+                                        niet werkt slaan we over.
+                                      </ContextMenuLabel>
+                                    </ContextMenuSubContent>
+                                  </ContextMenuSub>
+
+                                  <ContextMenuSeparator />
+                                  <ContextMenuItem
+                                    onSelect={() =>
+                                      void navigate({ to: "/dag", search: { datum: k } })
+                                    }
+                                  >
+                                    <ListChecks className="size-4" /> Dagplanning
+                                  </ContextMenuItem>
+                                  <ContextMenuItem
+                                    onSelect={() => void navigate({ to: "/", search: { dag: k } })}
+                                  >
+                                    <CalendarPlus className="size-4" /> Werk inplannen
+                                  </ContextMenuItem>
+                                  <ContextMenuItem
+                                    onSelect={() =>
+                                      void navigate({ to: "/mailing", search: { dag: k } })
+                                    }
+                                  >
+                                    <Mail className="size-4" /> Planningsmail sturen
+                                  </ContextMenuItem>
+                                </ContextMenuContent>
+                              </ContextMenu>
+                              {/* Rechtsboven: meteen naar de wijken om voor deze dag aan
+                            te vinken (en daarnaast naar de dagplanning). Alleen met een muis, en pas zichtbaar als je
                             over de dag beweegt. Op een telefoon of tablet zou een
                             onzichtbaar knopje tikken op de dag afvangen en over het
                             dagnummer vallen; daar staat "Werk inplannen" in het
                             menu onder lang indrukken. Buiten de Tab-volgorde om
                             dezelfde reden: het menu heeft het al. */}
-                            {!buitenMaand && (
-                              <Link
-                                to="/"
-                                search={{ dag: k }}
-                                tabIndex={-1}
-                                title="Inplannen voor deze dag"
-                                aria-label={`Inplannen voor ${format(d, "d MMMM", { locale: nl })}`}
-                                className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded-[8px] text-foreground/45 opacity-0 transition-[opacity,color,background-color] hover:bg-card hover:text-foreground hover:shadow-card group-hover/dag:opacity-100 [@media(hover:hover)]:flex"
-                              >
-                                <CalendarPlus className="size-3.5" />
-                              </Link>
-                            )}
-                          </div>
-                        )}
-                      </DagDrop>
+                              {!buitenMaand && (
+                                <Link
+                                  to="/"
+                                  search={{ dag: k }}
+                                  tabIndex={-1}
+                                  title="Inplannen voor deze dag"
+                                  aria-label={`Inplannen voor ${format(d, "d MMMM", { locale: nl })}`}
+                                  className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded-[8px] text-foreground/45 opacity-0 transition-[opacity,color,background-color] hover:bg-card hover:text-foreground hover:shadow-card group-hover/dag:opacity-100 [@media(hover:hover)]:flex"
+                                >
+                                  <CalendarPlus className="size-3.5" />
+                                </Link>
+                              )}
+                              {/* Ernaast: de dagplanning (de route van die dag). Alleen
+                            als er iets gepland staat; een lege route zegt niets. */}
+                              {!buitenMaand && info && (
+                                <Link
+                                  to="/dag"
+                                  search={{ datum: k }}
+                                  tabIndex={-1}
+                                  title="Dagplanning van deze dag"
+                                  aria-label={`Dagplanning van ${format(d, "d MMMM", { locale: nl })}`}
+                                  className="absolute right-[30px] top-1 hidden size-6 items-center justify-center rounded-[8px] text-foreground/45 opacity-0 transition-[opacity,color,background-color] hover:bg-card hover:text-foreground hover:shadow-card group-hover/dag:opacity-100 [@media(hover:hover)]:flex"
+                                >
+                                  <ListChecks className="size-3.5" />
+                                </Link>
+                              )}
+                            </div>
+                          )}
+                        </DagDrop>
+                      </Fragment>
                     );
                   })}
                 </div>
@@ -2691,6 +3247,10 @@ function Planning() {
                       : void uitPlanning(new Map([[datum, ids]]))
                   }
                   onOverslaan={(datum, ids) => void overslaan(new Map([[datum, ids]]))}
+                  onWijziging={(ids) => setWijziging({ customerIds: ids, soort: "wijziging" })}
+                  aankondigingen={aankondigingen}
+                  heeftContact={heeftContact}
+                  staatOp={staatOp}
                   dagen={weekGegevens}
                   instellingen={instellingen}
                   bouwstenen={bouwstenen}
@@ -2703,6 +3263,14 @@ function Planning() {
                       replace: true,
                     })
                   }
+                  onKiesDag={(datum) =>
+                    void navigate({
+                      to: "/planning",
+                      search: { dag: datum, weergave: "week" },
+                      replace: true,
+                    })
+                  }
+                  gekozenDag={gekozenDag}
                 />
               </div>
             )}
@@ -2732,6 +3300,7 @@ function Planning() {
                   ploegen={ploegenQuery.data?.get(gekozenDag) ?? []}
                   aankondigingen={aankondigingen}
                   heeftContact={heeftContact}
+                  staatOp={staatOp}
                   magPlannen={magPlannen}
                   prijzenZien={prijzenZien}
                   onVolgorde={(lijst) => void bewaarVolgorde(gekozenDag, lijst)}
@@ -2946,8 +3515,23 @@ function Planning() {
                   asChild
                 >
                   <Link to="/mailing" search={{ dag: gekozenDag }}>
-                    <Mail className="size-4" /> Deze dag aankondigen
+                    <Mail className="size-4" /> Planningsmail sturen
                   </Link>
+                </Button>
+              )}
+              {/* Staat er iemand anders dan in zijn planningsmail, dan in één
+                  keer een wijziging naar al die klanten. */}
+              {magVersturen && wijzigingenVanDag.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full justify-start rounded-full"
+                  onClick={() =>
+                    setWijziging({ customerIds: wijzigingenVanDag, soort: "wijziging" })
+                  }
+                >
+                  <AlertTriangle className="size-4 text-tint-oranje-ink" /> Wijzigingen sturen (
+                  {wijzigingenVanDag.length})
                 </Button>
               )}
               {dagRegels.length > 0 && (
@@ -2972,6 +3556,10 @@ function Planning() {
             <div className="rounded-[11px] border border-brand bg-card px-2.5 py-1.5 text-[13px] shadow-lg">
               {sleepBlok.titel}
             </div>
+          ) : sleepDag ? (
+            <div className="rounded-[11px] border border-brand bg-card px-2.5 py-1.5 text-[13px] shadow-lg">
+              <span className="capitalize">{toonDatum(sleepDag)}</span> — {werkOp(sleepDag)}
+            </div>
           ) : null}
         </DragOverlay>
       </DndContext>
@@ -2989,6 +3577,15 @@ function Planning() {
         teamleden={teamledenQuery.data ?? []}
         ploegen={ploegenQuery.data?.get(ploegenVoor ?? gekozenDag) ?? []}
         onOpslaan={(nieuwePloegen) => void bewaarPloegen(nieuwePloegen, ploegenVoor ?? gekozenDag)}
+      />
+
+      <DagVerplaatsenDialog
+        vraag={dagVraag}
+        onKies={(keuze) => {
+          const vraag = dagVraag;
+          setDagVraag(null);
+          if (vraag && keuze) void verplaatsHeleDag(vraag.van, vraag.naar, keuze);
+        }}
       />
 
       {wijziging && (

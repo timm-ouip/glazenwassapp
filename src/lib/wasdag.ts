@@ -234,13 +234,19 @@ export async function werkWasdagRegelBij(
 export async function zetPloegEnRest(
   datum: string,
   customerIds: string[],
-  plek: { ploeg_nr?: number | null; rest?: boolean; volgorde?: number | null },
+  plek: {
+    ploeg_nr?: number | null;
+    rest?: boolean;
+    volgorde?: number | null;
+    vaste_start?: string | null;
+  },
 ) {
   if (customerIds.length === 0) return;
   const patch = {
     ...(plek.ploeg_nr !== undefined ? { ploeg_nr: plek.ploeg_nr } : {}),
     ...(plek.rest !== undefined ? { rest: plek.rest } : {}),
     ...(plek.volgorde !== undefined ? { volgorde: plek.volgorde } : {}),
+    ...(plek.vaste_start !== undefined ? { vaste_start: plek.vaste_start } : {}),
   };
   if (Object.keys(patch).length === 0) return;
   const PER_KEER = 80;
@@ -274,6 +280,41 @@ export async function verplaatsWasdag(
   const kenmerken: string[] = [];
   const verplaatst: string[] = [];
   if (van === naar || customerIds.length === 0) return { verplaatst, kenmerken };
+  try {
+    await verplaatsInStukken(van, naar, customerIds, verplaatst, kenmerken);
+  } catch (e) {
+    // Een eerder stukje kan al verhuisd zijn: zeg wat, zodat terugdraaien
+    // ook dat deel meeneemt.
+    throw new HalfVerplaatst(e, verplaatst, kenmerken);
+  }
+  return { verplaatst, kenmerken };
+}
+
+/**
+ * De fout van `verplaatsWasdag`, met wat er vóór de fout al wel verhuisd (of
+ * bewaard weggehaald) was. Dezelfde melding als de oorspronkelijke fout.
+ */
+export class HalfVerplaatst extends Error {
+  constructor(
+    oorzaak: unknown,
+    readonly verplaatst: string[],
+    readonly kenmerken: string[],
+  ) {
+    super(
+      oorzaak instanceof Error
+        ? oorzaak.message
+        : String((oorzaak as { message?: string })?.message ?? oorzaak),
+    );
+  }
+}
+
+async function verplaatsInStukken(
+  van: string,
+  naar: string,
+  customerIds: string[],
+  verplaatst: string[],
+  kenmerken: string[],
+) {
   const PER_KEER = 80;
   for (let i = 0; i < customerIds.length; i += PER_KEER) {
     const stuk = customerIds.slice(i, i + PER_KEER);
@@ -313,7 +354,6 @@ export async function verplaatsWasdag(
       if (kenmerk) kenmerken.push(kenmerk);
     }
   }
-  return { verplaatst, kenmerken };
 }
 
 /** Binnen hoeveel dagen twee beurten van hetzelfde adres "dubbel" heten. */

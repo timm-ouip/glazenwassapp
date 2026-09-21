@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { IconMailForward as MailForward } from "@tabler/icons-react";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import { PopupBlok, PopupBody, PopupKader, PopupKop, PopupVoet } from "@/compone
 import { AlVerstuurdFout, telWijziging, verstuurWijziging } from "@/lib/mailing";
 import { useBevestig } from "@/components/Bevestig";
 import { fetchRedenen, fetchSjablonen, standaardVan, type SjabloonSoort } from "@/lib/sjablonen";
+import { fetchCustomersMetInactief, fetchKlanten, fetchStreets } from "@/lib/klanten";
 
 /**
  * "De planning is veranderd" — het bericht dat je stuurt als een dag
@@ -18,7 +19,8 @@ import { fetchRedenen, fetchSjablonen, standaardVan, type SjabloonSoort } from "
  *
  * Het gaat via hetzelfde kanaal als de aankondiging (mail, of WhatsApp waar
  * de klant dat wil). De tekst komt uit het sjabloon; de reden kies je snel
- * aan of typ je zelf.
+ * aan of typ je zelf. Onder "Naar wie" vink je adressen uit die het bericht
+ * toch niet moeten krijgen.
  */
 export function WijzigingsberichtDialog({
   open,
@@ -38,14 +40,56 @@ export function WijzigingsberichtDialog({
   const [tekst, setTekst] = useState("");
   const [sjabloonId, setSjabloonId] = useState("");
   const [bezig, setBezig] = useState(false);
+  /** Wat je hebt uitgevinkt: die krijgen niets. */
+  const [uit, setUit] = useState<Set<string>>(new Set());
   const bevestig = useBevestig();
+
+  // Bij een nieuwe lijst weer alles aan.
+  const lijstSleutel = [...customerIds].sort().join(",");
+  useEffect(() => {
+    setUit(new Set());
+  }, [lijstSleutel, open]);
+  const gekozen = useMemo(() => customerIds.filter((id) => !uit.has(id)), [customerIds, uit]);
+
+  // Namen voor de lijst: dezelfde gegevens die de rest van de app al heeft.
+  const adressen = useQuery({
+    queryKey: ["customers", "met-inactief"],
+    queryFn: fetchCustomersMetInactief,
+    enabled: open,
+  });
+  const straten = useQuery({ queryKey: ["streets"], queryFn: fetchStreets, enabled: open });
+  const klanten = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten, enabled: open });
+  const rijen = useMemo(() => {
+    const adresVan = new Map((adressen.data ?? []).map((c) => [c.id, c]));
+    const straatVan = new Map((straten.data ?? []).map((s) => [s.id, s.name]));
+    const klantVan = new Map((klanten.data ?? []).map((k) => [k.id, k.naam]));
+    return customerIds.map((id) => {
+      const c = adresVan.get(id);
+      return {
+        id,
+        adres: c
+          ? `${straatVan.get(c.street_id) ?? ""} ${c.house_number}${c.addition ?? ""}`.trim()
+          : "…",
+        klant: (c?.klant_id && klantVan.get(c.klant_id)) || "",
+      };
+    });
+  }, [customerIds, adressen.data, straten.data, klanten.data]);
+
+  function zet(id: string, aan: boolean) {
+    setUit((was) => {
+      const nieuw = new Set(was);
+      if (aan) nieuw.delete(id);
+      else nieuw.add(id);
+      return nieuw;
+    });
+  }
 
   const sjablonen = useQuery({ queryKey: ["bericht-sjablonen"], queryFn: fetchSjablonen });
   const redenen = useQuery({ queryKey: ["snelle-redenen"], queryFn: fetchRedenen });
   const telling = useQuery({
-    queryKey: ["wijziging-tellen", soort, [...customerIds].sort().join(",")],
-    queryFn: () => telWijziging(customerIds, soort),
-    enabled: open && customerIds.length > 0,
+    queryKey: ["wijziging-tellen", soort, [...gekozen].sort().join(",")],
+    queryFn: () => telWijziging(gekozen, soort),
+    enabled: open && gekozen.length > 0,
   });
 
   // Bij het opengaan de standaardtekst pakken.
@@ -65,8 +109,8 @@ export function WijzigingsberichtDialog({
     }
     setBezig(true);
     try {
-      const uit = await verstuurWijziging({
-        customerIds,
+      const uitkomst = await verstuurWijziging({
+        customerIds: gekozen,
         soort,
         reden: reden.trim(),
         onderwerp: onderwerp.trim(),
@@ -74,10 +118,11 @@ export function WijzigingsberichtDialog({
         ...(sjabloonId ? { sjabloonId } : {}),
         ...(toch ? { toch: true } : {}),
       });
+      const samen = uitkomst.verstuurd + uitkomst.verstuurdWhatsApp;
       toast.success(
-        `${uit.verstuurd + uit.verstuurdWhatsApp} ${
-          uit.verstuurd + uit.verstuurdWhatsApp === 1 ? "klant" : "klanten"
-        } ingelicht${uit.mislukt > 0 ? `, ${uit.mislukt} mislukt` : ""}`,
+        `${samen} ${samen === 1 ? "klant" : "klanten"} ingelicht${
+          uitkomst.mislukt > 0 ? `, ${uitkomst.mislukt} mislukt` : ""
+        }`,
       );
       onOpenChange(false);
       onVerstuurd?.();
@@ -102,7 +147,8 @@ export function WijzigingsberichtDialog({
     setBezig(false);
   }
 
-  const t = telling.data;
+  // Zonder aangevinkte adressen is er niemand om te tellen.
+  const t = gekozen.length > 0 ? telling.data : undefined;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -116,7 +162,7 @@ export function WijzigingsberichtDialog({
               ? `${t.aantal + t.aantalWhatsApp} ${t.aantal + t.aantalWhatsApp === 1 ? "klant" : "klanten"}${
                   t.zonderContact > 0 ? ` · ${t.zonderContact} zonder adres` : ""
                 }`
-              : `${customerIds.length} ${customerIds.length === 1 ? "adres" : "adressen"}`
+              : `${gekozen.length} ${gekozen.length === 1 ? "adres" : "adressen"}`
           }
         />
         <PopupBody>
@@ -157,29 +203,52 @@ export function WijzigingsberichtDialog({
             </p>
           </PopupBlok>
 
-          {t && t.voorbeeld.length > 0 && (
-            <PopupBlok label="Naar wie">
-              <ul className="space-y-0.5 text-[12.5px] text-muted-foreground">
-                {t.voorbeeld.slice(0, 5).map((v, i) => (
+          <PopupBlok label={`Naar wie (${gekozen.length} van ${customerIds.length})`}>
+            {customerIds.length > 1 && (
+              <button
+                type="button"
+                onClick={() =>
+                  setUit(gekozen.length === customerIds.length ? new Set(customerIds) : new Set())
+                }
+                className="mb-1.5 text-[12px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                {gekozen.length === customerIds.length ? "Alles uitvinken" : "Alles aanvinken"}
+              </button>
+            )}
+            <ul className="max-h-48 space-y-0.5 overflow-y-auto pr-1 text-[12.5px]">
+              {rijen.map((r) => (
+                <li key={r.id}>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-[8px] px-1 py-0.5 hover:bg-accent">
+                    <input
+                      type="checkbox"
+                      className="size-3.5 shrink-0 accent-foreground"
+                      checked={!uit.has(r.id)}
+                      onChange={(e) => zet(r.id, e.target.checked)}
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      {r.adres}
+                      {r.klant && <span className="text-muted-foreground"> — {r.klant}</span>}
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            {t && t.voorbeeld.length > 0 && (
+              <ul className="mt-2 space-y-0.5 border-t border-border/60 pt-2 text-[12px] text-muted-foreground">
+                {t.voorbeeld.slice(0, 3).map((v, i) => (
                   <li key={i} className="truncate">
-                    {v.naam} — {v.adressen.join(", ")}: {v.oudeDatum} → {v.nieuweDatum}
+                    {v.naam}: {v.oudeDatum} → {v.nieuweDatum}
                   </li>
                 ))}
-                {t.aantal + t.aantalWhatsApp > t.voorbeeld.length && (
-                  <li>en nog {t.aantal + t.aantalWhatsApp - t.voorbeeld.length} …</li>
-                )}
               </ul>
-            </PopupBlok>
-          )}
+            )}
+          </PopupBlok>
         </PopupBody>
         <PopupVoet>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={bezig}>
             Annuleren
           </Button>
-          <Button
-            onClick={() => void versturen(false)}
-            disabled={bezig || customerIds.length === 0}
-          >
+          <Button onClick={() => void versturen(false)} disabled={bezig || gekozen.length === 0}>
             {bezig ? "Bezig…" : "Versturen"}
           </Button>
         </PopupVoet>

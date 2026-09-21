@@ -11,6 +11,8 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { MailStatus } from "@/components/planning/MailStatus";
+import { SelectieGreep } from "@/components/planning/SelectieGreep";
 import { useVerfSelectie } from "@/components/planning/verfselectie";
 import {
   berekenTijden,
@@ -19,6 +21,7 @@ import {
   NIET_INGEDEELD,
   opzetVan,
   tijdVan,
+  tijdvakVan,
   volPercentage,
   type AdresInfo,
   type Blok,
@@ -30,6 +33,13 @@ import {
   verdeelOverAdressen,
 } from "@/lib/dagplanning";
 import { maandVan, type Bouwstenen } from "@/lib/dagbouwstenen";
+import {
+  isGestuurd,
+  samenvattingVan,
+  statusVan,
+  type AankondigingRij,
+  type Mailstatus,
+} from "@/lib/aankondigingen";
 import { ploegNaam } from "@/lib/ploegen";
 import { formatPrice, toonMaand, wijkInkt, wijkVlak } from "@/lib/klanten";
 
@@ -60,6 +70,16 @@ interface Handelingen {
   onUitPlanning: (datum: string, ids: string[], klusId?: string) => void;
   /** De maand van die dag overslaan; ze gaan dan ook van de dag af. */
   onOverslaan: (datum: string, ids: string[]) => void;
+  /** Klanten laten weten dat hun dag of tijd veranderd is. */
+  onWijziging: (ids: string[]) => void;
+}
+
+/** Wat er aan de klanten verstuurd is, voor de envelopjes. */
+interface Post {
+  aankondigingen: Map<string, AankondigingRij[]>;
+  heeftContact: (customerId: string) => boolean;
+  /** Staat dit adres op die dag gepland? */
+  staatOp: (customerId: string, datum: string) => boolean;
 }
 
 /**
@@ -83,10 +103,16 @@ export function WeekWeergave({
   onKies,
   selectieActies,
   onOpenDag,
+  onKiesDag,
+  gekozenDag,
   onPloegen,
   onNaarPloeg,
   onUitPlanning,
   onOverslaan,
+  onWijziging,
+  aankondigingen,
+  heeftContact,
+  staatOp,
 }: {
   dagen: WeekDag[];
   instellingen: PlanInstellingen;
@@ -97,12 +123,27 @@ export function WeekWeergave({
   gekozen: Set<string>;
   onKies: (ids: string[], aan: boolean, dag: string) => void;
   selectieActies: (ids: string[]) => { sleutel: string; label: string; doe: () => void }[];
+  /** Dubbelklik op een dag: naar de dagweergave. */
   onOpenDag: (datum: string) => void;
+  /** Klik op een dag: die dag kiezen, zodat het vak rechts hem laat zien. */
+  onKiesDag: (datum: string) => void;
+  gekozenDag: string;
   onPloegen: (datum: string) => void;
-} & Handelingen) {
+} & Handelingen &
+  Post) {
   /** Staan de losse adressen onder hun straat? */
   const [uitgeklapt, setUitgeklapt] = useState(false);
-  const doen: Handelingen = { selectieActies, onNaarPloeg, onUitPlanning, onOverslaan };
+  const doen: Handelingen = {
+    selectieActies,
+    onNaarPloeg,
+    onUitPlanning,
+    onOverslaan,
+    onWijziging,
+  };
+  const post = useMemo<Post>(
+    () => ({ aankondigingen, heeftContact, staatOp }),
+    [aankondigingen, heeftContact, staatOp],
+  );
   const verf = useVerfSelectie({
     actief: selecteren && sleepbaar,
     isGekozen: (id) => gekozen.has(id),
@@ -124,9 +165,19 @@ export function WeekWeergave({
         // je het vandaan slepen naar een ploeg.
         const bekend = new Set(d.ploegen.map((pl) => pl.nr));
         const los = [...blokken.entries()].filter(([nr]) => !bekend.has(nr)).flatMap(([, b]) => b);
-        return { ...d, blokken, los };
+        // De tijden hier al uitrekenen, niet bij het tekenen: dan blijven ze
+        // hetzelfde bij elke streek van een selectie, en rekent een kaart zijn
+        // envelopjes niet steeds opnieuw uit.
+        const losTijdlijn = berekenTijden(los, opzetVan(instellingen, null));
+        const tijdlijnen = new Map(
+          d.ploegen.map((pl) => [
+            pl.nr,
+            berekenTijden(blokken.get(pl.nr) ?? [], opzetVan(instellingen, pl)),
+          ]),
+        );
+        return { ...d, blokken, los, losTijdlijn, tijdlijnen };
       }),
-    [dagen, bouwstenen],
+    [dagen, bouwstenen, instellingen],
   );
 
   return (
@@ -154,8 +205,15 @@ export function WeekWeergave({
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => onOpenDag(d.datum)}
-                  className="min-w-0 flex-1 truncate rounded-[10px] px-1 py-1 text-[12.5px] font-medium hover:bg-accent"
+                  // Klikken kiest de dag (rechts zie je wat er staat), dubbelklikken
+                  // opent de dagweergave — net als in de maand.
+                  onClick={() => onKiesDag(d.datum)}
+                  onDoubleClick={() => onOpenDag(d.datum)}
+                  aria-pressed={d.datum === gekozenDag}
+                  title="Klik om te bekijken, dubbelklik voor de dagweergave"
+                  className={`min-w-0 flex-1 truncate rounded-[10px] px-1 py-1 text-[12.5px] font-medium ${
+                    d.datum === gekozenDag ? "bg-foreground text-background" : "hover:bg-accent"
+                  }`}
                 >
                   {new Date(`${d.datum}T12:00:00`).toLocaleDateString("nl-NL", {
                     weekday: "short",
@@ -187,7 +245,7 @@ export function WeekWeergave({
                       datum={d.datum}
                       ploegenVanDag={d.ploegen}
                       blokken={d.los}
-                      tijdlijn={berekenTijden(d.los, opzetVan(instellingen, null))}
+                      tijdlijn={d.losTijdlijn}
                       instellingen={instellingen}
                       bouwstenen={bouwstenen}
                       prijzenZien={prijzenZien}
@@ -196,6 +254,7 @@ export function WeekWeergave({
                       gekozen={gekozen}
                       uitgeklapt={uitgeklapt}
                       doen={doen}
+                      post={post}
                     />
                   )}
                 </Plek>
@@ -213,7 +272,7 @@ export function WeekWeergave({
                         datum={d.datum}
                         ploegenVanDag={d.ploegen}
                         blokken={blokken}
-                        tijdlijn={berekenTijden(blokken, opzetVan(instellingen, pl))}
+                        tijdlijn={d.tijdlijnen.get(pl.nr)!}
                         instellingen={instellingen}
                         bouwstenen={bouwstenen}
                         prijzenZien={prijzenZien}
@@ -222,6 +281,7 @@ export function WeekWeergave({
                         gekozen={gekozen}
                         uitgeklapt={uitgeklapt}
                         doen={doen}
+                        post={post}
                       />
                     )}
                   </Plek>
@@ -268,6 +328,7 @@ function Kaart({
   gekozen,
   uitgeklapt,
   doen,
+  post,
 }: {
   setRef: (el: HTMLElement | null) => void;
   erboven: boolean;
@@ -284,8 +345,35 @@ function Kaart({
   gekozen: Set<string>;
   uitgeklapt: boolean;
   doen: Handelingen;
+  post: Post;
 }) {
   const vol = volPercentage(tijdlijn);
+  const opzet = opzetVan(instellingen, ploeg);
+
+  /**
+   * Per adres wat de klant te horen kreeg. Het tijdvak rekent vanaf het begin
+   * van het blok, net als de planningsmail zelf (en de dagweergave). Eén keer
+   * per kaart uitgerekend, niet bij elke streek van een selectie.
+   */
+  const standen = useMemo(() => {
+    const kaart = new Map<string, Mailstatus>();
+    for (const item of tijdlijn.items) {
+      const blok = item.blok;
+      if (!blok || blok.soort === "klus") continue;
+      const tijdvak = instellingen.tijdlijn ? tijdvakVan(item.start, opzet.begin) : null;
+      for (const id of blok.adressen) {
+        kaart.set(
+          id,
+          statusVan(post.aankondigingen.get(id), datum, {
+            heeftContact: post.heeftContact(id),
+            tijdvak,
+            staatOp: (dag) => post.staatOp(id, dag),
+          }),
+        );
+      }
+    }
+    return kaart;
+  }, [tijdlijn, post, datum, instellingen.tijdlijn, opzet.begin]);
   const leeg = blokken.length === 0;
   return (
     <div
@@ -331,6 +419,8 @@ function Kaart({
                 doen={doen}
                 tijd={metKlok ? tijdVan(item.start) : null}
                 minuten={item.minuten}
+                standen={blok.adressen.flatMap((id) => standen.get(id) ?? [])}
+                anders={blok.adressen.filter((id) => standen.get(id)?.stand === "verplaatst")}
               />
               {losseAdressen.map((a) => (
                 <AdresRegel
@@ -348,6 +438,7 @@ function Kaart({
                   selecteren={selecteren}
                   gekozen={gekozen}
                   doen={doen}
+                  stand={standen.get(a.id) ?? null}
                 />
               ))}
             </Fragment>
@@ -408,6 +499,8 @@ function BlokRegel({
   doen,
   tijd,
   minuten,
+  standen,
+  anders,
 }: {
   blok: Blok;
   datum: string;
@@ -422,6 +515,10 @@ function BlokRegel({
   /** Hoe laat hij begint, of niets als er geen klok is. */
   tijd: string | null;
   minuten: number;
+  /** Wat elk adres van dit blok te horen kreeg. */
+  standen: Mailstatus[];
+  /** De adressen die na de planningsmail verplaatst zijn. */
+  anders: string[];
 }) {
   const klus = blok.soort === "klus";
   // Hoort hij bij de selectie, dan gaat die hele selectie mee als je sleept.
@@ -464,7 +561,9 @@ function BlokRegel({
       ploegenVanDag,
       gekozen,
       doen,
+      anders,
     });
+  const mail = samenvattingVan(standen);
 
   const regel = (
     <li
@@ -484,6 +583,9 @@ function BlokRegel({
       style={{ background: vlak ?? "var(--muted)", color: inkt }}
     >
       <div className="flex items-center gap-1">
+        {selecteren && sleepbaar && aangewezen && (
+          <SelectieGreep sleutel={`${datum}:${blok.sleutel}`} datum={datum} gekozen={gekozen} />
+        )}
         <span className="min-w-0 flex-1 truncate font-medium">{blok.titel}</span>
         {prijzenZien && <span className="shrink-0 tabular-nums">{formatPrice(blok.bedrag)}</span>}
       </div>
@@ -491,6 +593,11 @@ function BlokRegel({
         {tijd && <span className="tabular-nums">{tijd}</span>}
         <span className="tabular-nums">{duurTekst(minuten)}</span>
         {blok.soort === "straat" && <span>· {blok.adressen.length}</span>}
+        {mail && (
+          <span className="ml-auto">
+            <MailStatus status={mail} klein />
+          </span>
+        )}
       </div>
     </li>
   );
@@ -520,6 +627,7 @@ function AdresRegel({
   selecteren,
   gekozen,
   doen,
+  stand,
 }: {
   id: string;
   adres: AdresInfo | undefined;
@@ -535,6 +643,8 @@ function AdresRegel({
   selecteren: boolean;
   gekozen: Set<string>;
   doen: Handelingen;
+  /** Wat de klant te horen kreeg. */
+  stand: Mailstatus | null;
 }) {
   const aangewezen = gekozen.has(id);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -550,7 +660,16 @@ function AdresRegel({
   });
 
   const maakActies = () =>
-    actiesVoor({ ids: [id], titel, datum, huidigePloeg, ploegenVanDag, gekozen, doen });
+    actiesVoor({
+      ids: [id],
+      titel,
+      datum,
+      huidigePloeg,
+      ploegenVanDag,
+      gekozen,
+      doen,
+      anders: stand?.stand === "verplaatst" ? [id] : [],
+    });
 
   // De straatnaam staat er al boven; het huisnummer is genoeg.
   const kort = adres ? `${adres.house_number}${adres.addition}` : titel;
@@ -572,8 +691,12 @@ function AdresRegel({
         color: wijkIndex === null ? undefined : wijkInkt(wijkIndex),
       }}
     >
+      {selecteren && sleepbaar && aangewezen && (
+        <SelectieGreep sleutel={`${datum}:${blok.sleutel}:${id}`} datum={datum} gekozen={gekozen} />
+      )}
       <span className="min-w-0 flex-1 truncate">{kort}</span>
       {tijd && <span className="shrink-0 tabular-nums opacity-80">{tijd}</span>}
+      {stand && isGestuurd(stand) && <MailStatus status={stand} klein />}
     </li>
   );
 
@@ -598,6 +721,7 @@ function actiesVoor({
   ploegenVanDag,
   gekozen,
   doen,
+  anders,
 }: {
   ids: string[];
   klusId?: string | undefined;
@@ -607,6 +731,8 @@ function actiesVoor({
   ploegenVanDag: Ploeg[];
   gekozen: Set<string>;
   doen: Handelingen;
+  /** Wie na de planningsmail verplaatst is: die hoort een wijziging te krijgen. */
+  anders: string[];
 }): Actie[] {
   const acties: Actie[] = [];
   // Een extra opdracht hoort niet bij een selectie: zijn "adres" is het adres
@@ -637,11 +763,20 @@ function actiesVoor({
       doe: () => doen.onNaarPloeg(datum, ids, null, klusId),
     });
   }
+  // Alleen een streepje als er al iets boven staat.
+  const streepje = () => acties.length > 0 && !acties[acties.length - 1]!.kop;
+  if (anders.length > 0) {
+    acties.push({
+      sleutel: "wijziging",
+      scheidingVoor: streepje(),
+      label: anders.length > 1 ? `Wijziging sturen (${anders.length})` : "Wijziging sturen",
+      doe: () => doen.onWijziging(anders),
+    });
+  }
   const aantal = ids.length > 1 ? ` (${ids.length})` : "";
   acties.push({
     sleutel: "uitplanning",
-    // Alleen een streepje als er al iets boven staat.
-    scheidingVoor: acties.length > 0 && !acties[acties.length - 1]!.kop,
+    scheidingVoor: streepje(),
     label: `Uit planning halen${klusId ? "" : aantal}`,
     doe: () => doen.onUitPlanning(datum, ids, klusId),
   });

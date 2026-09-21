@@ -177,6 +177,22 @@ en in de dag per dag. Met "Vandaag" spring je terug. Naast "Selecteren" staat
 de knop "Ongedaan" (ook met ⌘/Ctrl+Z): die draait je laatste stap terug, ook
 als de melding met zijn eigen knop al weg is.
 
+De maandweergave: een vakje per dag, in de kleur van de wijk die er aan de
+beurt is. Links staat het weeknummer; klik je daarop, dan ga je naar de
+weekweergave van die week. Een klik op een dag kiest die dag (rechts zie je
+wat er staat), een dubbelklik opent de dagweergave. Beweeg je met de muis over
+een dag, dan verschijnen rechtsboven twee knopjes: naar de dagplanning (de
+route van die dag, alleen als er werk op staat) en naar de wijken om werk voor
+die dag in te plannen. Een hele dag kun je met de muis oppakken en op een
+andere dag laten vallen: alles gaat mee, ook de extra opdrachten. De teams
+gaan mee als de andere dag er nog geen had. Staat er op die andere dag al
+werk, dan vraagt de app of je wilt samenvoegen (alles erbij; had die dag al
+teams, dan komt het werk binnen als "nog niet ingedeeld") of omwisselen (de
+twee dagen ruilen, met hun teams). Op een telefoon kan dat
+niet; daar is lang indrukken het menu. In het menu van een dag
+(rechtermuisknop) staan "Hele wijk inplannen", "Planning vanaf hier
+opschuiven", "Dagplanning", "Werk inplannen" en "Planningsmail sturen".
+
 De weekweergave: een kolom per werkdag, en daarin een kaartje per team met
 de straten, hoe laat elke straat aan de beurt is, een balkje dat laat zien hoe
 vol die dag zit, en onderaan hoe laat het team klaar is. Past de dag niet, dan
@@ -184,7 +200,9 @@ staat er "loopt tot" in plaats van "klaar om". Bovenaan staat "Nog niet
 ingedeeld" voor werk dat nog bij geen team hoort. Met de knop "Adressen tonen"
 rechtsboven komen de losse adressen (de huisnummers, met hun tijd) onder hun
 straat te staan; met "Straten tonen" klap je ze weer in. Ook een los adres kun
-je slepen en heeft zijn eigen rechtermuisknop-menu.
+je slepen en heeft zijn eigen rechtermuisknop-menu. Is er een planningsmail
+verstuurd, dan staat er een envelopje bij de straat (en bij elk adres als ze
+uitgeklapt staan), net als in de dagweergave.
 
 De dagweergave is een tijdraster: links de uren, en per team een kolom waarin
 het werk op zijn eigen begintijd staat. Rechts staat een gestippelde kolom
@@ -224,7 +242,9 @@ al gekozen is. Een hele straat pak je door hem aan te
 wijzen als de adressen ingeklapt staan, en met "Alles" bij de teamnaam neem je
 dat hele team in één keer. Kies daarna in de balk bovenin "Naar team…", of
 "Verplaatsen naar" om diezelfde selectie naar een andere dag te sturen. Handig
-als een straat niet af kwam.
+als een straat niet af kwam. Slepen kan ook: wat gekozen is krijgt een klein
+handvatje (⠿); pak je dat vast, dan sleep je de hele selectie naar een andere
+dag of een ander team. Een streek over de rest blijft gewoon selecteren.
 
 Eén los adres kun je ook naar een ander team slepen als "Selecteren" uit
 staat, of dat via zijn eigen rechtermuisknop kiezen. Onder in dat adresmenu
@@ -246,6 +266,22 @@ Allebei kun je terugdraaien met "Ongedaan maken" in de melding of met de knop
 "Ongedaan" bovenin. Heb je adressen geselecteerd, dan staan ze ook bovenin het
 menu voor de hele selectie.
 
+De envelopjes bij een adres (dag- en weekweergave) zeggen wat de klant van de
+planningsmail weet. Klik erop, of houd de muis erboven, voor de uitleg:
+- lichtgrijs envelopje — nog geen planningsmail gestuurd;
+- grijs envelopje — verstuurd, nog geen bevestiging dat hij aankwam;
+- groen envelopje met vinkje — aangekomen;
+- rood envelopje met kruisje — niet aangekomen (klopt het adres?);
+- oranje driehoekje met uitroepteken — de planning is veranderd ná de mail:
+  het adres staat nu op een andere dag of (bij een groot pand) een ander
+  tijdvak dan in de mail stond. Er ging dus niets mis met versturen; de klant
+  verwacht je alleen nog op het oude moment. Stuur dan een wijziging.
+Een wijziging sturen kan per straat of adres (rechtermuisknop → "Wijziging
+sturen"), voor een selectie (knop "Wijziging sturen" in de balk bovenin, of in
+het menu van de selectie), of voor een hele dag in één keer ("Wijzigingen
+sturen" in het vak rechts, onder "Planningsmail sturen"). Alleen wie echt
+verplaatst is krijgt het bericht.
+
 Staat de tijdlijn aan, dan kun je per team een begin- en eindtijd invullen
 en rekent de app uit hoe vol de dag zit. Die duur komt uit de prijs. Staat de
 tijdlijn uit, dan zijn de blokken nog steeds even hoog als ze lang duren, maar
@@ -265,7 +301,8 @@ je kiest "Zet op…".
 
 Verder op de pagina: "Dagplanning" gaat naar de route van die dag,
 "Inplannen" naar de wijkenpagina om werk toe te voegen, en achter het
-⋯-knopje zitten "Deze dag aankondigen", "Extra opdracht" en "Dag leegmaken".
+⋯-knopje zitten "Planningsmail sturen" (de klanten van die dag
+laten weten dat je komt), "Extra opdracht" en "Dag leegmaken".
 `,
 
   dag: `

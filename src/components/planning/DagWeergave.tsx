@@ -27,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MailStatus } from "@/components/planning/MailStatus";
+import { SelectieGreep } from "@/components/planning/SelectieGreep";
 import { useVerfSelectie } from "@/components/planning/verfselectie";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -66,6 +67,8 @@ export interface DagWeergaveProps {
   aankondigingen: Map<string, AankondigingRij[]>;
   /** Heeft de klant van dit adres een mailadres of 06? */
   heeftContact: (customerId: string) => boolean;
+  /** Staat dit adres op die dag gepland? Voor de envelopjes. */
+  staatOp: (customerId: string, datum: string) => boolean;
   magPlannen: boolean;
   prijzenZien: boolean;
   /** Blokken opnieuw ordenen; de lijst is de nieuwe volgorde per ploeg. */
@@ -100,11 +103,21 @@ export interface DagWeergaveProps {
  * `uurHoogte`. Een aparte zoomstand is daar niet voor nodig.
  */
 const BASIS_UUR_PX = 66;
+/**
+ * Hoger dan dit rekt een uur niet op, ook niet met heel veel korte adressen
+ * erin: anders wordt één uur een hele pagina. Een uur met vijftien losse
+ * adressen (15 × 24 px) blijft er ruim onder.
+ */
+const MAX_UUR_PX = 10 * BASIS_UUR_PX;
 
-/** Kleiner dan dit is geen blok meer maar een streepje. */
-const MIN_BLOK_PX = 14;
-/** Een adres moet zijn naam kwijt kunnen; daar rekt het uur zo nodig voor uit. */
-const MIN_ADRES_PX = 20;
+/**
+ * Een blok moet zijn naam en zijn ⋯-knopje kwijt kunnen, met de rand erbij —
+ * ook een straat van tien minuten. Daar rekt het uur zo nodig voor uit.
+ * (Het vak is twee pixels hoger dan het blokje: dat is het kiertje ertussen.)
+ */
+const MIN_BLOK_PX = 26;
+/** Hetzelfde voor een los adres; dat heeft geen rand. */
+const MIN_ADRES_PX = 24;
 /** Hoogte van een blok als de hele dag geen duur heeft: dan zegt hoogte niets. */
 const BLOK_ZONDER_DUUR_PX = 44;
 
@@ -268,23 +281,42 @@ function maakSchaal(kolommen: Kolom[], van: number, tot: number, basisUurPx: num
    * Hoe hoog een uur moet zijn.
    *
    * Een eenheid is zo hoog als hij lang duurt, maar nooit lager dan wat je
-   * kunt lezen. Zitten er korte adressen in, dan nemen die meer ruimte dan hun
-   * minuten, en moet het uur mee. Omdat een hoger uur de lange eenheden ook
-   * weer hoger maakt, rekenen we een paar rondes door tot het uitkomt.
+   * kunt lezen. Zitten er korte eenheden in, dan nemen die meer ruimte dan hun
+   * minuten, en moet het uur mee — anders zakt alles erna onder zijn eigen
+   * tijd. Een hoger uur maakt de lange eenheden ook weer hoger, dus per kolom
+   * lossen we het exact op: de korte houden hun minimum, de lange nemen hun
+   * deel van het uur, en het uur is wat daar samen uitkomt.
    */
   function uurHoogte(i: number): number {
     let hoogte = basisUurPx;
-    for (let ronde = 0; ronde < 8; ronde++) {
-      let nodig = basisUurPx;
-      for (const kolom of stukken[i]!) {
-        let som = 0;
-        for (const st of kolom) som += Math.max(st.min, (st.minuten * hoogte) / 60) * st.deel;
-        nodig = Math.max(nodig, som);
-      }
-      if (nodig <= hoogte + 0.5) break;
-      hoogte = nodig;
-    }
+    for (const kolom of stukken[i]!) hoogte = Math.max(hoogte, kolomHoogte(kolom));
     return Math.ceil(hoogte);
+  }
+
+  /**
+   * Hoe hoog één kolom dit uur moet zijn. Bij een hoger uur worden korte stukken
+   * vanzelf lang genoeg; dan rekenen we opnieuw met die indeling. Dat kan alleen
+   * maar omhoog, dus het stopt vanzelf, en nooit hoger dan MAX_UUR_PX.
+   */
+  function kolomHoogte(kolom: Stuk[]): number {
+    let hoogte = basisUurPx;
+    for (let ronde = 0; ronde <= kolom.length; ronde++) {
+      let kort = 0;
+      let langDeel = 0;
+      for (const st of kolom) {
+        if ((st.minuten * hoogte) / 60 >= st.min) langDeel += (st.minuten * st.deel) / 60;
+        else kort += st.min * st.deel;
+      }
+      // Past het al? Dan klaar. Zo niet, dan is de hoogte waarbij de korte
+      // precies hun minimum krijgen en de lange hun deel: h = kort + langDeel·h.
+      if (kort + langDeel * hoogte <= hoogte + 0.5) break;
+      // Vult het lange werk het hele uur al, dan helpt geen enkele hoogte: wat
+      // kort is steekt er altijd uit. Dan niet voor niets oprekken.
+      if (langDeel >= 1) break;
+      hoogte = Math.min(MAX_UUR_PX, kort / (1 - langDeel));
+      if (hoogte === MAX_UUR_PX) break;
+    }
+    return hoogte;
   }
 
   const hoogten: number[] = [];
@@ -711,6 +743,7 @@ export function DagWeergave(p: DagWeergaveProps) {
               bouwstenen={p.bouwstenen}
               aankondigingen={p.aankondigingen}
               heeftContact={p.heeftContact}
+              staatOp={p.staatOp}
               actiesVan={actiesVan}
             />
           ))}
@@ -856,6 +889,7 @@ function PloegKolom({
   bouwstenen,
   aankondigingen,
   heeftContact,
+  staatOp,
   actiesVan,
 }: {
   kolom: Kolom;
@@ -870,6 +904,7 @@ function PloegKolom({
   bouwstenen: Bouwstenen;
   aankondigingen: Map<string, AankondigingRij[]>;
   heeftContact: (customerId: string) => boolean;
+  staatOp: (customerId: string, datum: string) => boolean;
   actiesVan: (kolom: Kolom, e: Eenheid, anders: string[]) => Actie[];
 }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -889,6 +924,7 @@ function PloegKolom({
   function standVan(id: string, start: number) {
     return statusVan(aankondigingen.get(id), datum, {
       heeftContact: heeftContact(id),
+      staatOp: (dag) => staatOp(id, dag),
       tijdvak: instellingen.tijdlijn ? tijdvakVan(start, opzet.begin) : null,
     });
   }
@@ -905,7 +941,7 @@ function PloegKolom({
     }
     return kaart;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eenheden, aankondigingen, datum, instellingen.tijdlijn, opzet.begin]);
+  }, [eenheden, aankondigingen, heeftContact, staatOp, datum, instellingen.tijdlijn, opzet.begin]);
 
   /** Wat elke klant van een blok te horen kreeg, voor "Wijziging sturen". */
   function andersVan(e: Eenheid): string[] {
@@ -1158,6 +1194,9 @@ function Eenheidkaart({
       style={{ top: plek.top, height: plek.hoogte, background: vlak, color: inkt }}
     >
       <div className="flex items-center gap-1">
+        {selecteren && magPlannen && aangevinkt && blok.soort !== "klus" && (
+          <SelectieGreep sleutel={`${datum}:${eenheid.sleutel}`} datum={datum} gekozen={gekozen} />
+        )}
         <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{eenheid.titel}</span>
         {metKlok && losAdres && (
           <span className="shrink-0 text-[10px] tabular-nums opacity-70">
