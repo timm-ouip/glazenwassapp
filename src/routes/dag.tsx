@@ -780,7 +780,7 @@ function DagPagina() {
         : namen.length === 1
           ? namen[0]!
           : `${namen.slice(0, -1).join(", ")} en ${namen.at(-1)}`;
-    const delen = [`${straten} ${straten === 1 ? "straat" : "straten"}`];
+    const delen = straten > 0 ? [`${straten} ${straten === 1 ? "straat" : "straten"}`] : [];
     if (klussen.length > 0) {
       delen.push(`${klussen.length} extra ${klussen.length === 1 ? "opdracht" : "opdrachten"}`);
     }
@@ -918,7 +918,7 @@ function DagPagina() {
     <AppLayout
       titel={datum === vandaag() ? "Vandaag op de route" : `De route van ${toonDatum(datum)}`}
       kruimel="Overzicht / Planning / Dag"
-      onderschrift={samenvatting}
+      naastTitel={samenvatting}
       actiePositie="onder"
       acties={
         <>

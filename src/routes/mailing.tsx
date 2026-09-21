@@ -506,7 +506,7 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
       toast.error(
         !mailKlaar
           ? "Vul een onderwerp en een tekst in."
-          : "Kies een goedgekeurd WhatsApp-sjabloon.",
+          : "Kies een goedgekeurde WhatsApp-template.",
       );
       return;
     }
@@ -652,7 +652,7 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
           <Kaart titel="WhatsApp-bericht">
             {goedgekeurd.length === 0 ? (
               <p className="text-[13px] text-muted-foreground">
-                Er is nog geen goedgekeurd sjabloon. Maak er een bij{" "}
+                Er is nog geen goedgekeurde template. Maak er een bij{" "}
                 <Link to="/instellingen" search={{ tab: "mail" }} className="underline">
                   Instellingen → mail → WhatsApp
                 </Link>
@@ -661,12 +661,12 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
             ) : (
               <>
                 <select
-                  aria-label="WhatsApp-sjabloon"
+                  aria-label="WhatsApp-template"
                   value={sjabloonId}
                   onChange={(e) => setSjabloonId(e.target.value)}
                   className="h-9 w-full rounded-[10px] border border-input bg-background px-2 text-[13px]"
                 >
-                  <option value="">Kies een sjabloon…</option>
+                  <option value="">Kies een template…</option>
                   {goedgekeurd.map((x) => (
                     <option key={x.id} value={x.id}>
                       {x.titel}
@@ -697,7 +697,7 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
                   htmlFor="sjabloonkeuze"
                   className="block text-[12px] font-medium text-muted-foreground"
                 >
-                  Sjabloon
+                  Template
                 </label>
                 <select
                   id="sjabloonkeuze"

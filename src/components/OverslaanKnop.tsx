@@ -51,6 +51,7 @@ export function OverslaanKnop({
           variant="outline"
           className="rounded-full"
           disabled={aantal === 0}
+          data-sneltoets="overslaan"
           title={aantal === 0 ? "Vink eerst adressen aan" : `${aantal} adressen overslaan`}
           aria-label="Overslaan"
         >

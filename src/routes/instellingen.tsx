@@ -304,6 +304,7 @@ function Veld({
   waarde,
   onChange,
   lezen,
+  hint,
   ...rest
 }: {
   id: string;
@@ -311,6 +312,8 @@ function Veld({
   waarde: string;
   onChange: (v: string) => void;
   lezen: boolean;
+  /** Eén regel onder het vakje, voor wat je aan het veld niet kunt zien. */
+  hint?: string;
 } & Omit<React.ComponentProps<typeof Input>, "id" | "value" | "onChange">) {
   return (
     <div className="space-y-1.5">
@@ -324,6 +327,7 @@ function Veld({
         onChange={(e) => onChange(e.target.value)}
         {...rest}
       />
+      {hint && <p className="text-[11.5px] text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -1381,6 +1385,7 @@ function PlanningKaart() {
           waarde={getal(i.pauzeMin)}
           lezen={!isEigenaar}
           inputMode="numeric"
+          hint="0 = geen pauze: hij telt niet mee en staat niet in de planning."
           onChange={(v) => zet({ pauzeMin: Number(v) || 0 })}
         />
         <Veld
@@ -1389,6 +1394,7 @@ function PlanningKaart() {
           waarde={getal(i.rijtijdMin)}
           lezen={!isEigenaar}
           inputMode="numeric"
+          hint="0 = geen rijtijd tussen twee wijken."
           onChange={(v) => zet({ rijtijdMin: Number(v) || 0 })}
         />
       </div>

@@ -107,7 +107,7 @@ export function SjablonenBeheer({ isEigenaar }: { isEigenaar: boolean }) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[13.5px] font-medium">Sjablonen</p>
+          <p className="text-[13.5px] font-medium">Templates</p>
           <p className="text-[12.5px] text-muted-foreground">
             Een bericht dat jij begint (een aankondiging, of een appje na meer dan 24 uur) moet
             eerst door Meta goedgekeurd zijn.
@@ -153,7 +153,7 @@ export function SjablonenBeheer({ isEigenaar }: { isEigenaar: boolean }) {
                       const ja = await bevestig({
                         titel: `${s.titel} weggooien?`,
                         tekst:
-                          "Het sjabloon gaat ook bij Meta weg. Wat ermee verstuurd is, blijft staan.",
+                          "De template gaat ook bij Meta weg. Wat ermee verstuurd is, blijft staan.",
                         bevestigLabel: "Weggooien",
                         gevaarlijk: true,
                       });
@@ -326,8 +326,8 @@ export function SjabloonBericht({
   if (bruikbaar.length === 0) {
     return (
       <p className="border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
-        De klant appte langer dan 24 uur geleden. Dan kan het alleen met een door Meta goedgekeurd
-        sjabloon, en die is er nog niet (Instellingen → mail → WhatsApp).
+        De klant appte langer dan 24 uur geleden. Dan kan het alleen met een door Meta goedgekeurde
+        template, en die is er nog niet (Instellingen → mail → WhatsApp).
       </p>
     );
   }
@@ -358,10 +358,10 @@ export function SjabloonBericht({
   return (
     <div className="space-y-2 border-t border-border px-3 py-2 text-[12.5px]">
       <p className="text-muted-foreground">
-        De klant appte langer dan 24 uur geleden: kies een goedgekeurd sjabloon.
+        De klant appte langer dan 24 uur geleden: kies een goedgekeurde template.
       </p>
       <select
-        aria-label="Sjabloon"
+        aria-label="Template"
         value={sjabloonId}
         onChange={(e) => {
           setSjabloonId(e.target.value);
@@ -369,7 +369,7 @@ export function SjabloonBericht({
         }}
         className="h-8 w-full rounded-[10px] border border-input bg-background px-2 text-[13px]"
       >
-        <option value="">Kies een sjabloon…</option>
+        <option value="">Kies een template…</option>
         {bruikbaar.map((s) => (
           <option key={s.id} value={s.id}>
             {s.titel}

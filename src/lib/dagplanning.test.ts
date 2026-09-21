@@ -19,8 +19,8 @@ import {
 } from "@/lib/dagplanning";
 
 const wijken = new Map<string, WijkInfo>([
-  ["w1", { id: "w1", naam: "Markgraaf", sort_order: 1 }],
-  ["w2", { id: "w2", naam: "Othilde", sort_order: 2 }],
+  ["w1", { id: "w1", naam: "Markgraaf", sort_order: 1, index: 0 }],
+  ["w2", { id: "w2", naam: "Othilde", sort_order: 2, index: 1 }],
 ]);
 const straten = new Map<string, StraatInfo>([
   ["s1", { id: "s1", naam: "Markgraaf A", wijk_id: "w1", sort_order: 1 }],

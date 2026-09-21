@@ -42,6 +42,7 @@ import {
   zoekKlant,
   adresDetails,
 } from "../_gedeeld/paaltje-chat.ts";
+import { leesUitleg } from "../_gedeeld/uitleg.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -436,6 +437,8 @@ async function voerUit(
   });
   try {
     switch (naam) {
+      case "lees_uitleg":
+        return json(leesUitleg(input?.onderwerp) as Record<string, unknown>);
       case "zoek_adres":
         return json(await zoekAdres(db, m.company_id, rechten, String(input?.zoekterm ?? "")));
       case "zoek_klant":

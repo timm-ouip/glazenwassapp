@@ -53,7 +53,7 @@ export function BerichtSjablonen() {
     onSuccess: async () => {
       await ververs();
       setOpen(null);
-      toast.success("Sjabloon opgeslagen");
+      toast.success("Template opgeslagen");
     },
     onError: (e: Error) => toast.error("Opslaan mislukt: " + e.message),
   });
@@ -73,7 +73,7 @@ export function BerichtSjablonen() {
 
   async function weg(s: Sjabloon) {
     const ja = await bevestig({
-      titel: `Sjabloon "${s.naam}" weghalen?`,
+      titel: `Template "${s.naam}" weghalen?`,
       tekst: "Berichten die je al verstuurde blijven zoals ze waren.",
       gevaarlijk: true,
     });
@@ -81,7 +81,7 @@ export function BerichtSjablonen() {
     try {
       await legSjabloonWeg(s.id);
       await ververs();
-      toast.success("Sjabloon weggehaald");
+      toast.success("Template weggehaald");
     } catch (e) {
       toast.error("Weghalen mislukt: " + (e as Error).message);
     }
@@ -108,7 +108,7 @@ export function BerichtSjablonen() {
             </div>
             <ul className="mt-1.5 divide-y divide-border/60 rounded-[14px] border border-border">
               {lijst.length === 0 && (
-                <li className="px-3 py-2 text-[13px] text-muted-foreground">Nog geen sjabloon.</li>
+                <li className="px-3 py-2 text-[13px] text-muted-foreground">Nog geen template.</li>
               )}
               {lijst.map((s) => (
                 <li key={s.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
@@ -156,7 +156,7 @@ export function BerichtSjablonen() {
                 className="mt-1 rounded-full text-muted-foreground"
                 onClick={() => void nieuw(soort)}
               >
-                <Plus className="size-4" /> Sjabloon erbij
+                <Plus className="size-4" /> Template erbij
               </Button>
             )}
           </div>

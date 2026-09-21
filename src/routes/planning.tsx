@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -35,6 +35,7 @@ import {
   IconEraser as Eraser,
   IconHammer as Hammer,
   IconListCheck as ListChecks,
+  IconSquareCheck as CheckSquare,
   IconDots as MoreHorizontal,
   IconMail as Mail,
   IconRoute as Route2,
@@ -53,6 +54,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -128,11 +130,9 @@ import {
   duurTekst,
   maakBlokken,
   type OpenBlok,
-  nogInTePlannen,
   NIET_INGEDEELD,
   opzetVan,
   berekenTijden,
-  stelWeekVoor,
   type Blok,
   type Ploeg,
 } from "@/lib/dagplanning";
@@ -142,12 +142,31 @@ import { fetchKlanten, duurVoorMaand, patchCustomer } from "@/lib/klanten";
 import { zetPloegEnRest } from "@/lib/wasdag";
 import { DagWeergave } from "@/components/planning/DagWeergave";
 import { WeekWeergave, type WeekDag } from "@/components/planning/WeekWeergave";
-import { NogInTePlannen } from "@/components/planning/NogInTePlannen";
+import { OverslaanKnop } from "@/components/OverslaanKnop";
+import { VerplaatsNaarKnop } from "@/components/VerplaatsNaarKnop";
+import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
+import { SneltoetsenHulp } from "@/components/mail/Sneltoetsen";
 import { PloegenDialog } from "@/components/planning/PloegenDialog";
 import { WijzigingsberichtDialog } from "@/components/WijzigingsberichtDialog";
 import { haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
 
 type Weergave = "maand" | "week" | "dag";
+
+const PLANNING_SNELTOETSEN: [string, string][] = [
+  ["← →", "Een stap terug of vooruit — maand, week of dag"],
+  ["t", "Vandaag"],
+  ["m / w / d", "Maand, week of dag"],
+  ["x", "Selecteren aan / uit"],
+  ["a", "Alles op het scherm aanwijzen / niets"],
+  ["Esc", "Selectie wissen; nog eens is stoppen met selecteren"],
+  ["p", "De selectie naar een ploeg"],
+  ["v", "De selectie naar een andere dag"],
+  ["o", "De selectie overslaan"],
+  ["u", "Adressen uitklappen / inklappen (dagweergave)"],
+  ["i", "Ploegen indelen"],
+  ["r", "Naar de route van die dag"],
+  ["?", "Dit lijstje"],
+];
 
 interface PlanningSearch {
   /** De dag die openstaat, bijvoorbeeld vanaf de wijkenpagina. */
@@ -282,6 +301,41 @@ function Planning() {
     const dagNieuw = isSameMonth(new Date(`${dagNu}T12:00:00`), nieuw) ? dagNu : sleutel(nieuw);
     void navigate({ to: "/planning", search: { dag: dagNieuw }, replace: true });
   }
+
+  /**
+   * De pijltjes naast de titel sturen je langs wat je voor je ziet: per maand
+   * in de maandweergave, per week in de week, per dag in de dag. Een maand
+   * verder springen terwijl je naar één dag kijkt is een sprong die niemand
+   * vroeg.
+   *
+   * Loopt de nieuwe dag de maand uit, dan schuift `maand` mee: de gegevens
+   * worden per maandraster opgehaald, en bleef hij staan dan keek je naar een
+   * dag die niet geladen is.
+   */
+  function blader(stap: number) {
+    if (weergave === "maand") return bladerMaand(stap);
+    const d = new Date(`${gekozenDag}T12:00:00`);
+    d.setDate(d.getDate() + stap * (weergave === "week" ? 7 : 1));
+    if (!isSameMonth(d, maand)) setMaand(startOfMonth(d));
+    void navigate({ to: "/planning", search: { dag: sleutel(d), weergave }, replace: true });
+  }
+
+  /** Waar de pijltjes je langs sturen, als tekst in de pil ertussen. */
+  function bladerTekst(): string {
+    if (weergave === "maand") return format(maand, "LLLL yyyy", { locale: nl });
+    const d = new Date(`${gekozenDag}T12:00:00`);
+    if (weergave === "dag") return format(d, "EEE d MMM", { locale: nl });
+    const begin = startOfWeek(d, { locale: nl });
+    const eind = endOfWeek(d, { locale: nl });
+    // Loopt de week de maand uit, dan staat de maand er twee keer bij:
+    // "28 sep – 4 okt" is anders niet te lezen.
+    return isSameMonth(begin, eind)
+      ? `${format(begin, "d", { locale: nl })} – ${format(eind, "d MMM", { locale: nl })}`
+      : `${format(begin, "d MMM", { locale: nl })} – ${format(eind, "d MMM", { locale: nl })}`;
+  }
+
+  /** "maand", "week" of "dag", voor de voorleesnaam van de pijltjes. */
+  const bladerNaam = weergave === "maand" ? "maand" : weergave === "week" ? "week" : "dag";
 
   // De kalender toont hele weken, dus lopen de randen buiten de maand door.
   const van = startOfWeek(startOfMonth(maand), { locale: nl });
@@ -506,8 +560,20 @@ function Planning() {
   });
   const klantenQuery = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten });
   const aankondigingenQuery = useAankondigingen(sleutel(van), sleutel(tot), weergave === "dag");
-  const [ploegenOpen, setPloegenOpen] = useState(false);
-  const [sleepStraat, setSleepStraat] = useState<OpenBlok | null>(null);
+  /** Voor welke dag je de ploegen indeelt; leeg = dicht. */
+  const [ploegenVoor, setPloegenVoor] = useState<string | null>(null);
+  const [hulpOpen, setHulpOpen] = useState(false);
+  /** Wat er aangewezen is. Van de pagina, want je selecteert in de dag én in
+   *  de week, en de knoppen erboven gelden voor allebei. */
+  const [gekozen, setGekozen] = useState<Set<string>>(new Set());
+  const [selecteren, setSelecteren] = useState(false);
+  /** Een blok dat je in de dagweergave naar een andere ploeg sleept. */
+  const [sleepBlok, setSleepBlok] = useState<{
+    titel: string;
+    adressen: string[];
+    klusId?: string;
+    datum?: string;
+  } | null>(null);
   /** Het venster "de planning is veranderd", met de adressen die het betreft. */
   const [wijziging, setWijziging] = useState<{
     customerIds: string[];
@@ -570,6 +636,124 @@ function Planning() {
       }));
   }
 
+  /**
+   * Wat de dagweergave krijgt. In een `useMemo`, want anders is het bij elke
+   * toets een nieuwe lijst en rekent hij al zijn blokken en tijden opnieuw uit
+   * — merkbaar op een tablet bij een volle dag.
+   */
+  const dagWeergaveRegels = useMemo(
+    () => dagRegelsVan(gekozenDag),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [regelsPerDag, gekozenDag],
+  );
+  const dagWeergaveKlussen = useMemo(
+    () => klussenVanDag(klussen, gekozenDag),
+    [klussen, gekozenDag],
+  );
+
+  /**
+   * Sneltoetsen. Een toets die een menu opent drukt de knop in in plaats van
+   * zelf een open-stand bij te houden: zo kan het menu nooit uit de pas lopen
+   * met de knop waar het bij hoort.
+   */
+  const sneltoets = useRef<(e: KeyboardEvent) => void>(() => {});
+  sneltoets.current = (e: KeyboardEvent) => {
+    const doel = e.target as HTMLElement | null;
+    if (doel && (doel.tagName === "INPUT" || doel.tagName === "TEXTAREA" || doel.isContentEditable))
+      return;
+    if (
+      document.querySelector(
+        '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"], [role="listbox"]',
+      )
+    )
+      return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const doe = (actie: () => void) => {
+      e.preventDefault();
+      actie();
+    };
+    const druk = (naam: string) =>
+      doe(() => document.querySelector<HTMLElement>(`[data-sneltoets="${naam}"]`)?.click());
+    const naarWeergave = (keuze: Weergave) =>
+      doe(() =>
+        navigate({
+          to: "/planning",
+          search: { dag: gekozenDag, ...(keuze === "maand" ? {} : { weergave: keuze }) },
+          replace: true,
+        }),
+      );
+    switch (e.key) {
+      case "ArrowLeft":
+        return doe(() => blader(-1));
+      case "ArrowRight":
+        return doe(() => blader(1));
+      case "t":
+        return doe(() => {
+          setMaand(startOfMonth(new Date()));
+          void navigate({
+            to: "/planning",
+            search: { dag: vandaag(), ...(weergave === "maand" ? {} : { weergave }) },
+            replace: true,
+          });
+        });
+      case "m":
+        return naarWeergave("maand");
+      case "w":
+        return naarWeergave("week");
+      case "d":
+        return naarWeergave("dag");
+      case "x":
+        if (magPlannen && weergave !== "maand") druk("selecteren");
+        return;
+      case "a":
+        // Alles van wat er nu op het scherm staat.
+        if (selecteren && magPlannen) {
+          doe(() => {
+            const vakken = document.querySelectorAll<HTMLElement>("[data-kies]");
+            const alles = new Map<string, string>();
+            for (const vak of vakken) {
+              const dag = vak.dataset["kiesDag"] ?? "";
+              for (const id of (vak.dataset["kies"] ?? "").split(",").filter(Boolean)) {
+                alles.set(id, dag);
+              }
+            }
+            const compleet = [...alles.keys()].every((id) => gekozen.has(id));
+            for (const [id, dag] of alles) kiesIds([id], !compleet, dag);
+          });
+        }
+        return;
+      case "Escape":
+        if (gekozen.size > 0) return doe(() => setGekozen(new Set()));
+        if (selecteren) return doe(() => setSelecteren(false));
+        return;
+      case "p":
+        if (gekozen.size > 0) druk("ploeg");
+        return;
+      case "v":
+        if (gekozen.size > 0) druk("verplaats");
+        return;
+      case "o":
+        if (gekozen.size > 0) druk("overslaan");
+        return;
+      case "u":
+        if (weergave === "dag") druk("uitklappen");
+        return;
+      case "i":
+        if (magPlannen) druk("ploegen");
+        return;
+      case "r":
+        if (weergave === "dag") druk("route");
+        return;
+      case "?":
+        return doe(() => setHulpOpen(true));
+    }
+  };
+  useEffect(() => {
+    const opToets = (e: KeyboardEvent) => sneltoets.current(e);
+    window.addEventListener("keydown", opToets);
+    return () => window.removeEventListener("keydown", opToets);
+  }, []);
+
   /** De werkdagen van de week waar de gekozen dag in valt. */
   const weekDagen = useMemo(() => {
     const d = new Date(`${gekozenDag}T12:00:00`);
@@ -591,52 +775,6 @@ function Planning() {
     [weekDagen, regelsPerDag, klussen, ploegenQuery.data],
   );
 
-  /** Straten die deze maand nog aan de beurt zijn en nergens staan. */
-  const openBlokken = useMemo(() => {
-    const maandNu = maandVan(gekozenDag);
-    const gepland = new Set(
-      regels.filter((r) => r.datum.startsWith(maandNu) && r.customer_id).map((r) => r.customer_id!),
-    );
-    const teDoen = (customersQuery.data ?? [])
-      .filter((c) => aanDeBeurt(c, maandNu) && !gepland.has(c.id))
-      .map((c) => bouwstenen.adressen.get(c.id))
-      .filter((a): a is NonNullable<typeof a> => !!a);
-    return nogInTePlannen(teDoen, bouwstenen.straten, bouwstenen.wijken);
-  }, [customersQuery.data, regels, gekozenDag, bouwstenen]);
-
-  /** De vrije ruimte per dag en ploeg deze week, voor het voorstel. */
-  const vrijePlekken = useMemo(
-    () =>
-      weekGegevens.flatMap((d) => {
-        const blokken = maakBlokken({
-          regels: d.regels,
-          klussen: d.klussen,
-          adressen: bouwstenen.adressen,
-          straten: bouwstenen.straten,
-          wijken: bouwstenen.wijken,
-        });
-        const ploegen: (Ploeg | null)[] = d.ploegen.length > 0 ? d.ploegen : [null];
-        return ploegen.map((pl) => {
-          const eigen = blokken.get(pl?.nr ?? NIET_INGEDEELD) ?? [];
-          const los = pl && pl.nr === d.ploegen[0]?.nr ? (blokken.get(NIET_INGEDEELD) ?? []) : [];
-          const opzet = opzetVan(instellingen, pl);
-          const t = berekenTijden([...eigen, ...los], opzet);
-          return {
-            datum: d.datum,
-            ploeg_nr: pl?.nr ?? 1,
-            vrij: Math.max(0, t.capaciteitMin - t.werkMin),
-            mensen: opzet.mensen,
-            vol: `${duurTekst(t.werkMin)}/${duurTekst(t.capaciteitMin)}`,
-          };
-        });
-      }),
-    [weekGegevens, bouwstenen, instellingen],
-  );
-
-  const voorstellen = useMemo(
-    () => stelWeekVoor(openBlokken, vrijePlekken),
-    [openBlokken, vrijePlekken],
-  );
   /** Op de telefoon staan de extra opdrachten eerst ingeklapt tot één regel. */
   const [opdrachtenOpen, setOpdrachtenOpen] = useState(false);
   /** Waar een veeg over de kalender begon. */
@@ -853,9 +991,17 @@ function Planning() {
 
   function opSleepStart(e: DragStartEvent) {
     const id = String(e.active.id);
-    if (id.startsWith("open:")) {
-      // Een straat uit de strook "nog in te plannen".
-      setSleepStraat(openBlokken.find((b) => b.street_id === id.slice(5)) ?? null);
+    if (id.startsWith("blok:")) {
+      // Een blok uit de dagweergave. Wat we nodig hebben komt mee in de
+      // sleep zelf: de blokken worden daar gemaakt en staan hier niet.
+      const gegevens = e.active.data.current as
+        { titel?: string; adressen?: string[]; klusId?: string; datum?: string } | undefined;
+      setSleepBlok({
+        titel: gegevens?.titel ?? "",
+        adressen: gegevens?.adressen ?? [],
+        ...(gegevens?.klusId ? { klusId: gegevens.klusId } : {}),
+        ...(gegevens?.datum ? { datum: gegevens.datum } : {}),
+      });
       setSleep(null);
       return;
     }
@@ -863,23 +1009,87 @@ function Planning() {
   }
 
   function opSleepEinde(e: DragEndEvent) {
-    const straat = sleepStraat;
     const bezig = sleep;
+    const blok = sleepBlok;
     setSleep(null);
-    setSleepStraat(null);
+    setSleepBlok(null);
     if (!e.over) return;
     const doel = String(e.over.id);
+    // Op een straat laten vallen: hij komt daarvóór te staan en de rest
+    // schuift op. Geen vaste tijd, alleen de volgorde.
+    if (doel.startsWith("voor|")) {
+      const stukken = doel.split("|");
+      const datum = stukken[1] ?? "";
+      const nr = Number(stukken[2] ?? 0);
+      const ploegNr = nr > 0 ? nr : null;
+      const voorSleutel = stukken.slice(3).join("|");
+      if (!datum) return;
+      // Een opdracht uit de strook die precies op een straat landt: ook die
+      // hoort gewoon op die dag te komen.
+      if (bezig) {
+        void zetOpDag(bezig, datum, ploegNr);
+        return;
+      }
+      if (!blok) return;
+      if (blok.klusId) {
+        void zetKlusOpDag(blok.klusId, datum, ploegNr)
+          .then(ververs)
+          .catch((f: unknown) =>
+            toast.error("Verplaatsen mislukt: " + (f instanceof Error ? f.message : String(f))),
+          );
+        return;
+      }
+      // Van een andere dag: die verhuist eerst; de volgorde volgt daar vanzelf.
+      if (blok.datum && blok.datum !== datum) {
+        void verplaatsNaarDag(blok.adressen, datum, ploegNr, blok.datum);
+        return;
+      }
+      herorden(datum, ploegNr, blok.adressen, voorSleutel);
+      return;
+    }
+    // Een kolom in de dagweergave: hetzelfde als "Naar Ploeg 2" in het menu.
+    if (doel.startsWith("ploegkolom:")) {
+      const nr = Number(doel.slice("ploegkolom:".length));
+      if (bezig) {
+        // Een opdracht uit de strook, net naast een straatregel losgelaten.
+        void zetOpDag(bezig, gekozenDag, nr > 0 ? nr : null);
+        return;
+      }
+      if (!blok || (blok.adressen.length === 0 && !blok.klusId)) return;
+      void naarPloeg(blok.adressen, nr > 0 ? nr : null, blok.klusId);
+      return;
+    }
     // Een plek in de weekweergave: een dag, en eventueel een ploeg.
     if (doel.startsWith("plek:")) {
       const [, datum, nr] = doel.split(":");
       if (!datum) return;
       const ploegNr = Number(nr) > 0 ? Number(nr) : null;
-      if (straat) {
-        void zetStraatOpDag(straat.adressen, datum, ploegNr);
-      } else if (bezig) {
-        // Laat je hem op het vakje van een ploeg vallen, dan hoort hij daar
-        // ook bij.
+      if (bezig) {
+        // Een opdracht uit de strook. Laat je hem op het vakje van een ploeg
+        // vallen, dan hoort hij daar ook bij.
         void zetOpDag(bezig, datum, ploegNr);
+        return;
+      }
+      if (!blok) return;
+      if (blok.klusId) {
+        // Een extra opdracht verhuist als opdracht; zijn adressen zijn het
+        // adres waar hij bij staat en dat hoort niet mee te gaan.
+        void zetKlusOpDag(blok.klusId, datum, ploegNr)
+          .then(ververs)
+          .catch((f: unknown) =>
+            toast.error("Verplaatsen mislukt: " + (f instanceof Error ? f.message : String(f))),
+          );
+        return;
+      }
+      if (blok.adressen.length === 0) return;
+      if (blok.datum === datum) {
+        // Binnen dezelfde dag: alleen een andere ploeg, niet opnieuw inplannen
+        // — dat zou het dagbedrag en de notitie van die dag overschrijven.
+        void weekNaarPloeg(datum, blok.adressen, ploegNr);
+      } else if (blok.datum) {
+        void verplaatsNaarDag(blok.adressen, datum, ploegNr, blok.datum);
+      } else {
+        void zetStraatOpDag(blok.adressen, datum, ploegNr);
       }
       return;
     }
@@ -1268,9 +1478,9 @@ function Planning() {
     }
   }
 
-  async function bewaarPloegen(ploegen: Ploeg[]) {
+  async function bewaarPloegen(ploegen: Ploeg[], datum = gekozenDag) {
     try {
-      await zetDagPloegen(gekozenDag, ploegen);
+      await zetDagPloegen(datum, ploegen);
       await qc.invalidateQueries({ queryKey: ["dag-ploegen"] });
       await ververs();
       toast.success("Ploegen opgeslagen");
@@ -1285,10 +1495,268 @@ function Planning() {
     await bewaarPloegen(van.map((pl) => (pl.nr === ploegNr ? { ...pl, begin, eind } : pl)));
   }
 
-  /** Adressen bij een andere ploeg zetten (of eruit halen). */
-  async function naarPloeg(customerIds: string[], ploegNr: number | null) {
+  /**
+   * Een straat vóór een andere zetten. De blokken van die dag worden opnieuw
+   * opgebouwd, de meeverhuizers eruit gehaald en op de nieuwe plek gezet; de
+   * rest sluit gewoon weer aan. Een vaste tijd zetten we niet: die houdt de
+   * app apart bij, via "Vastzetten op".
+   */
+  function herorden(datum: string, ploegNr: number | null, ids: string[], voorSleutel: string) {
+    const blokken = maakBlokken({
+      regels: dagRegelsVan(datum),
+      klussen: klussenVanDag(klussen, datum),
+      adressen: bouwstenen.adressen,
+      straten: bouwstenen.straten,
+      wijken: bouwstenen.wijken,
+    });
+    const bekend = new Set((ploegenQuery.data?.get(datum) ?? []).map((pl) => pl.nr));
+    // Het vak "Nog niet ingedeeld" bevat ook werk met een ploegnummer dat deze
+    // dag niet bestaat; dat hoort bij dezelfde kolom.
+    const kolom =
+      ploegNr === null
+        ? [...blokken.entries()].filter(([nr]) => !bekend.has(nr)).flatMap(([, b]) => b)
+        : (blokken.get(ploegNr) ?? []);
+    const mee = new Set(ids);
+    // Ook blokken die nu nog bij een andere ploeg van die dag staan: die
+    // verhuizen mee naar deze kolom. Een extra opdracht telt niet mee: zijn
+    // adres hoort ook bij de straat die je die dag wast, en dan zou die hele
+    // straat meeverhuizen.
+    const verhuizers = [...blokken.values()]
+      .flat()
+      .filter((b) => b.soort !== "klus" && b.adressen.some((id) => mee.has(id)));
+    if (verhuizers.length === 0) return;
+    const sleutels = new Set(verhuizers.map((b) => b.sleutel));
+    // Op zichzelf laten vallen verandert niets; zonder dit springt het blok
+    // naar het eind van de dag omdat het in `rest` niet meer te vinden is.
+    if (sleutels.has(voorSleutel)) return;
+    const rest = kolom.filter((b) => !sleutels.has(b.sleutel));
+    const i = rest.findIndex((b) => b.sleutel === voorSleutel);
+    const nieuw =
+      i < 0 ? [...rest, ...verhuizers] : [...rest.slice(0, i), ...verhuizers, ...rest.slice(i)];
+    // In "Nog niet ingedeeld" staat ook werk van een ploeg die deze dag niet
+    // bestaat; dat nummer hoort te blijven staan, net als in de dagweergave.
+    const herkomst = new Map<string, number>();
+    if (ploegNr === null) {
+      for (const [nr, lijst] of blokken) {
+        // Nummer 0 is "geen ploeg"; dat hoort als leeg terug, niet als 0 — de
+        // database kent alleen 1 t/m 9 of leeg.
+        if (nr !== NIET_INGEDEELD && !bekend.has(nr)) {
+          for (const b of lijst) herkomst.set(b.sleutel, nr);
+        }
+      }
+    }
+    void bewaarVolgorde(
+      datum,
+      nieuw.map((b) => ({
+        ploeg_nr: ploegNr ?? herkomst.get(b.sleutel) ?? null,
+        vasteStart: b.vasteStart,
+        blok: b,
+      })),
+    );
+  }
+
+  /**
+   * Werk naar een andere dag verplaatsen. Erbij zetten is niet hetzelfde als
+   * verplaatsen: dan staat het op allebei de dagen en telt het bedrag dubbel.
+   * De prijs en de notitie van die keer gaan mee.
+   */
+  async function verplaatsNaarDag(
+    ids: string[],
+    naar: string,
+    ploegNr: number | null,
+    vanDag?: string,
+  ) {
+    const perDag = groepeerPerDag(ids, vanDag);
+    perDag.delete(naar);
+    if (perDag.size === 0) {
+      toast("Daar staat het al.");
+      return;
+    }
+    const heen: { van: string; ids: string[] }[] = [];
+    const kenmerken: string[] = [];
+    let aantal = 0;
     try {
-      await zetPloegEnRest(gekozenDag, customerIds, { ploeg_nr: ploegNr });
+      for (const [van, lijst] of perDag) {
+        const uit = await verplaatsWasdag(van, naar, lijst);
+        if (uit.verplaatst.length > 0) heen.push({ van, ids: uit.verplaatst });
+        kenmerken.push(...uit.kenmerken);
+        aantal += uit.verplaatst.length;
+      }
+      if (ploegNr !== null && aantal > 0) {
+        await zetPloegEnRest(naar, ids, { ploeg_nr: ploegNr });
+      }
+      if (aantal > 0) {
+        pushUndo({
+          label: `${aantal} naar ${toonDatum(naar)}`,
+          undo: async () => {
+            for (const stuk of heen) await verplaatsWasdag(naar, stuk.van, stuk.ids);
+            for (const kenmerk of kenmerken) await zetWasdagTerug(kenmerk);
+            await ververs();
+          },
+        });
+      }
+      await ververs();
+      setGekozen(new Set());
+      if (aantal > 0) {
+        toast.success(`${aantal} naar ${toonDatum(naar)}`, {
+          duration: 10000,
+          action: undoKnop(),
+        });
+      }
+    } catch (e) {
+      // Ook bij een halve verhuizing opnieuw ophalen: anders staat op het
+      // scherm nog wat er al verhuisd is.
+      await ververs();
+      toast.error("Verplaatsen mislukt: " + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  /** Werk van één dag bij een andere ploeg van díe dag zetten. */
+  async function weekNaarPloeg(
+    datum: string,
+    ids: string[],
+    ploegNr: number | null,
+    klusId?: string,
+  ) {
+    try {
+      // Een extra opdracht verhuist als opdracht; zijn adressen zijn het adres
+      // waar hij bij staat en dat hoort hier niet te verhuizen.
+      if (klusId) await zetKlusOpDag(klusId, datum, ploegNr);
+      else await zetPloegEnRest(datum, ids, { ploeg_nr: ploegNr });
+      await ververs();
+    } catch (e) {
+      toast.error("Indelen mislukt: " + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  /** Op welke dag een adres aangewezen is. Een adres kan deze maand op meer
+   *  dan één dag staan; verplaatsen mag alleen de dag raken die je aanwees. */
+  const gekozenOp = useRef(new Map<string, string>());
+
+  function kiesIds(ids: string[], aan: boolean, dag: string) {
+    setGekozen((was) => {
+      const nieuw = new Set(was);
+      for (const id of ids) {
+        if (aan) {
+          nieuw.add(id);
+          if (dag) gekozenOp.current.set(id, dag);
+        } else {
+          nieuw.delete(id);
+          gekozenOp.current.delete(id);
+        }
+      }
+      return nieuw;
+    });
+  }
+
+  /**
+   * Op welke dag een adres nu staat. "Naar ploeg" hoort bij de dag waar dat
+   * adres op staat en niet bij de dag die je toevallig open hebt — anders
+   * verhuis je iets op een heel andere dag.
+   */
+  const dagenVanAdres = useMemo(() => {
+    const kaart = new Map<string, string[]>();
+    for (const r of regels) {
+      if (!r.customer_id) continue;
+      kaart.set(r.customer_id, [...(kaart.get(r.customer_id) ?? []), r.datum]);
+    }
+    return kaart;
+  }, [regels]);
+
+  /**
+   * De adressen op een hoop per dag. De dag die je aanwees telt; anders de dag
+   * van het blok dat je sleepte, anders de enige dag waarop hij staat. Nooit
+   * álle dagen tegelijk: een adres kan deze maand twee keer aan de beurt zijn,
+   * en dan zou je die tweede beurt stilletjes kwijtraken.
+   */
+  function groepeerPerDag(ids: string[], vanDag?: string): Map<string, string[]> {
+    const uit = new Map<string, string[]>();
+    for (const id of ids) {
+      const datum = gekozenOp.current.get(id) ?? vanDag ?? (dagenVanAdres.get(id) ?? [])[0];
+      if (!datum) continue;
+      uit.set(datum, [...(uit.get(datum) ?? []), id]);
+    }
+    return uit;
+  }
+
+  /** De dagen waarop de selectie staat. */
+  function dagenVanSelectie(ids: string[]): string[] {
+    const uit = new Set<string>();
+    for (const id of ids) for (const d of dagenVanAdres.get(id) ?? []) uit.add(d);
+    return [...uit];
+  }
+
+  /**
+   * De ploegen die je aan een selectie kunt geven: alleen nummers die op élke
+   * dag van die selectie bestaan. Anders krijgt werk een ploegnummer dat op
+   * zijn dag niet bestaat, en verdwijnt het in "Nog niet ingedeeld".
+   */
+  function ploegenVoorSelectie(ids: string[]): Ploeg[] {
+    const dagen = dagenVanSelectie(ids);
+    if (dagen.length === 0) return [];
+    const eerste = ploegenQuery.data?.get(dagen[0]!) ?? [];
+    return eerste.filter((pl) =>
+      dagen.every((d) => (ploegenQuery.data?.get(d) ?? []).some((x) => x.nr === pl.nr)),
+    );
+  }
+
+  /** De hele selectie naar een ploeg, per dag waar ze op staan. */
+  async function selectieNaarPloeg(ids: string[], ploegNr: number | null) {
+    const perDag = groepeerPerDag(ids);
+    try {
+      for (const [datum, lijst] of perDag) {
+        await zetPloegEnRest(datum, lijst, { ploeg_nr: ploegNr });
+      }
+      await ververs();
+      setGekozen(new Set());
+    } catch (e) {
+      toast.error("Indelen mislukt: " + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  /** De hele selectie deze maand overslaan, of die pauzes juist weghalen. */
+  async function selectieOverslaan(maanden: string[]) {
+    const lijst = (customersQuery.data ?? []).filter((c) => gekozen.has(c.id));
+    if (lijst.length === 0) return;
+    if (maanden.length === 0) await wisOverslaanVanSelectie(lijst, qc);
+    else await slaSelectieOver(lijst, maanden, qc);
+    setGekozen(new Set());
+  }
+
+  /** Wat er in het rechtermuismenu bij komt als je op de selectie klikt. */
+  function selectieActies(ids: string[]) {
+    if (gekozen.size === 0 || !ids.some((id) => gekozen.has(id))) return [];
+    const lijst = [...gekozen];
+    return [
+      ...ploegenVoorSelectie(lijst).map((pl) => ({
+        sleutel: `sel-ploeg:${pl.nr}`,
+        label: `${lijst.length} naar ${ploegNaam(pl)}`,
+        doe: () => void selectieNaarPloeg(lijst, pl.nr),
+      })),
+      {
+        sleutel: "sel-uitploeg",
+        label: `${lijst.length} uit de ploeg halen`,
+        doe: () => void selectieNaarPloeg(lijst, null),
+      },
+      {
+        sleutel: "sel-overslaan",
+        label: `${lijst.length} deze maand overslaan`,
+        doe: () => void selectieOverslaan([maandVan(gekozenDag)]),
+      },
+      { sleutel: "sel-wis", label: "Selectie wissen", doe: () => setGekozen(new Set()) },
+    ];
+  }
+
+  /**
+   * Adressen bij een andere ploeg zetten (of eruit halen). Bij een blok dat
+   * een extra opdracht is telt `klusId`: de adressen van zo'n blok zijn het
+   * adres waar de opdracht bij hoort, en dat adres hoort hier niet te
+   * verhuizen.
+   */
+  async function naarPloeg(customerIds: string[], ploegNr: number | null, klusId?: string) {
+    try {
+      if (klusId) await zetKlusOpDag(klusId, gekozenDag, ploegNr);
+      else await zetPloegEnRest(gekozenDag, customerIds, { ploeg_nr: ploegNr });
       await ververs();
     } catch (e) {
       toast.error("Indelen mislukt: " + (e instanceof Error ? e.message : String(e)));
@@ -1538,7 +2006,10 @@ function Planning() {
         collisionDetection={pointerWithin}
         onDragStart={opSleepStart}
         onDragEnd={opSleepEinde}
-        onDragCancel={() => setSleep(null)}
+        onDragCancel={() => {
+          setSleep(null);
+          setSleepBlok(null);
+        }}
       >
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
           {/* --- maandkalender ---
@@ -1564,30 +2035,32 @@ function Planning() {
               const dx = t.clientX - start.x;
               const dy = t.clientY - start.y;
               if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-                bladerMaand(dx < 0 ? 1 : -1);
+                blader(dx < 0 ? 1 : -1);
               }
             }}
           >
-            <div className="flex items-center gap-2 px-3 pt-3">
-              {/* De maand is één pil met de pijltjes erin: samen één ding om
-                  te bedienen, in plaats van drie losse knoppen naast elkaar. */}
+            <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
+              {/* De periode is één pil met de pijltjes erin: samen één ding om
+                  te bedienen, in plaats van drie losse knoppen naast elkaar.
+                  Wat erin staat volgt de weergave, net als waar de pijltjes
+                  je heen brengen. */}
               <div className="flex items-center gap-0.5 rounded-full border border-border bg-card py-1 pl-1 pr-1 shadow-card">
                 <button
                   type="button"
                   className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
-                  onClick={() => bladerMaand(-1)}
-                  aria-label="Vorige maand"
+                  onClick={() => blader(-1)}
+                  aria-label={`Vorige ${bladerNaam}`}
                 >
                   <ChevronLeft className="size-4" />
                 </button>
-                <h2 className="px-1.5 font-display text-[15.5px] font-semibold capitalize tracking-[-0.01em]">
-                  {format(maand, "LLLL yyyy", { locale: nl })}
+                <h2 className="px-1.5 font-display text-[15.5px] font-semibold tracking-[-0.01em] first-letter:uppercase">
+                  {bladerTekst()}
                 </h2>
                 <button
                   type="button"
                   className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
-                  onClick={() => bladerMaand(1)}
-                  aria-label="Volgende maand"
+                  onClick={() => blader(1)}
+                  aria-label={`Volgende ${bladerNaam}`}
                 >
                   <ChevronRight className="size-4" />
                 </button>
@@ -1607,6 +2080,25 @@ function Planning() {
                 Vandaag
               </button>
 
+              {/* Aanwijzen in de week én in de dag: dezelfde selectie, dus ook
+                  dezelfde knop. In de maandweergave valt er niets aan te
+                  wijzen. */}
+              {magPlannen && weergave !== "maand" && (
+                <Button
+                  size="sm"
+                  variant={selecteren ? "default" : "outline"}
+                  className="rounded-full"
+                  data-sneltoets="selecteren"
+                  onClick={() => {
+                    setSelecteren((aan) => !aan);
+                    setGekozen(new Set());
+                  }}
+                  title="Slepen over het werk om het aan te wijzen"
+                >
+                  <CheckSquare className="size-4" /> Selecteren
+                </Button>
+              )}
+
               {/* Maand, week of dag. De maand blijft wat hij was; week en dag
                   gaan over de gekozen dag. */}
               <div className="ml-auto flex items-center gap-0.5 rounded-full border border-border bg-card p-1 shadow-card">
@@ -1625,17 +2117,78 @@ function Planning() {
                         replace: true,
                       })
                     }
-                    className={`rounded-full px-3 py-1 text-[12.5px] font-medium capitalize transition-colors ${
+                    className={`rounded-full px-2.5 py-1 text-[12.5px] font-medium capitalize transition-colors sm:px-3 ${
                       weergave === keuze
                         ? "bg-foreground text-background"
                         : "text-muted-foreground hover:bg-surface hover:text-foreground"
                     }`}
                   >
-                    {keuze}
+                    {/* Op een smal scherm alleen de eerste letter: anders past
+                        de rij niet en valt "Dag" buiten beeld. */}
+                    <span className="sm:hidden">{keuze[0]}</span>
+                    <span className="hidden sm:inline">{keuze}</span>
                   </button>
                 ))}
               </div>
             </div>
+
+            {/* Wat je met de selectie kunt. Staat hier en niet in de dag- of
+                weekweergave: je wijst in allebei dezelfde adressen aan. */}
+            {selecteren && magPlannen && gekozen.size > 0 && (
+              <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
+                <span className="text-[12.5px] font-medium tabular-nums">
+                  {gekozen.size} {gekozen.size === 1 ? "adres" : "adressen"}
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-full"
+                      data-sneltoets="ploeg"
+                    >
+                      Naar ploeg…
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-52">
+                    {ploegenVoorSelectie([...gekozen]).length === 0 && (
+                      <DropdownMenuLabel className="text-[11.5px] font-normal text-muted-foreground">
+                        Deze dagen hebben geen ploeg gemeen
+                      </DropdownMenuLabel>
+                    )}
+                    {ploegenVoorSelectie([...gekozen]).map((pl) => (
+                      <DropdownMenuItem
+                        key={pl.nr}
+                        onSelect={() => void selectieNaarPloeg([...gekozen], pl.nr)}
+                      >
+                        {ploegNaam(pl)}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuItem onSelect={() => void selectieNaarPloeg([...gekozen], null)}>
+                      Uit de ploeg halen
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <VerplaatsNaarKnop
+                  aantal={gekozen.size}
+                  huidigeDag={gekozenDag}
+                  onKies={(naar) => void verplaatsNaarDag([...gekozen], naar, null)}
+                />
+                <OverslaanKnop
+                  aantal={gekozen.size}
+                  onOverslaan={(maanden) => void selectieOverslaan(maanden)}
+                  onNietsOverslaan={() => void selectieOverslaan([])}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() => setGekozen(new Set())}
+                >
+                  Selectie wissen
+                </Button>
+              </div>
+            )}
 
             {weergave === "maand" && (
               <>
@@ -1911,10 +2464,17 @@ function Planning() {
             {weergave === "week" && (
               <div className="p-2">
                 <WeekWeergave
+                  selecteren={selecteren}
+                  gekozen={gekozen}
+                  onKies={kiesIds}
+                  selectieActies={selectieActies}
+                  onPloegen={(datum) => setPloegenVoor(datum)}
+                  onNaarPloeg={(datum, ids, nr, klusId) =>
+                    void weekNaarPloeg(datum, ids, nr, klusId)
+                  }
                   dagen={weekGegevens}
                   instellingen={instellingen}
                   bouwstenen={bouwstenen}
-                  voorstellen={voorstellen}
                   prijzenZien={prijzenZien}
                   sleepbaar={magPlannen && !mobiel}
                   onOpenDag={(datum) =>
@@ -1930,36 +2490,38 @@ function Planning() {
 
             {weergave === "dag" && (
               <div className="p-2">
-                <div className="mb-2 flex flex-wrap items-center gap-2 px-1">
-                  <h3 className="font-display text-[15px] font-semibold capitalize">
-                    {format(new Date(`${gekozenDag}T12:00:00`), "EEEE d MMMM", { locale: nl })}
-                  </h3>
-                  <Link
-                    to="/dag"
-                    search={{ datum: gekozenDag }}
-                    className="rounded-full bg-surface px-3 py-1 text-[12.5px] font-medium text-foreground/80 hover:bg-muted"
-                  >
-                    Naar de dagpagina
-                  </Link>
-                </div>
                 <DagWeergave
+                  selecteren={selecteren}
+                  gekozen={gekozen}
+                  onKies={kiesIds}
+                  selectieActies={selectieActies}
                   datum={gekozenDag}
+                  naarDagpagina={
+                    <Link
+                      to="/dag"
+                      search={{ datum: gekozenDag }}
+                      data-sneltoets="route"
+                      className="rounded-full bg-surface px-3 py-1.5 text-[12.5px] font-medium text-foreground/80 hover:bg-muted"
+                    >
+                      Naar de dagpagina
+                    </Link>
+                  }
                   instellingen={instellingen}
                   bouwstenen={bouwstenen}
-                  regels={dagRegelsVan(gekozenDag)}
-                  klussen={klussenVanDag(klussen, gekozenDag)}
+                  regels={dagWeergaveRegels}
+                  klussen={dagWeergaveKlussen}
                   ploegen={ploegenQuery.data?.get(gekozenDag) ?? []}
                   aankondigingen={aankondigingen}
                   heeftContact={heeftContact}
                   magPlannen={magPlannen}
                   prijzenZien={prijzenZien}
                   onVolgorde={(lijst) => void bewaarVolgorde(gekozenDag, lijst)}
-                  onPloegen={() => setPloegenOpen(true)}
+                  onPloegen={() => setPloegenVoor(gekozenDag)}
                   onWerktijd={(nr, begin, eind) => void zetWerktijd(nr, begin, eind)}
                   onEigenBlok={(id, waarde) => void zetEigenBlok(id, waarde)}
                   onSamenvoegen={(blok) => void voegSamen(blok)}
                   onVerplaats={(ids, naar) => void verplaatsAdressen(ids, naar)}
-                  onNaarPloeg={(ids, nr) => void naarPloeg(ids, nr)}
+                  onNaarPloeg={(ids, nr, klusId) => void naarPloeg(ids, nr, klusId)}
                   onWijziging={(ids) => setWijziging({ customerIds: ids, soort: "wijziging" })}
                 />
               </div>
@@ -2033,38 +2595,6 @@ function Planning() {
               Rechts naast de kalender en bovenaan beginnen: zonder row-start
               schuift hij onder de strook met opdrachten door, en dan staat
               het belangrijkste van de pagina onderin. */}
-          {weergave === "week" && (
-            <div className="rounded-[18px] border border-border bg-surface p-3 shadow-card max-md:order-2 lg:col-start-2 lg:row-start-1">
-              <h2 className="mb-2 font-display text-[15px] font-semibold tracking-[-0.01em]">
-                Nog in te plannen
-              </h2>
-              <p className="mb-2 text-[12px] text-muted-foreground">
-                Straten die deze maand aan de beurt zijn.{" "}
-                {magPlannen && !mobiel
-                  ? "Sleep er een op een dag, of kies 'Zet op…'."
-                  : "Kies 'Zet op…' om er een neer te zetten."}
-              </p>
-              <NogInTePlannen
-                blokken={openBlokken}
-                prijzenZien={prijzenZien}
-                sleepbaar={magPlannen && !mobiel}
-                plekken={vrijePlekken.map((v) => {
-                  const ploegen = ploegenQuery.data?.get(v.datum) ?? [];
-                  const ploeg = ploegen.find((pl) => pl.nr === v.ploeg_nr);
-                  return {
-                    datum: v.datum,
-                    ploeg_nr: ploegen.length > 0 ? v.ploeg_nr : null,
-                    label: ploeg ? ploegNaam(ploeg) : "",
-                    vol: v.vol,
-                  };
-                })}
-                onZetOp={(blok, datum, ploegNr) =>
-                  void zetStraatOpDag(blok.adressen, datum, ploegNr)
-                }
-              />
-            </div>
-          )}
-
           <div className="rounded-[18px] border border-border bg-card shadow-card p-4 max-md:order-2 lg:col-start-2 lg:row-start-1">
             <p className="text-xs text-muted-foreground">
               {gekozenDag > nu ? "Gepland voor" : "Gewassen op"}
@@ -2213,17 +2743,27 @@ function Planning() {
             <div className="rounded-[11px] border border-brand bg-card px-2.5 py-1.5 text-[13px] shadow-lg">
               {adresVan(sleep)} — {sleep.omschrijving}
             </div>
+          ) : sleepBlok ? (
+            <div className="rounded-[11px] border border-brand bg-card px-2.5 py-1.5 text-[13px] shadow-lg">
+              {sleepBlok.titel}
+            </div>
           ) : null}
         </DragOverlay>
       </DndContext>
 
+      <SneltoetsenHulp
+        open={hulpOpen}
+        onSluit={() => setHulpOpen(false)}
+        toetsen={PLANNING_SNELTOETSEN}
+        waarvoor="Toetsen om sneller in te delen"
+      />
       <PloegenDialog
-        open={ploegenOpen}
-        onOpenChange={setPloegenOpen}
-        datum={gekozenDag}
+        open={ploegenVoor !== null}
+        onOpenChange={(open) => !open && setPloegenVoor(null)}
+        datum={ploegenVoor ?? gekozenDag}
         teamleden={teamledenQuery.data ?? []}
-        ploegen={ploegenQuery.data?.get(gekozenDag) ?? []}
-        onOpslaan={(nieuwePloegen) => void bewaarPloegen(nieuwePloegen)}
+        ploegen={ploegenQuery.data?.get(ploegenVoor ?? gekozenDag) ?? []}
+        onOpslaan={(nieuwePloegen) => void bewaarPloegen(nieuwePloegen, ploegenVoor ?? gekozenDag)}
       />
 
       {wijziging && (

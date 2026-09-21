@@ -14,15 +14,21 @@ import { heeftRecht, rechtenVoorPad } from "@/lib/rechten";
 /** De koptekst van een pagina. Ook bruikbaar buiten AppLayout, zodat een
  *  klikbare titel — de wijkkiezer — er precies zo uitziet. */
 export const TITEL_KLASSEN =
-  "truncate font-display text-[25px] font-semibold leading-tight tracking-[-0.02em]";
+  "truncate font-display text-[18px] font-semibold leading-tight tracking-[-0.02em]";
 
 type Props = {
   /** Meestal gewoon tekst. Een node mag ook: de wijkenpagina zet er de
    *  wijkkiezer neer, zodat je de wijk wisselt door op de titel te klikken. */
   titel: ReactNode;
-  /** Klein kruimelpad boven de titel, bijvoorbeeld "Overzicht / Klanten". */
+  /** Niet meer getoond; blijft staan zodat de pagina's niet allemaal tegelijk
+   *  aangepast hoeven te worden. */
   kruimel?: ReactNode;
+  /** Niet meer getoond, zie `kruimel`. */
   onderschrift?: ReactNode;
+  /** Klein regeltje náást de naam, voor wat nergens anders staat: de plaats
+   *  van een wijk, of waar een dag uit bestaat. Past het niet, dan valt het
+   *  weg in plaats van de kop hoger te maken. */
+  naastTitel?: ReactNode;
   /** Knoppen rechtsboven: de besturing van deze pagina. */
   acties?: ReactNode;
   /** Waar die knoppen staan: naast de titel, of als eigen balk boven of
@@ -42,8 +48,7 @@ type Props = {
 
 export function AppLayout({
   titel,
-  kruimel,
-  onderschrift,
+  naastTitel,
   acties,
   actiePositie = "titelbalk",
   kop,
@@ -52,7 +57,7 @@ export function AppLayout({
   children,
 }: Props) {
   // De knoppenbalk plakt onder de titelbalk vast. Hoe hoog die is hangt af
-  // van kruimel en onderschrift, dus we meten hem in plaats van te gokken.
+  // van de titel, dus we meten hem in plaats van te gokken.
   // Mag je deze pagina zien? Zolang je gegevens nog laden niet blokkeren: dan
   // flitst er "geen toegang" bij de eigenaar.
   const { employee } = useAuth();
@@ -114,25 +119,22 @@ export function AppLayout({
         >
           <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 md:px-6 md:py-3.5">
             <div className="mr-auto min-w-0">
-              {kruimel &&
-                (typeof kruimel === "string" ? (
-                  // Op de telefoon weg: de tabbalk zegt al waar je bent.
-                  <p className="hidden text-[11.5px] leading-tight text-muted-foreground md:block">
-                    {kruimel}
-                  </p>
+              {/* Een kruimelpad dat zegt wat het menu links al aanwijst, en een
+                  onderschrift dat vertelt wat je op het scherm ziet: samen
+                  kostten die een halve balk op elke pagina. Alleen de naam dus.
+                  Een titel die geen tekst is (de wijkkiezer) blijft staan. */}
+              <div className="flex min-w-0 items-baseline gap-2">
+                {typeof titel === "string" ? (
+                  <h1 className={TITEL_KLASSEN}>{titel}</h1>
                 ) : (
-                  <div className="mb-1 flex min-w-0 flex-wrap items-center gap-1.5">{kruimel}</div>
-                ))}
-              {typeof titel === "string" ? (
-                <h1 className={TITEL_KLASSEN}>{titel}</h1>
-              ) : (
-                <div className="flex min-w-0 flex-wrap items-center gap-2">{titel}</div>
-              )}
-              {onderschrift && (
-                <p className="truncate text-xs text-muted-foreground md:whitespace-normal">
-                  {onderschrift}
-                </p>
-              )}
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">{titel}</div>
+                )}
+                {naastTitel && (
+                  <span className="hidden min-w-0 truncate text-[12px] text-muted-foreground md:block">
+                    {naastTitel}
+                  </span>
+                )}
+              </div>
             </div>
             {acties && actiePositie === "titelbalk" && (
               <div className="flex flex-wrap items-center gap-2">{acties}</div>

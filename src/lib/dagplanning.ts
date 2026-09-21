@@ -103,6 +103,10 @@ export interface WijkInfo {
   id: string;
   naam: string;
   sort_order: number;
+  /** Plek in de wijkenlijst. Daar hangt de kleur van de wijk aan (`wijkVlak`,
+   *  `wijkInkt`), dus hij moet dezelfde lijst en dezelfde volgorde volgen als
+   *  de kalender — anders krijgt dezelfde wijk twee kleuren. */
+  index: number;
 }
 
 export type BlokSoort = "straat" | "pand" | "klus";

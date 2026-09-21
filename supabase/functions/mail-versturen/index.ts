@@ -294,7 +294,7 @@ Deno.serve(async (req) => {
     return antwoord(
       {
         fout: test
-          ? "Kies een sjabloon en vul een 06-nummer in om de WhatsApp-proef te versturen."
+          ? "Kies een template en vul een 06-nummer in om de WhatsApp-proef te versturen."
           : "Er staat niemand op deze dag die een bericht kan krijgen.",
       },
       400,
@@ -304,7 +304,7 @@ Deno.serve(async (req) => {
     return antwoord({ fout: "Vul een onderwerp en een tekst in." }, 400);
   }
   if (metWhatsApp && (!sjabloon || sjabloon.status !== "goedgekeurd")) {
-    return antwoord({ fout: "Kies een WhatsApp-sjabloon dat door Meta is goedgekeurd." }, 400);
+    return antwoord({ fout: "Kies een WhatsApp-template die door Meta is goedgekeurd." }, 400);
   }
 
   // Mag dit bedrijf vanaf zijn afzender mailen? Eerst dat, dan pas versturen.

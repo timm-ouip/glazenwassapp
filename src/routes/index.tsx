@@ -2385,6 +2385,13 @@ function Index() {
           onKiezerOpen={setWijkOpen}
         />
       }
+      naastTitel={
+        actieveWijk
+          ? wijkPlaats && wijkPlaats !== districts.find((d) => d.id === actieveWijk)?.name
+            ? wijkPlaats
+            : undefined
+          : "Kies een wijk om zijn straten te zien."
+      }
       actiePositie="onder"
       verbergBijScrollen
       kruimel="Overzicht / Wijken"

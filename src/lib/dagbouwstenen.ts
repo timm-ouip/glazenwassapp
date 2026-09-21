@@ -44,7 +44,10 @@ export function maakBouwstenen(
   instellingen: PlanInstellingen,
 ): Bouwstenen {
   const wijken = new Map<string, WijkInfo>(
-    districts.map((d, i) => [d.id, { id: d.id, naam: d.name, sort_order: d.sort_order ?? i }]),
+    districts.map((d, i) => [
+      d.id,
+      { id: d.id, naam: d.name, sort_order: d.sort_order ?? i, index: i },
+    ]),
   );
   const straten = new Map<string, StraatInfo>(
     streets.map((s, i) => [

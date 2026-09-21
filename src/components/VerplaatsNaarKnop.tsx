@@ -34,6 +34,7 @@ export function VerplaatsNaarKnop({
           size="sm"
           className="rounded-full"
           disabled={aantal === 0}
+          data-sneltoets="verplaats"
           title={aantal === 0 ? "Vink eerst iets aan" : `${aantal} verplaatsen`}
         >
           <CalendarArrowUp className="size-4" /> Verplaatsen naar

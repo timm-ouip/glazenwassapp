@@ -813,7 +813,7 @@ function AntwoordBalk({
             type="submit"
             className="h-9 flex-1 truncate rounded-full px-2 text-left text-[13px] text-muted-foreground"
           >
-            Langer dan 24 uur stil: stuur een sjabloon
+            Langer dan 24 uur stil: stuur een template
           </button>
         ) : (
           <textarea
@@ -846,7 +846,7 @@ function AntwoordBalk({
           side="bottom"
           className="rounded-t-[22px] p-0 pb-[env(safe-area-inset-bottom)]"
         >
-          <SheetTitle className="px-4 pt-4 font-display text-lg">WhatsApp-sjabloon</SheetTitle>
+          <SheetTitle className="px-4 pt-4 font-display text-lg">WhatsApp-template</SheetTitle>
           <SjabloonBericht
             telefoon={telefoon}
             onVerstuurd={() => {

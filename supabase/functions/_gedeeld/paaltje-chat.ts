@@ -14,6 +14,7 @@
  */
 import { maandVan, metOverslaan, overslaanTerug } from "./doorvoeren.ts";
 import { frequentieVan } from "./paaltje.ts";
+import { ONDERWERPEN, WAAROVER } from "./uitleg.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -1622,6 +1623,12 @@ export function systeemPrompt(bedrijfNaam: string, snelkeuzes: Snelkeuze[], r: R
     "- Zeg nooit dat iets gelukt, gewijzigd of geregeld is: de medewerker drukt zelf op de knop.",
     "- Zeg nooit dat iets veranderd is: dat gebeurt pas als de medewerker op de knop drukt.",
     "",
+    "Vragen over de app zelf:",
+    "- Vraagt iemand hoe iets werkt, waar een knop zit of wat iets betekent, sla het dan op met",
+    "  lees_uitleg. Antwoord nooit uit je hoofd over schermen en knoppen: je weet het alleen uit dat boekje.",
+    "- Staat het er niet in, zeg dan eerlijk dat je het niet weet in plaats van iets aannemelijks te noemen.",
+    "- Je kunt niets voor iemand aanklikken of openen; je kunt alleen vertellen waar het zit.",
+    "",
     "Adressen opzoeken:",
     "- Straatnamen zijn in dit bedrijf vaak afkortingen of werknamen (zoals 'Ameland'), naast de officiële",
     "  volledige naam. Zoek met zoek_adres; die kijkt naar allebei.",
@@ -1673,7 +1680,8 @@ export function systeemPrompt(bedrijfNaam: string, snelkeuzes: Snelkeuze[], r: R
   if (!magInzien(r)) {
     regels.push(
       "- Mag geen klantgegevens inzien. Je hebt daarom geen zoekgereedschap. Vraagt hij naar klanten of",
-      "  adressen, zeg dan vriendelijk dat zijn rol dat niet toestaat.",
+      "  adressen, zeg dan vriendelijk dat zijn rol dat niet toestaat. Uitleggen hoe de app werkt mag wel:",
+      "  lees_uitleg heb je gewoon.",
     );
   } else {
     if (!r.prijzen) {
@@ -1692,9 +1700,32 @@ export function systeemPrompt(bedrijfNaam: string, snelkeuzes: Snelkeuze[], r: R
   return regels.join("\n");
 }
 
+/**
+ * De handleiding. Staat los van de zoekgereedschappen, want hoe de app werkt
+ * mag iedereen weten — ook wie geen klantgegevens mag inzien.
+ */
+const LEES_UITLEG = {
+  name: "lees_uitleg",
+  description: [
+    "Zoek op hoe iets in de app Wooshy werkt: welk scherm het is, waar de knop zit, wat iets betekent.",
+    "Gebruik dit bij elke vraag die met 'hoe', 'waar' of 'wat betekent' over de app zelf gaat, en",
+    "antwoord nooit uit je hoofd: een knop die er niet is, is erger dan geen antwoord.",
+    "Onderwerpen:",
+    ...ONDERWERPEN.map((o) => `- ${o}: ${WAAROVER[o]}`),
+  ].join("\n"),
+  input_schema: {
+    type: "object",
+    properties: {
+      onderwerp: { type: "string", enum: [...ONDERWERPEN], description: "Eén onderwerp uit de lijst." },
+    },
+    required: ["onderwerp"],
+  },
+};
+
 export function gereedschap(r: Rechten) {
-  if (!magInzien(r)) return [];
+  if (!magInzien(r)) return [LEES_UITLEG];
   return [
+    LEES_UITLEG,
     {
       name: "zoek_adres",
       description:

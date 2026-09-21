@@ -153,10 +153,10 @@ Deno.serve(async (req) => {
         }
         return await geplandAntwoord(db, m, String(verzoek.bericht_id ?? ""), verzoek.actie === "antwoord_nu");
       case "sjabloon_maken":
-        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan sjablonen maken." }, 403);
+        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan templates maken." }, 403);
         return await sjabloonMaken(db, m, verzoek);
       case "sjabloon_weg":
-        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan sjablonen weggooien." }, 403);
+        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan templates weggooien." }, 403);
         return await sjabloonWeg(db, m, String(verzoek.sjabloon_id ?? ""));
       case "sjablonen_verversen":
         if (!(await heeftRecht(db, m, "mail_versturen"))) {
@@ -604,7 +604,7 @@ async function verstuur(db: Db, m: Medewerker, telefoon: string, invoer: string)
   if (!laatsteIn || Date.now() - new Date(laatsteIn.ontvangen_op).getTime() > VENSTER_MS) {
     return antwoord(
       {
-        fout: "Het laatste bericht van deze klant is meer dan 24 uur oud. WhatsApp staat dan alleen een goedgekeurd sjabloon toe.",
+        fout: "Het laatste bericht van deze klant is meer dan 24 uur oud. WhatsApp staat dan alleen een goedgekeurde template toe.",
         venster_dicht: true,
       },
       409,
@@ -738,7 +738,7 @@ async function koppelingMetAccount(db: Db, m: Medewerker) {
 async function sjabloonMaken(db: Db, m: Medewerker, verzoek: Verzoek): Promise<Response> {
   const titel = String(verzoek.titel ?? "").trim().slice(0, 60);
   const categorie = verzoek.categorie === "marketing" ? "marketing" : "utility";
-  if (!titel) return antwoord({ fout: "Geef het sjabloon een naam." }, 400);
+  if (!titel) return antwoord({ fout: "Geef de template een naam." }, 400);
   const omgezet = sjabloonVoorMeta(String(verzoek.tekst ?? ""));
   if (!omgezet.ok) return antwoord({ fout: omgezet.fout }, 400);
 
@@ -803,7 +803,7 @@ async function sjablonenVerversen(db: Db, m: Medewerker): Promise<Response> {
 }
 
 async function sjabloonWeg(db: Db, m: Medewerker, id: string): Promise<Response> {
-  if (!UUID.test(id)) return antwoord({ fout: "Onbekend sjabloon." }, 400);
+  if (!UUID.test(id)) return antwoord({ fout: "Onbekende template." }, 400);
   const { data: sjabloon } = await db
     .from("wa_sjablonen")
     .select("id,meta_naam")
@@ -811,7 +811,7 @@ async function sjabloonWeg(db: Db, m: Medewerker, id: string): Promise<Response>
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
-  if (!sjabloon) return antwoord({ fout: "Onbekend sjabloon." }, 404);
+  if (!sjabloon) return antwoord({ fout: "Onbekende template." }, 404);
   // Eerst bij Meta: lukt dat niet, dan blijft hij hier ook staan, anders
   // denk je dat hij weg is terwijl hij bij Meta nog bestaat.
   const k = await koppelingMetAccount(db, m);
@@ -839,7 +839,7 @@ async function sjabloonWeg(db: Db, m: Medewerker, id: string): Promise<Response>
 async function sjabloonNaarKlant(db: Db, m: Medewerker, verzoek: Verzoek, versturen: boolean): Promise<Response> {
   const nummer = waNummer(verzoek.telefoon);
   const id = String(verzoek.sjabloon_id ?? "");
-  if (!nummer || !UUID.test(id)) return antwoord({ fout: "Kies een klant en een sjabloon." }, 400);
+  if (!nummer || !UUID.test(id)) return antwoord({ fout: "Kies een klant en een template." }, 400);
 
   const { data: sjabloon } = await db
     .from("wa_sjablonen")
@@ -848,8 +848,8 @@ async function sjabloonNaarKlant(db: Db, m: Medewerker, verzoek: Verzoek, verstu
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
-  if (!sjabloon) return antwoord({ fout: "Onbekend sjabloon." }, 404);
-  if (sjabloon.status !== "goedgekeurd") return antwoord({ fout: "Dit sjabloon is (nog) niet goedgekeurd door Meta." }, 409);
+  if (!sjabloon) return antwoord({ fout: "Onbekende template." }, 404);
+  if (sjabloon.status !== "goedgekeurd") return antwoord({ fout: "Deze template is (nog) niet goedgekeurd door Meta." }, 409);
 
   // Alleen naar een nummer dat bij een klant hoort.
   const sleutel = telefoonAlsSleutel(nummer);
