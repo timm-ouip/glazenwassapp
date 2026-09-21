@@ -1001,7 +1001,7 @@ function TeamledenKaart({ isEigenaar }: { isEigenaar: boolean }) {
     const ja = await bevestig({
       titel: `${naam} uit het team halen?`,
       tekst:
-        "Hij verdwijnt uit de ploegenkeuze. Ploegen van dagen die geweest zijn blijven kloppen.",
+        "Hij verdwijnt uit de teamkeuze. Teams van dagen die geweest zijn blijven kloppen.",
       gevaarlijk: true,
     });
     if (!ja) return;
@@ -1037,7 +1037,7 @@ function TeamledenKaart({ isEigenaar }: { isEigenaar: boolean }) {
   return (
     <Kaart
       titel="Teamleden zonder account"
-      uitleg="Wie meewast maar niet in de app hoeft. Je kunt ze wel in een ploeg zetten, en later alsnog uitnodigen."
+      uitleg="Wie meewast maar niet in de app hoeft. Je kunt ze wel op een dag in een team zetten, en later alsnog uitnodigen."
     >
       {zonderAccount.length > 0 && (
         <ul className="mb-3 divide-y divide-border/60">

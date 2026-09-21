@@ -101,6 +101,7 @@ import {
   zetKlusOpDag,
   haalKlusTerug,
   nieuweKlus,
+  patchKlus,
   type Klus,
 } from "@/lib/klussen";
 import {
@@ -138,13 +139,13 @@ import {
 } from "@/lib/dagplanning";
 import { perAdres, useAankondigingen } from "@/lib/aankondigingen";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchKlanten, duurVoorMaand, patchCustomer } from "@/lib/klanten";
+import { fetchKlanten, duurVoorMaand, patchCustomer, toonMaand } from "@/lib/klanten";
 import { zetPloegEnRest } from "@/lib/wasdag";
 import { DagWeergave } from "@/components/planning/DagWeergave";
 import { WeekWeergave, type WeekDag } from "@/components/planning/WeekWeergave";
 import { OverslaanKnop } from "@/components/OverslaanKnop";
 import { VerplaatsNaarKnop } from "@/components/VerplaatsNaarKnop";
-import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
+import { telAdressen, wisOverslaanVanSelectie, zetOverslaan } from "@/lib/overslaan-keuze";
 import { SneltoetsenHulp } from "@/components/mail/Sneltoetsen";
 import { PloegenDialog } from "@/components/planning/PloegenDialog";
 import { WijzigingsberichtDialog } from "@/components/WijzigingsberichtDialog";
@@ -159,11 +160,11 @@ const PLANNING_SNELTOETSEN: [string, string][] = [
   ["x", "Selecteren aan / uit"],
   ["a", "Alles op het scherm aanwijzen / niets"],
   ["Esc", "Selectie wissen; nog eens is stoppen met selecteren"],
-  ["p", "De selectie naar een ploeg"],
+  ["p", "De selectie naar een team"],
   ["v", "De selectie naar een andere dag"],
   ["o", "De selectie overslaan"],
-  ["u", "Adressen uitklappen / inklappen (dagweergave)"],
-  ["i", "Ploegen indelen"],
+  ["u", "Adressen uitklappen / inklappen"],
+  ["i", "Teams indelen"],
   ["r", "Naar de route van die dag"],
   ["?", "Dit lijstje"],
 ];
@@ -736,7 +737,7 @@ function Planning() {
         if (gekozen.size > 0) druk("overslaan");
         return;
       case "u":
-        if (weergave === "dag") druk("uitklappen");
+        if (weergave !== "maand") druk("uitklappen");
         return;
       case "i":
         if (magPlannen) druk("ploegen");
@@ -1047,7 +1048,7 @@ function Planning() {
       herorden(datum, ploegNr, blok.adressen, voorSleutel);
       return;
     }
-    // Een kolom in de dagweergave: hetzelfde als "Naar Ploeg 2" in het menu.
+    // Een kolom in de dagweergave: hetzelfde als "Naar Team 2" in het menu.
     if (doel.startsWith("ploegkolom:")) {
       const nr = Number(doel.slice("ploegkolom:".length));
       if (bezig) {
@@ -1483,9 +1484,9 @@ function Planning() {
       await zetDagPloegen(datum, ploegen);
       await qc.invalidateQueries({ queryKey: ["dag-ploegen"] });
       await ververs();
-      toast.success("Ploegen opgeslagen");
+      toast.success("Teams opgeslagen");
     } catch (e) {
-      toast.error("Ploegen opslaan mislukt: " + (e instanceof Error ? e.message : String(e)));
+      toast.error("Teams opslaan mislukt: " + (e instanceof Error ? e.message : String(e)));
     }
   }
 
@@ -1650,7 +1651,7 @@ function Planning() {
   }
 
   /**
-   * Op welke dag een adres nu staat. "Naar ploeg" hoort bij de dag waar dat
+   * Op welke dag een adres nu staat. "Naar team" hoort bij de dag waar dat
    * adres op staat en niet bij de dag die je toevallig open hebt — anders
    * verhuis je iets op een heel andere dag.
    */
@@ -1714,13 +1715,187 @@ function Planning() {
     }
   }
 
-  /** De hele selectie deze maand overslaan, of die pauzes juist weghalen. */
+  /**
+   * Overslaan vanuit de balk (of met "o"): de maanden die je daar kiest, of met
+   * een lege lijst de pauzes juist weghalen.
+   */
   async function selectieOverslaan(maanden: string[]) {
-    const lijst = (customersQuery.data ?? []).filter((c) => gekozen.has(c.id));
-    if (lijst.length === 0) return;
-    if (maanden.length === 0) await wisOverslaanVanSelectie(lijst, qc);
-    else await slaSelectieOver(lijst, maanden, qc);
-    setGekozen(new Set());
+    if (maanden.length === 0) {
+      const lijst = (adressenQuery.data ?? []).filter((c) => gekozen.has(c.id));
+      if (lijst.length > 0) await wisOverslaanVanSelectie(lijst, qc);
+      setGekozen(new Set());
+      return;
+    }
+    await overslaan(groepeerPerDag([...gekozen]), maanden);
+  }
+
+  /** Wat van de dag af is, hoort ook niet meer in de selectie. */
+  function laatLos(ids: string[]) {
+    setGekozen((oud) => {
+      const nieuw = new Set(oud);
+      for (const id of ids) {
+        nieuw.delete(id);
+        gekozenOp.current.delete(id);
+      }
+      return nieuw;
+    });
+  }
+
+  /**
+   * Adressen van hun dag halen; ze staan daarna weer bij "Nog in te plannen".
+   * De database bewaart wat er wegging (het bedrag van die dag, het team, de
+   * volgorde), zodat terugzetten alles precies zo terugzet.
+   *
+   * Geeft terug hoe het terug moet, of null als het misging. Gaat het
+   * halverwege mis, dan zet hij meteen terug wat al weg was: een halve stap
+   * is anders nergens terug te vinden.
+   */
+  async function haalVanDagen(
+    perDag: Map<string, string[]>,
+  ): Promise<(() => Promise<void>) | null> {
+    const kenmerken: string[] = [];
+    // Elk kenmerk gaat van de lijst zodra het terug is. De database weigert
+    // een kenmerk dat al teruggezet is, dus zo begint een tweede poging (na
+    // een haperende verbinding) waar de eerste bleef.
+    const terug = async () => {
+      while (kenmerken.length > 0) {
+        await zetWasdagTerug(kenmerken[0]!);
+        kenmerken.shift();
+      }
+    };
+    try {
+      for (const [datum, lijst] of perDag) {
+        const kenmerk = await haalUitWasdagBewaard(datum, lijst);
+        if (kenmerk) kenmerken.push(kenmerk);
+      }
+    } catch (e) {
+      toast.error("Uit de planning halen mislukt: " + (e instanceof Error ? e.message : String(e)));
+      await terug().catch(() =>
+        toast.error("Let op: een deel van de adressen staat nu niet meer op zijn dag."),
+      );
+      await ververs();
+      return null;
+    }
+    return terug;
+  }
+
+  /** "Uit planning halen" in het menu, voor een blok of voor de selectie. */
+  async function uitPlanning(perDag: Map<string, string[]>) {
+    const ids = [...perDag.values()].flat();
+    if (ids.length === 0) return;
+    const terug = await haalVanDagen(perDag);
+    if (!terug) return;
+    pushUndo({
+      label: `${telAdressen(ids.length)} uit de planning`,
+      undo: async () => {
+        await terug();
+        await ververs();
+      },
+    });
+    const dagen = [...perDag.keys()];
+    toast(
+      dagen.length === 1
+        ? `${telAdressen(ids.length)} van ${toonDatum(dagen[0]!)} gehaald`
+        : `${telAdressen(ids.length)} uit de planning gehaald`,
+      { duration: 12000, action: undoKnop() },
+    );
+    laatLos(ids);
+    await ververs();
+  }
+
+  /**
+   * Overslaan vanuit de planning. Zonder `maanden` is het de maand van de dag
+   * waar het adres op staat (het menu); in de balk kies je ze zelf.
+   *
+   * Staat het adres op een dag in een maand die het nu overslaat, dan gaat het
+   * daar ook af — anders staat het er nog, telt zijn tijd mee, en ontbreekt
+   * het alleen op de printlijst. Eén keer ongedaan maken zet allebei terug.
+   */
+  async function overslaan(perDag: Map<string, string[]>, maanden?: string[]) {
+    // Ook gestopte adressen: die staan net zo goed in de week en de dag.
+    const klanten = new Map((adressenQuery.data ?? []).map((c) => [c.id, c]));
+    const wat: { c: Customer; maanden: string[] }[] = [];
+    const vanDag = new Map<string, string[]>();
+    for (const [datum, lijst] of perDag) {
+      const deze = maanden ?? [maandVan(datum)];
+      for (const id of lijst) {
+        const c = klanten.get(id);
+        if (!c) continue;
+        wat.push({ c, maanden: deze });
+        if (deze.includes(maandVan(datum))) vanDag.set(datum, [...(vanDag.get(datum) ?? []), id]);
+      }
+    }
+    if (wat.length === 0) return;
+
+    // Eerst van de dag af: lukt dat niet, dan ook niet overslaan.
+    const terugDag = await haalVanDagen(vanDag);
+    if (!terugDag) return;
+    const terugOverslaan = await zetOverslaan(wat, qc);
+    if (!terugOverslaan) {
+      // Dan hoort het ook weer gewoon op de dag.
+      await terugDag().catch(() =>
+        toast.error("Let op: een deel van de adressen staat nu niet meer op zijn dag."),
+      );
+      await ververs();
+      return;
+    }
+    pushUndo({
+      label: `Overslaan voor ${telAdressen(wat.length)}`,
+      undo: async () => {
+        // Eerst het overslaan: dat kan veilig nog een keer, de dag niet.
+        await terugOverslaan();
+        await terugDag();
+        await ververs();
+      },
+    });
+    // Uit het menu slaat elk adres de maand van zijn eigen dag over; alleen
+    // in de balk kies je zelf meer maanden voor iedereen.
+    const alle = [...new Set(wat.flatMap((x) => x.maanden))].sort();
+    toast(
+      alle.length === 1
+        ? `${telAdressen(wat.length)} overgeslagen in ${toonMaand(alle[0]!)}`
+        : maanden
+          ? `${telAdressen(wat.length)} slaan ${alle.length} maanden over, t/m ${toonMaand(alle[alle.length - 1]!)}`
+          : `${telAdressen(wat.length)} overgeslagen, elk in de maand van zijn dag`,
+      { duration: 12000, action: undoKnop() },
+    );
+    laatLos([...perDag.values()].flat());
+    await ververs();
+  }
+
+  /**
+   * Een extra opdracht uit de planning: hij staat daarna weer open. Terug zet
+   * hem op dezelfde plek, met zijn team, volgorde en vaste tijd.
+   */
+  async function klusUitPlanning(klusId: string) {
+    const k = klussen.find((x) => x.id === klusId);
+    if (!k?.gepland_op) return;
+    try {
+      await zetKlusOpDag(k.id, null);
+    } catch (e) {
+      toast.error("Uit de planning halen mislukt: " + (e instanceof Error ? e.message : String(e)));
+      return;
+    }
+    pushUndo({
+      label: `Opdracht ${k.omschrijving}`,
+      undo: async () => {
+        await patchKlus(k.id, {
+          gepland_op: k.gepland_op,
+          ploeg_nr: k.ploeg_nr ?? null,
+          volgorde: k.volgorde ?? null,
+          vaste_start: k.vaste_start ?? null,
+        });
+        await ververs();
+      },
+    });
+    toast(`${k.omschrijving} staat weer open`, { duration: 12000, action: undoKnop() });
+    await ververs();
+  }
+
+  /** De maand waarin de selectie staat, voor in het menu. */
+  function maandVanSelectie(ids: string[]): string {
+    const maanden = [...new Set(dagenVanSelectie(ids).map(maandVan))];
+    return maanden.length === 1 ? ` in ${toonMaand(maanden[0]!)}` : "";
   }
 
   /** Wat er in het rechtermuismenu bij komt als je op de selectie klikt. */
@@ -1735,13 +1910,18 @@ function Planning() {
       })),
       {
         sleutel: "sel-uitploeg",
-        label: `${lijst.length} uit de ploeg halen`,
+        label: `${lijst.length} uit het team halen`,
         doe: () => void selectieNaarPloeg(lijst, null),
       },
       {
+        sleutel: "sel-uitplanning",
+        label: `${lijst.length} uit planning halen`,
+        doe: () => void uitPlanning(groepeerPerDag(lijst)),
+      },
+      {
         sleutel: "sel-overslaan",
-        label: `${lijst.length} deze maand overslaan`,
-        doe: () => void selectieOverslaan([maandVan(gekozenDag)]),
+        label: `${lijst.length} overslaan${maandVanSelectie(lijst)}`,
+        doe: () => void overslaan(groepeerPerDag(lijst)),
       },
       { sleutel: "sel-wis", label: "Selectie wissen", doe: () => setGekozen(new Set()) },
     ];
@@ -2147,13 +2327,13 @@ function Planning() {
                       className="rounded-full"
                       data-sneltoets="ploeg"
                     >
-                      Naar ploeg…
+                      Naar team…
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-52">
                     {ploegenVoorSelectie([...gekozen]).length === 0 && (
                       <DropdownMenuLabel className="text-[11.5px] font-normal text-muted-foreground">
-                        Deze dagen hebben geen ploeg gemeen
+                        Deze dagen hebben geen team gemeen
                       </DropdownMenuLabel>
                     )}
                     {ploegenVoorSelectie([...gekozen]).map((pl) => (
@@ -2165,7 +2345,7 @@ function Planning() {
                       </DropdownMenuItem>
                     ))}
                     <DropdownMenuItem onSelect={() => void selectieNaarPloeg([...gekozen], null)}>
-                      Uit de ploeg halen
+                      Uit het team halen
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -2472,6 +2652,12 @@ function Planning() {
                   onNaarPloeg={(datum, ids, nr, klusId) =>
                     void weekNaarPloeg(datum, ids, nr, klusId)
                   }
+                  onUitPlanning={(datum, ids, klusId) =>
+                    klusId
+                      ? void klusUitPlanning(klusId)
+                      : void uitPlanning(new Map([[datum, ids]]))
+                  }
+                  onOverslaan={(datum, ids) => void overslaan(new Map([[datum, ids]]))}
                   dagen={weekGegevens}
                   instellingen={instellingen}
                   bouwstenen={bouwstenen}
@@ -2522,6 +2708,12 @@ function Planning() {
                   onSamenvoegen={(blok) => void voegSamen(blok)}
                   onVerplaats={(ids, naar) => void verplaatsAdressen(ids, naar)}
                   onNaarPloeg={(ids, nr, klusId) => void naarPloeg(ids, nr, klusId)}
+                  onUitPlanning={(ids, klusId) =>
+                    klusId
+                      ? void klusUitPlanning(klusId)
+                      : void uitPlanning(new Map([[gekozenDag, ids]]))
+                  }
+                  onOverslaan={(ids) => void overslaan(new Map([[gekozenDag, ids]]))}
                   onWijziging={(ids) => setWijziging({ customerIds: ids, soort: "wijziging" })}
                 />
               </div>

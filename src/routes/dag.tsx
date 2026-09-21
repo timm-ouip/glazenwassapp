@@ -1018,7 +1018,7 @@ function DagPagina() {
                 >
                   {eigen
                     ? (dagPloegen.find((pl) => pl.nr === eigenPloeg)?.leden.length ?? 0) > 1
-                      ? "Jouw ploeg"
+                      ? "Jouw team"
                       : "Jouw route"
                     : "Alles"}
                 </button>

@@ -40,7 +40,7 @@ export const WAAROVER: Record<Onderwerp, string> = {
   wijken: "de wijkenpagina: straten, adressen en werk inplannen",
   klanten: "de klantenlijst: namen, mail, telefoon en postcodes",
   dossier: "de klantkaart die opengaat als je op een adres klikt",
-  planning: "de kalender: maand, week en dag, ploegen indelen",
+  planning: "de kalender: maand, week en dag, teams indelen",
   dag: "de route van één dag: afvinken wat gedaan is",
   printen: "de printlijst voor in de bus",
   mailing: "postvak, WhatsApp, aankondigingen versturen en het rapport",
@@ -175,17 +175,19 @@ blijft staan waar hij stond; week en dag gaan over de gekozen dag. De pijltjes
 ernaast volgen die keuze: in de maand blader je per maand, in de week per week
 en in de dag per dag. Met "Vandaag" spring je terug.
 
-De weekweergave: een kolom per werkdag, en daarin een kaartje per ploeg met
-een balkje dat laat zien hoe vol die dag zit. Klik op het pijltje van een
-kaartje en het klapt open: dan staat erbij hoe laat elke straat aan de beurt
-is, met de pauze en de rijtijd ertussen, en onderaan hoe laat de ploeg klaar
-is. Past de dag niet, dan staat er "loopt tot" in plaats van "klaar om". Met
-"Alles uitklappen" doe je ze in één keer open.
+De weekweergave: een kolom per werkdag, en daarin een kaartje per team met
+de straten, hoe laat elke straat aan de beurt is, een balkje dat laat zien hoe
+vol die dag zit, en onderaan hoe laat het team klaar is. Past de dag niet, dan
+staat er "loopt tot" in plaats van "klaar om". Bovenaan staat "Nog niet
+ingedeeld" voor werk dat nog bij geen team hoort. Met de knop "Adressen tonen"
+rechtsboven komen de losse adressen (de huisnummers, met hun tijd) onder hun
+straat te staan; met "Straten tonen" klap je ze weer in. Ook een los adres kun
+je slepen en heeft zijn eigen rechtermuisknop-menu.
 
-De dagweergave is een tijdraster: links de uren, en per ploeg een kolom waarin
+De dagweergave is een tijdraster: links de uren, en per team een kolom waarin
 het werk op zijn eigen begintijd staat. Rechts staat een gestippelde kolom
-"Nog niet ingedeeld" voor werk dat nog bij geen ploeg hoort; daar staat geen
-klok bij, want er staat niemand op. Zijn er die dag geen ploegen, dan is er
+"Nog niet ingedeeld" voor werk dat nog bij geen team hoort; daar staat geen
+klok bij, want er staat niemand op. Zijn er die dag geen teams, dan is er
 één kolom en die heet "Deze dag". Pauze en rijtijd staan als smalle strookjes
 tussen de blokken, en op de dag van vandaag loopt er een streep op het uur van
 nu.
@@ -198,28 +200,31 @@ blijven op hun eigen tijd staan. Met "Straten tonen" klap je ze weer in. Een
 groot pand en een extra opdracht blijven één blok; daar valt niets uit elkaar
 te halen.
 
-Ploegen maken: de knop "Ploegen indelen…" boven de kolommen. Je kiest hoeveel
-ploegen het die dag zijn (hooguit vier) en wie in welke ploeg zit. Dat doe je
+Teams maken: de knop "Teams indelen…" boven de kolommen. Je kiest hoeveel
+teams het die dag zijn (hooguit vier) en wie in welk team zit. Dat doe je
 per dag opnieuw: de ene dag gaan twee man samen, de andere dag splitsen ze.
-Kies je niemand, dan rekent de app met één persoon.
+Kies je niemand, dan rekent de app met één persoon. Een team in de planning is
+wie er díe dag samen op pad gaan; wie er in het bedrijf werken staat bij
+Instellingen > Team.
 
-Een heel blok naar een andere ploeg: sleep het naar die kolom, of gebruik het
+Een heel blok naar een ander team: sleep het naar die kolom, of gebruik het
 menu. Dat menu open je met de rechtermuisknop op het blok of met het
 ⋯-knopje erop; op een telefoon met het ⋯-knopje. Onderaan staat een regel per
-ploeg ("Naar Ploeg 1") en, als het al in een ploeg zit, "Uit de ploeg halen".
+team ("Naar Jan & Piet", met de namen van wie erin zit) en, als het al in
+een team zit, "Uit het team halen".
 
-Een deel van een straat naar een andere ploeg: zet "Selecteren" aan (dan klappen
+Een deel van een straat naar een ander team: zet "Selecteren" aan (dan klappen
 de adressen vanzelf uit) en sleep met je muis over de adressen die mee moeten,
 net als op de wijkenpagina. Wat gekozen is krijgt een randje. Binnen één streek
 gaat alles dezelfde kant op: het eerste adres dat je aanraakt bepaalt of je
 kiest of juist wist. Wil je iets weghalen, begin je streek dan op een adres dat
 al gekozen is. Een hele straat pak je door hem aan te
-wijzen als de adressen ingeklapt staan, en met "Alles" bij de ploegnaam neem je
-die hele ploeg in één keer. Kies daarna in de balk bovenin "Naar ploeg…", of
+wijzen als de adressen ingeklapt staan, en met "Alles" bij de teamnaam neem je
+dat hele team in één keer. Kies daarna in de balk bovenin "Naar team…", of
 "Verplaatsen naar" om diezelfde selectie naar een andere dag te sturen. Handig
 als een straat niet af kwam.
 
-Eén los adres kun je ook naar een andere ploeg slepen als "Selecteren" uit
+Eén los adres kun je ook naar een ander team slepen als "Selecteren" uit
 staat, of dat via zijn eigen rechtermuisknop kiezen. Onder in dat adresmenu
 staat de straat waar hij bij hoort, met wat je met de hele straat kunt.
 
@@ -229,13 +234,22 @@ aanstaat), "Als eigen blok zetten" voor een adres dat los van de straat moet,
 en "Samenvoegen met de straat" voor de rest van een straat die op een andere
 dag begon.
 
-Staat de tijdlijn aan, dan kun je per ploeg een begin- en eindtijd invullen
+Onderaan elk menu, in de dag- én de weekweergave, voor een hele straat of één
+adres:
+- "Uit planning halen" — het gaat van die dag af en staat weer bij "Nog in te
+  plannen". Een extra opdracht staat daarna weer open.
+- "Overslaan in <maand>" — het adres slaat die maand over (zoals Overslaan op
+  de wijkenpagina) en gaat meteen van de dag af. Niet bij een extra opdracht.
+Allebei kun je direct terugdraaien met "Ongedaan maken" in de melding. Heb je
+adressen geselecteerd, dan staan ze ook bovenin het menu voor de hele selectie.
+
+Staat de tijdlijn aan, dan kun je per team een begin- en eindtijd invullen
 en rekent de app uit hoe vol de dag zit. Die duur komt uit de prijs. Staat de
 tijdlijn uit, dan zijn de blokken nog steeds even hoog als ze lang duren, maar
 staan er geen uren en geen tijden bij.
 
 De kleur van een blok is de kleur van zijn wijk — dezelfde als op de kalender.
-Zo zie je in één oogopslag wanneer een ploeg naar een andere wijk rijdt. Een
+Zo zie je in één oogopslag wanneer een team naar een andere wijk rijdt. Een
 extra opdracht is altijd geel.
 
 In de knoppenbalk van de dagweergave staat ook "Naar de dagpagina": dat is de
@@ -264,7 +278,7 @@ Bovenaan de datum met pijltjes naar de dag ervoor en erna. De ronde knopjes:
 - Het euroteken — naar de wijkenpagina om werk in te plannen.
 - Printlijst — het vel voor deze dag.
 
-Werk je die dag in ploegen, dan zie je standaard je eigen route. Met "Alles"
+Werk je die dag in teams, dan zie je standaard je eigen route. Met "Alles"
 zie je de hele dag, bijvoorbeeld om een ander te helpen.
 `,
 

@@ -148,9 +148,9 @@ export function ploegVan(ploegen: Ploeg[], teamlidId: string | null | undefined)
   return ploegen.find((p) => p.leden.some((l) => l.teamlid_id === teamlidId))?.nr ?? null;
 }
 
-/** "Jan & Piet", of "Ploeg 2" als er niemand in staat. */
+/** "Jan & Piet", of "Team 2" als er niemand in staat. */
 export function ploegNaam(p: Ploeg): string {
-  if (p.leden.length === 0) return `Ploeg ${p.nr}`;
+  if (p.leden.length === 0) return `Team ${p.nr}`;
   const namen = p.leden.map((l) => l.naam.split(" ")[0] || l.naam);
   if (namen.length === 1) return namen[0]!;
   return `${namen.slice(0, -1).join(", ")} & ${namen.at(-1)}`;

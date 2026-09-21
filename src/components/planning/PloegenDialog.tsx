@@ -93,7 +93,7 @@ export function PloegenDialog({
           subtitel={toonDatum(datum)}
         />
         <PopupBody>
-          <PopupBlok label="Aantal ploegen">
+          <PopupBlok label="Aantal teams">
             <div className="flex flex-wrap gap-1.5">
               {Array.from({ length: MAX_PLOEGEN }, (_, i) => i + 1).map((n) => (
                 <button
@@ -144,7 +144,7 @@ export function PloegenDialog({
                           : "border-border bg-card text-muted-foreground hover:bg-accent"
                       }`}
                     >
-                      Ploeg {n}
+                      Team {n}
                     </button>
                   ))}
                 </li>

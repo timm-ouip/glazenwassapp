@@ -45,11 +45,12 @@ import {
   type PlanInstellingen,
   type Ploeg,
   type Tijdlijn,
+  verdeelOverAdressen,
 } from "@/lib/dagplanning";
-import type { Bouwstenen } from "@/lib/dagbouwstenen";
+import { maandVan, type Bouwstenen } from "@/lib/dagbouwstenen";
 import { statusVan, type AankondigingRij } from "@/lib/aankondigingen";
 import { ploegNaam } from "@/lib/ploegen";
-import { formatPrice, wijkInkt, wijkVlak } from "@/lib/klanten";
+import { formatPrice, toonMaand, wijkInkt, wijkVlak } from "@/lib/klanten";
 
 export interface DagWeergaveProps {
   datum: string;
@@ -80,6 +81,11 @@ export interface DagWeergaveProps {
    *  van zo'n blok zijn het adres waar de opdracht bij staat, niet de opdracht. */
   onNaarPloeg: (customerIds: string[], ploegNr: number | null, klusId?: string) => void;
   onWijziging: (customerIds: string[]) => void;
+  /** Van deze dag af, terug naar "Nog in te plannen". Bij een extra opdracht
+   *  telt `klusId`: die staat daarna weer open. */
+  onUitPlanning: (customerIds: string[], klusId?: string) => void;
+  /** De maand van deze dag overslaan; ze gaan dan ook van de dag af. */
+  onOverslaan: (customerIds: string[]) => void;
   /** De selectie is van de pagina: in de week wijs je dezelfde adressen aan. */
   selecteren: boolean;
   gekozen: Set<string>;
@@ -184,50 +190,17 @@ function eenhedenVan(
       });
       continue;
     }
-    // Op volgorde van de route, net als op de dagpagina en de printlijst: de
-    // database geeft ze op id terug, en dat is een willekeurig uuid.
-    const opVolgorde = [...blok.adressen].sort((a, b) => {
-      const x = adressen.get(a);
-      const y = adressen.get(b);
-      if (!x || !y) return 0;
-      return (
-        x.sort_order - y.sort_order ||
-        x.house_number - y.house_number ||
-        x.addition.localeCompare(y.addition)
-      );
-    });
-    // De minuten van het blok over de adressen verdelen, naar rato van hun
-    // duur. Elk adres apart afronden telt altijd hoger op dan de ene afronding
-    // die het blok van `berekenTijden` kreeg, en dan loopt alles erna scheef.
-    const duren = opVolgorde.map((id) => adressen.get(id)?.duur ?? 0);
-    const samen = duren.reduce((a, b) => a + b, 0);
-    let klok = item.start;
-    let verdeeld = 0;
-    opVolgorde.forEach((id, i) => {
-      const laatste = i === opVolgorde.length - 1;
-      const minuten = laatste
-        ? Math.max(0, item.minuten - verdeeld)
-        : Math.max(
-            0,
-            Math.min(
-              item.minuten - verdeeld,
-              Math.round(
-                samen > 0 ? (duren[i]! / samen) * item.minuten : item.minuten / opVolgorde.length,
-              ),
-            ),
-          );
-      verdeeld += minuten;
+    for (const a of verdeelOverAdressen(blok, item.start, item.minuten, adressen)) {
       uit.push({
-        sleutel: `${blok.sleutel}:${id}`,
+        sleutel: `${blok.sleutel}:${a.id}`,
         soort: "adres",
-        titel: adressen.get(id)?.naam ?? "—",
-        start: klok,
-        minuten,
+        titel: a.titel,
+        start: a.start,
+        minuten: a.minuten,
         blok,
-        adresId: id,
+        adresId: a.id,
       });
-      klok += minuten;
-    });
+    }
   }
   return uit;
 }
@@ -483,6 +456,8 @@ export function DagWeergave(p: DagWeergaveProps) {
     );
   }
 
+  const maandNaam = toonMaand(maandVan(p.datum));
+
   /** Wat er in het menu van één eenheid staat, voor allebei de menu's. */
   function actiesVan(kolom: Kolom, e: Eenheid, anders: string[]): Actie[] {
     const blok = e.blok;
@@ -492,7 +467,9 @@ export function DagWeergave(p: DagWeergaveProps) {
     // Klik je op iets dat aangewezen is, dan gaat het menu eerst over de hele
     // selectie: dat is wat je bedoelde toen je ze aanwees.
     const eigen = e.adresId ? [e.adresId] : blok.adressen;
-    const bulk = p.selectieActies(eigen);
+    // Niet bij een extra opdracht: zijn "adres" is het adres waar hij bij
+    // staat, en dan zou het menu de straat raken in plaats van hem.
+    const bulk = blok.soort === "klus" ? [] : p.selectieActies(eigen);
     if (bulk.length > 0) {
       uit.push({
         sleutel: "selkop",
@@ -520,7 +497,7 @@ export function DagWeergave(p: DagWeergaveProps) {
       if (kolom.nr !== NIET_INGEDEELD) {
         uit.push({
           sleutel: "adres-uitploeg",
-          label: "Uit de ploeg halen",
+          label: "Uit het team halen",
           doe: () => p.onNaarPloeg([id], null),
         });
       }
@@ -531,6 +508,19 @@ export function DagWeergave(p: DagWeergaveProps) {
           doe: () => p.onWijziging([id]),
         });
       }
+      uit.push(
+        {
+          sleutel: "adres-uitplanning",
+          scheidingVoor: true,
+          label: "Uit planning halen",
+          doe: () => p.onUitPlanning([id]),
+        },
+        {
+          sleutel: "adres-overslaan",
+          label: `Overslaan in ${maandNaam}`,
+          doe: () => p.onOverslaan([id]),
+        },
+      );
       uit.push({
         sleutel: "straatkop",
         label: `Hele straat: ${blok.titel}`,
@@ -597,8 +587,25 @@ export function DagWeergave(p: DagWeergaveProps) {
     if (kolom.nr !== NIET_INGEDEELD) {
       uit.push({
         sleutel: "straat-uitploeg",
-        label: "Uit de ploeg halen",
+        label: "Uit het team halen",
         doe: () => p.onNaarPloeg(blok.adressen, null, blok.klusId),
+      });
+    }
+    const hoeveel = blok.soort === "straat" && blok.adressen.length > 1;
+    uit.push({
+      sleutel: "uitplanning",
+      scheidingVoor: true,
+      label: hoeveel ? `Uit planning halen (${blok.adressen.length})` : "Uit planning halen",
+      doe: () => p.onUitPlanning(blok.adressen, blok.klusId),
+    });
+    // Een extra opdracht is eenmalig: die sla je niet over, die haal je eraf.
+    if (blok.soort !== "klus") {
+      uit.push({
+        sleutel: "overslaan",
+        label: hoeveel
+          ? `Overslaan in ${maandNaam} (${blok.adressen.length})`
+          : `Overslaan in ${maandNaam}`,
+        doe: () => p.onOverslaan(blok.adressen),
       });
     }
     return uit;
@@ -621,7 +628,7 @@ export function DagWeergave(p: DagWeergaveProps) {
             data-sneltoets="ploegen"
             onClick={p.onPloegen}
           >
-            Ploegen indelen…
+            Teams indelen…
           </Button>
         )}
         {p.naarDagpagina}
@@ -792,7 +799,7 @@ function KolomKop({
         </>
       ) : (
         <p className="mt-1 text-[11.5px] text-muted-foreground">
-          {duurTekst(tijdlijn.werkMin)} werk — sleep naar een ploeg
+          {duurTekst(tijdlijn.werkMin)} werk — sleep naar een team
         </p>
       )}
       {instellingen.tijdlijn && ploeg && magPlannen && (
@@ -1185,9 +1192,7 @@ function Eenheidkaart({
     <ContextMenu>
       <ContextMenuTrigger asChild>{kaart}</ContextMenuTrigger>
       <ContextMenuContent className="w-56">
-        {maakActies().map((a) => (
-          <MenuRegel key={a.sleutel} actie={a} soort="context" />
-        ))}
+        <MenuInhoud maakActies={maakActies} soort="context" />
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -1210,11 +1215,29 @@ function EenheidMenu({ maakActies, titel }: { maakActies: () => Actie[]; titel: 
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        {maakActies().map((a) => (
-          <MenuRegel key={a.sleutel} actie={a} soort="dropdown" />
-        ))}
+        <MenuInhoud maakActies={maakActies} soort="dropdown" />
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * Eigen component, zodat `maakActies` pas draait als het menu open is — als
+ * gewoon kind van de menu-inhoud zou het bij elke keer tekenen meelopen.
+ */
+function MenuInhoud({
+  maakActies,
+  soort,
+}: {
+  maakActies: () => Actie[];
+  soort: "context" | "dropdown";
+}) {
+  return (
+    <>
+      {maakActies().map((a) => (
+        <MenuRegel key={a.sleutel} actie={a} soort={soort} />
+      ))}
+    </>
   );
 }
 

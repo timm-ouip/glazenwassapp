@@ -338,6 +338,55 @@ export function opzetVan(instellingen: PlanInstellingen, ploeg?: Ploeg | null): 
 }
 
 /**
+ * De losse adressen van een straatblok, als je ze uitklapt: op volgorde van de
+ * route, en met de minuten van het blok naar rato van hun duur over de
+ * adressen verdeeld. De dag- en de weekweergave doen dit allebei, en dan
+ * horen er dezelfde tijden uit te komen.
+ */
+export function verdeelOverAdressen(
+  blok: Blok,
+  start: number,
+  minuten: number,
+  adressen: Map<string, AdresInfo>,
+): { id: string; titel: string; start: number; minuten: number }[] {
+  // Op volgorde van de route, net als op de dagpagina en de printlijst: de
+  // database geeft ze op id terug, en dat is een willekeurig uuid.
+  const opVolgorde = [...blok.adressen].sort((a, b) => {
+    const x = adressen.get(a);
+    const y = adressen.get(b);
+    if (!x || !y) return 0;
+    return (
+      x.sort_order - y.sort_order ||
+      x.house_number - y.house_number ||
+      x.addition.localeCompare(y.addition)
+    );
+  });
+  // Elk adres apart afronden telt altijd hoger op dan de ene afronding die het
+  // blok van `berekenTijden` kreeg, en dan loopt alles erna scheef. Het laatste
+  // adres krijgt daarom wat er overblijft.
+  const duren = opVolgorde.map((id) => adressen.get(id)?.duur ?? 0);
+  const samen = duren.reduce((a, b) => a + b, 0);
+  let klok = start;
+  let verdeeld = 0;
+  return opVolgorde.map((id, i) => {
+    const laatste = i === opVolgorde.length - 1;
+    const deel = laatste
+      ? Math.max(0, minuten - verdeeld)
+      : Math.max(
+          0,
+          Math.min(
+            minuten - verdeeld,
+            Math.round(samen > 0 ? (duren[i]! / samen) * minuten : minuten / opVolgorde.length),
+          ),
+        );
+    verdeeld += deel;
+    const uit = { id, titel: adressen.get(id)?.naam ?? "—", start: klok, minuten: deel };
+    klok += deel;
+    return uit;
+  });
+}
+
+/**
  * De blokken op de klok zetten. Tussen twee wijken komt rijtijd, en de pauze
  * valt op de eerste bloknaad vanaf de pauzetijd — blokken worden niet
  * doormidden geknipt, want je stopt niet halverwege een straat.

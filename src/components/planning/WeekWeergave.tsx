@@ -1,7 +1,8 @@
-import { useMemo, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { IconUsers as Users } from "@tabler/icons-react";
 
+import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -19,16 +20,18 @@ import {
   opzetVan,
   tijdVan,
   volPercentage,
+  type AdresInfo,
   type Blok,
   type DagKlus,
   type DagRegel,
   type PlanInstellingen,
   type Ploeg,
   type Tijdlijn,
+  verdeelOverAdressen,
 } from "@/lib/dagplanning";
-import type { Bouwstenen } from "@/lib/dagbouwstenen";
+import { maandVan, type Bouwstenen } from "@/lib/dagbouwstenen";
 import { ploegNaam } from "@/lib/ploegen";
-import { formatPrice, wijkInkt, wijkVlak } from "@/lib/klanten";
+import { formatPrice, toonMaand, wijkInkt, wijkVlak } from "@/lib/klanten";
 
 /** Eén dag in de week, met wat er die dag te doen is. */
 export interface WeekDag {
@@ -43,7 +46,20 @@ interface Actie {
   sleutel: string;
   label: string;
   kop?: boolean;
+  /** Een streepje erboven, om een nieuw groepje te beginnen. */
+  scheidingVoor?: boolean;
   doe: () => void;
+}
+
+/** Wat alle kaartjes en regels van de week van de pagina meekrijgen. */
+interface Handelingen {
+  selectieActies: (ids: string[]) => { sleutel: string; label: string; doe: () => void }[];
+  onNaarPloeg: (datum: string, ids: string[], ploegNr: number | null, klusId?: string) => void;
+  /** Van de dag af, terug naar "Nog in te plannen". Bij een extra opdracht
+   *  telt `klusId`: die staat daarna weer open. */
+  onUitPlanning: (datum: string, ids: string[], klusId?: string) => void;
+  /** De maand van die dag overslaan; ze gaan dan ook van de dag af. */
+  onOverslaan: (datum: string, ids: string[]) => void;
 }
 
 /**
@@ -53,7 +69,8 @@ interface Actie {
  * Elk kaartje heeft zijn eigen vol-balk, zodat je ziet waar nog ruimte is, en
  * de begintijd staat bij elke straat. Je sleept werk naar een andere dag of
  * ploeg, en met "Selecteren" wijs je met een streek aan wat er tegelijk mee
- * moet.
+ * moet. Met "Adressen tonen" staan de losse adressen onder hun straat, elk
+ * met zijn eigen menu.
  */
 export function WeekWeergave({
   dagen,
@@ -68,6 +85,8 @@ export function WeekWeergave({
   onOpenDag,
   onPloegen,
   onNaarPloeg,
+  onUitPlanning,
+  onOverslaan,
 }: {
   dagen: WeekDag[];
   instellingen: PlanInstellingen;
@@ -80,8 +99,10 @@ export function WeekWeergave({
   selectieActies: (ids: string[]) => { sleutel: string; label: string; doe: () => void }[];
   onOpenDag: (datum: string) => void;
   onPloegen: (datum: string) => void;
-  onNaarPloeg: (datum: string, ids: string[], ploegNr: number | null, klusId?: string) => void;
-}) {
+} & Handelingen) {
+  /** Staan de losse adressen onder hun straat? */
+  const [uitgeklapt, setUitgeklapt] = useState(false);
+  const doen: Handelingen = { selectieActies, onNaarPloeg, onUitPlanning, onOverslaan };
   const verf = useVerfSelectie({
     actief: selecteren && sleepbaar,
     isGekozen: (id) => gekozen.has(id),
@@ -109,108 +130,122 @@ export function WeekWeergave({
   );
 
   return (
-    <div className="overflow-x-auto">
-      <div
-        className={`grid min-w-[52rem] gap-2 ${selecteren ? "select-none" : ""}`}
-        style={{ gridTemplateColumns: `repeat(${dagen.length}, minmax(0, 1fr))` }}
-        {...verf}
-      >
-        {perDag.map((d) => (
-          <div key={d.datum} className="flex flex-col gap-2">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => onOpenDag(d.datum)}
-                className="min-w-0 flex-1 truncate rounded-[10px] px-1 py-1 text-[12.5px] font-medium hover:bg-accent"
-              >
-                {new Date(`${d.datum}T12:00:00`).toLocaleDateString("nl-NL", {
-                  weekday: "short",
-                  day: "numeric",
-                })}
-              </button>
-              {sleepbaar && (
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          className="rounded-full"
+          data-sneltoets="uitklappen"
+          aria-pressed={uitgeklapt}
+          onClick={() => setUitgeklapt((aan) => !aan)}
+        >
+          {uitgeklapt ? "Straten tonen" : "Adressen tonen"}
+        </Button>
+      </div>
+      <div className="overflow-x-auto">
+        <div
+          className={`grid min-w-[52rem] gap-2 ${selecteren ? "select-none" : ""}`}
+          style={{ gridTemplateColumns: `repeat(${dagen.length}, minmax(0, 1fr))` }}
+          {...verf}
+        >
+          {perDag.map((d) => (
+            <div key={d.datum} className="flex flex-col gap-2">
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => onPloegen(d.datum)}
-                  aria-label={`Ploegen indelen voor ${d.datum}`}
-                  title="Ploegen indelen"
-                  className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  onClick={() => onOpenDag(d.datum)}
+                  className="min-w-0 flex-1 truncate rounded-[10px] px-1 py-1 text-[12.5px] font-medium hover:bg-accent"
                 >
-                  <Users className="size-3.5" />
+                  {new Date(`${d.datum}T12:00:00`).toLocaleDateString("nl-NL", {
+                    weekday: "short",
+                    day: "numeric",
+                  })}
                 </button>
-              )}
-            </div>
-
-            {/* Nog niet ingedeeld staat bovenaan, ook als het leeg is zolang er
-                ploegen zijn: dan is er een plek om iets naartoe te slepen. */}
-            {(d.los.length > 0 || d.ploegen.length > 0) && (
-              <Plek datum={d.datum} ploegNr={null} actief={sleepbaar}>
-                {(setRef, erboven) => (
-                  <Kaart
-                    setRef={setRef}
-                    erboven={erboven}
-                    ploeg={null}
-                    datum={d.datum}
-                    ploegenVanDag={d.ploegen}
-                    blokken={d.los}
-                    tijdlijn={berekenTijden(d.los, opzetVan(instellingen, null))}
-                    instellingen={instellingen}
-                    bouwstenen={bouwstenen}
-                    prijzenZien={prijzenZien}
-                    sleepbaar={sleepbaar}
-                    selecteren={selecteren}
-                    gekozen={gekozen}
-                    selectieActies={selectieActies}
-                    onNaarPloeg={onNaarPloeg}
-                  />
+                {sleepbaar && (
+                  <button
+                    type="button"
+                    onClick={() => onPloegen(d.datum)}
+                    aria-label={`Teams indelen voor ${d.datum}`}
+                    title="Teams indelen"
+                    className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <Users className="size-3.5" />
+                  </button>
                 )}
-              </Plek>
-            )}
+              </div>
 
-            {d.ploegen.map((pl) => {
-              const blokken = d.blokken.get(pl.nr) ?? [];
-              return (
-                <Plek key={pl.nr} datum={d.datum} ploegNr={pl.nr} actief={sleepbaar}>
+              {/* Nog niet ingedeeld staat bovenaan, ook als het leeg is zolang er
+                ploegen zijn: dan is er een plek om iets naartoe te slepen. */}
+              {(d.los.length > 0 || d.ploegen.length > 0) && (
+                <Plek datum={d.datum} ploegNr={null} actief={sleepbaar}>
                   {(setRef, erboven) => (
                     <Kaart
                       setRef={setRef}
                       erboven={erboven}
-                      ploeg={pl}
+                      ploeg={null}
                       datum={d.datum}
                       ploegenVanDag={d.ploegen}
-                      blokken={blokken}
-                      tijdlijn={berekenTijden(blokken, opzetVan(instellingen, pl))}
+                      blokken={d.los}
+                      tijdlijn={berekenTijden(d.los, opzetVan(instellingen, null))}
                       instellingen={instellingen}
                       bouwstenen={bouwstenen}
                       prijzenZien={prijzenZien}
                       sleepbaar={sleepbaar}
                       selecteren={selecteren}
                       gekozen={gekozen}
-                      selectieActies={selectieActies}
-                      onNaarPloeg={onNaarPloeg}
+                      uitgeklapt={uitgeklapt}
+                      doen={doen}
                     />
                   )}
                 </Plek>
-              );
-            })}
+              )}
 
-            {/* Een dag zonder ploegen: één vak waar alles op valt. */}
-            {d.ploegen.length === 0 && d.los.length === 0 && (
-              <Plek datum={d.datum} ploegNr={null} actief={sleepbaar}>
-                {(setRef, erboven) => (
-                  <div
-                    ref={setRef}
-                    className={`min-h-20 rounded-[14px] border border-dashed p-1.5 text-center text-[11px] text-muted-foreground ${
-                      erboven ? "border-primary bg-accent/60" : "border-border"
-                    }`}
-                  >
-                    niets gepland
-                  </div>
-                )}
-              </Plek>
-            )}
-          </div>
-        ))}
+              {d.ploegen.map((pl) => {
+                const blokken = d.blokken.get(pl.nr) ?? [];
+                return (
+                  <Plek key={pl.nr} datum={d.datum} ploegNr={pl.nr} actief={sleepbaar}>
+                    {(setRef, erboven) => (
+                      <Kaart
+                        setRef={setRef}
+                        erboven={erboven}
+                        ploeg={pl}
+                        datum={d.datum}
+                        ploegenVanDag={d.ploegen}
+                        blokken={blokken}
+                        tijdlijn={berekenTijden(blokken, opzetVan(instellingen, pl))}
+                        instellingen={instellingen}
+                        bouwstenen={bouwstenen}
+                        prijzenZien={prijzenZien}
+                        sleepbaar={sleepbaar}
+                        selecteren={selecteren}
+                        gekozen={gekozen}
+                        uitgeklapt={uitgeklapt}
+                        doen={doen}
+                      />
+                    )}
+                  </Plek>
+                );
+              })}
+
+              {/* Een dag zonder ploegen: één vak waar alles op valt. */}
+              {d.ploegen.length === 0 && d.los.length === 0 && (
+                <Plek datum={d.datum} ploegNr={null} actief={sleepbaar}>
+                  {(setRef, erboven) => (
+                    <div
+                      ref={setRef}
+                      className={`min-h-20 rounded-[14px] border border-dashed p-1.5 text-center text-[11px] text-muted-foreground ${
+                        erboven ? "border-primary bg-accent/60" : "border-border"
+                      }`}
+                    >
+                      niets gepland
+                    </div>
+                  )}
+                </Plek>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -231,8 +266,8 @@ function Kaart({
   sleepbaar,
   selecteren,
   gekozen,
-  selectieActies,
-  onNaarPloeg,
+  uitgeklapt,
+  doen,
 }: {
   setRef: (el: HTMLElement | null) => void;
   erboven: boolean;
@@ -247,8 +282,8 @@ function Kaart({
   sleepbaar: boolean;
   selecteren: boolean;
   gekozen: Set<string>;
-  selectieActies: (ids: string[]) => { sleutel: string; label: string; doe: () => void }[];
-  onNaarPloeg: (datum: string, ids: string[], ploegNr: number | null, klusId?: string) => void;
+  uitgeklapt: boolean;
+  doen: Handelingen;
 }) {
   const vol = volPercentage(tijdlijn);
   const leeg = blokken.length === 0;
@@ -271,26 +306,53 @@ function Kaart({
         {/* Uit de tijdlijn, zodat de begintijd er meteen bij staat. Pauze en
             rijtijd laten we hier weg: in een kolom van deze breedte zeggen ze
             weinig, en in de dagweergave staan ze wel. */}
-        {tijdlijn.items
-          .filter((item) => item.blok)
-          .map((item) => (
-            <BlokRegel
-              key={item.sleutel}
-              blok={item.blok!}
-              datum={datum}
-              huidigePloeg={ploeg?.nr ?? NIET_INGEDEELD}
-              ploegenVanDag={ploegenVanDag}
-              bouwstenen={bouwstenen}
-              prijzenZien={prijzenZien}
-              sleepbaar={sleepbaar}
-              selecteren={selecteren}
-              gekozen={gekozen}
-              selectieActies={selectieActies}
-              onNaarPloeg={onNaarPloeg}
-              tijd={instellingen.tijdlijn && ploeg ? tijdVan(item.start) : null}
-              minuten={item.minuten}
-            />
-          ))}
+        {tijdlijn.items.map((item) => {
+          const blok = item.blok;
+          if (!blok) return null;
+          const metKlok = instellingen.tijdlijn && ploeg !== null;
+          // Een straat met één adres, een groot pand of een opdracht ís al één
+          // adres: daar valt niets uit te klappen.
+          const losseAdressen =
+            uitgeklapt && blok.soort === "straat" && blok.adressen.length > 1
+              ? verdeelOverAdressen(blok, item.start, item.minuten, bouwstenen.adressen)
+              : [];
+          return (
+            <Fragment key={item.sleutel}>
+              <BlokRegel
+                blok={blok}
+                datum={datum}
+                huidigePloeg={ploeg?.nr ?? NIET_INGEDEELD}
+                ploegenVanDag={ploegenVanDag}
+                bouwstenen={bouwstenen}
+                prijzenZien={prijzenZien}
+                sleepbaar={sleepbaar}
+                selecteren={selecteren}
+                gekozen={gekozen}
+                doen={doen}
+                tijd={metKlok ? tijdVan(item.start) : null}
+                minuten={item.minuten}
+              />
+              {losseAdressen.map((a) => (
+                <AdresRegel
+                  key={a.id}
+                  id={a.id}
+                  adres={bouwstenen.adressen.get(a.id)}
+                  titel={a.titel}
+                  tijd={metKlok ? tijdVan(a.start) : null}
+                  blok={blok}
+                  datum={datum}
+                  huidigePloeg={ploeg?.nr ?? NIET_INGEDEELD}
+                  ploegenVanDag={ploegenVanDag}
+                  wijkIndex={bouwstenen.wijken.get(blok.wijk_id)?.index ?? null}
+                  sleepbaar={sleepbaar}
+                  selecteren={selecteren}
+                  gekozen={gekozen}
+                  doen={doen}
+                />
+              ))}
+            </Fragment>
+          );
+        })}
       </ul>
 
       {!leeg && ploeg && (
@@ -343,8 +405,7 @@ function BlokRegel({
   sleepbaar,
   selecteren,
   gekozen,
-  selectieActies,
-  onNaarPloeg,
+  doen,
   tijd,
   minuten,
 }: {
@@ -357,8 +418,7 @@ function BlokRegel({
   sleepbaar: boolean;
   selecteren: boolean;
   gekozen: Set<string>;
-  selectieActies: (ids: string[]) => { sleutel: string; label: string; doe: () => void }[];
-  onNaarPloeg: (datum: string, ids: string[], ploegNr: number | null, klusId?: string) => void;
+  doen: Handelingen;
   /** Hoe laat hij begint, of niets als er geen klok is. */
   tijd: string | null;
   minuten: number;
@@ -394,35 +454,17 @@ function BlokRegel({
   const vlak = klus ? "var(--tint-geel)" : index === null ? undefined : wijkVlak([index]);
   const inkt = klus ? "var(--tint-geel-ink)" : index === null ? undefined : wijkInkt(index);
 
-  const acties: Actie[] = [];
-  if (sleepbaar) {
-    const bulk = selectieActies(blok.adressen);
-    if (bulk.length > 0) {
-      acties.push({
-        sleutel: "selkop",
-        label: `Selectie (${gekozen.size})`,
-        kop: true,
-        doe: () => {},
-      });
-      for (const a of bulk) acties.push({ ...a });
-      acties.push({ sleutel: "eigenkop", label: blok.titel, kop: true, doe: () => {} });
-    }
-    for (const pl of ploegenVanDag) {
-      if (pl.nr === huidigePloeg) continue;
-      acties.push({
-        sleutel: `ploeg:${pl.nr}`,
-        label: `Naar ${ploegNaam(pl)}`,
-        doe: () => onNaarPloeg(datum, blok.adressen, pl.nr, blok.klusId),
-      });
-    }
-    if (huidigePloeg !== NIET_INGEDEELD) {
-      acties.push({
-        sleutel: "uitploeg",
-        label: "Uit de ploeg halen",
-        doe: () => onNaarPloeg(datum, blok.adressen, null, blok.klusId),
-      });
-    }
-  }
+  const maakActies = () =>
+    actiesVoor({
+      ids: blok.adressen,
+      klusId: blok.klusId,
+      titel: blok.titel,
+      datum,
+      huidigePloeg,
+      ploegenVanDag,
+      gekozen,
+      doen,
+    });
 
   const regel = (
     <li
@@ -453,28 +495,212 @@ function BlokRegel({
     </li>
   );
 
-  if (acties.length === 0) return regel;
+  return (
+    <MetMenu actief={sleepbaar} maakActies={maakActies}>
+      {regel}
+    </MetMenu>
+  );
+}
+
+/**
+ * Eén adres onder zijn straat, als de adressen uitgeklapt staan. Te slepen en
+ * aan te wijzen zoals een straat, met een eigen menu voor alleen dit adres.
+ */
+function AdresRegel({
+  id,
+  adres,
+  titel,
+  tijd,
+  blok,
+  datum,
+  huidigePloeg,
+  ploegenVanDag,
+  wijkIndex,
+  sleepbaar,
+  selecteren,
+  gekozen,
+  doen,
+}: {
+  id: string;
+  adres: AdresInfo | undefined;
+  titel: string;
+  /** Hoe laat hij aan de beurt is, of niets als er geen klok is. */
+  tijd: string | null;
+  blok: Blok;
+  datum: string;
+  huidigePloeg: number;
+  ploegenVanDag: Ploeg[];
+  wijkIndex: number | null;
+  sleepbaar: boolean;
+  selecteren: boolean;
+  gekozen: Set<string>;
+  doen: Handelingen;
+}) {
+  const aangewezen = gekozen.has(id);
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `blok:${datum}:${blok.sleutel}:${id}`,
+    disabled: !sleepbaar || selecteren,
+    data: {
+      soort: "blok",
+      // Hoort hij bij de selectie, dan gaat die hele selectie mee.
+      adressen: aangewezen ? [...gekozen] : [id],
+      titel,
+      datum,
+    },
+  });
+
+  const maakActies = () =>
+    actiesVoor({ ids: [id], titel, datum, huidigePloeg, ploegenVanDag, gekozen, doen });
+
+  // De straatnaam staat er al boven; het huisnummer is genoeg.
+  const kort = adres ? `${adres.house_number}${adres.addition}` : titel;
+
+  const regel = (
+    <li
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      data-kies={id}
+      data-kies-sleutel={`${datum}:${blok.sleutel}:${id}`}
+      data-kies-dag={datum}
+      title={titel}
+      className={`ml-2.5 flex items-center gap-1 rounded-[6px] px-1.5 py-px text-[10.5px] opacity-90 ${
+        isDragging ? "opacity-40" : ""
+      } ${aangewezen ? "outline outline-2 -outline-offset-2 outline-primary" : ""}`}
+      style={{
+        background: wijkIndex === null ? "var(--muted)" : wijkVlak([wijkIndex]),
+        color: wijkIndex === null ? undefined : wijkInkt(wijkIndex),
+      }}
+    >
+      <span className="min-w-0 flex-1 truncate">{kort}</span>
+      {tijd && <span className="shrink-0 tabular-nums opacity-80">{tijd}</span>}
+    </li>
+  );
 
   return (
+    <MetMenu actief={sleepbaar} maakActies={maakActies}>
+      {regel}
+    </MetMenu>
+  );
+}
+
+/**
+ * Het menu van een straat of van één adres. Staat wat je aanklikt in de
+ * selectie, dan komt eerst wat je met de hele selectie kunt: dat bedoelde je
+ * toen je ze aanwees.
+ */
+function actiesVoor({
+  ids,
+  klusId,
+  titel,
+  datum,
+  huidigePloeg,
+  ploegenVanDag,
+  gekozen,
+  doen,
+}: {
+  ids: string[];
+  klusId?: string | undefined;
+  titel: string;
+  datum: string;
+  huidigePloeg: number;
+  ploegenVanDag: Ploeg[];
+  gekozen: Set<string>;
+  doen: Handelingen;
+}): Actie[] {
+  const acties: Actie[] = [];
+  // Een extra opdracht hoort niet bij een selectie: zijn "adres" is het adres
+  // waar hij bij staat, en dan zou het menu de straat raken in plaats van hem.
+  const bulk = klusId ? [] : doen.selectieActies(ids);
+  if (bulk.length > 0) {
+    acties.push({
+      sleutel: "selkop",
+      label: `Selectie (${gekozen.size})`,
+      kop: true,
+      doe: () => {},
+    });
+    for (const a of bulk) acties.push({ ...a });
+    acties.push({ sleutel: "eigenkop", label: titel, kop: true, doe: () => {} });
+  }
+  for (const pl of ploegenVanDag) {
+    if (pl.nr === huidigePloeg) continue;
+    acties.push({
+      sleutel: `ploeg:${pl.nr}`,
+      label: `Naar ${ploegNaam(pl)}`,
+      doe: () => doen.onNaarPloeg(datum, ids, pl.nr, klusId),
+    });
+  }
+  if (huidigePloeg !== NIET_INGEDEELD) {
+    acties.push({
+      sleutel: "uitploeg",
+      label: "Uit het team halen",
+      doe: () => doen.onNaarPloeg(datum, ids, null, klusId),
+    });
+  }
+  const aantal = ids.length > 1 ? ` (${ids.length})` : "";
+  acties.push({
+    sleutel: "uitplanning",
+    // Alleen een streepje als er al iets boven staat.
+    scheidingVoor: acties.length > 0 && !acties[acties.length - 1]!.kop,
+    label: `Uit planning halen${klusId ? "" : aantal}`,
+    doe: () => doen.onUitPlanning(datum, ids, klusId),
+  });
+  // Een extra opdracht is eenmalig: die sla je niet over, die haal je eraf.
+  if (!klusId) {
+    acties.push({
+      sleutel: "overslaan",
+      label: `Overslaan in ${toonMaand(maandVan(datum))}${aantal}`,
+      doe: () => doen.onOverslaan(datum, ids),
+    });
+  }
+  return acties;
+}
+
+/**
+ * Een regel met het rechtermuisknopmenu erop. Het menu wordt pas opgebouwd als
+ * het opengaat: met de adressen uitgeklapt staan er honderden regels in de
+ * week, en elke streek bij het selecteren tekent ze allemaal opnieuw.
+ */
+function MetMenu({
+  actief,
+  maakActies,
+  children,
+}: {
+  actief: boolean;
+  maakActies: () => Actie[];
+  children: ReactNode;
+}) {
+  if (!actief) return <>{children}</>;
+  return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>{regel}</ContextMenuTrigger>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="w-56">
-        {acties.map((a) =>
-          a.kop ? (
-            <div key={a.sleutel}>
-              <ContextMenuSeparator />
-              <ContextMenuLabel className="text-[11.5px] text-muted-foreground">
-                {a.label}
-              </ContextMenuLabel>
-            </div>
-          ) : (
-            <ContextMenuItem key={a.sleutel} onSelect={a.doe}>
-              {a.label}
-            </ContextMenuItem>
-          ),
-        )}
+        <MenuRegels maakActies={maakActies} />
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+/** Eigen component, zodat `maakActies` pas draait als het menu open is. */
+function MenuRegels({ maakActies }: { maakActies: () => Actie[] }) {
+  return (
+    <>
+      {maakActies().map((a) =>
+        a.kop ? (
+          <div key={a.sleutel}>
+            <ContextMenuSeparator />
+            <ContextMenuLabel className="text-[11.5px] text-muted-foreground">
+              {a.label}
+            </ContextMenuLabel>
+          </div>
+        ) : (
+          <Fragment key={a.sleutel}>
+            {a.scheidingVoor && <ContextMenuSeparator />}
+            <ContextMenuItem onSelect={a.doe}>{a.label}</ContextMenuItem>
+          </Fragment>
+        ),
+      )}
+    </>
   );
 }
 
