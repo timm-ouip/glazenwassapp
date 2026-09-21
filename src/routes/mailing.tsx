@@ -12,7 +12,7 @@
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconAlertTriangle as AlertTriangle,
   IconCheck as Check,
@@ -49,7 +49,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WhatsAppGesprekken } from "@/components/whatsapp/WhatsAppGesprekken";
 import { datumVoluit, fetchSjablonen, fetchWhatsAppKoppeling } from "@/lib/whatsapp";
-import { fetchCustomersMetInactief, fetchDistricts, fetchStreets, toonMaand } from "@/lib/klanten";
+import {
+  fetchCustomersMetInactief,
+  fetchDistricts,
+  fetchKlanten,
+  fetchStreets,
+  toonMaand,
+} from "@/lib/klanten";
 import { datumSleutel, fetchWasdag, fetchWasdagen, toonDatum, vandaag } from "@/lib/wasdag";
 import { fetchKlussen } from "@/lib/klussen";
 import { fetchDagPloegen } from "@/lib/ploegen";
@@ -65,12 +71,16 @@ import {
   type Wijziging,
   fetchMailingen,
   telOntvangers,
+  telWijziging,
   verstuurAankondiging,
+  verstuurWijziging,
   AlVerstuurdFout,
   type AankondigKanaal,
   type Controle,
 } from "@/lib/mailing";
 import { heeftRecht } from "@/lib/rechten";
+import { kwamAan, perAdres, useAankondigingen } from "@/lib/aankondigingen";
+import { telAdressen } from "@/lib/overslaan-keuze";
 
 interface MailingSearch {
   /** De dag die al gekozen is, bijvoorbeeld vanaf de planningspagina. */
@@ -472,9 +482,14 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
     d.setDate(d.getDate() + 45);
     return datumSleutel(d);
   }, []);
+  // Ligt de gekozen dag (bijvoorbeeld vanuit de planning) verder weg, dan
+  // kijken we tot en met die dag: anders zien we niet wie er op staat.
+  const bereik = datum > tot ? datum : tot;
   const dagen = useQuery({
-    queryKey: ["wasdagen-vooruit", tot],
-    queryFn: () => fetchWasdagen(vandaag(), tot),
+    queryKey: ["wasdagen-vooruit", bereik],
+    queryFn: () => fetchWasdagen(vandaag(), bereik),
+    // Bij een andere periode de oude lijst laten staan tot de nieuwe er is.
+    placeholderData: keepPreviousData,
   });
 
   const perDag = useMemo(() => {
@@ -485,11 +500,124 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
     return [...telling.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [dagen.data]);
 
+  /**
+   * Wie op deze dag al iets weet. Nieuwe adressen krijgen de planningsmail;
+   * wie in een eerdere mail op een andere dag stond (die nog moet komen, en
+   * waar hij niet meer op staat), krijgt een wijziging; en wie de mail voor
+   * deze dag al had, krijgt hem niet nog eens — tenzij je dat aanvinkt.
+   */
+  const qc = useQueryClient();
+  const eerdereMails = useAankondigingen(vandaag(), bereik);
+  const [opnieuw, setOpnieuw] = useState(false);
+  const indeling = useMemo(() => {
+    const dagenVan = new Map<string, Set<string>>();
+    for (const r of dagen.data ?? []) {
+      if (!r.customer_id) continue;
+      const lijst = dagenVan.get(r.customer_id) ?? new Set<string>();
+      lijst.add(r.datum);
+      dagenVan.set(r.customer_id, lijst);
+    }
+    // Alleen wat aankwam telt: wie een mislukte mail kreeg, weet van niets.
+    const mails = perAdres((eerdereMails.data ?? []).filter(kwamAan));
+    const nu = vandaag();
+    const al: string[] = [];
+    const verplaatst: string[] = [];
+    for (const [id, opDagen] of dagenVan) {
+      if (!opDagen.has(datum)) continue;
+      const rijen = mails.get(id) ?? [];
+      // Had hij hem voor deze dag al, met hetzelfde tijdvak (als er een beloofd
+      // is)? Is dat tijdvak veranderd, dan krijgt hij de mail opnieuw, met de
+      // nieuwe tijd.
+      const voorDezeDag = rijen.filter((r) => r.aangekondigd_voor === datum);
+      const nieuwVak = tijdvakken[id];
+      const klopt = voorDezeDag.some(
+        (r) =>
+          !r.tijdvak_van ||
+          !nieuwVak ||
+          (r.tijdvak_van === nieuwVak.van && r.tijdvak_tot === nieuwVak.tot),
+      );
+      if (voorDezeDag.length > 0) {
+        if (klopt) al.push(id);
+        continue;
+      }
+      // Een belofte voor een dag die nog komt (en binnen wat we kunnen zien),
+      // waar hij niet meer op staat: verplaatst.
+      if (
+        rijen.some(
+          (r) =>
+            r.aangekondigd_voor >= nu &&
+            r.aangekondigd_voor <= bereik &&
+            !opDagen.has(r.aangekondigd_voor),
+        )
+      )
+        verplaatst.push(id);
+    }
+    return { al, verplaatst };
+  }, [dagen.data, eerdereMails.data, datum, bereik, tijdvakken]);
+  const wijzigingSjabloon = standaardVan(berichtSjablonen.data ?? [], "wijziging");
+
+  // Wie een wijziging kan krijgen: dat zegt de server, die ze straks ook
+  // verstuurt (mail, of WhatsApp als er een goedgekeurd sjabloon bij de tekst
+  // hoort). Wie hij niet kan bereiken, houdt gewoon de planningsmail. Zonder
+  // tekst voor een wijziging krijgt iedereen de planningsmail, zoals vroeger.
+  const wijzigingTelling = useQuery({
+    queryKey: [
+      "wijziging-tellen",
+      "wijziging",
+      wijzigingSjabloon?.wa_sjabloon_id ?? "",
+      indeling.verplaatst.join(","),
+    ],
+    queryFn: () =>
+      telWijziging(indeling.verplaatst, "wijziging", wijzigingSjabloon?.wa_sjabloon_id),
+    enabled: !!wijzigingSjabloon && indeling.verplaatst.length > 0,
+  });
+  const wijzigingen = useMemo(() => {
+    if (!wijzigingSjabloon || indeling.verplaatst.length === 0) return [];
+    const bereikbaar = new Set(wijzigingTelling.data?.bereikbaar ?? []);
+    return indeling.verplaatst.filter((id) => bereikbaar.has(id));
+  }, [wijzigingSjabloon, indeling.verplaatst, wijzigingTelling.data]);
+  const aantalWijzigingen =
+    wijzigingen.length > 0 && wijzigingTelling.data
+      ? wijzigingTelling.data.aantal + wijzigingTelling.data.aantalWhatsApp
+      : 0;
+  // De tijdvakken moeten er zijn voordat we zeggen wie de mail "al had": een
+  // veranderd tijdvak betekent opnieuw sturen.
+  const tijdKlaar =
+    !metTijdvak ||
+    [
+      adressenVoorTijd,
+      stratenVoorTijd,
+      wijkenVoorTijd,
+      wasdagVoorTijd,
+      klussenVoorTijd,
+      ploegenVoorTijd,
+    ].every((q) => q.isSuccess);
+  const tijdFout =
+    metTijdvak &&
+    [
+      adressenVoorTijd,
+      stratenVoorTijd,
+      wijkenVoorTijd,
+      wasdagVoorTijd,
+      klussenVoorTijd,
+      ploegenVoorTijd,
+    ].some((q) => q.isError);
+  const uitsluiten = useMemo(
+    () => [...wijzigingen, ...(opnieuw ? [] : indeling.al)].sort(),
+    [wijzigingen, opnieuw, indeling.al],
+  );
+
   // De telling komt van de server, want die bouwt straks ook de echte lijst.
+  // Pas tellen als bekend is wie er uitvalt, anders springt het getal.
   const telling = useQuery({
-    queryKey: ["mail-telling", datum, kanaal, sjabloonId],
-    queryFn: () => telOntvangers(datum, kanaal, sjabloonId),
-    enabled: !!datum,
+    queryKey: ["mail-telling", datum, kanaal, sjabloonId, uitsluiten.join(",")],
+    queryFn: () => telOntvangers(datum, kanaal, sjabloonId, uitsluiten),
+    enabled:
+      !!datum &&
+      dagen.isSuccess &&
+      eerdereMails.isSuccess &&
+      tijdKlaar &&
+      (!wijzigingSjabloon || indeling.verplaatst.length === 0 || wijzigingTelling.isSuccess),
   });
 
   const aantal = telling.data?.aantal ?? 0;
@@ -499,7 +627,56 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
   const mailKlaar = !metMail || (onderwerp.trim().length > 0 && tekst.trim().length > 0);
   const waKlaar = !metWa || !!sjabloon || aantalWa === 0;
   const klaar = mailKlaar && waKlaar;
-  const totaal = aantal + (sjabloon ? aantalWa : 0);
+  const planningsmails = aantal + (sjabloon ? aantalWa : 0);
+  const totaal = planningsmails + aantalWijzigingen;
+  // Pas versturen als vaststaat wie wat krijgt: anders gaat bij een halve
+  // telling misschien alleen de helft de deur uit.
+  const geteld =
+    telling.isSuccess &&
+    !telling.isPlaceholderData &&
+    eerdereMails.isSuccess &&
+    tijdKlaar &&
+    (!wijzigingSjabloon || indeling.verplaatst.length === 0 || wijzigingTelling.isSuccess);
+
+  /** De verplaatste klanten een wijziging, met de standaardtekst daarvoor. */
+  async function stuurWijzigingen(toch = false): Promise<void> {
+    if (!wijzigingSjabloon || wijzigingen.length === 0) return;
+    try {
+      const uit = await verstuurWijziging({
+        customerIds: wijzigingen,
+        soort: "wijziging",
+        reden: "",
+        onderwerp: wijzigingSjabloon.onderwerp,
+        tekst: wijzigingSjabloon.tekst,
+        // Het WhatsApp-sjabloon dat bij deze tekst hoort; zonder gaat hij per mail.
+        ...(wijzigingSjabloon.wa_sjabloon_id
+          ? { sjabloonId: wijzigingSjabloon.wa_sjabloon_id }
+          : {}),
+        ...(toch ? { toch: true } : {}),
+      });
+      const n = uit.verstuurd + uit.verstuurdWhatsApp;
+      toast.success(
+        `${n} ${n === 1 ? "klant kreeg" : "klanten kregen"} een wijziging${
+          uit.mislukt > 0 ? `, ${uit.mislukt} mislukt` : ""
+        }.`,
+      );
+    } catch (e) {
+      if (e instanceof AlVerstuurdFout && !toch) {
+        const ja = await bevestig({
+          titel: "Deze klanten kregen net al een wijziging",
+          tekst: "Het afgelopen uur ging er al zo'n bericht naar deze adressen. Toch nog een keer?",
+          bevestigLabel: "Toch versturen",
+          annuleerLabel: "Niet versturen",
+          gevaarlijk: true,
+        });
+        if (ja) await stuurWijzigingen(true);
+        return;
+      }
+      toast.error(
+        "Wijzigingen versturen mislukte: " + (e instanceof Error ? e.message : String(e)),
+      );
+    }
+  }
 
   async function verstuur(test: boolean, toch = false) {
     if (!klaar) {
@@ -516,13 +693,36 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
         sjabloon && aantalWa > 0
           ? `${aantalWa} ${aantalWa === 1 ? "WhatsApp-bericht" : "WhatsApp-berichten"}`
           : "",
+        aantalWijzigingen > 0
+          ? `${aantalWijzigingen} ${aantalWijzigingen === 1 ? "wijziging" : "wijzigingen"}`
+          : "",
       ].filter(Boolean);
       const ja = await bevestig({
         titel: `${delen.join(" en ")} versturen?`,
-        tekst: `De aankondiging voor ${toonDatum(datum)} gaat de deur uit. Dit kun je niet terugnemen.`,
+        tekst:
+          wijzigingen.length > 0
+            ? `De planningsmail voor ${toonDatum(datum)} gaat naar wie nieuw is, en wie eerst op een andere dag stond krijgt een wijziging. Dit kun je niet terugnemen.`
+            : `De aankondiging voor ${toonDatum(datum)} gaat de deur uit. Dit kun je niet terugnemen.`,
         bevestigLabel: "Versturen",
       });
       if (!ja) return;
+    }
+    // Alleen wijzigingen, geen planningsmail: dan niet de dag versturen (daar
+    // staat dan niemand meer op om hem te krijgen).
+    if (!test && !geteld) {
+      toast("Even wachten: de telling is nog niet klaar.");
+      return;
+    }
+    if (!test && planningsmails === 0) {
+      setBezig(true);
+      try {
+        await stuurWijzigingen(toch);
+      } finally {
+        setBezig(false);
+        void qc.invalidateQueries({ queryKey: ["aankondigingen"] });
+        void qc.invalidateQueries({ queryKey: ["mail-telling"] });
+      }
+      return;
     }
     setBezig(true);
     try {
@@ -540,6 +740,9 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
           : {}),
         ...(toch ? { toch: true } : {}),
         ...(Object.keys(tijdvakken).length > 0 ? { tijdvakken } : {}),
+        // Een proef laat zien hoe de planningsmail eruitziet; die hoeft
+        // niemand over te slaan.
+        ...(!test && uitsluiten.length > 0 ? { uitsluiten } : {}),
       });
       const samen = [
         uit.verstuurd > 0 ? `${uit.verstuurd} ${uit.verstuurd === 1 ? "mail" : "mails"}` : "",
@@ -558,6 +761,10 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
       } else {
         toast.success(`${samen} onderweg.`);
       }
+      // Daarna de wijzigingen, met hun eigen vraag als ze net al verstuurd zijn.
+      if (!test) await stuurWijzigingen();
+      void qc.invalidateQueries({ queryKey: ["aankondigingen"] });
+      void qc.invalidateQueries({ queryKey: ["mail-telling"] });
     } catch (e) {
       if (e instanceof AlVerstuurdFout) {
         setBezig(false);
@@ -569,6 +776,8 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
           gevaarlijk: true,
         });
         if (nogEens) await verstuur(false, true);
+        // De wijzigingen hebben hun eigen controle; die gaan gewoon.
+        else if (!test) await stuurWijzigingen();
         return;
       }
       const tekst = e instanceof Error ? e.message : String(e);
@@ -790,6 +999,66 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
                   {kanaal === "voorkeur" ? "; die krijgen een mail als dat kan" : ""}.
                 </p>
               )}
+              {(dagen.isError || tijdFout) && (
+                <p className="mt-2 flex items-start gap-1.5 text-[12.5px] text-tint-oranje-ink">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  Kon de planning van deze dag niet ophalen, dus nog niet tellen. Ververs de pagina
+                  of probeer het straks nog eens.
+                </p>
+              )}
+              {wijzigingTelling.isError && (
+                <p className="mt-2 flex items-start gap-1.5 text-[12.5px] text-tint-oranje-ink">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  Kon niet uitrekenen wie een wijziging krijgt. Probeer het straks nog eens.
+                </p>
+              )}
+              {eerdereMails.isError && (
+                <p className="mt-2 flex items-start gap-1.5 text-[12.5px] text-tint-oranje-ink">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  Kon niet ophalen wie al een planningsmail kreeg. Probeer het straks nog eens,
+                  anders krijgt iedereen hem opnieuw.
+                </p>
+              )}
+              {(indeling.verplaatst.length > 0 || indeling.al.length > 0) && (
+                <div className="mt-3 space-y-2 border-t border-border pt-3 text-[12.5px]">
+                  {indeling.verplaatst.length > 0 && (
+                    <p className="flex items-start gap-1.5">
+                      <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-tint-oranje-ink" />
+                      <span>
+                        {telAdressen(indeling.verplaatst.length)}{" "}
+                        {indeling.verplaatst.length === 1 ? "stond" : "stonden"} in een eerdere
+                        planningsmail op een andere dag.{" "}
+                        {!wijzigingSjabloon
+                          ? "Er is nog geen tekst voor een wijziging, dus die krijgen deze mail. Maak er een bij Instellingen → mail."
+                          : wijzigingen.length === indeling.verplaatst.length
+                            ? `Die krijgen een wijziging ("${wijzigingSjabloon.naam}") in plaats van deze mail${
+                                aantalWijzigingen > 0
+                                  ? `: ${aantalWijzigingen} ${aantalWijzigingen === 1 ? "bericht" : "berichten"}`
+                                  : ""
+                              }.`
+                            : wijzigingTelling.isSuccess
+                              ? `${wijzigingen.length} daarvan krijgen een wijziging ("${wijzigingSjabloon.naam}"); de rest is zo niet te bereiken en krijgt deze mail.`
+                              : "Even kijken wie een wijziging kan krijgen…"}
+                      </span>
+                    </p>
+                  )}
+                  {indeling.al.length > 0 && (
+                    <label className="flex cursor-pointer items-start gap-1.5 text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={opnieuw}
+                        onChange={(e) => setOpnieuw(e.target.checked)}
+                        className="mt-0.5 size-3.5 shrink-0 accent-foreground"
+                      />
+                      <span>
+                        {telAdressen(indeling.al.length)}{" "}
+                        {indeling.al.length === 1 ? "had" : "hadden"} de planningsmail voor deze dag
+                        al. Ook opnieuw sturen
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
               {metMail && (telling.data?.zonderEmail ?? 0) > 0 && (
                 <p className="mt-1 flex items-start gap-1.5 text-[12.5px] text-muted-foreground">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-tint-amber-ink" />
@@ -874,11 +1143,15 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
           </Button>
           <Button
             className="w-full rounded-full"
-            disabled={bezig || !klaar || totaal === 0}
+            disabled={bezig || !klaar || !geteld || totaal === 0}
             onClick={() => void verstuur(false)}
           >
             <Send className="size-4" />
-            {totaal === 0 ? "Niemand om te bereiken" : `Versturen naar ${totaal}`}
+            {!geteld
+              ? "Bezig met tellen…"
+              : totaal === 0
+                ? "Niemand om te bereiken"
+                : `Versturen naar ${totaal}`}
           </Button>
           <p className="text-center text-[11.5px] text-muted-foreground">
             Stuur eerst een proef. Die gaat alleen naar het adres{metWa ? " en het nummer" : ""}{" "}

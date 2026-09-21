@@ -119,12 +119,15 @@ export function telOntvangers(
   datum: string,
   kanaal: AankondigKanaal = "mail",
   sjabloonId = "",
+  /** Adressen van de dag die deze mail niet krijgen. */
+  uitsluiten: string[] = [],
 ): Promise<Telling> {
   return roep<Telling>({
     actie: "tellen",
     datum,
     kanaal,
     ...(sjabloonId ? { sjabloon_id: sjabloonId } : {}),
+    ...(uitsluiten.length > 0 ? { uitsluiten } : {}),
   });
 }
 
@@ -145,6 +148,8 @@ export function verstuurAankondiging(opdracht: {
   toch?: boolean;
   /** Het beloofde tijdvak per adres, bij grote panden. */
   tijdvakken?: Record<string, { van: string; tot: string }>;
+  /** Adressen van de dag die deze mail niet krijgen (verplaatst, of al ingelicht). */
+  uitsluiten?: string[];
 }): Promise<Verzending> {
   const { proefNaar, sjabloonId, proefTelefoon, tijdvakken, ...rest } = opdracht;
   return roep<Verzending>({
@@ -169,6 +174,8 @@ export interface WijzigingTelling {
   /** Adressen waarvan we de klant niet kunnen bereiken. */
   zonderContact: number;
   voorbeeld: { naam: string; adressen: string[]; oudeDatum: string; nieuweDatum: string }[];
+  /** De adressen die het bericht echt bereikt (mail of WhatsApp). */
+  bereikbaar?: string[];
 }
 
 export interface Wijzigingsbericht {
@@ -185,8 +192,18 @@ export interface Wijzigingsbericht {
   proefNaar?: string;
 }
 
-export function telWijziging(customerIds: string[], soort: Wijzigingsbericht["soort"]) {
-  return roep<WijzigingTelling>({ actie: "wijziging_tellen", customer_ids: customerIds, soort });
+export function telWijziging(
+  customerIds: string[],
+  soort: Wijzigingsbericht["soort"],
+  /** Het WhatsApp-sjabloon dat meegaat; zonder telt hij alleen de mail. */
+  waSjabloonId?: string | null,
+) {
+  return roep<WijzigingTelling>({
+    actie: "wijziging_tellen",
+    customer_ids: customerIds,
+    soort,
+    ...(waSjabloonId ? { sjabloon_id: waSjabloonId } : {}),
+  });
 }
 
 export function verstuurWijziging(w: Wijzigingsbericht): Promise<Verzending> {

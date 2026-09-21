@@ -70,6 +70,11 @@ export interface Mailstatus {
 
 const NIET_AANGEKOMEN = ["gebounced", "geblokkeerd", "ongeldig"];
 
+/** Kwam dit bericht (voor zover we weten) aan? Een mislukte mail telt niet. */
+export function kwamAan(r: AankondigingRij): boolean {
+  return r.status !== "mislukt" && !NIET_AANGEKOMEN.includes(r.bezorgstatus);
+}
+
 /**
  * Hoe het envelopje er bij dit adres uitziet op deze dag.
  *

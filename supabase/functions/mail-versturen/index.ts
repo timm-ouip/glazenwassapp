@@ -69,6 +69,12 @@ interface Verzoek {
   soort?: string;
   /** Waarom de planning verandert ("Door de regen"). */
   reden?: string;
+  /**
+   * Bij `tellen`/`versturen`: deze adressen van de dag overslaan. De app
+   * stuurt wie verplaatst is een wijziging in plaats van de planningsmail, en
+   * wie hem voor deze dag al had, krijgt hem niet nog eens.
+   */
+  uitsluiten?: string[];
 }
 
 /** Een tijdvak zoals het in het bericht komt. */
@@ -255,12 +261,17 @@ Deno.serve(async (req) => {
   }
 
   // 3. De ontvangers, uit de dag zelf, per kanaal.
-  const klanten = await klantenVoorDag(beheerder, bedrijf.id, datum);
+  const uitsluiten = new Set(
+    (Array.isArray(verzoek.uitsluiten) ? verzoek.uitsluiten : [])
+      .map(String)
+      .filter((id) => UUID_RE.test(id)),
+  );
+  const klanten = await klantenVoorDag(beheerder, bedrijf.id, datum, uitsluiten);
   const verdeling = verdeel(klanten, kanaal, sjabloon?.categorie === "marketing");
   const ontvangers = verdeling.mail;
 
   if (!versturen) {
-    const dekking = await telDekking(beheerder, bedrijf.id, datum);
+    const dekking = await telDekking(beheerder, bedrijf.id, datum, uitsluiten);
     return antwoord({
       aantal: ontvangers.length,
       aantalWhatsApp: verdeling.whatsapp.length,
@@ -446,12 +457,48 @@ Deno.serve(async (req) => {
       // appjes). Een verzending die nog bezig is (alles nog 0) telt wél.
       const metMail = (k: string) => k !== "whatsapp";
       const metApp = (k: string) => k !== "mail";
-      const overlapt = (recent ?? []).some((m) => {
+      const overlappend = (recent ?? []).filter((m) => {
         const allesGeweigerd = m.aantal === 0 && m.aantal_whatsapp === 0 && m.mislukt > 0;
         const zelfdeKanaal =
           (metMail(m.kanaal) && metMail(kanaal)) || (metApp(m.kanaal) && metApp(kanaal));
         return !allesGeweigerd && zelfdeKanaal;
       });
+      let overlapt = overlappend.length > 0;
+      // Slimme verzending: de app liet wie de mail al had weg (`uitsluiten`).
+      // Dan alleen tegenhouden als een van de adressen die overblijven hem het
+      // afgelopen uur toch al kreeg — of als een eerdere verzending nog bezig
+      // is, want dan staat nog niet vast wie hem kreeg.
+      if (overlapt && uitsluiten.size > 0) {
+        const nogBezig = overlappend.some(
+          (m) => m.aantal === 0 && m.aantal_whatsapp === 0 && m.mislukt === 0,
+        );
+        if (!nogBezig) {
+          const uurGeleden = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+          const over = klanten.flatMap((k) => k.customer_ids);
+          overlapt = false;
+          for (const stuk of inStukjes(over)) {
+            // Alleen wat echt de deur uit ging: een mislukte mail mag je
+            // meteen opnieuw proberen, daar is de slimme verzending juist voor.
+            const { data: al, error: alFout } = await beheerder
+              .from("aankondiging_adressen")
+              .select("customer_id, mail_ontvangers!inner(status)")
+              .eq("company_id", bedrijf.id)
+              .eq("soort", "aankondiging")
+              .eq("datum", datum)
+              .eq("mail_ontvangers.status", "verzonden")
+              .in("customer_id", stuk)
+              .gte("created_at", uurGeleden)
+              .limit(1);
+            if (alFout) {
+              return antwoord({ fout: "Kon niet nagaan of deze adressen al een mail kregen." }, 500);
+            }
+            if ((al ?? []).length > 0) {
+              overlapt = true;
+              break;
+            }
+          }
+        }
+      }
       if (overlapt) {
         return antwoord(
           {
@@ -738,6 +785,9 @@ async function wijzigingsbericht(
       .is("deleted_at", null)
       .maybeSingle();
     sjabloon = (data as Sjabloon | null) ?? null;
+    // Een template dat Meta (nog) niet goedkeurde geeft alleen mislukte appjes;
+    // dan liever per mail, net als zonder sjabloon.
+    if (sjabloon && sjabloon.status !== "goedgekeurd") sjabloon = null;
   }
   // Wie nooit iets over deze dag hoorde, krijgt ook geen wijziging: dan zou
   // er "we komen niet op , maar op donderdag" staan. En wie nergens meer op
@@ -755,6 +805,9 @@ async function wijzigingsbericht(
       aantalWhatsApp: verdeling.whatsapp.length,
       zonderContact,
       zonderAankondiging,
+      // De adressen die dit bericht echt bereikt, precies zoals versturen ze
+      // straks kiest: de planningsmail kan de rest dan nog meenemen.
+      bereikbaar: [...verdeling.mail, ...verdeling.whatsapp].flatMap((k) => k.customer_ids),
       voorbeeld: [...verdeling.mail, ...verdeling.whatsapp].slice(0, 5).map((o) => ({
         naam: o.naam,
         adressen: o.adressen,
@@ -1195,6 +1248,7 @@ async function klantenVoorDag(
   db: ReturnType<typeof createClient>,
   companyId: string,
   datum: string,
+  uitsluiten: Set<string> = new Set(),
 ): Promise<KlantOpDag[]> {
   // Wie deze maand overslaat staat nog wel op de dag, maar komt niet: die
   // hoort ook geen aankondiging te krijgen.
@@ -1207,7 +1261,7 @@ async function klantenVoorDag(
 
   const ids = (regels ?? [])
     .map((r) => r["customer_id"] as string | null)
-    .filter((id): id is string => !!id);
+    .filter((id): id is string => !!id && !uitsluiten.has(id));
   return await klantenVoorAdressen(db, companyId, ids, maand);
 }
 
@@ -1386,6 +1440,7 @@ async function telDekking(
   db: ReturnType<typeof createClient>,
   companyId: string,
   datum: string,
+  uitsluiten: Set<string> = new Set(),
 ): Promise<{ zonderEmail: number; overgeslagen: number }> {
   const maand = datum.slice(0, 7);
   const { data: regels } = await db
@@ -1395,7 +1450,7 @@ async function telDekking(
     .eq("datum", datum);
   const ids = (regels ?? [])
     .map((r) => r["customer_id"] as string | null)
-    .filter((id): id is string => !!id);
+    .filter((id): id is string => !!id && !uitsluiten.has(id));
   if (ids.length === 0) return { zonderEmail: 0, overgeslagen: 0 };
 
   let overgeslagen = 0;

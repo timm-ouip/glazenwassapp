@@ -86,9 +86,12 @@ export function WijzigingsberichtDialog({
 
   const sjablonen = useQuery({ queryKey: ["bericht-sjablonen"], queryFn: fetchSjablonen });
   const redenen = useQuery({ queryKey: ["snelle-redenen"], queryFn: fetchRedenen });
+  const waSjabloonId =
+    (sjablonen.data ?? []).find((x) => x.id === sjabloonId)?.wa_sjabloon_id ?? null;
+
   const telling = useQuery({
-    queryKey: ["wijziging-tellen", soort, [...gekozen].sort().join(",")],
-    queryFn: () => telWijziging(gekozen, soort),
+    queryKey: ["wijziging-tellen", soort, waSjabloonId ?? "", [...gekozen].sort().join(",")],
+    queryFn: () => telWijziging(gekozen, soort, waSjabloonId),
     enabled: open && gekozen.length > 0,
   });
 
@@ -115,7 +118,9 @@ export function WijzigingsberichtDialog({
         reden: reden.trim(),
         onderwerp: onderwerp.trim(),
         tekst,
-        ...(sjabloonId ? { sjabloonId } : {}),
+        // De server verwacht het WhatsApp-sjabloon dat bij deze tekst hoort,
+        // niet de tekst zelf; zonder gaat het bericht alleen per mail.
+        ...(waSjabloonId ? { sjabloonId: waSjabloonId } : {}),
         ...(toch ? { toch: true } : {}),
       });
       const samen = uitkomst.verstuurd + uitkomst.verstuurdWhatsApp;
