@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   IconLogout as LogOut,
@@ -8,6 +8,7 @@ import {
   IconMap as Map,
   IconHistory as History,
   IconHome as Home,
+  IconLayoutDashboard as Dashboard,
   IconInbox as Inbox,
   IconMail as Mail,
   IconLayoutSidebarLeftCollapse as PanelLeftClose,
@@ -19,9 +20,16 @@ import {
 } from "@tabler/icons-react";
 
 import { Druppel } from "@/components/Merk";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth, signOut } from "@/lib/auth";
 import { aantalOpenAanmeldingen } from "@/lib/aanmeldingen";
 import { heeftRecht, rolLabel, type Recht } from "@/lib/rechten";
+import { TABBLADEN, TABNAAM, type BetalingenTab } from "@/lib/betalingen";
 
 const OPSLAG = "zijbalk-ingeklapt";
 
@@ -31,6 +39,8 @@ type Pagina = {
   icon: LucideIcon;
   /** Zichtbaar voor wie minstens één van deze rechten heeft (de eigenaar altijd). */
   recht?: Recht[];
+  /** En deze allemaal: het dashboard telt planning en prijzen bij elkaar op. */
+  rechtAlles?: Recht[];
 };
 
 /** Het startscherm met een vak per onderdeel. Voor iedereen: wat erop staat
@@ -38,6 +48,12 @@ type Pagina = {
 const THUIS: Pagina = { label: "Home", to: "/home", icon: Home };
 
 const WERK: Pagina[] = [
+  {
+    label: "Dashboard",
+    to: "/dashboard",
+    icon: Dashboard,
+    rechtAlles: ["planning", "prijzen_zien"],
+  },
   { label: "Wijken", to: "/", icon: Map, recht: ["planning"] },
   // Printen staat bewust niet in dit menu: die knop hoort bij de wijk waar je
   // op dat moment naar kijkt, en zit daarom op de wijkenpagina zelf.
@@ -62,6 +78,7 @@ const BEHEER: Pagina[] = [
 export function useMenu() {
   const { employee, company } = useAuth();
   const pad = useRouterState({ select: (s) => s.location.pathname });
+  const zoek = useRouterState({ select: (s) => s.location.search as Record<string, unknown> });
 
   // Wat er in het postvak op een mens wacht. Staat in de balk en niet op
   // de pagina zelf, want je moet het zien zonder ernaartoe te gaan.
@@ -71,7 +88,34 @@ export function useMenu() {
     enabled: heeftRecht(employee, "klanten_bewerken"),
   });
 
-  const magZien = (p: Pagina) => !p.recht || p.recht.some((r) => heeftRecht(employee, r));
+  const magZien = (p: Pagina) =>
+    (!p.recht || p.recht.some((r) => heeftRecht(employee, r))) &&
+    (!p.rechtAlles || p.rechtAlles.every((r) => heeftRecht(employee, r)));
+  const isActief = (p: Pagina) => (p.to === "/" ? pad === "/" : pad.startsWith(p.to));
+
+  /**
+   * De tabbladen van de pagina waar je bent, als sublijstje onder het
+   * menu-item. Alleen Betalingen heeft ze, en alleen voor wie bedragen mag
+   * zien: een geldloper krijgt daar toch maar één lijst te zien.
+   */
+  const subtabs = (p: Pagina): Subtab[] => {
+    if (p.to !== "/betalingen" || !isActief(p) || !heeftRecht(employee, "prijzen_zien")) return [];
+    // Vrijgeven is van de eigenaar; de pagina zelf stuurt de rest terug naar
+    // Vanavond, dus hier staat hij ook niet in de lijst.
+    const zichtbaar = TABBLADEN.filter((t) => t !== "vrijgeven" || employee?.rol === "eigenaar");
+    const gevraagd = String(zoek["tab"] ?? "");
+    const huidig = zichtbaar.find((t) => t === gevraagd) ?? "vanavond";
+    // De gekozen wijk gaat mee: wissel je van tabblad, dan kijk je nog steeds
+    // naar dezelfde wijk (de Beginstand rekent daarop).
+    const wijk = typeof zoek["wijk"] === "string" ? (zoek["wijk"] as string) : undefined;
+    return zichtbaar.map((t) => ({
+      tab: t,
+      label: TABNAAM[t],
+      actief: t === huidig,
+      zoek: { tab: t, ...(wijk ? { wijk } : {}) },
+    }));
+  };
+
   return {
     employee,
     company,
@@ -79,14 +123,89 @@ export function useMenu() {
     werk: WERK.filter(magZien),
     beheer: BEHEER.filter(magZien),
     teDoen: teDoen ?? 0,
-    isActief: (p: Pagina) => (p.to === "/" ? pad === "/" : pad.startsWith(p.to)),
+    isActief,
+    subtabs,
   };
 }
 
+/** Een tabblad van de pagina waar je bent, zoals het menu het toont. */
+export type Subtab = {
+  tab: BetalingenTab;
+  label: string;
+  actief: boolean;
+  /** Wat er in het webadres komt te staan als je erop klikt. */
+  zoek: { tab: BetalingenTab; wijk?: string };
+};
+
 export type { Pagina };
 
+/**
+ * Het sublijstje onder een menu-item: de tabbladen van die pagina. In de
+ * zijbalk klein, in de balk onderin op de telefoon met regels waar je duim
+ * bij kan.
+ */
+export function Subtabs({
+  lijst,
+  groot = false,
+  onKies,
+}: {
+  lijst: Subtab[];
+  groot?: boolean;
+  onKies?: () => void;
+}) {
+  if (lijst.length === 0) return null;
+  return (
+    <div className="mb-1 ml-[22px] flex flex-col gap-0.5 border-l border-border pl-2">
+      {lijst.map((s) => (
+        <Link
+          key={s.tab}
+          to="/betalingen"
+          search={s.zoek}
+          onClick={onKies}
+          className={`flex items-center rounded-[10px] transition-colors ${
+            groot ? "h-12 px-3 text-[15px] fel:rounded-full" : "h-9 px-2.5 text-[12.5px]"
+          } ${
+            s.actief
+              ? "bg-card font-semibold shadow-card fel:shadow-none"
+              : "text-foreground/65 hover:bg-card/70 hover:text-foreground"
+          }`}
+        >
+          {s.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+/** Het icoon van een ingeklapte zijbalk, met de tabbladen eronder. */
+function TabbladenMenu({ p, lijst }: { p: Pagina; lijst: Subtab[] }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          title={p.label}
+          aria-label={p.label}
+          className="flex h-10 items-center justify-center rounded-[12px] border border-border bg-card shadow-card fel:rounded-full fel:border-transparent fel:bg-primary fel:text-primary-foreground fel:shadow-none"
+        >
+          <p.icon className="size-[17px] shrink-0 text-tint-oranje-ink fel:text-primary-foreground" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="right" align="start" className="w-44">
+        {lijst.map((s) => (
+          <DropdownMenuItem key={s.tab} asChild>
+            <Link to="/betalingen" search={s.zoek} className={s.actief ? "font-semibold" : ""}>
+              {s.label}
+            </Link>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function Zijbalk() {
-  const { employee, company, thuis, werk, beheer, teDoen, isActief } = useMenu();
+  const { employee, company, thuis, werk, beheer, teDoen, isActief, subtabs } = useMenu();
   const navigate = useNavigate();
 
   // Begint uitgeklapt; de keuze van de gebruiker wordt na het eerste
@@ -198,9 +317,20 @@ export function Zijbalk() {
               werk
             </span>
           )}
-          {werk.map((p) => (
-            <Item key={p.to} p={p} />
-          ))}
+          {werk.map((p) => {
+            const subs = subtabs(p);
+            // Ingeklapt is er geen ruimte voor een sublijstje. De tabbladen
+            // hangen dan als menuutje aan het icoon — zonder dat kom je er op
+            // een groot scherm helemaal niet meer bij.
+            return ingeklapt && subs.length > 0 ? (
+              <TabbladenMenu key={p.to} p={p} lijst={subs} />
+            ) : (
+              <Fragment key={p.to}>
+                <Item p={p} />
+                {!ingeklapt && <Subtabs lijst={subs} />}
+              </Fragment>
+            );
+          })}
         </nav>
       )}
 

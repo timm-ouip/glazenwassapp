@@ -16,6 +16,15 @@ import {
 } from "@tabler/icons-react";
 
 import { AppLayout } from "@/components/AppLayout";
+import {
+  TEGEL_GEWOON,
+  TEGEL_KLEUR,
+  TEGEL_KLIKBAAR,
+  TEGEL_VAK,
+  TegelGetal,
+  TegelKop,
+  TegelOnder,
+} from "@/components/Tegel";
 import { aantalOpenAanmeldingen } from "@/lib/aanmeldingen";
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { fetchAfmeldstatus } from "@/lib/dagklaar";
@@ -59,24 +68,9 @@ const MAANDEN = [
   ["december", "dec"],
 ] as const;
 
-/**
- * De kleuren van de vakken. Ze komen uit --tegel-* in styles.css: in het
- * thema Fel de felle kleuren van het ontwerp, in crème de zachte tinten.
- */
-const KLEUR = {
-  oranje: "bg-tegel-oranje text-tegel-oranje-ink",
-  creme: "bg-tegel-creme text-tegel-creme-ink shadow-card",
-  geel: "bg-tegel-geel text-tegel-geel-ink",
-  aqua: "bg-tegel-aqua text-tegel-aqua-ink",
-  perzik: "bg-tegel-perzik text-tegel-perzik-ink",
-  groen: "bg-tegel-groen text-tegel-groen-ink",
-  donker: "bg-tegel-donker text-tegel-donker-ink shadow-card",
-} as const;
-
-const VAK =
-  "flex min-w-0 flex-col rounded-[24px] outline-none transition-[filter] hover:brightness-[1.04] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
-/** Een gewoon vak in het rooster: klein op de telefoon, hoog op de computer. */
-const GEWOON = "h-[116px] px-4 py-3.5 md:h-[180px] md:rounded-[26px] md:px-5 md:py-[18px]";
+const KLEUR = TEGEL_KLEUR;
+const VAK = `${TEGEL_VAK} ${TEGEL_KLIKBAAR}`;
+const GEWOON = TEGEL_GEWOON;
 
 function groetVoor(uur: number) {
   if (uur < 6) return "Goedenacht";
@@ -410,7 +404,7 @@ function Home() {
 
           {magOmzet && (
             <Link
-              to="/planning"
+              to="/dashboard"
               className={cn(
                 VAK,
                 KLEUR.donker,
@@ -439,9 +433,9 @@ function Home() {
 
           {magKlantenZien && (
             <Link to="/klanten" className={cn(VAK, KLEUR.creme, GEWOON)}>
-              <VakKop label="Klanten" />
-              <Getal>{bestand?.klaar ? bestand.adressen.length : leeg}</Getal>
-              <Onder>
+              <TegelKop label="Klanten" />
+              <TegelGetal>{bestand?.klaar ? bestand.adressen.length : leeg}</TegelGetal>
+              <TegelOnder>
                 {!bestand?.klaar ? (
                   " "
                 ) : bestand.zonderNaam > 0 ? (
@@ -453,7 +447,7 @@ function Home() {
                 ) : (
                   "adressen, allemaal met naam"
                 )}
-              </Onder>
+              </TegelOnder>
             </Link>
           )}
 
@@ -463,24 +457,24 @@ function Home() {
               search={{ tab: prijzenZien ? "pof" : "lopen" }}
               className={cn(VAK, KLEUR.geel, GEWOON)}
             >
-              <VakKop label="Betalingen" />
+              <TegelKop label="Betalingen" />
               {prijzenZien ? (
                 <>
-                  <Getal>{pof ? formatPrice(pof.bedrag) : leeg}</Getal>
-                  <Onder>
+                  <TegelGetal>{pof ? formatPrice(pof.bedrag) : leeg}</TegelGetal>
+                  <TegelOnder>
                     {!pof
                       ? " "
                       : pof.adressen > 0
                         ? `pof open bij ${pof.adressen} ${pof.adressen === 1 ? "adres" : "adressen"}`
                         : "geen pof open"}
-                  </Onder>
+                  </TegelOnder>
                 </>
               ) : (
                 <>
                   <span className="mt-auto text-[17px] font-semibold md:text-[20px]">
                     Geld lopen
                   </span>
-                  <Onder>naar je looplijst</Onder>
+                  <TegelOnder>naar je looplijst</TegelOnder>
                 </>
               )}
             </Link>
@@ -488,9 +482,9 @@ function Home() {
 
           {magPlannen && (
             <Link to="/" className={cn(VAK, KLEUR.aqua, GEWOON)}>
-              <VakKop label="Wijken" />
-              <Getal>{bestand ? bestand.wijken : leeg}</Getal>
-              <Onder>{bestand ? `${bestand.straten} straten` : " "}</Onder>
+              <TegelKop label="Wijken" />
+              <TegelGetal>{bestand ? bestand.wijken : leeg}</TegelGetal>
+              <TegelOnder>{bestand ? `${bestand.straten} straten` : " "}</TegelOnder>
             </Link>
           )}
 
@@ -532,7 +526,7 @@ function Home() {
                 "h-[116px] px-4 py-3.5 md:h-[128px] md:px-5 md:py-4",
               )}
             >
-              <VakKop label="Aanmeldingen" />
+              <TegelKop label="Aanmeldingen" />
               <span className="mt-auto flex min-w-0 flex-col md:flex-row md:items-baseline md:gap-2">
                 <span className="font-display text-[38px] font-semibold leading-none tracking-[-0.04em] tabular-nums md:text-[40px]">
                   {aanmeldQuery.data ?? leeg}
@@ -550,7 +544,7 @@ function Home() {
 
           {magOmzet && (
             <Link
-              to="/planning"
+              to="/dashboard"
               className={cn(VAK, KLEUR.groen, "h-[116px] px-4 pb-3 pt-3.5 md:hidden")}
             >
               <span className="flex items-center justify-between text-[13px] font-semibold">
@@ -616,31 +610,6 @@ function KleinVak({
         {onder}
       </span>
     </>
-  );
-}
-
-function VakKop({ label }: { label: string }) {
-  return (
-    <span className="flex items-center justify-between gap-2 text-[13px] font-semibold md:text-[14px]">
-      {label}
-      <NaarRechtsBoven className="size-4 shrink-0 md:size-[18px]" aria-hidden="true" />
-    </span>
-  );
-}
-
-function Getal({ children }: { children: ReactNode }) {
-  return (
-    <span className="mt-auto truncate font-display text-[38px] font-semibold leading-none tracking-[-0.045em] tabular-nums md:text-[56px]">
-      {children}
-    </span>
-  );
-}
-
-function Onder({ children }: { children: ReactNode }) {
-  return (
-    <span className="mt-1 truncate text-[12px] opacity-80 md:mt-1.5 md:text-[13px]">
-      {children}
-    </span>
   );
 }
 

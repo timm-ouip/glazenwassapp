@@ -359,7 +359,7 @@ export function MailOpstellen({
             <div className="flex">
               <Button
                 type="submit"
-                className="rounded-l-full rounded-r-none"
+                className="rounded-l-full rounded-r-none fel:rounded-r-none"
                 disabled={bezig || teLang}
               >
                 {bezig ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
@@ -371,7 +371,7 @@ export function MailOpstellen({
                 trigger={
                   <Button
                     type="button"
-                    className="rounded-l-none rounded-r-full border-l border-primary-foreground/20 px-2"
+                    className="rounded-l-none rounded-r-full border-l border-primary-foreground/20 px-2 fel:rounded-l-none"
                     disabled={bezig || teLang}
                     aria-label="Later versturen"
                     title="Later versturen"

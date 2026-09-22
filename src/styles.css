@@ -92,6 +92,8 @@
   --color-grafiek-accent: var(--grafiek-accent);
   --color-grafiek-klein-rustig: var(--grafiek-klein-rustig);
   --color-grafiek-klein-accent: var(--grafiek-klein-accent);
+  --color-serie-contant: var(--serie-contant);
+  --color-serie-overmaken: var(--serie-overmaken);
   --shadow-card: var(--shadow-card);
 
   --color-background: var(--background);
@@ -275,6 +277,9 @@
   --grafiek-accent: var(--tint-oranje-mid);
   --grafiek-klein-rustig: color-mix(in oklab, var(--tint-groen-ink) 35%, transparent);
   --grafiek-klein-accent: var(--tint-groen-ink);
+  /* Twee reeksen naast elkaar op het dashboard: contant en overmaken. */
+  --serie-contant: #c98f00;
+  --serie-overmaken: var(--tint-blauw-mid);
 }
 
 .dark {
@@ -347,6 +352,7 @@
   --sidebar-accent-foreground: #B5D4F4;
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: #378ADD;
+  --serie-contant: #fac775;
   --wijk-l: 0.305;
   --wijk-c: 0.048;
   --wijk-ink-l: 0.87;
@@ -488,6 +494,8 @@
   --grafiek-accent: #ff5b1f;
   --grafiek-klein-rustig: rgb(243 238 229 / 55%);
   --grafiek-klein-accent: #f2b705;
+  --serie-contant: #f2b705;
+  --serie-overmaken: #a9d7d8;
 }
 
 .fel.dark {

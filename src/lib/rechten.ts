@@ -71,6 +71,9 @@ export function rechtenVoorPad(pad: string): Recht[] | null {
   ) {
     return ["planning"];
   }
+  // Het dashboard telt de planning en de prijzen bij elkaar op; zonder die
+  // twee rechten geeft de database er toch niets voor terug.
+  if (pad.startsWith("/dashboard")) return ["prijzen_zien"];
   if (pad.startsWith("/klanten")) return ["klanten_bekijken"];
   if (
     pad.startsWith("/aanmeldingen") ||

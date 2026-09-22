@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { IconLogout as LogOut, IconMenu2 as Menu } from "@tabler/icons-react";
 
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
-import { useMenu, type Pagina } from "@/components/Zijbalk";
+import { Subtabs, useMenu, type Pagina } from "@/components/Zijbalk";
 import { useQuery } from "@tanstack/react-query";
 
 import { signOut } from "@/lib/auth";
@@ -25,9 +25,12 @@ const TABNAAM: Record<string, string> = { "/mailing": "Mail" };
  * groter scherm staat de zijbalk er, dan is deze balk verborgen.
  */
 export function Tabbalk({ boven }: { boven?: ReactNode }) {
-  const { employee, company, thuis, werk, beheer, teDoen, isActief } = useMenu();
+  const { employee, company, thuis, werk, beheer, teDoen, isActief, subtabs } = useMenu();
   const navigate = useNavigate();
   const [meerOpen, setMeerOpen] = useState(false);
+  // De tabbladen van de pagina waar je bent (nu alleen Betalingen). Sta je er
+  // al, dan klapt dezelfde knop ze open in plaats van niets te doen.
+  const [tabsOpen, setTabsOpen] = useState(false);
   // Ongelezen mail in het postvak, als getal op de Mail-tab. Dezelfde vraag
   // als het postvak zelf stelt, dus die delen de cache.
   const mappen = useQuery({
@@ -58,6 +61,7 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
   const tabs = alles.filter((p) => VAST.includes(p.to)).slice(0, MAX_TABS);
   const meer = alles.filter((p) => !tabs.includes(p));
   const meerActief = meer.some(isActief);
+  const eigenTabs = alles.flatMap(subtabs);
 
   const tabKlassen = (actief: boolean) =>
     `relative flex min-w-0 flex-1 flex-col items-center gap-0.5 pt-2 pb-1.5 text-[11px] ${
@@ -106,7 +110,19 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
           className="flex border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur fel:dark:bg-background/95"
         >
           {tabs.map((p) => (
-            <Link key={p.to} to={p.to} className={tabKlassen(isActief(p))}>
+            <Link
+              key={p.to}
+              to={p.to}
+              onClick={(e) => {
+                // Sta je al op deze pagina en heeft hij tabbladen, dan opent
+                // dezelfde knop de lijst met die tabbladen.
+                if (subtabs(p).length > 0) {
+                  e.preventDefault();
+                  setTabsOpen(true);
+                }
+              }}
+              className={tabKlassen(isActief(p))}
+            >
               <p.icon
                 className={`size-[21px] ${isActief(p) ? "text-tint-oranje-ink" : ""}`}
                 strokeWidth={isActief(p) ? 2.2 : 1.8}
@@ -144,7 +160,10 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
           </DrawerTitle>
           <div className="flex flex-col gap-0.5">
             {meer.map((p) => (
-              <MeerRegel key={p.to} p={p} />
+              <Fragment key={p.to}>
+                <MeerRegel p={p} />
+                <Subtabs lijst={subtabs(p)} groot onKies={() => setMeerOpen(false)} />
+              </Fragment>
             ))}
           </div>
           <div className="mt-3 flex items-center gap-3 rounded-[14px] border border-border bg-card p-3 shadow-card">
@@ -172,6 +191,17 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
               <LogOut className="size-4" /> Uitloggen
             </button>
           </div>
+        </DrawerContent>
+      </Drawer>
+
+      {/* Tik je onderin op de pagina waar je al bent, dan klappen haar
+          tabbladen hier open — binnen duimbereik. */}
+      <Drawer open={tabsOpen} onOpenChange={setTabsOpen} shouldScaleBackground={false}>
+        <DrawerContent className="rounded-t-[22px] border-border bg-surface px-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <DrawerTitle className="px-3 pb-2 pt-3 font-display text-lg font-bold">
+            Betalingen
+          </DrawerTitle>
+          <Subtabs lijst={eigenTabs} groot onKies={() => setTabsOpen(false)} />
         </DrawerContent>
       </Drawer>
     </>

@@ -86,6 +86,27 @@ export async function fetchOpenKlachten(): Promise<OpenKlacht[]> {
 }
 
 /**
+ * Wanneer er klachten binnenkwamen, voor het dashboard. Alleen de datum en de
+ * stand: meer heeft een grafiek per maand niet nodig.
+ */
+export async function fetchKlachtenPeriode(
+  vanaf: string,
+  tot: string,
+): Promise<{ ontvangen_op: string; status: KlachtStatus }[]> {
+  const { data, error } = await supabase
+    .from("klachten")
+    .select("ontvangen_op,status")
+    // ontvangen_op is een tijdstip: tot en met het einde van die dag.
+    .gte("ontvangen_op", vanaf)
+    .lte("ontvangen_op", `${tot}T23:59:59.999Z`)
+    .is("deleted_at", null)
+    .order("ontvangen_op")
+    .limit(5000);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as { ontvangen_op: string; status: KlachtStatus }[];
+}
+
+/**
  * Open klachten bij een adres: die met precies dit adres, en die van de klant
  * waar nog geen adres bij gekozen is (die gelden voor al zijn adressen).
  */

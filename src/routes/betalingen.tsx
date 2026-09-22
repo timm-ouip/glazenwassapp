@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { IconCash as Cash } from "@tabler/icons-react";
 
@@ -11,23 +11,10 @@ import { PofLijst } from "@/components/betalingen/PofLijst";
 import { GeldloopScherm } from "@/components/betalingen/GeldloopScherm";
 import { Vrijgeven } from "@/components/betalingen/Vrijgeven";
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
+import { TABBLADEN, TABNAAM, type BetalingenTab as Tab } from "@/lib/betalingen";
 import { fetchMijnGeldloop, type Vrijgave } from "@/lib/geldlopen";
 import { probeerOpnieuw, useWachtrij, vergeetMislukt } from "@/lib/geldloop-wachtrij";
 import { heeftRecht } from "@/lib/rechten";
-
-/** De tabbladen voor wie bedragen mag zien. Een geldloper ziet alleen de
- *  lijst van de wijk die voor hem is vrijgegeven. */
-const TABBLADEN = ["vanavond", "vrijgeven", "lopen", "pof", "kaart", "beginstand"] as const;
-type Tab = (typeof TABBLADEN)[number];
-
-const TABNAAM: Record<Tab, string> = {
-  vanavond: "Vanavond",
-  vrijgeven: "Vrijgeven",
-  lopen: "Lopen",
-  pof: "Pof",
-  kaart: "Kaart",
-  beginstand: "Beginstand",
-};
 
 interface BetalingenSearch {
   tab: Tab;
@@ -85,31 +72,20 @@ function Betalingen() {
   // Een geldloper (zonder "prijzen zien") ziet alleen zijn avond.
   if (employee && !ziedBedragen) return <Lopen />;
 
-  const zichtbaar = TABBLADEN.filter((t) => t !== "vrijgeven" || isEigenaar);
-  const tabs = (
-    <div className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full border border-border bg-card p-1 shadow-card [scrollbar-width:none]">
-      {zichtbaar.map((t) => (
-        <button
-          key={t}
-          type="button"
-          aria-pressed={tab === t}
-          onClick={() => naarTab(t)}
-          className={`shrink-0 rounded-full px-3 py-1 text-[12.5px] font-medium transition-colors ${
-            tab === t
-              ? "bg-foreground text-background"
-              : "text-muted-foreground hover:bg-surface hover:text-foreground"
-          }`}
-        >
-          {TABNAAM[t]}
-        </button>
-      ))}
-    </div>
-  );
+  // De tabbladen staan in het menu (de zijbalk, en op de telefoon de balk
+  // onderin), niet meer als pillenrij boven de pagina. De kop zegt daarom
+  // zelf waar je bent.
+  const titel = `Betalingen · ${TABNAAM[tab]}`;
 
-  if (tab === "lopen") return <Lopen acties={tabs} onVrijgeven={() => naarTab("vrijgeven")} />;
+  // Vrijgeven is van de eigenaar: een ander krijgt die knop niet te zien, want
+  // de pagina zou hem meteen terugzetten op Vanavond.
+  if (tab === "lopen")
+    return (
+      <Lopen titel={titel} onVrijgeven={isEigenaar ? () => naarTab("vrijgeven") : undefined} />
+    );
 
   return (
-    <AppLayout titel="Betalingen" acties={tabs}>
+    <AppLayout titel={titel}>
       {tab === "vanavond" && <Avondoverzicht />}
       {tab === "vrijgeven" && isEigenaar && <Vrijgeven onLopen={() => naarTab("lopen")} />}
       {tab === "pof" && <PofLijst onKaart={kiesStraat} />}
@@ -121,10 +97,10 @@ function Betalingen() {
 
 /** De avond(en) die nu voor jou open staan, met de lijst van de eerste. */
 function Lopen({
-  acties,
+  titel = "Geldlopen",
   onVrijgeven,
 }: {
-  acties?: ReactNode;
+  titel?: string;
   onVrijgeven?: (() => void) | undefined;
 }) {
   const avonden = useQuery({
@@ -141,7 +117,7 @@ function Lopen({
 
   if (!vrijgave) {
     return (
-      <AppLayout titel="Geldlopen" acties={acties}>
+      <AppLayout titel={titel}>
         {avonden.isLoading ? (
           <p className="text-[13px] text-muted-foreground">Laden…</p>
         ) : (
@@ -157,7 +133,7 @@ function Lopen({
   return (
     <GeldloopScherm
       vrijgave={vrijgave}
-      acties={acties}
+      titel={titel}
       bovenaan={
         lopend.length > 1 ? (
           <div className="flex flex-wrap gap-1.5">

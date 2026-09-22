@@ -17,6 +17,24 @@ export const BETAALMETHODEN: { waarde: Betaalmethode; label: string }[] = [
   { waarde: "overmaken", label: "Overmaken" },
 ];
 
+/**
+ * De tabbladen van de Betalingen-pagina. Ze staan hier en niet in de route,
+ * omdat het menu (de zijbalk en de balk onderin) ze als sublijstje toont: dat
+ * menu staat op elke pagina, ook als Betalingen zelf nog niet geladen is.
+ */
+export const TABBLADEN = ["vanavond", "vrijgeven", "lopen", "pof", "kaart", "beginstand"] as const;
+
+export type BetalingenTab = (typeof TABBLADEN)[number];
+
+export const TABNAAM: Record<BetalingenTab, string> = {
+  vanavond: "Vanavond",
+  vrijgeven: "Vrijgeven",
+  lopen: "Lopen",
+  pof: "Pof",
+  kaart: "Kaart",
+  beginstand: "Beginstand",
+};
+
 export function betaalmethodeLabel(m: Betaalmethode): string {
   return m === "contant" ? "Contant" : "Overmaken";
 }

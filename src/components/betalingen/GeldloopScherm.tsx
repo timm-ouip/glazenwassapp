@@ -23,7 +23,7 @@ import {
   type GeldloopLijst,
   type Vrijgave,
 } from "@/lib/geldlopen";
-import { formatPrice } from "@/lib/klanten";
+import { formatPrice, kantVan, type Kant } from "@/lib/klanten";
 import { useAuth } from "@/lib/auth";
 import {
   bijVerstuurd,
@@ -66,14 +66,11 @@ export function GeldloopScherm({
   vrijgave,
   titel = "Geldlopen",
   bovenaan,
-  acties,
 }: {
   vrijgave: Vrijgave;
   titel?: string;
   /** Iets boven de lijst, zoals de keuze tussen twee avonden. */
   bovenaan?: ReactNode;
-  /** De knoppen rechtsboven (bij de eigenaar: de tabbladen). */
-  acties?: ReactNode;
 }) {
   const qc = useQueryClient();
   const lijst = useQuery({
@@ -109,6 +106,9 @@ export function GeldloopScherm({
 
   const [gekozen, setGekozen] = useState<string | null>(null);
   const [zoeken, setZoeken] = useState<string | null>(null);
+  // Loop je met z'n tweeën, of zigzag je zelf de straat over? Dan zet deze
+  // knop de even en de oneven kant naast elkaar.
+  const [kanten, setKanten] = useState(false);
   const [uitgeklapt, setUitgeklapt] = useState<Set<string>>(new Set());
   const [nu, setNu] = useState(() => Date.now());
   useEffect(() => {
@@ -160,8 +160,36 @@ export function GeldloopScherm({
     />
   );
 
+  // In een useMemo, want AppLayout meet zijn balk opnieuw zodra `acties` een
+  // ander blokje is — dat hoeft alleen als je de schakelaar echt omzet.
+  const schakelaar = useMemo(
+    () => (
+      <div className="flex items-center gap-0.5 rounded-full border border-border bg-card p-1 shadow-card">
+        {[
+          { aan: false, naam: "Lijst" },
+          { aan: true, naam: "Beide kanten" },
+        ].map((k) => (
+          <button
+            key={k.naam}
+            type="button"
+            aria-pressed={kanten === k.aan}
+            onClick={() => setKanten(k.aan)}
+            className={`min-h-8 shrink-0 rounded-full px-3 text-[12.5px] font-medium transition-colors ${
+              kanten === k.aan
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-surface hover:text-foreground"
+            }`}
+          >
+            {k.naam}
+          </button>
+        ))}
+      </div>
+    ),
+    [kanten],
+  );
+
   return (
-    <AppLayout titel={titel} onderbalk={onderbalk} acties={acties}>
+    <AppLayout titel={titel} onderbalk={onderbalk} acties={schakelaar}>
       <div className="mx-auto max-w-2xl space-y-3 pb-6">
         {bovenaan}
         <div className="flex items-baseline justify-between gap-3 px-1 text-[13px] text-muted-foreground">
@@ -242,36 +270,11 @@ export function GeldloopScherm({
                   <span className="text-[11.5px] text-muted-foreground">{s.wijk}</span>
                 )}
               </h2>
-              <div className="divide-y divide-border/60">
-                {zichtbaar.map((a) => (
-                  <AdresRij
-                    key={a.id}
-                    a={a}
-                    datum={vrijgave.datum}
-                    onKies={() => setGekozen(a.id)}
-                  />
-                ))}
-                {rust.length > 0 && (
-                  <button
-                    type="button"
-                    className="flex min-h-11 w-full items-center gap-2 px-2.5 text-[12.5px] text-muted-foreground"
-                    onClick={() =>
-                      setUitgeklapt((was) => {
-                        const nu = new Set(was);
-                        if (nu.has(s.id)) nu.delete(s.id);
-                        else nu.add(s.id);
-                        return nu;
-                      })
-                    }
-                  >
-                    <ChevronDown
-                      className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
-                    />
-                    {rust.length} {rust.length === 1 ? "adres" : "adressen"} zonder iets open
-                  </button>
-                )}
-                {open &&
-                  rust.map((a) => (
+              {kanten ? (
+                <BeideKanten adressen={passend} onKies={setGekozen} />
+              ) : (
+                <div className="divide-y divide-border/60">
+                  {zichtbaar.map((a) => (
                     <AdresRij
                       key={a.id}
                       a={a}
@@ -279,7 +282,36 @@ export function GeldloopScherm({
                       onKies={() => setGekozen(a.id)}
                     />
                   ))}
-              </div>
+                  {rust.length > 0 && (
+                    <button
+                      type="button"
+                      className="flex min-h-11 w-full items-center gap-2 px-2.5 text-[12.5px] text-muted-foreground"
+                      onClick={() =>
+                        setUitgeklapt((was) => {
+                          const nu = new Set(was);
+                          if (nu.has(s.id)) nu.delete(s.id);
+                          else nu.add(s.id);
+                          return nu;
+                        })
+                      }
+                    >
+                      <ChevronDown
+                        className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
+                      />
+                      {rust.length} {rust.length === 1 ? "adres" : "adressen"} zonder iets open
+                    </button>
+                  )}
+                  {open &&
+                    rust.map((a) => (
+                      <AdresRij
+                        key={a.id}
+                        a={a}
+                        datum={vrijgave.datum}
+                        onKies={() => setGekozen(a.id)}
+                      />
+                    ))}
+                </div>
+              )}
             </section>
           );
         })}
@@ -297,6 +329,109 @@ export function GeldloopScherm({
         onVeranderd={() => void qc.invalidateQueries({ queryKey: ["geldloop-lijst", vrijgave.id] })}
       />
     </AppLayout>
+  );
+}
+
+/**
+ * De even en de oneven kant naast elkaar, voor als je de straat overzigzagt
+ * of met z'n tweeën loopt. Er is dan ongeveer 150 px per kant, dus alleen het
+ * huisnummer en het bedrag passen; de naam zie je zodra je een adres aantikt.
+ *
+ * De verdeling is dezelfde als op de printlijst — even links, oneven rechts,
+ * en een hoekhuis in de kolom die de wijklijst hem met de hand gaf — zodat
+ * papier en telefoon naast elkaar hetzelfde beeld geven. Loopt de straat per
+ * 1 op, dan is er geen overkant en knippen we de lijst doormidden.
+ */
+function BeideKanten({
+  adressen,
+  onKies,
+}: {
+  adressen: GeldloopAdres[];
+  onKies: (id: string) => void;
+}) {
+  const doorlopend = adressen[0]?.doorlopend ?? false;
+  const helft = Math.ceil(adressen.length / 2);
+  const kant = (a: GeldloopAdres) =>
+    kantVan({ house_number: a.house_number, hoek_kant: a.hoek_kant as Kant | "" });
+  return (
+    <div className="flex gap-1.5 px-1 pb-1">
+      <Kolom
+        naam={doorlopend ? "eerste helft" : "even"}
+        lijst={doorlopend ? adressen.slice(0, helft) : adressen.filter((a) => kant(a) === "even")}
+        onKies={onKies}
+      />
+      <Kolom
+        naam={doorlopend ? "tweede helft" : "oneven"}
+        lijst={doorlopend ? adressen.slice(helft) : adressen.filter((a) => kant(a) === "oneven")}
+        onKies={onKies}
+      />
+    </div>
+  );
+}
+
+function Kolom({
+  naam,
+  lijst,
+  onKies,
+}: {
+  naam: string;
+  lijst: GeldloopAdres[];
+  onKies: (id: string) => void;
+}) {
+  return (
+    <div className="min-w-0 flex-1">
+      <p className="px-1 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+        {naam}
+      </p>
+      {/* Een eigen scrollvak per kant: de nummers lopen links en rechts zelden
+          gelijk op, dus je moet de ene kant vooruit kunnen schuiven terwijl de
+          andere blijft staan. Wat er niet is, staat er niet tussen. */}
+      <div className="max-h-[52vh] space-y-1 overflow-y-auto overscroll-contain">
+        {lijst.map((a) => (
+          <Tegel key={a.id} a={a} onKies={() => onKies(a.id)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Eén adres als tegeltje: het nummer en wat er nog moet gebeuren. */
+function Tegel({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
+  const betaald = a.vanavond?.soort === "betaald";
+  const mislukt = a.vanavond && !betaald;
+  const rood = a.open_wassen >= ROOD_VANAF && heeftIetsOpen(a);
+  const stil = !heeftIetsOpen(a) && !a.vanavond;
+  return (
+    <button
+      type="button"
+      onClick={onKies}
+      className={`flex min-h-11 w-full items-center justify-between gap-1.5 rounded-[11px] px-2 py-1.5 text-left transition-colors ${
+        betaald
+          ? "bg-tint-groen text-tint-groen-ink"
+          : mislukt || rood
+            ? "bg-tint-rood text-tint-rood-ink"
+            : stil
+              ? "text-muted-foreground"
+              : "bg-surface"
+      }`}
+    >
+      <span className="font-display text-[15px] font-semibold tabular-nums">
+        {a.house_number}
+        {a.addition}
+      </span>
+      {a.klachten.length > 0 && <span className="size-1.5 rounded-full bg-tint-rood-ink" />}
+      <span className="truncate text-[12.5px] font-semibold tabular-nums">
+        {betaald ? (
+          <Check className="size-4" />
+        ) : mislukt ? (
+          <X className="size-4" />
+        ) : heeftIetsOpen(a) ? (
+          formatPrice(a.open)
+        ) : (
+          "—"
+        )}
+      </span>
+    </button>
   );
 }
 
