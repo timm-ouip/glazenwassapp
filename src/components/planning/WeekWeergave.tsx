@@ -577,7 +577,9 @@ function BlokRegel({
             "data-kies-sleutel": `${datum}:${blok.sleutel}`,
             "data-kies-dag": datum,
           })}
-      className={`rounded-[8px] px-1.5 py-0.5 text-[11.5px] ${isDragging ? "opacity-40" : ""} ${
+      // bg-tint-geel naast de inline kleur: daaraan ziet het thema Fel dat
+      // hier een fel vlak ligt, en zet het de tekst erop donker.
+      className={`rounded-[8px] px-1.5 py-0.5 text-[11.5px] ${klus ? "bg-tint-geel" : ""} ${isDragging ? "opacity-40" : ""} ${
         aangewezen ? "outline outline-2 -outline-offset-2 outline-primary" : ""
       } ${isOver ? "border-t-2 border-primary" : ""}`}
       style={{ background: vlak ?? "var(--muted)", color: inkt }}

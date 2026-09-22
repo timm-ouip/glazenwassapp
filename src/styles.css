@@ -3,6 +3,8 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+/* Alleen in het thema Fel (licht of donker); combineer met dark: voor Fel donker. */
+@custom-variant fel (&:is(.fel *));
 
 /*
  * Design system definition.
@@ -62,6 +64,34 @@
   --color-tint-turkoois-mid: var(--tint-turkoois-mid);
   --color-tint-geel: var(--tint-geel);
   --color-tint-geel-ink: var(--tint-geel-ink);
+  --color-kaart-blauw: var(--kaart-blauw);
+  --color-kaart-blauw-ink: var(--kaart-blauw-ink);
+  --color-kaart-amber: var(--kaart-amber);
+  --color-kaart-amber-ink: var(--kaart-amber-ink);
+  --color-kaart-groen: var(--kaart-groen);
+  --color-kaart-groen-ink: var(--kaart-groen-ink);
+  --color-kaart-paars: var(--kaart-paars);
+  --color-kaart-paars-ink: var(--kaart-paars-ink);
+  --color-kaart-roze: var(--kaart-roze);
+  --color-kaart-roze-ink: var(--kaart-roze-ink);
+  --color-tegel-oranje: var(--tegel-oranje);
+  --color-tegel-oranje-ink: var(--tegel-oranje-ink);
+  --color-tegel-creme: var(--tegel-creme);
+  --color-tegel-creme-ink: var(--tegel-creme-ink);
+  --color-tegel-geel: var(--tegel-geel);
+  --color-tegel-geel-ink: var(--tegel-geel-ink);
+  --color-tegel-aqua: var(--tegel-aqua);
+  --color-tegel-aqua-ink: var(--tegel-aqua-ink);
+  --color-tegel-perzik: var(--tegel-perzik);
+  --color-tegel-perzik-ink: var(--tegel-perzik-ink);
+  --color-tegel-groen: var(--tegel-groen);
+  --color-tegel-groen-ink: var(--tegel-groen-ink);
+  --color-tegel-donker: var(--tegel-donker);
+  --color-tegel-donker-ink: var(--tegel-donker-ink);
+  --color-grafiek-rustig: var(--grafiek-rustig);
+  --color-grafiek-accent: var(--grafiek-accent);
+  --color-grafiek-klein-rustig: var(--grafiek-klein-rustig);
+  --color-grafiek-klein-accent: var(--grafiek-klein-accent);
   --shadow-card: var(--shadow-card);
 
   --color-background: var(--background);
@@ -209,6 +239,42 @@
      als het vlak, maar dan diep genoeg om te lezen. */
   --wijk-ink-l: 0.43;
   --wijk-ink-c: 0.115;
+
+  /* De cijferkaarten boven aan een pagina. In crème gewoon de tinten; het
+     thema Fel geeft ze eigen kleuren (zie .fel). */
+  --kaart-blauw: var(--tint-blauw);
+  --kaart-blauw-ink: var(--tint-blauw-ink);
+  --kaart-amber: var(--tint-amber);
+  --kaart-amber-ink: var(--tint-amber-ink);
+  --kaart-groen: var(--tint-groen);
+  --kaart-groen-ink: var(--tint-groen-ink);
+  --kaart-paars: var(--tint-paars);
+  --kaart-paars-ink: var(--tint-paars-ink);
+  --kaart-roze: var(--tint-roze);
+  --kaart-roze-ink: var(--tint-roze-ink);
+
+  /* De vakken op Home (src/routes/home.tsx). In crème de zachte tinten en
+     witte kaarten; Fel geeft ze de felle kleuren van het ontwerp. */
+  --tegel-oranje: var(--tint-oranje);
+  --tegel-oranje-ink: var(--tint-oranje-ink);
+  --tegel-creme: var(--card);
+  --tegel-creme-ink: var(--card-foreground);
+  --tegel-geel: var(--tint-amber);
+  --tegel-geel-ink: var(--tint-amber-ink);
+  --tegel-aqua: var(--tint-blauw);
+  --tegel-aqua-ink: var(--tint-blauw-ink);
+  --tegel-perzik: var(--tint-roze);
+  --tegel-perzik-ink: var(--tint-roze-ink);
+  --tegel-groen: var(--tint-groen);
+  --tegel-groen-ink: var(--tint-groen-ink);
+  --tegel-donker: var(--card);
+  --tegel-donker-ink: var(--card-foreground);
+  /* Het staafjesdiagram op Home: de maanden rustig, de huidige in kleur.
+     "Klein" is het minidiagram op het groene vak op de telefoon. */
+  --grafiek-rustig: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
+  --grafiek-accent: var(--tint-oranje-mid);
+  --grafiek-klein-rustig: color-mix(in oklab, var(--tint-groen-ink) 35%, transparent);
+  --grafiek-klein-accent: var(--tint-groen-ink);
 }
 
 .dark {
@@ -287,6 +353,343 @@
   --wijk-ink-c: 0.085;
 }
 
+/*
+ * Fel. Een apart thema naast crème, in een lichte (.fel) en een zwarte
+ * versie (.fel.dark): felle, lichte kleurvlakken met bijna zwarte tekst, grote
+ * cijfers en oranje als actiekleur. De vlakken zijn in beide versies precies
+ * dezelfde kleur; alleen de ondergrond en de tekst die er los op staat
+ * verschillen. Beide zijn te kiezen in Instellingen
+ * (src/lib/thema.ts).
+ *
+ * Tekst in een tintkleur (text-tint-*-ink) kan op twee plekken staan: op de
+ * ondergrond, of op zijn eigen vlak. In crème is dat één kleur, maar op zwart
+ * moet de tekst licht zijn en op een fel vlak juist donker. Daarom heet de
+ * kleur op de ondergrond hier --grond-*, en zet de regel verderop de inkt
+ * binnen elk fel vlak op donker.
+ */
+.fel {
+  --background: #f4f0e8;
+  --surface: #ede7dc;
+  --foreground: #141413;
+  --card: #ffffff;
+  --card-header: #f1ece3;
+  --card-foreground: #141413;
+  --popover: #ffffff;
+  --popover-foreground: #141413;
+  --primary: #ff5b1f;
+  --primary-foreground: #140600;
+  --brand: #a9d7d8;
+  --brand-foreground: #0b2324;
+  --secondary: #efeae0;
+  --secondary-foreground: #141413;
+  --muted: #efeae0;
+  --muted-foreground: #5c5954;
+  --accent: #efeae0;
+  --accent-foreground: #141413;
+  --destructive: #c8321f;
+  --destructive-foreground: #ffffff;
+  --border: #e6e0d5;
+  --input: #e2dcd0;
+  --ring: #ff5b1f;
+  --shadow-card: 0 1px 2px rgb(20 20 19 / 4%), 0 4px 12px rgb(20 20 19 / 4%);
+
+  /* De vlakken. */
+  --tint-amber: #f2b705;
+  --tint-geel: #f6e27a;
+  --tint-groen: #a6de8c;
+  --tint-blauw: #a9d7d8;
+  --tint-turkoois: #74d6b3;
+  --tint-limoen: #d4ec6e;
+  --tint-paars: #c8c2f4;
+  --tint-rood: #ff8a7a;
+  --tint-oranje: #ff5b1f;
+  --tint-roze: #f7b8cf;
+
+  /* De ondergrond nog eens apart, voor de regels verderop. */
+  --grond-vlak: #f4f0e8;
+  --grond-kaart: #ffffff;
+  --grond-zacht: #efeae0;
+  --grond-rand: #e6e0d5;
+  --grond-surface: #ede7dc;
+  --grond-kop: #f1ece3;
+  /* Tekst op het papier: de diepe kant van elke kleur. */
+  --grond-tekst: #141413;
+  --grond-grijs: #5c5954;
+  --grond-amber: #633806;
+  --grond-geel: #6b4e07;
+  --grond-groen: #27500a;
+  --grond-blauw: #0b5c5e;
+  --grond-turkoois: #085041;
+  --grond-limoen: #3b6d11;
+  --grond-paars: #3c3489;
+  --grond-rood: #791f1f;
+  --grond-oranje: #c2410c;
+  --grond-roze: #72243e;
+  --brand-ink: var(--grond-blauw);
+  --tint-amber-ink: var(--grond-amber);
+  --tint-geel-ink: var(--grond-geel);
+  --tint-groen-ink: var(--grond-groen);
+  --tint-blauw-ink: var(--grond-blauw);
+  --tint-turkoois-ink: var(--grond-turkoois);
+  --tint-limoen-ink: var(--grond-limoen);
+  --tint-paars-ink: var(--grond-paars);
+  --tint-rood-ink: var(--grond-rood);
+  --tint-oranje-ink: var(--grond-oranje);
+  --tint-roze-ink: var(--grond-roze);
+  --tint-blauw-mid: #0e7c7e;
+  --tint-groen-mid: #3b6d11;
+  --tint-rood-mid: #c43b2b;
+  --tint-paars-mid: #534ab7;
+  --tint-oranje-mid: #e04a10;
+  --tint-roze-mid: #993556;
+  --tint-turkoois-mid: #0f6e56;
+
+  --sidebar: #ede7dc;
+  --sidebar-foreground: #141413;
+  --sidebar-primary: #ff5b1f;
+  --sidebar-primary-foreground: #140600;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #141413;
+  --sidebar-border: #e6e0d5;
+  --sidebar-ring: #ff5b1f;
+  --wijk-l: 0.88;
+  --wijk-c: 0.08;
+  --wijk-ink-l: 0.4;
+  --wijk-ink-c: 0.12;
+
+  /* Cijferkaarten: oranje, crème (hier wit), donkergroen, aqua en perzik. */
+  --kaart-blauw: #ff5b1f;
+  --kaart-blauw-ink: #140600;
+  --kaart-amber: #ffffff;
+  --kaart-amber-ink: #141413;
+  --kaart-groen: #0c4a30;
+  --kaart-groen-ink: #f3eee5;
+  --kaart-paars: #a9d7d8;
+  --kaart-paars-ink: #0b2324;
+  --kaart-roze: #ffc7b0;
+  --kaart-roze-ink: #3a1406;
+
+  /* De vakken op Home, precies zoals het ontwerp. */
+  --tegel-oranje: #ff5b1f;
+  --tegel-oranje-ink: #140600;
+  --tegel-creme: #ffffff;
+  --tegel-creme-ink: #141413;
+  --tegel-geel: #f2b705;
+  --tegel-geel-ink: #1c1400;
+  --tegel-aqua: #a9d7d8;
+  --tegel-aqua-ink: #0b2324;
+  --tegel-perzik: #ffc7b0;
+  --tegel-perzik-ink: #3a1406;
+  --tegel-groen: #0c4a30;
+  --tegel-groen-ink: #f3eee5;
+  --tegel-donker: #141413;
+  --tegel-donker-ink: #f3eee5;
+  --grafiek-rustig: #c9c2b6;
+  --grafiek-accent: #ff5b1f;
+  --grafiek-klein-rustig: rgb(243 238 229 / 55%);
+  --grafiek-klein-accent: #f2b705;
+}
+
+.fel.dark {
+  --background: #000000;
+  --surface: #161616;
+  --foreground: #f3eee5;
+  --card: #111111;
+  --card-header: #1a1a1a;
+  --card-foreground: #f3eee5;
+  --popover: #1a1a1a;
+  --popover-foreground: #f3eee5;
+  --secondary: #1c1c1c;
+  --secondary-foreground: #f3eee5;
+  --muted: #1a1a1a;
+  --muted-foreground: #9c9993;
+  --accent: #1f1f1f;
+  --accent-foreground: #f3eee5;
+  --destructive: #e5484d;
+  --border: rgb(255 255 255 / 10%);
+  --input: rgb(255 255 255 / 14%);
+  /* Schaduw doet op zwart niets; een haarlijntje wel. */
+  --shadow-card: 0 0 0 1px rgb(255 255 255 / 6%);
+
+  --grond-vlak: #000000;
+  --grond-kaart: #111111;
+  --grond-zacht: #1a1a1a;
+  --grond-rand: rgb(255 255 255 / 10%);
+  --grond-surface: #161616;
+  --grond-kop: #1a1a1a;
+  /* Op zwart is de tekst de felle kleur zelf. */
+  --grond-tekst: #f3eee5;
+  --grond-grijs: #9c9993;
+  --grond-amber: #f2b705;
+  --grond-geel: #f6e27a;
+  --grond-groen: #a6de8c;
+  --grond-blauw: #a9d7d8;
+  --grond-turkoois: #74d6b3;
+  --grond-limoen: #d4ec6e;
+  --grond-paars: #c8c2f4;
+  --grond-rood: #ff8a7a;
+  --grond-oranje: #ff5b1f;
+  --grond-roze: #f7b8cf;
+  --tint-blauw-mid: #a9d7d8;
+  --tint-groen-mid: #a6de8c;
+  --tint-rood-mid: #ff8a7a;
+  --tint-paars-mid: #c8c2f4;
+  --tint-oranje-mid: #ff5b1f;
+  --tint-roze-mid: #f7b8cf;
+  --tint-turkoois-mid: #74d6b3;
+
+  --sidebar: #000000;
+  --sidebar-foreground: #f3eee5;
+  --sidebar-accent: #1f1f1f;
+  --sidebar-accent-foreground: #f3eee5;
+  --sidebar-border: rgb(255 255 255 / 10%);
+  /* Dagtegels in de planning blijven donker gekleurd: er staat veel lichte
+     tekst op die niet per tegel om te zetten is. */
+  --wijk-l: 0.36;
+  --wijk-c: 0.085;
+  --wijk-ink-l: 0.9;
+  --wijk-ink-c: 0.08;
+  /* Het voortgangsbalkje achter een straatnaam in de planmodus (index.tsx):
+     donker goud, want de lichte straatnaam staat eroverheen. */
+  --voortgang: #7a5a06;
+
+  --kaart-amber: #f3eee5;
+  --tegel-creme: #f3eee5;
+  --tegel-donker: #161616;
+  --grafiek-rustig: #6f6c68;
+}
+
+/*
+ * Op een fel vlak is de tekst bijna zwart, ook in Fel donker, en alles wat
+ * erin ligt (een kaartje, een invulveld) is licht: binnen een fel vlak is het
+ * altijd Fel licht. Deze regels zetten alleen de kleurvariabelen; de
+ * tekstkleur zelf staat in @layer base hieronder, zodat een tekstklasse op het
+ * element (text-white, text-tint-*-ink) altijd voorgaat.
+ */
+:where(.fel)
+  :where(
+    .bg-tint-amber,
+    .bg-tint-geel,
+    .bg-tint-groen,
+    .bg-tint-blauw,
+    .bg-tint-turkoois,
+    .bg-tint-limoen,
+    .bg-tint-paars,
+    .bg-tint-rood,
+    .bg-tint-oranje,
+    .bg-tint-roze
+  ),
+:where(.fel [data-selecteren]) :where([class*="in-data-[selecteren]:bg-tint-"]) {
+  --foreground: #141413;
+  --background: #ffffff;
+  --card: #ffffff;
+  --card-foreground: #141413;
+  --popover: #ffffff;
+  --popover-foreground: #141413;
+  --muted: rgb(20 20 19 / 8%);
+  --muted-foreground: rgb(20 20 19 / 78%);
+  --secondary: rgb(20 20 19 / 8%);
+  --secondary-foreground: #141413;
+  --accent: rgb(20 20 19 / 8%);
+  --accent-foreground: #141413;
+  --border: rgb(20 20 19 / 14%);
+  --input: rgb(20 20 19 / 18%);
+  --surface: rgb(255 255 255 / 55%);
+  --card-header: rgb(20 20 19 / 6%);
+  --voortgang: #f2b705;
+  --brand-ink: #0b5c5e;
+  --tint-amber-ink: #1c1400;
+  --tint-geel-ink: #2a2200;
+  --tint-groen-ink: #0a3a1c;
+  --tint-blauw-ink: #0b2324;
+  --tint-turkoois-ink: #06291f;
+  --tint-limoen-ink: #1f2a05;
+  --tint-paars-ink: #1a1540;
+  --tint-rood-ink: #3b0a05;
+  --tint-oranje-ink: #140600;
+  --tint-roze-ink: #3d0b1e;
+  --tint-blauw-mid: #0b5c5e;
+  --tint-groen-mid: #27500a;
+  --tint-rood-mid: #791f1f;
+  --tint-paars-mid: #3c3489;
+  --tint-oranje-mid: #712b13;
+  --tint-roze-mid: #72243e;
+  --tint-turkoois-mid: #085041;
+}
+
+/* Een gekleurde regel die in de selecteermodus juist geen kleur heeft: terug
+   naar de kleuren van de ondergrond. Deze regel staat erna en wint dus. */
+:where(.fel [data-selecteren]) :where([class*="in-data-[selecteren]:bg-transparent"]) {
+  --foreground: var(--grond-tekst);
+  --background: var(--grond-vlak);
+  --card: var(--grond-kaart);
+  --card-foreground: var(--grond-tekst);
+  --popover: var(--grond-kaart);
+  --popover-foreground: var(--grond-tekst);
+  --muted: var(--grond-zacht);
+  --muted-foreground: var(--grond-grijs);
+  --secondary: var(--grond-zacht);
+  --secondary-foreground: var(--grond-tekst);
+  --accent: var(--grond-zacht);
+  --accent-foreground: var(--grond-tekst);
+  --border: var(--grond-rand);
+  --input: var(--grond-rand);
+  --surface: var(--grond-surface);
+  --card-header: var(--grond-kop);
+  --brand-ink: var(--grond-blauw);
+  --tint-amber-ink: var(--grond-amber);
+  --tint-geel-ink: var(--grond-geel);
+  --tint-groen-ink: var(--grond-groen);
+  --tint-blauw-ink: var(--grond-blauw);
+  --tint-turkoois-ink: var(--grond-turkoois);
+  --tint-limoen-ink: var(--grond-limoen);
+  --tint-paars-ink: var(--grond-paars);
+  --tint-rood-ink: var(--grond-rood);
+  --tint-oranje-ink: var(--grond-oranje);
+  --tint-roze-ink: var(--grond-roze);
+  /* De middentinten liggen dicht genoeg bij de inkt van de ondergrond. */
+  --tint-blauw-mid: var(--grond-blauw);
+  --tint-groen-mid: var(--grond-groen);
+  --tint-rood-mid: var(--grond-rood);
+  --tint-paars-mid: var(--grond-paars);
+  --tint-oranje-mid: var(--grond-oranje);
+  --tint-roze-mid: var(--grond-roze);
+  --tint-turkoois-mid: var(--grond-turkoois);
+}
+
+/* Een half doorzichtig vlak (bg-tint-paars/60) wordt op zwart modderig en
+   houdt lichte tekst. Daarin geldt de rustige donkere tint van crème donker. */
+:where(.fel.dark) :where([class*="bg-tint-amber/"]) {
+  --tint-amber: #633806;
+}
+:where(.fel.dark) :where([class*="bg-tint-geel/"]) {
+  --tint-geel: #4a3a06;
+}
+:where(.fel.dark) :where([class*="bg-tint-groen/"]) {
+  --tint-groen: #27500a;
+}
+:where(.fel.dark) :where([class*="bg-tint-blauw/"]) {
+  --tint-blauw: #0b4a4c;
+}
+:where(.fel.dark) :where([class*="bg-tint-turkoois/"]) {
+  --tint-turkoois: #085041;
+}
+:where(.fel.dark) :where([class*="bg-tint-limoen/"]) {
+  --tint-limoen: #2c4a0e;
+}
+:where(.fel.dark) :where([class*="bg-tint-paars/"]) {
+  --tint-paars: #3c3489;
+}
+:where(.fel.dark) :where([class*="bg-tint-rood/"]) {
+  --tint-rood: #791f1f;
+}
+:where(.fel.dark) :where([class*="bg-tint-oranje/"]) {
+  --tint-oranje: #712b13;
+}
+:where(.fel.dark) :where([class*="bg-tint-roze/"]) {
+  --tint-roze: #72243e;
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
@@ -304,6 +707,37 @@
   h3 {
     font-family: var(--font-display);
     letter-spacing: -0.015em;
+  }
+
+  /* Geselecteerde tekst in Fel: omgekeerd, de tekstkleur wordt de achtergrond.
+     Anders neemt de browser de markeerkleur van het systeem (een rode selectie
+     leek op een fout), en elke vaste kleur valt samen met een van de felle
+     vlakken. Binnen een fel vlak zijn de variabelen al omgezet (zie boven), dus
+     daar wordt het zwart met wit. */
+  .fel ::selection {
+    background-color: var(--foreground);
+    color: var(--background);
+  }
+
+  /* Fel: de tekstkleur op een fel vlak (en terug in de selecteermodus) volgt
+     de variabelen die de regels boven @layer base daar zetten. Hier in de
+     laag, zodat een tekstklasse op het element voorgaat. */
+  :where(.fel)
+    :where(
+      .bg-tint-amber,
+      .bg-tint-geel,
+      .bg-tint-groen,
+      .bg-tint-blauw,
+      .bg-tint-turkoois,
+      .bg-tint-limoen,
+      .bg-tint-paars,
+      .bg-tint-rood,
+      .bg-tint-oranje,
+      .bg-tint-roze
+    ),
+  :where(.fel [data-selecteren]) :where([class*="in-data-[selecteren]:bg-tint-"]),
+  :where(.fel [data-selecteren]) :where([class*="in-data-[selecteren]:bg-transparent"]) {
+    color: var(--foreground);
   }
 }
 
@@ -324,7 +758,9 @@
      printlijst lichte letters op een wit vel geven — onleesbaar. Daarom
      krijgt .dark hier de lichte waarden terug voor alles wat op de
      printlijst gebruikt wordt. */
-  .dark {
+  .dark,
+  .fel,
+  .fel.dark {
     --background: #fff;
     --foreground: #000;
     --card: #fff;
@@ -335,6 +771,38 @@
     --border: oklch(0.78 0 0);
     --secondary: oklch(0.95 0 0);
     --secondary-foreground: #000;
+  }
+
+  /* Fel drukt af als crème: zachte vlakken in plaats van felle, anders gaat
+     er een halve inktpatroon op aan een printlijst. */
+  .fel,
+  .fel.dark {
+    --tint-amber: #faeeda;
+    --tint-geel: #fbf3d0;
+    --tint-groen: #eaf3de;
+    --tint-blauw: #e6f1fb;
+    --tint-turkoois: #e1f5ee;
+    --tint-limoen: #f0f6e4;
+    --tint-paars: #eeedfe;
+    --tint-rood: #fcebeb;
+    --tint-oranje: #faece7;
+    --tint-roze: #fbeaf0;
+    --grond-tekst: #000;
+    --grond-grijs: oklch(0.42 0 0);
+    --grond-amber: #633806;
+    --grond-geel: #6b4e07;
+    --grond-groen: #27500a;
+    --grond-blauw: #0c447c;
+    --grond-turkoois: #085041;
+    --grond-limoen: #3b6d11;
+    --grond-paars: #3c3489;
+    --grond-rood: #791f1f;
+    --grond-oranje: #712b13;
+    --grond-roze: #72243e;
+    --wijk-l: 0.94;
+    --wijk-c: 0.045;
+    --wijk-ink-l: 0.43;
+    --wijk-ink-c: 0.115;
   }
 }
 

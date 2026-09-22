@@ -11,8 +11,9 @@ import { fetchMappen } from "@/lib/mailbox";
 import { heeftRecht, rolLabel } from "@/lib/rechten";
 
 /** Wat je op de telefoon het vaakst opent, staat los in de balk. De rest zit
- *  achter "Meer" — net als in een bank- of fotoapp. */
-const VAST = ["/", "/planning", "/klanten", "/mailing", "/betalingen"];
+ *  achter "Meer" — net als in een bank- of fotoapp. Wijken staat niet los:
+ *  daar kom je via Home of via Meer. */
+const VAST = ["/home", "/planning", "/klanten", "/mailing", "/betalingen"];
 /** Meer dan dit past niet naast "Meer". De eigenaar houdt zo zijn vier vaste
  *  tabs; een geldloper, die alleen Betalingen heeft, krijgt die als tab. */
 const MAX_TABS = 4;
@@ -24,7 +25,7 @@ const TABNAAM: Record<string, string> = { "/mailing": "Mail" };
  * groter scherm staat de zijbalk er, dan is deze balk verborgen.
  */
 export function Tabbalk({ boven }: { boven?: ReactNode }) {
-  const { employee, company, werk, beheer, teDoen, isActief } = useMenu();
+  const { employee, company, thuis, werk, beheer, teDoen, isActief } = useMenu();
   const navigate = useNavigate();
   const [meerOpen, setMeerOpen] = useState(false);
   // Ongelezen mail in het postvak, als getal op de Mail-tab. Dezelfde vraag
@@ -53,7 +54,7 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
     };
   }, []);
 
-  const alles = [...werk, ...beheer];
+  const alles = [thuis, ...werk, ...beheer];
   const tabs = alles.filter((p) => VAST.includes(p.to)).slice(0, MAX_TABS);
   const meer = alles.filter((p) => !tabs.includes(p));
   const meerActief = meer.some(isActief);
@@ -70,12 +71,15 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
       <Link
         to={p.to}
         onClick={() => setMeerOpen(false)}
-        className={`flex h-12 items-center gap-3 rounded-[12px] px-3 text-[15px] ${
-          actief ? "bg-card font-semibold shadow-card" : "text-foreground/85"
+        // In Fel: alleen de pagina waar je bent krijgt kleur, een oranje pil.
+        className={`flex h-12 items-center gap-3 rounded-[12px] px-3 text-[15px] fel:rounded-full fel:px-4 ${
+          actief
+            ? "bg-card font-semibold shadow-card fel:bg-primary fel:text-primary-foreground fel:shadow-none"
+            : "text-foreground/85"
         }`}
       >
         <p.icon
-          className={`size-5 shrink-0 ${actief ? "text-tint-oranje-ink" : "text-muted-foreground"}`}
+          className={`size-5 shrink-0 ${actief ? "text-tint-oranje-ink fel:text-primary-foreground" : "text-muted-foreground"}`}
         />
         <span className="truncate">{p.label}</span>
         {telletje > 0 && (
@@ -99,7 +103,7 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
         )}
         <nav
           aria-label="Hoofdmenu"
-          className="flex border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
+          className="flex border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur fel:dark:bg-background/95"
         >
           {tabs.map((p) => (
             <Link key={p.to} to={p.to} className={tabKlassen(isActief(p))}>

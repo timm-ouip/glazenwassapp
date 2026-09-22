@@ -902,7 +902,14 @@ function MapKnop({
       )}
     >
       {stip ? (
-        <span className={cn("ml-1 mr-0.5 size-2.5 shrink-0 rounded-full", stip)} />
+        // Het randje houdt ook een stipje zonder eigen kleur (Overig) zichtbaar,
+        // net als bij de keuzechips bovenaan.
+        <span
+          className={cn(
+            "ml-1 mr-0.5 size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-foreground/20",
+            stip,
+          )}
+        />
       ) : (
         <Icoon
           className={cn(
@@ -2310,7 +2317,14 @@ function Mailweergave({
             </p>
           )}
           {b.html ? (
-            <MailHtml html={b.html} meegroeien />
+            // Mail heeft zijn eigen kleuren en blijft dus wit. In het donker
+            // ligt hij als een afgerond vel op de pagina, niet als een wit blok
+            // van rand tot rand dat tegen Paaltje erboven aan plakt.
+            <MailHtml
+              html={b.html}
+              meegroeien
+              className="dark:mx-4 dark:mb-4 dark:mt-2 dark:w-[calc(100%-2rem)] dark:rounded-[16px] lg:dark:mx-5 lg:dark:w-[calc(100%-2.5rem)]"
+            />
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 max-lg:overflow-visible max-lg:px-4">
               <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed">

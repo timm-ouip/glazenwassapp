@@ -1186,9 +1186,11 @@ function Eenheidkaart({
             "data-kies-sleutel": eenheid.sleutel,
             "data-kies-dag": datum,
           })}
+      // bg-tint-geel naast de inline kleur: daaraan ziet het thema Fel dat
+      // hier een fel vlak ligt, en zet het de tekst erop donker.
       className={`absolute overflow-hidden rounded-[7px] px-1.5 py-0.5 text-left ${
         losAdres ? "left-3 right-1 opacity-90" : "inset-x-1 border border-border/60"
-      } ${isDragging ? "opacity-40" : ""} ${
+      } ${blok.soort === "klus" ? "bg-tint-geel" : ""} ${isDragging ? "opacity-40" : ""} ${
         aangevinkt ? "outline outline-2 -outline-offset-2 outline-primary" : ""
       } ${isOver ? "border-t-2 border-primary" : ""}`}
       style={{ top: plek.top, height: plek.hoogte, background: vlak, color: inkt }}

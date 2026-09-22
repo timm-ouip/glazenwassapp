@@ -7,6 +7,7 @@ import {
   IconCash as Cash,
   IconMap as Map,
   IconHistory as History,
+  IconHome as Home,
   IconInbox as Inbox,
   IconMail as Mail,
   IconLayoutSidebarLeftCollapse as PanelLeftClose,
@@ -31,6 +32,10 @@ type Pagina = {
   /** Zichtbaar voor wie minstens één van deze rechten heeft (de eigenaar altijd). */
   recht?: Recht[];
 };
+
+/** Het startscherm met een vak per onderdeel. Voor iedereen: wat erop staat
+ *  hangt zelf van je rechten af. */
+const THUIS: Pagina = { label: "Home", to: "/home", icon: Home };
 
 const WERK: Pagina[] = [
   { label: "Wijken", to: "/", icon: Map, recht: ["planning"] },
@@ -70,6 +75,7 @@ export function useMenu() {
   return {
     employee,
     company,
+    thuis: THUIS,
     werk: WERK.filter(magZien),
     beheer: BEHEER.filter(magZien),
     teDoen: teDoen ?? 0,
@@ -80,7 +86,7 @@ export function useMenu() {
 export type { Pagina };
 
 export function Zijbalk() {
-  const { employee, company, werk, beheer, teDoen, isActief } = useMenu();
+  const { employee, company, thuis, werk, beheer, teDoen, isActief } = useMenu();
   const navigate = useNavigate();
 
   // Begint uitgeklapt; de keuze van de gebruiker wordt na het eerste
@@ -119,17 +125,18 @@ export function Zijbalk() {
         aria-label={p.label}
         // Het actieve item is een witte pil op de crème balk, niet een
         // gekleurd vlak: de kleur zit in het icoon, en het wit tilt de pagina
-        // waar je bent op uit de rest.
-        className={`relative flex h-10 items-center rounded-[12px] text-[13.5px] transition-colors ${
-          ingeklapt ? "justify-center px-0" : "gap-3 px-2.5"
+        // waar je bent op uit de rest. In Fel is het juist de enige plek met
+        // kleur: een volle oranje pil, de rest van het menu blijft rustig.
+        className={`relative flex h-10 items-center rounded-[12px] text-[13.5px] transition-colors fel:rounded-full ${
+          ingeklapt ? "justify-center px-0" : "gap-3 px-2.5 fel:px-3"
         } ${
           actief
-            ? "border border-border bg-card font-semibold shadow-card"
+            ? "border border-border bg-card font-semibold shadow-card fel:border-transparent fel:bg-primary fel:text-primary-foreground fel:shadow-none"
             : "border border-transparent text-foreground/75 hover:bg-card/70 hover:text-foreground"
         }`}
       >
         <p.icon
-          className={`size-[17px] shrink-0 ${actief ? "text-tint-oranje-ink" : "text-muted-foreground"}`}
+          className={`size-[17px] shrink-0 ${actief ? "text-tint-oranje-ink fel:text-primary-foreground" : "text-muted-foreground"}`}
         />
         {!ingeklapt && <span className="truncate">{p.label}</span>}
         {/* Ingeklapt is er geen ruimte voor een getal: dan alleen een stip,
@@ -148,7 +155,7 @@ export function Zijbalk() {
 
   return (
     <aside
-      className={`${breed} sticky top-0 hidden h-screen md:flex shrink-0 flex-col gap-5 border-r border-border bg-surface px-3.5 py-5 transition-[width] duration-200 print:hidden`}
+      className={`${breed} sticky top-0 hidden h-screen md:flex shrink-0 flex-col gap-5 border-r border-border bg-surface px-3.5 py-5 fel:dark:bg-background transition-[width] duration-200 print:hidden`}
     >
       <div className={`flex items-center ${ingeklapt ? "flex-col gap-3" : "gap-2.5"}`}>
         <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[12px] border border-border bg-card">
@@ -179,6 +186,10 @@ export function Zijbalk() {
           )}
         </button>
       </div>
+
+      <nav className="-mb-2 flex flex-col gap-0.5" aria-label="Start">
+        <Item p={thuis} />
+      </nav>
 
       {werk.length > 0 && (
         <nav className="flex flex-col gap-0.5">

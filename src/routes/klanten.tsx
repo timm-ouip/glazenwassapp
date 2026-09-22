@@ -87,6 +87,11 @@ interface KlantenSearch {
   wijk?: string;
   /** Opent het dossier van deze klant — zo landt de link vanaf de wijkenpagina goed. */
   klant?: string;
+  /** Opent het dossier van dit adres, ook als er nog geen klant aan hangt:
+   *  zo landt een zoekresultaat op Home. */
+  adres?: string;
+  /** Opent meteen een leeg dossier voor een nieuwe klant (de knop op Home). */
+  nieuw?: "klant";
 }
 
 export const Route = createFileRoute("/klanten")({
@@ -97,6 +102,8 @@ export const Route = createFileRoute("/klanten")({
     const uit: KlantenSearch = {};
     if (typeof search["wijk"] === "string" && search["wijk"]) uit.wijk = search["wijk"];
     if (typeof search["klant"] === "string" && search["klant"]) uit.klant = search["klant"];
+    if (typeof search["adres"] === "string" && search["adres"]) uit.adres = search["adres"];
+    if (search["nieuw"] === "klant") uit.nieuw = "klant";
     return uit;
   },
   head: () => ({
@@ -658,7 +665,7 @@ function Klanten() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const bevestig = useBevestig();
-  const { wijk, klant: klantUitUrl } = Route.useSearch();
+  const { wijk, klant: klantUitUrl, adres: adresUitUrl, nieuw: nieuwUitUrl } = Route.useSearch();
   // Wat je hier mag, per recht. De database dwingt het af; dit zorgt dat er
   // geen velden of knoppen staan die toch niets opslaan.
   const magKlanten = useRecht("klanten_bewerken");
@@ -722,14 +729,20 @@ function Klanten() {
 
   // De wijk waar je mee bezig bent blijft staan, ook na een paginawissel of
   // een nieuwe inlog. Een ?klant= in de URL blijft daarbij behouden, anders
-  // sluit de omleiding het dossier voor het geopend is.
+  // sluit de omleiding het dossier voor het geopend is. Hetzelfde voor
+  // ?adres= en ?nieuw= vanaf Home.
   const actieveWijk = useActieveWijk(
     districts,
     wijk,
     (id) =>
       void navigate({
         to: "/klanten",
-        search: klantUitUrl ? { wijk: id, klant: klantUitUrl } : { wijk: id },
+        search: {
+          wijk: id,
+          ...(klantUitUrl ? { klant: klantUitUrl } : {}),
+          ...(adresUitUrl ? { adres: adresUitUrl } : {}),
+          ...(nieuwUitUrl ? { nieuw: nieuwUitUrl } : {}),
+        },
         replace: true,
       }),
   );
@@ -773,6 +786,37 @@ function Klanten() {
     streets,
     customersQuery.isSuccess,
     streetsQuery.isSuccess,
+    actieveWijk,
+    navigate,
+  ]);
+
+  // Vanaf Home: ?adres= opent het dossier van dat adres (met zijn klant, als
+  // die er is), ?nieuw=klant een leeg dossier. Daarna uit de URL, net als
+  // hierboven, zodat sluiten en opnieuw openen gewoon werkt.
+  useEffect(() => {
+    if (!adresUitUrl && !nieuwUitUrl) return;
+    if (adresUitUrl) {
+      if (!customersQuery.isSuccess || !klantenQuery.isSuccess) return;
+      const pand = customers.find((c) => c.id === adresUitUrl);
+      if (pand) {
+        const eigenaar = pand.klant_id ? klanten.find((k) => k.id === pand.klant_id) : undefined;
+        setDossier({ open: true, klant: eigenaar ?? null, customer: pand });
+      }
+    } else {
+      setDossier({ open: true, klant: null, customer: null });
+    }
+    void navigate({
+      to: "/klanten",
+      search: actieveWijk ? { wijk: actieveWijk } : {},
+      replace: true,
+    });
+  }, [
+    adresUitUrl,
+    nieuwUitUrl,
+    customers,
+    klanten,
+    customersQuery.isSuccess,
+    klantenQuery.isSuccess,
     actieveWijk,
     navigate,
   ]);

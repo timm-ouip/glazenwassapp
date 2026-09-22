@@ -145,7 +145,7 @@ export function DagContant({ adres }: { adres: string }) {
             <div className="flex gap-2">
               <Button
                 type="button"
-                className="h-11 flex-1 rounded-full bg-tint-groen-ink text-white hover:bg-tint-groen-ink/90"
+                className="h-11 flex-1 rounded-full bg-tint-groen-ink text-card hover:bg-tint-groen-ink/90"
                 disabled={bezig}
                 onClick={() => void tik(s.open)}
               >

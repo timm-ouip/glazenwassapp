@@ -58,7 +58,7 @@ function SignupPagina() {
     await refreshEmployee();
     setBezig(false);
     toast.success(`Welkom, ${bedrijfsnaam.trim()}!`);
-    void navigate({ to: "/" });
+    void navigate({ to: "/home" });
   }
 
   return (

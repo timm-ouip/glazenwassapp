@@ -121,7 +121,7 @@ function UitnodigingPagina() {
         ? `Welkom bij ${stand.bedrijf}!`
         : "Welkom bij het team!",
     );
-    void navigate({ to: "/" });
+    void navigate({ to: "/home" });
   }
 
   /** Eigen uitnodiging: de server zet het wachtwoord en het lidmaatschap, daarna gewoon inloggen. */

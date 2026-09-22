@@ -9,8 +9,10 @@ import {
   IconMail as Mail,
   IconDeviceDesktop as Monitor,
   IconMoon as Moon,
+  IconMoonFilled as MoonFel,
   IconPlus as Plus,
   IconSun as Sun,
+  IconSunFilled as SunFel,
   IconTrash as Trash2,
   IconUser as User,
   IconUserPlus as UserPlus,
@@ -2108,11 +2110,14 @@ const THEMA_ICOON: Record<Thema, typeof Monitor> = {
   systeem: Monitor,
   licht: Sun,
   donker: Moon,
+  "fel-licht": SunFel,
+  "fel-donker": MoonFel,
 };
 
 /**
  * Licht of donker. Standaard volgt de app je systeem — zet je hem vast, dan
- * geldt dat alleen op dit apparaat.
+ * geldt dat alleen op dit apparaat. Fel licht en Fel donker zijn het thema
+ * met de felle kleurvlakken; die staan altijd vast.
  */
 function WeergaveKaart() {
   const [thema, setThema] = useState<Thema>("systeem");
@@ -2139,7 +2144,7 @@ function WeergaveKaart() {
   return (
     <Kaart
       titel="Weergave"
-      uitleg="Standaard volgt de app je systeem. Je kunt hem ook vastzetten; dat geldt dan alleen op dit apparaat."
+      uitleg="Standaard volgt de app je systeem. Je kunt hem ook vastzetten; dat geldt dan alleen op dit apparaat. Fel zet felle kleurvlakken op een lichte of een zwarte achtergrond."
     >
       <div className="flex flex-wrap gap-2">
         {(Object.keys(themaLabels) as Thema[]).map((t) => {

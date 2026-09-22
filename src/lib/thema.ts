@@ -3,9 +3,13 @@
  * zetten. De keuze staat in localStorage, want hij hoort bij dit apparaat en
  * niet bij je account — op je telefoon wil je 's avonds misschien donker
  * terwijl de laptop op kantoor licht blijft.
+ *
+ * Naast crème (licht en donker) is er Fel: felle kleurvlakken met grote
+ * cijfers, op warm papier (Fel licht) of op zwart (Fel donker). Die kies je
+ * elk los; ze wisselen niet mee met het systeem.
  */
 
-export type Thema = "systeem" | "licht" | "donker";
+export type Thema = "systeem" | "licht" | "donker" | "fel-licht" | "fel-donker";
 
 export const THEMA_OPSLAG = "glazenwas.thema";
 
@@ -13,13 +17,19 @@ export const themaLabels: Record<Thema, string> = {
   systeem: "Systeem",
   licht: "Licht",
   donker: "Donker",
+  "fel-licht": "Fel licht",
+  "fel-donker": "Fel donker",
 };
+
+function isThema(waarde: string | null): waarde is Thema {
+  return waarde !== null && Object.hasOwn(themaLabels, waarde);
+}
 
 export function leesThema(): Thema {
   if (typeof window === "undefined") return "systeem";
   try {
     const opgeslagen = window.localStorage.getItem(THEMA_OPSLAG);
-    return opgeslagen === "licht" || opgeslagen === "donker" ? opgeslagen : "systeem";
+    return isThema(opgeslagen) ? opgeslagen : "systeem";
   } catch {
     return "systeem";
   }
@@ -27,14 +37,19 @@ export function leesThema(): Thema {
 
 /** Wat er nu daadwerkelijk op het scherm staat, met "systeem" uitgerekend. */
 export function isDonker(thema: Thema): boolean {
-  if (thema !== "systeem") return thema === "donker";
+  if (thema !== "systeem") return thema === "donker" || thema === "fel-donker";
   if (typeof window === "undefined") return false;
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+export function isFel(thema: Thema): boolean {
+  return thema === "fel-licht" || thema === "fel-donker";
 }
 
 export function pasThemaToe(thema: Thema) {
   if (typeof document === "undefined") return;
   document.documentElement.classList.toggle("dark", isDonker(thema));
+  document.documentElement.classList.toggle("fel", isFel(thema));
 }
 
 export function bewaarThema(thema: Thema) {
@@ -54,6 +69,8 @@ export function bewaarThema(thema: Thema) {
  */
 export const THEMA_SCRIPT = `(function(){try{
 var k=localStorage.getItem(${JSON.stringify(THEMA_OPSLAG)});
-var d=k==="donker"||(k!=="licht"&&window.matchMedia("(prefers-color-scheme: dark)").matches);
+var f=k==="fel-licht"||k==="fel-donker";
+var d=k==="donker"||k==="fel-donker"||(k!=="licht"&&k!=="fel-licht"&&window.matchMedia("(prefers-color-scheme: dark)").matches);
 if(d)document.documentElement.classList.add("dark");
+if(f)document.documentElement.classList.add("fel");
 }catch(e){}})();`;

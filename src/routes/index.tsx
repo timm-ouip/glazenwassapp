@@ -3032,7 +3032,7 @@ const GroepSectie = memo(function GroepSectie(p: SectieProps) {
         style={
           gevuld > 0
             ? {
-                backgroundImage: `linear-gradient(to right, var(--tint-amber) ${gevuld}%, transparent ${gevuld}%)`,
+                backgroundImage: `linear-gradient(to right, var(--voortgang, var(--tint-amber)) ${gevuld}%, transparent ${gevuld}%)`,
               }
             : undefined
         }
@@ -3262,7 +3262,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
           style={
             gevuld > 0
               ? {
-                  backgroundImage: `linear-gradient(to right, var(--tint-amber) ${gevuld}%, transparent ${gevuld}%)`,
+                  backgroundImage: `linear-gradient(to right, var(--voortgang, var(--tint-amber)) ${gevuld}%, transparent ${gevuld}%)`,
                 }
               : undefined
           }
@@ -3421,7 +3421,7 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
             style={
               gevuld > 0
                 ? {
-                    backgroundImage: `linear-gradient(to right, var(--tint-amber) ${gevuld}%, transparent ${gevuld}%)`,
+                    backgroundImage: `linear-gradient(to right, var(--voortgang, var(--tint-amber)) ${gevuld}%, transparent ${gevuld}%)`,
                   }
                 : undefined
             }

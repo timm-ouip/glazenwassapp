@@ -27,7 +27,13 @@ export function BetaalIcoon({
     >
       <Icoon
         aria-hidden="true"
-        className={cn("size-4", contant ? "text-amber-500" : "text-teal-600")}
+        className={cn(
+          "size-4",
+          // In het thema Fel de goudgele en aquablauwe tint van de vlakken.
+          contant
+            ? "text-amber-500 fel:text-[#b98700] fel:dark:text-[#f2b705]"
+            : "text-teal-600 fel:text-[#0e7c7e] fel:dark:text-[#a9d7d8]",
+        )}
       />
     </span>
   );

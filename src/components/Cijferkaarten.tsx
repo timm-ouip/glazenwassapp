@@ -10,15 +10,19 @@ import type { TablerIcon as LucideIcon } from "@tabler/icons-react";
  *
  * Vier pagina's tekenden deze rij eerst zelf, elk net iets anders. Nu staat
  * hij hier: verandert de vorm, dan verandert hij overal mee.
+ *
+ * In het thema Fel is het een felle tegel met het label bovenaan en een groot
+ * getal onderin, zonder icoon. De kleuren komen dan uit --kaart-* in
+ * styles.css: oranje, crème, donkergroen, aqua en perzik.
  */
 export type Kaartkleur = "blauw" | "amber" | "groen" | "paars" | "roze";
 
 const KLEUREN: Record<Kaartkleur, { vlak: string; chip: string }> = {
-  blauw: { vlak: "bg-accent text-accent-foreground", chip: "bg-accent-foreground/15" },
-  amber: { vlak: "bg-tint-amber text-tint-amber-ink", chip: "bg-tint-amber-ink/15" },
-  groen: { vlak: "bg-tint-groen text-tint-groen-ink", chip: "bg-tint-groen-ink/15" },
-  paars: { vlak: "bg-tint-paars text-tint-paars-ink", chip: "bg-tint-paars-ink/15" },
-  roze: { vlak: "bg-tint-roze text-tint-roze-ink", chip: "bg-tint-roze-ink/15" },
+  blauw: { vlak: "bg-kaart-blauw text-kaart-blauw-ink", chip: "bg-kaart-blauw-ink/15" },
+  amber: { vlak: "bg-kaart-amber text-kaart-amber-ink", chip: "bg-kaart-amber-ink/15" },
+  groen: { vlak: "bg-kaart-groen text-kaart-groen-ink", chip: "bg-kaart-groen-ink/15" },
+  paars: { vlak: "bg-kaart-paars text-kaart-paars-ink", chip: "bg-kaart-paars-ink/15" },
+  roze: { vlak: "bg-kaart-roze text-kaart-roze-ink", chip: "bg-kaart-roze-ink/15" },
 };
 
 export interface Cijfer {
@@ -42,19 +46,23 @@ export function Cijferkaarten({ cijfers }: { cijfers: Cijfer[] }) {
         return (
           <div
             key={c.label}
-            className={`min-w-0 rounded-[14px] px-2.5 py-2 sm:rounded-[18px] sm:px-4 sm:py-3.5 ${kleur.vlak}`}
+            className={`min-w-0 rounded-[14px] px-2.5 py-2 sm:rounded-[18px] sm:px-4 sm:py-3.5 fel:flex fel:min-h-[112px] fel:flex-col fel:rounded-[22px] fel:px-3.5 fel:py-3 fel:sm:min-h-[132px] fel:sm:rounded-[24px] fel:sm:px-5 fel:sm:py-4 ${kleur.vlak}`}
           >
             <div
-              className={`mb-2.5 hidden size-8 items-center sm:flex justify-center rounded-[10px] ${kleur.chip}`}
+              className={`mb-2.5 hidden size-8 items-center sm:flex justify-center rounded-[10px] fel:sm:hidden ${kleur.chip}`}
             >
               <c.icon className="size-[16px]" />
             </div>
-            <p className="truncate text-[11px] opacity-80 sm:text-[12.5px]">{c.label}</p>
-            <p className="truncate font-display text-[17px] font-semibold sm:text-[24px] leading-tight tracking-[-0.02em] tabular-nums">
+            <p className="truncate text-[11px] opacity-80 sm:text-[12.5px] fel:font-semibold fel:opacity-100 fel:sm:text-[13px]">
+              {c.label}
+            </p>
+            <p className="truncate font-display text-[17px] font-semibold sm:text-[24px] leading-tight tracking-[-0.02em] tabular-nums fel:mt-auto fel:pt-2 fel:text-[30px] fel:leading-none fel:tracking-[-0.045em] fel:sm:text-[52px]">
               {c.waarde}
             </p>
             {c.onder && (
-              <p className="mt-0.5 hidden truncate text-[11px] opacity-70 sm:block">{c.onder}</p>
+              <p className="mt-0.5 hidden truncate text-[11px] opacity-70 sm:block fel:mt-1.5 fel:block fel:opacity-80 fel:sm:text-[13px]">
+                {c.onder}
+              </p>
             )}
           </div>
         );

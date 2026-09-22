@@ -56,7 +56,9 @@ export function niveausVoor(c: Pick<MailCategorie, "sleutel">): Zelfstandigheid[
 }
 
 /** Tinten voor de labels: vaste categorieën een vaste kleur, eigen categorieën lopen door. */
-const GEEN_TINT = "bg-muted text-muted-foreground";
+// In Fel donker is "muted" bijna zo zwart als de ondergrond: dan een grijs
+// dat je als stipje en als label nog ziet liggen.
+const GEEN_TINT = "bg-muted text-muted-foreground fel:dark:bg-[#2e2c2a]";
 
 const VASTE_TINT: Record<Sleutel, string> = {
   klachten: "bg-tint-rood text-tint-rood-ink",

@@ -56,7 +56,7 @@ function LoginPagina() {
     } catch {
       // Privémodus of geen opslag beschikbaar: dan onthouden we niets.
     }
-    void navigate({ to: "/" });
+    void navigate({ to: "/home" });
   }
 
   return (

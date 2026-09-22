@@ -44,6 +44,9 @@ type Props = {
   /** Op de telefoon: een balk onderin, vlak boven de tabs. Daar zet je wat
    *  je met je duim moet kunnen bereiken, zoals de zoekbalk. */
   onderbalk?: ReactNode;
+  /** Geen titelbalk bovenaan: de pagina zet zelf een kop neer (Home, met
+   *  de begroeting). `titel` blijft nodig, maar wordt dan niet getoond. */
+  zonderTitelbalk?: boolean;
   children: ReactNode;
 };
 
@@ -55,6 +58,7 @@ export function AppLayout({
   kop,
   verbergBijScrollen = false,
   onderbalk,
+  zonderTitelbalk = false,
   children,
 }: Props) {
   // De knoppenbalk plakt onder de titelbalk vast. Hoe hoog die is hangt af
@@ -116,6 +120,7 @@ export function AppLayout({
       >
         <header
           ref={kopRef}
+          hidden={zonderTitelbalk}
           className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur print:hidden"
         >
           <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 md:px-6 md:py-3.5">
