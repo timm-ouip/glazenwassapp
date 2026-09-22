@@ -88,6 +88,14 @@
   --color-tegel-groen-ink: var(--tegel-groen-ink);
   --color-tegel-donker: var(--tegel-donker);
   --color-tegel-donker-ink: var(--tegel-donker-ink);
+  --color-tegel-goud: var(--tegel-goud);
+  --color-tegel-goud-ink: var(--tegel-goud-ink);
+  --color-tegel-paars: var(--tegel-paars);
+  --color-tegel-paars-ink: var(--tegel-paars-ink);
+  --color-tegel-petrol: var(--tegel-petrol);
+  --color-tegel-petrol-ink: var(--tegel-petrol-ink);
+  --color-tegel-ijsblauw: var(--tegel-ijsblauw);
+  --color-tegel-ijsblauw-ink: var(--tegel-ijsblauw-ink);
   --color-grafiek-rustig: var(--grafiek-rustig);
   --color-grafiek-accent: var(--grafiek-accent);
   --color-grafiek-klein-rustig: var(--grafiek-klein-rustig);
@@ -271,6 +279,20 @@
   --tegel-groen-ink: var(--tint-groen-ink);
   --tegel-donker: var(--card);
   --tegel-donker-ink: var(--card-foreground);
+  /* De vier kleuren die Timmie koos. Ze zijn steviger dan de pastels, dus ze
+     zijn bedoeld voor een enkel vlak — een tegel of een grafieklijn — en niet
+     om er een hele pagina mee te vullen. De inkt erbij is de tekstkleur die
+     er leesbaar op is: op goud, paars en ijsblauw donker, op petrol licht.
+     Paars is een middentint: daar haalt witte tekst de norm net niet, dus
+     staat er bijna zwarte tekst op, net als op een fel vlak. */
+  --tegel-goud: #EEC170;
+  --tegel-goud-ink: #3A2A08;
+  --tegel-paars: #7F7CAF;
+  --tegel-paars-ink: #0B0A14;
+  --tegel-petrol: #1A5E63;
+  --tegel-petrol-ink: #E8F3F2;
+  --tegel-ijsblauw: #CDE6F5;
+  --tegel-ijsblauw-ink: #10344C;
   /* Het staafjesdiagram op Home: de maanden rustig, de huidige in kleur.
      "Klein" is het minidiagram op het groene vak op de telefoon. */
   --grafiek-rustig: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
@@ -301,6 +323,17 @@
   --tint-groen-ink: #C0DD97;
   --tint-paars: #3C3489;
   --tint-paars-ink: #CECBF6;
+  /* De vier gekozen kleuren, omgedraaid voor het donker: het vlak diep, de
+     tekst erop licht. Anders zou een tegel van 270 pixels als een lamp op een
+     donkere pagina staan. */
+  --tegel-goud: #563D0C;
+  --tegel-goud-ink: #F0CE94;
+  --tegel-paars: #3B3960;
+  --tegel-paars-ink: #C6C4E4;
+  --tegel-petrol: #17555A;
+  --tegel-petrol-ink: #CFE7E5;
+  --tegel-ijsblauw: #123C57;
+  --tegel-ijsblauw-ink: #BBDCF2;
   --tint-rood: #791F1F;
   --tint-rood-ink: #F7C1C1;
   --tint-blauw: #0C447C;
@@ -490,6 +523,20 @@
   --tegel-groen-ink: #f3eee5;
   --tegel-donker: #141413;
   --tegel-donker-ink: #f3eee5;
+  /* De vier kleuren die Timmie koos. Ze zijn steviger dan de pastels, dus ze
+     zijn bedoeld voor een enkel vlak — een tegel of een grafieklijn — en niet
+     om er een hele pagina mee te vullen. De inkt erbij is de tekstkleur die
+     er leesbaar op is: op goud, paars en ijsblauw donker, op petrol licht.
+     Paars is een middentint: daar haalt witte tekst de norm net niet, dus
+     staat er bijna zwarte tekst op, net als op een fel vlak. */
+  --tegel-goud: #EEC170;
+  --tegel-goud-ink: #3A2A08;
+  --tegel-paars: #7F7CAF;
+  --tegel-paars-ink: #0B0A14;
+  --tegel-petrol: #1A5E63;
+  --tegel-petrol-ink: #E8F3F2;
+  --tegel-ijsblauw: #CDE6F5;
+  --tegel-ijsblauw-ink: #10344C;
   --grafiek-rustig: #c9c2b6;
   --grafiek-accent: #ff5b1f;
   --grafiek-klein-rustig: rgb(243 238 229 / 55%);

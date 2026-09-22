@@ -432,7 +432,7 @@ function Home() {
           )}
 
           {magKlantenZien && (
-            <Link to="/klanten" className={cn(VAK, KLEUR.creme, GEWOON)}>
+            <Link to="/klanten" className={cn(VAK, KLEUR.paars, GEWOON)}>
               <TegelKop label="Klanten" />
               <TegelGetal>{bestand?.klaar ? bestand.adressen.length : leeg}</TegelGetal>
               <TegelOnder>
@@ -489,13 +489,13 @@ function Home() {
           )}
 
           {magMail && (
-            <Link to="/mailing" className={cn(VAK, KLEUR.donker, GEWOON)}>
+            <Link to="/mailing" className={cn(VAK, KLEUR.petrol, GEWOON)}>
               <span className="flex items-center justify-between">
-                <span className="flex size-7 items-center justify-center rounded-[8px] bg-tegel-oranje text-tegel-oranje-ink md:size-8 md:rounded-[9px]">
+                <span className="flex size-7 items-center justify-center rounded-[8px] bg-tegel-petrol-ink text-tegel-petrol md:size-8 md:rounded-[9px]">
                   <Mail className="size-[17px] md:size-[18px]" stroke={2.2} aria-hidden="true" />
                 </span>
                 {ongelezen > 0 && (
-                  <span className="rounded-full bg-tegel-donker-ink px-2 py-0.5 text-[11px] font-semibold text-tegel-donker md:text-[12px]">
+                  <span className="rounded-full bg-tegel-petrol-ink px-2 py-0.5 text-[11px] font-semibold text-tegel-petrol md:text-[12px]">
                     {ongelezen} nieuw
                   </span>
                 )}
@@ -503,7 +503,7 @@ function Home() {
               <span className="mt-auto text-[17px] font-semibold tracking-[-0.01em] md:text-[20px]">
                 Mail
               </span>
-              <span className="mt-0.5 truncate text-[12px] text-tegel-donker-ink/70 md:mt-1 md:text-[13px]">
+              <span className="mt-0.5 truncate text-[12px] text-current/80 md:mt-1 md:text-[13px]">
                 {!magMailLezen
                   ? "berichten opstellen"
                   : !mappenQuery.data

@@ -16,6 +16,10 @@ export const TEGEL_KLEUR = {
   perzik: "bg-tegel-perzik text-tegel-perzik-ink",
   groen: "bg-tegel-groen text-tegel-groen-ink",
   donker: "bg-tegel-donker text-tegel-donker-ink shadow-card",
+  goud: "bg-tegel-goud text-tegel-goud-ink",
+  paars: "bg-tegel-paars text-tegel-paars-ink",
+  petrol: "bg-tegel-petrol text-tegel-petrol-ink",
+  ijsblauw: "bg-tegel-ijsblauw text-tegel-ijsblauw-ink",
 } as const;
 
 export type TegelKleur = keyof typeof TEGEL_KLEUR;
@@ -54,7 +58,7 @@ export function TegelGetal({ children, klein }: { children: ReactNode; klein?: b
 
 export function TegelOnder({ children }: { children: ReactNode }) {
   return (
-    <span className="mt-1 truncate text-[12px] opacity-80 md:mt-1.5 md:text-[13px]">
+    <span className="mt-1 truncate text-[12px] opacity-90 md:mt-1.5 md:text-[13px]">
       {children}
     </span>
   );
