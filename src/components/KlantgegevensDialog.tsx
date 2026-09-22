@@ -14,8 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { BetaalwijzeKiezer } from "@/components/betalingen/BetaalwijzeKiezer";
 import { DossierGeld } from "@/components/dossier/DossierGeld";
+import { BetaalIcoon } from "@/components/betalingen/BetaalIcoon";
 import { GeldloopWijzigingenVak } from "@/components/betalingen/GeldloopWijzigingenVak";
-import type { Betaalmethode } from "@/lib/betalingen";
+import { effectieveMethode, type Betaalmethode } from "@/lib/betalingen";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useBevestig } from "@/components/Bevestig";
 import {
@@ -1285,6 +1286,21 @@ export function KlantgegevensDialog({
     : klant
       ? klant.naam || "Naamloze klant"
       : "Nieuw adres";
+  // Hoe dit adres betaalt (zoals nu in het formulier staat): muntje of pinpas
+  // achter de titel. Alleen de tekst wordt afgekapt, het icoontje blijft staan.
+  const methode = effectieveMethode(
+    pand,
+    districts.find((d) => d.id === wijkId),
+  );
+  const titelMetIcoon = (tekst: string) =>
+    dossierCustomer ? (
+      <span className="flex min-w-0 items-center">
+        <span className="truncate">{tekst}</span>
+        <BetaalIcoon className="ml-1.5" methode={methode} />
+      </span>
+    ) : (
+      tekst
+    );
   const telefoon = velden.telefoon.trim() || velden.telefoon2.trim();
   // wa.me wil het nummer internationaal en zonder tekens: 06… wordt 316….
   // Alleen een mobiel nummer: een vast nummer (070…) heeft geen WhatsApp.
@@ -1402,7 +1418,7 @@ export function KlantgegevensDialog({
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
                 <DialogTitle className="truncate font-display text-[20px] font-semibold leading-tight tracking-[-0.02em]">
-                  {titelTekst}
+                  {titelMetIcoon(titelTekst)}
                 </DialogTitle>
                 <DialogDescription className="truncate text-[13px]">
                   {onderregel || "Nog geen gegevens"}
@@ -1468,7 +1484,7 @@ export function KlantgegevensDialog({
           </Button>
           <div className="min-w-0 flex-1">
             <DialogTitle className="truncate font-display text-[18px] font-semibold leading-tight tracking-[-0.01em]">
-              {stap === "tab" ? tabNamen[tab] : titelTekst}
+              {stap === "tab" ? tabNamen[tab] : titelMetIcoon(titelTekst)}
             </DialogTitle>
             <DialogDescription className="truncate text-xs">
               {stap === "tab" ? titelTekst : onderregel || "Alles van dit adres bij elkaar"}
@@ -1531,7 +1547,7 @@ export function KlantgegevensDialog({
             icoon={<House className="size-[22px]" />}
             titel={
               dossierCustomer
-                ? adresTekst(dossierCustomer)
+                ? titelMetIcoon(adresTekst(dossierCustomer))
                 : klant
                   ? `Dossier van ${klant.naam || "naamloze klant"}`
                   : "Nieuw adres"

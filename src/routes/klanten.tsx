@@ -1,4 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { BetaalIcoon } from "@/components/betalingen/BetaalIcoon";
+import { effectieveMethode, type Betaalmethode } from "@/lib/betalingen";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -118,7 +120,14 @@ export const Route = createFileRoute("/klanten")({
  * daarom niet in deze lijst maar in een eigen blok eronder — anders lijkt
  * een klant uit Testwijk ineens ook in Madestein te wonen.
  */
-type Regel = { id: string; customer: Customer; street: Street; klant: Klant | null };
+type Regel = {
+  id: string;
+  customer: Customer;
+  street: Street;
+  klant: Klant | null;
+  /** Contant of overmaken: van het adres zelf, anders van de wijk. */
+  methode: Betaalmethode;
+};
 
 /**
  * Het adres zoals het op de post staat.
@@ -308,6 +317,11 @@ const KlantRegel = memo(function KlantRegel({
             {r.customer.price ? formatPrice(r.customer.price) : "—"}
           </td>
         )}
+        {/* Contant of overmaken, achter de prijs: zo staan ze recht onder
+            elkaar en blijft de adreskolom rustig. */}
+        <td className="px-1 py-1">
+          <BetaalIcoon methode={r.methode} className="align-middle" />
+        </td>
         <td className="px-2 py-1">
           {magKlanten && (
             <button
@@ -533,6 +547,7 @@ const KlantRegelMobiel = memo(function KlantRegelMobiel({
               {prijzenZien && r.customer.price ? ` · ${formatPrice(r.customer.price)}` : ""}
             </span>
           </span>
+          <BetaalIcoon methode={r.methode} />
           <ChevronRight className="size-4 shrink-0 text-muted-foreground/60" />
         </button>
       </KlantMenu>
@@ -770,6 +785,7 @@ function Klanten() {
       .filter((s) => s.district_id === actieveWijk)
       .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
 
+    const wijk = districts.find((d) => d.id === actieveWijk);
     const uit: Regel[] = [];
     for (const street of eigenStraten) {
       const eigen = sortCustomers(customers.filter((c) => c.street_id === street.id));
@@ -779,11 +795,12 @@ function Klanten() {
           customer,
           street,
           klant: customer.klant_id ? (klantOp.get(customer.klant_id) ?? null) : null,
+          methode: effectieveMethode(customer, wijk),
         });
       }
     }
     return uit;
-  }, [customers, streets, klanten, actieveWijk]);
+  }, [customers, streets, klanten, actieveWijk, districts]);
 
   /**
    * Klanten die op geen enkele wijklijst staan. Dat is niet alleen "geen pand
@@ -1312,6 +1329,7 @@ function Klanten() {
                   <th className="w-24 px-2 py-2.5">postcode</th>
                   <th className="w-28 px-2 py-2.5">plaats</th>
                   {prijzenZien && <th className="w-24 px-2 py-2.5">prijs</th>}
+                  <th className="w-6 px-1 py-2.5" />
                   <th className="w-9 px-2 py-2.5" />
                 </tr>
               </thead>
@@ -1339,7 +1357,7 @@ function Klanten() {
                     bent. Staat er niet als de lijst al helemaal getoond is. */}
                 {erIsMeer && (
                   <tr ref={meerRef} aria-hidden="true">
-                    <td colSpan={KOLOMMEN.length + (prijzenZien ? 6 : 5)} className="h-8" />
+                    <td colSpan={KOLOMMEN.length + (prijzenZien ? 7 : 6)} className="h-8" />
                   </tr>
                 )}
               </tbody>
