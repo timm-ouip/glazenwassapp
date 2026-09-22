@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { rekening, type GeldDeel } from "@/lib/betalingen";
+import { frequentieKort, rekening, type GeldDeel } from "@/lib/betalingen";
 import { metWachtende, pasToeOpAdres, type Wachtend } from "@/lib/geldloop-wachtrij";
-import type { GeldloopAdres, GeldloopLijst } from "@/lib/geldlopen";
+import { nietGewassen, type GeldloopAdres, type GeldloopLijst } from "@/lib/geldlopen";
 
 const wassen = (datum: string, bedrag: number, rest = bedrag, omschrijving = ""): GeldDeel => ({
   soort: "wassen",
@@ -136,5 +136,44 @@ describe("wachtrij: een tik in de lijst", () => {
     ]);
     expect(uit.adressen[0]!.open).toBe(0);
     expect(uit.opgehaald.mij).toBe(45);
+  });
+});
+
+describe("frequentie", () => {
+  test("om de maand zegt of het de even of de oneven maanden zijn", () => {
+    expect(frequentieKort({ interval_maanden: 2, ritme: 2 })).toBe("om de maand, even");
+    expect(frequentieKort({ interval_maanden: 2, ritme: 1 })).toBe("om de maand, oneven");
+    expect(frequentieKort({ interval_maanden: 1, ritme: 1 })).toBe("elke maand");
+  });
+});
+
+describe("pof maar deze maand niet gewassen", () => {
+  // Dit jaar, want maandKort zet er bij een ander jaar "'26" achter.
+  const jaar = new Date().getFullYear();
+  const avond = `${jaar}-09-21`;
+  const aug = adres({ open: 15, open_wassen: 1, delen: [wassen(`${jaar}-08-10`, 15)] });
+
+  test("alleen pof van eerder: sep niet gewassen", () => {
+    expect(nietGewassen(aug, avond)).toBe("sep niet gewassen");
+    expect(nietGewassen({ ...aug, interval_maanden: 2, ritme: 2 }, avond)).toBe(
+      "sep niet gewassen",
+    );
+  });
+  test("deze maand gewassen: niets", () => {
+    const a = { ...aug, delen: [...aug.delen, wassen(`${jaar}-09-10`, 15)] };
+    expect(nietGewassen(a, avond)).toBeNull();
+  });
+  test("wasbeurt al betaald maar de klus van deze maand nog open: niets", () => {
+    const klus: GeldDeel = {
+      ...wassen(`${jaar}-09-10`, 25),
+      soort: "klus",
+      omschrijving: "dakgoot",
+    };
+    expect(nietGewassen({ ...aug, open: 25, delen: [klus] }, avond)).toBeNull();
+  });
+  test("niets open, maakt over of gestopt: niets", () => {
+    expect(nietGewassen({ ...aug, open: 0 }, avond)).toBeNull();
+    expect(nietGewassen({ ...aug, methode: "overmaken" }, avond)).toBeNull();
+    expect(nietGewassen({ ...aug, gestopt: true }, avond)).toBeNull();
   });
 });

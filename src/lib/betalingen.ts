@@ -150,10 +150,11 @@ export async function zetWijkKlaar(wijk: string, klaar: boolean) {
 // ---------------------------------------------------------------------
 
 /** "om de maand", "1× per 3 maanden": zoals het op de kaart staat. */
-export function frequentieKort(c: Pick<Customer, "interval_maanden">): string {
+export function frequentieKort(c: Pick<Customer, "interval_maanden" | "ritme">): string {
   const n = c.interval_maanden || 1;
   if (n <= 1) return "elke maand";
-  if (n === 2) return "om de maand";
+  // Even of oneven, zoals het % op de papieren kaart in de goede maanden stond.
+  if (n === 2) return `om de maand, ${c.ritme % 2 === 0 ? "even" : "oneven"}`;
   if (n === 12) return "1× per jaar";
   return `1× per ${n} maanden`;
 }

@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
-import type { GeldDeel } from "@/lib/betalingen";
+import { maandKort, type GeldDeel } from "@/lib/betalingen";
 
 export interface Vrijgave {
   id: string;
@@ -297,6 +297,22 @@ export function looprichting(a: GeldloopAdres[]): GeldloopAdres[] {
 /** Staat er vanavond nog iets te doen bij dit adres? */
 export function heeftIetsOpen(a: GeldloopAdres): boolean {
   return a.open > 0.005;
+}
+
+/**
+ * Staat er pof open maar is er in de maand van de avond niet gewassen? Dan
+ * rekent de klant vaak niet op je en loop je het misschien pas bij de
+ * volgende wasbeurt na. Geeft dan "sep niet gewassen", anders null.
+ *
+ * Betalingen dekken altijd de oudste posten eerst. Staat er dus niets van deze
+ * maand open (geen wasbeurt, geen klus) maar wel iets ouders, dan is er deze
+ * maand ook niets gedaan dat al betaald is.
+ */
+export function nietGewassen(a: GeldloopAdres, datum: string): string | null {
+  if (a.methode !== "contant" || a.gestopt || !heeftIetsOpen(a)) return null;
+  const maand = datum.slice(0, 7);
+  if (a.delen.some((d) => d.soort !== "beginstand" && d.datum.slice(0, 7) === maand)) return null;
+  return `${maandKort(`${maand}-01`)} niet gewassen`;
 }
 
 // ---------------------------------------------------------------------

@@ -17,6 +17,7 @@ import {
   fetchGeldloopLijst,
   heeftIetsOpen,
   looprichting,
+  nietGewassen,
   useGeldloopLive,
   type GeldloopAdres,
   type GeldloopLijst,
@@ -243,7 +244,12 @@ export function GeldloopScherm({
               </h2>
               <div className="divide-y divide-border/60">
                 {zichtbaar.map((a) => (
-                  <AdresRij key={a.id} a={a} onKies={() => setGekozen(a.id)} />
+                  <AdresRij
+                    key={a.id}
+                    a={a}
+                    datum={vrijgave.datum}
+                    onKies={() => setGekozen(a.id)}
+                  />
                 ))}
                 {rust.length > 0 && (
                   <button
@@ -265,7 +271,14 @@ export function GeldloopScherm({
                   </button>
                 )}
                 {open &&
-                  rust.map((a) => <AdresRij key={a.id} a={a} onKies={() => setGekozen(a.id)} />)}
+                  rust.map((a) => (
+                    <AdresRij
+                      key={a.id}
+                      a={a}
+                      datum={vrijgave.datum}
+                      onKies={() => setGekozen(a.id)}
+                    />
+                  ))}
               </div>
             </section>
           );
@@ -287,8 +300,18 @@ export function GeldloopScherm({
   );
 }
 
-function AdresRij({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
+function AdresRij({
+  a,
+  datum,
+  onKies,
+}: {
+  a: GeldloopAdres;
+  /** De dag van de avond, voor "sep niet aan de beurt". */
+  datum: string;
+  onKies: () => void;
+}) {
   const rood = a.open_wassen >= ROOD_VANAF && heeftIetsOpen(a);
+  const nietDezeMaand = nietGewassen(a, datum);
   const betaald = a.vanavond?.soort === "betaald";
   const overmaken = a.methode === "overmaken";
   const nummer = `${a.house_number}${a.addition}`;
@@ -327,6 +350,11 @@ function AdresRij({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
           {a.gestopt && (
             <span className="shrink-0 rounded-full bg-surface px-1.5 text-[10.5px] text-muted-foreground">
               gestopt
+            </span>
+          )}
+          {nietDezeMaand && !a.vanavond && (
+            <span className="shrink-0 rounded-full bg-tint-geel px-1.5 text-[10.5px] text-tint-geel-ink">
+              {nietDezeMaand}
             </span>
           )}
         </span>

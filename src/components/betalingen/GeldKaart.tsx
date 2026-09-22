@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -22,7 +22,7 @@ import {
   sortCustomers,
   type Customer,
 } from "@/lib/klanten";
-import { fetchKaart, soortLabel, type KaartAdres } from "@/lib/overzichten";
+import { fetchKaart, soortLabel, type Kaart, type KaartAdres } from "@/lib/overzichten";
 
 const MAANDEN = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
 const MAANDNAMEN = [
@@ -39,6 +39,14 @@ const MAANDNAMEN = [
   "november",
   "december",
 ];
+
+/** Pijltjes in de kaart: [rijen, maanden] verder. */
+const PIJLEN: Record<string, [number, number]> = {
+  ArrowUp: [-1, 0],
+  ArrowDown: [1, 0],
+  ArrowLeft: [0, -1],
+  ArrowRight: [0, 1],
+};
 
 type Vak =
   | { soort: "betaald"; aantal: number; korting: boolean }
@@ -73,9 +81,11 @@ function vakVoor(
   data: KaartAdres | undefined,
   maand: string,
   peilMaand: string | null,
+  concept?: string[],
 ): Vak {
   const posten = (data?.posten ?? []).filter((p) => p.soort !== "klus");
-  const beginMaanden = beginMaandenVan(data);
+  // Net aangevinkt maar nog niet bewaard: dat tonen we alvast.
+  const beginMaanden = concept ?? beginMaandenVan(data);
   const betaald = posten.filter((p) => {
     if (!p.betaald_op) return false;
     const betaalMaand = maandVan(p.betaald_op);
@@ -96,9 +106,12 @@ function vakVoor(
     const begin = posten.find((p) => p.soort === "beginstand");
     if (
       beginMaanden.includes(maand) ||
-      (begin && beginMaanden.length === 0 && maand === peilMaand)
+      (!concept && begin && beginMaanden.length === 0 && maand === peilMaand)
     ) {
-      return { soort: "open", nogOpen: !begin || begin.gedekt < begin.bedrag - 0.005 };
+      return {
+        soort: "open",
+        nogOpen: !!concept || !begin || begin.gedekt < begin.bedrag - 0.005,
+      };
     }
   }
   // Vanaf de startmaand: gewassen maar (nog) niet betaald.
@@ -120,7 +133,8 @@ function vakVoor(
  * De kaartweergave: per straat een jaar, zoals de papieren kaart. Tik een
  * vakje en je ziet wie wanneer wat intikte. Met "Pof van vóór de start"
  * tik je de maanden aan die op de kaart nog open stonden; Wooshy rekent de
- * beginstand dan zelf uit.
+ * beginstand dan zelf uit. Met het toetsenbord kan dat ook: pijltjes om te
+ * lopen, 0 voor pof en Backspace om hem weg te halen.
  */
 export function GeldKaart({
   straatId,
@@ -141,7 +155,22 @@ export function GeldKaart({
   const [jaar, setJaar] = useState(() => new Date().getFullYear());
   const [invullen, setInvullen] = useState(false);
   const [gekozen, setGekozen] = useState<{ adres: string; maand: string } | null>(null);
-  const [bezig, setBezig] = useState(false);
+  // De pof-maanden die nog bewaard worden, per adres, zodat je door kunt tikken.
+  const [concept, setConcept] = useState<Record<string, string[]>>({});
+  // Dezelfde stand, maar meteen bij: tik je sneller dan het scherm bijwerkt,
+  // dan bouwt de volgende tik toch voort op de vorige.
+  const conceptNu = useRef(concept);
+  function wijzigConcept(adres: string, lijst: string[] | null) {
+    const rest = { ...conceptNu.current };
+    if (lijst) rest[adres] = lijst;
+    else delete rest[adres];
+    conceptNu.current = rest;
+    setConcept(rest);
+  }
+  const opslag = useRef(new Map<string, { keten: Promise<void>; versie: number }>());
+  // Het vakje waar het toetsenbord staat (rij, maand).
+  const [cursor, setCursor] = useState({ r: 0, k: 0 });
+  const tabel = useRef<HTMLTableElement>(null);
   const bevestig = useBevestig();
 
   const straat = (streets.data ?? []).find((s) => s.id === straatId);
@@ -182,38 +211,101 @@ export function GeldKaart({
   const peilMaand = peil ? peil.slice(0, 7) : null;
   const maanden = MAANDEN.map((_, i) => `${jaar}-${String(i + 1).padStart(2, "0")}`);
 
-  async function wisselBegin(c: Customer, maand: string) {
-    if (bezig) return;
-    const data = perAdres.get(c.id);
+  /** Zet een maand aan of uit als pof van vóór de start (of wissel hem). */
+  async function zetBegin(c: Customer, maand: string, aan: boolean | "wissel") {
+    // Vers uit de cache: net na het bewaren is de kaart op het scherm nog van ervoor.
+    const vers = qc.getQueryData<Kaart>(["geld-kaart", straatId, jaar]);
+    const data = vers?.adressen.find((a) => a.id === c.id) ?? perAdres.get(c.id);
     const begin = (data?.posten ?? []).find((p) => p.soort === "beginstand");
-    const nu = new Set(beginMaandenVan(data));
-    // Een ingetypt bedrag (zonder maanden) wordt vervangen door maanden × prijs.
-    if (begin && nu.size === 0) {
+    const nu = new Set(conceptNu.current[c.id] ?? beginMaandenVan(data));
+    const wordtAan = aan === "wissel" ? !nu.has(maand) : aan;
+    // Een ingetypt bedrag (zonder maanden) staat als 0 in de startmaand.
+    const ingetypt =
+      !conceptNu.current[c.id] && begin && begin.bedrag > 0 && nu.size === 0 ? begin : null;
+    if (ingetypt && !wordtAan) {
+      if (maand !== peilMaand) return;
       const ja = await bevestig({
-        titel: "Ingetypte beginstand vervangen?",
-        tekst: `Hier staat nu ${formatPrice(begin.bedrag)} als beginstand. Met aanvinken wordt dat het aantal maanden × ${formatPrice(c.price)}.`,
-        bevestigLabel: "Vervangen",
+        titel: "Ingetypte beginstand weghalen?",
+        tekst: `Hier staat nu ${formatPrice(ingetypt.bedrag)} als beginstand, ingetypt zonder maanden.`,
+        bevestigLabel: "Weghalen",
       });
       if (!ja) return;
+    } else {
+      if (wordtAan === nu.has(maand)) return;
+      // Aanvinken vervangt een ingetypt bedrag door maanden × prijs.
+      if (ingetypt) {
+        const ja = await bevestig({
+          titel: "Ingetypte beginstand vervangen?",
+          tekst: `Hier staat nu ${formatPrice(ingetypt.bedrag)} als beginstand. Met aanvinken wordt dat het aantal maanden × ${formatPrice(c.price)}.`,
+          bevestigLabel: "Vervangen",
+        });
+        if (!ja) return;
+      }
     }
-    if (nu.has(maand)) nu.delete(maand);
-    else nu.add(maand);
+    if (wordtAan) nu.add(maand);
+    else nu.delete(maand);
     const lijst = [...nu].sort();
     if (c.price <= 0 && lijst.length > 0) {
       toast.error("Dit adres heeft nog geen prijs, dus Wooshy weet niet wat een maand kost.");
       return;
     }
-    setBezig(true);
-    try {
-      await zetBeginstand(c.id, lijst.length * c.price, Math.max(1, lijst.length), lijst);
-      await qc.invalidateQueries({ queryKey: ["geld-kaart", straatId] });
-      void qc.invalidateQueries({ queryKey: ["geld-stand"] });
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBezig(false);
+    wijzigConcept(c.id, lijst);
+    // Per adres op volgorde bewaren; tik je snel door, dan telt alleen de laatste stand.
+    const vorige = opslag.current.get(c.id);
+    const versie = (vorige?.versie ?? 0) + 1;
+    const laatste = () => opslag.current.get(c.id)?.versie === versie;
+    const keten = (vorige?.keten ?? Promise.resolve()).then(async () => {
+      if (!laatste()) return;
+      try {
+        await zetBeginstand(c.id, lijst.length * c.price, Math.max(1, lijst.length), lijst);
+        await qc.invalidateQueries({ queryKey: ["geld-kaart", straatId] });
+        void qc.invalidateQueries({ queryKey: ["geld-stand"] });
+      } catch (e) {
+        toast.error((e as Error).message);
+      }
+      if (laatste()) wijzigConcept(c.id, null);
+    });
+    opslag.current.set(c.id, { keten, versie });
+  }
+
+  function naarVak(r: number, k: number) {
+    if (adressen.length === 0) return;
+    const rij = Math.min(Math.max(r, 0), adressen.length - 1);
+    const kol = Math.min(Math.max(k, 0), 11);
+    setCursor({ r: rij, k: kol });
+    tabel.current?.querySelector<HTMLButtonElement>(`[data-vak="${rij}-${kol}"]`)?.focus();
+  }
+
+  function opToets(
+    e: KeyboardEvent,
+    r: number,
+    k: number,
+    c: Customer,
+    maand: string,
+    kanAanvinken: boolean,
+  ) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const stap = PIJLEN[e.key];
+    if (stap) {
+      e.preventDefault();
+      naarVak(r + stap[0], k + stap[1]);
+    } else if (kanAanvinken && e.key === "0") {
+      e.preventDefault();
+      void zetBegin(c, maand, true);
+    } else if (kanAanvinken && (e.key === "Backspace" || e.key === "Delete")) {
+      e.preventDefault();
+      void zetBegin(c, maand, false);
     }
   }
+
+  // De maand waar het aanvinken begint: de startmaand, als die in dit jaar valt.
+  const startKolom =
+    peilMaand && Number(peilMaand.slice(0, 4)) === jaar
+      ? Number(peilMaand.slice(5, 7)) - 1
+      : peilMaand && Number(peilMaand.slice(0, 4)) > jaar
+        ? 11
+        : 0;
+  const cursorRij = Math.min(cursor.r, Math.max(adressen.length - 1, 0));
 
   const details = gekozen ? perAdres.get(gekozen.adres) : undefined;
   const detailAdres = gekozen ? adressen.find((c) => c.id === gekozen.adres) : undefined;
@@ -286,7 +378,11 @@ export function GeldKaart({
             size="sm"
             variant={invullen ? "default" : "outline"}
             className="rounded-full"
-            onClick={() => setInvullen((v) => !v)}
+            onClick={() => {
+              setInvullen(!invullen);
+              // Meteen verder met het toetsenbord, in de startmaand van het eerste adres.
+              if (!invullen) naarVak(0, startKolom);
+            }}
           >
             <Pencil className="size-3.5" />
             {invullen ? "Klaar met aanvinken" : "Pof van vóór de start aanvinken"}
@@ -296,6 +392,10 @@ export function GeldKaart({
               Tik de maanden tot en met {MAANDNAMEN[Number(peil.slice(5, 7)) - 1]}{" "}
               {peil.slice(0, 4)} aan die op de kaart nog open stonden (een 0). Wooshy rekent de
               beginstand uit met de prijs van nu.
+              <span className="hidden sm:inline">
+                {" "}
+                Met het toetsenbord: pijltjes om te lopen, 0 voor pof, Backspace om weg te halen.
+              </span>
             </span>
           )}
         </div>
@@ -308,7 +408,7 @@ export function GeldKaart({
       )}
 
       <section className="overflow-x-auto rounded-[18px] border border-border bg-card shadow-card">
-        <table className="w-full min-w-[640px] border-collapse text-[13px]">
+        <table ref={tabel} className="w-full min-w-[640px] border-collapse text-[13px]">
           <thead>
             <tr className="text-[11.5px] text-muted-foreground">
               <th className="px-3 py-2 text-left font-medium">Nr</th>
@@ -327,7 +427,7 @@ export function GeldKaart({
             </tr>
           </thead>
           <tbody>
-            {adressen.map((c) => {
+            {adressen.map((c, r) => {
               const data = perAdres.get(c.id);
               const overmaken = effectieveMethode(c, wijk) === "overmaken";
               return (
@@ -347,8 +447,8 @@ export function GeldKaart({
                   <td className="px-2 py-1.5 text-right tabular-nums">
                     {c.price > 0 ? formatPrice(c.price) : ""}
                   </td>
-                  {maanden.map((maand) => {
-                    const vak = vakVoor(c, data, maand, peilMaand);
+                  {maanden.map((maand, k) => {
+                    const vak = vakVoor(c, data, maand, peilMaand, concept[c.id]);
                     const beginZone = !!peilMaand && maand <= peilMaand;
                     const kanAanvinken = invullen && beginZone && !overmaken;
                     const aan = gekozen?.adres === c.id && gekozen.maand === maand;
@@ -356,14 +456,27 @@ export function GeldKaart({
                       <td key={maand} className={`p-0.5 ${beginZone ? "bg-surface/60" : ""}`}>
                         <button
                           type="button"
+                          data-vak={`${r}-${k}`}
+                          tabIndex={r === cursorRij && k === cursor.k ? 0 : -1}
+                          onFocus={() => setCursor({ r, k })}
+                          onKeyDown={(e) => opToets(e, r, k, c, maand, kanAanvinken)}
+                          aria-label={`${c.house_number}${c.addition}, ${MAANDNAMEN[k]}`}
+                          aria-pressed={
+                            kanAanvinken
+                              ? (concept[c.id] ?? beginMaandenVan(data)).includes(maand)
+                              : undefined
+                          }
                           onClick={() =>
                             kanAanvinken
-                              ? void wisselBegin(c, maand)
+                              ? void zetBegin(c, maand, "wissel")
                               : setGekozen(aan ? null : { adres: c.id, maand })
                           }
-                          className={`flex h-8 w-full items-center justify-center rounded-[8px] text-[13px] font-semibold tabular-nums transition-colors ${
-                            aan ? "ring-2 ring-foreground/40" : ""
-                          } ${
+                          className={`flex h-8 w-full items-center justify-center rounded-[8px] text-[13px] font-semibold tabular-nums outline-none transition-colors ${
+                            // Bij aanvinken ook na een muisklik zien waar de 0 terechtkomt.
+                            invullen
+                              ? "focus:ring-2 focus:ring-foreground/70"
+                              : "focus-visible:ring-2 focus-visible:ring-foreground/70"
+                          } ${aan ? "ring-2 ring-foreground/40" : ""} ${
                             vak.soort === "betaald"
                               ? vak.korting
                                 ? "bg-tint-paars text-tint-paars-ink"

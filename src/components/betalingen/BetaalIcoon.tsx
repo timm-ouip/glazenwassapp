@@ -27,7 +27,7 @@ export function BetaalIcoon({
     >
       <Icoon
         aria-hidden="true"
-        className={cn("size-4", contant ? "text-amber-500" : "text-orange-600")}
+        className={cn("size-4", contant ? "text-amber-500" : "text-teal-600")}
       />
     </span>
   );

@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import {
   heeftIetsOpen,
   nieuweTik,
+  nietGewassen,
   type GeldloopAdres,
   type Tik,
   type Vrijgave,
@@ -97,6 +98,7 @@ export function BetaalPaneel({
   }
 
   const regels = a ? rekening(a.delen) : [];
+  const nietDezeMaand = a ? nietGewassen(a, vrijgave.datum) : null;
   const open = a && heeftIetsOpen(a);
   const kanTikken = !!a && (!voorbij || isEigenaar);
   const vanMij = a?.vanavond && (a.vanavond.door === employee?.id || isEigenaar);
@@ -123,6 +125,11 @@ export function BetaalPaneel({
                   {a.straat}
                   {a.note && ` · ${a.note}`}
                 </p>
+                {nietDezeMaand && (
+                  <p className="mt-2 w-fit rounded-full bg-tint-geel px-2.5 py-0.5 text-[12.5px] text-tint-geel-ink">
+                    {nietDezeMaand}: ze rekenen misschien niet op je
+                  </p>
+                )}
 
                 {a.klachten.length > 0 && (
                   <div className="mt-3 space-y-1 rounded-[14px] bg-tint-rood px-3 py-2 text-[13px] text-tint-rood-ink">
