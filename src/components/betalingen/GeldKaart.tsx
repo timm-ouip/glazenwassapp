@@ -164,7 +164,7 @@ const VASTE_KOLOM = "sticky left-0 z-[2] w-20 border-r border-border/70";
  * overgebleven ruimte opslokken — dat was het witte gat tussen de frequentie
  * en de prijs. Vanaf een tablet is er ruimte zat en mag hij weer meegroeien.
  */
-const FREQUENTIE_KOLOM = "w-[7.5rem] max-w-[7.5rem] sm:w-auto sm:max-w-[10rem]";
+const FREQUENTIE_KOLOM = "w-[7.5rem] sm:w-auto sm:max-w-[10rem]";
 
 /**
  * De kaartweergave: per straat een jaar, zoals de papieren kaart. Tik een
@@ -758,7 +758,7 @@ export function GeldKaart({
                       data-adres={c.id}
                       className={cn(
                         "border-t border-border/70",
-                        markeer === c.id && "bg-tint-blauw",
+                        markeer === c.id && "bg-tint-blauw/100",
                       )}
                     >
                       <td
@@ -767,7 +767,7 @@ export function GeldKaart({
                           "whitespace-nowrap px-3 py-1.5 align-top",
                           // Een bevroren vakje moet dekken, anders schuift de
                           // rest eronder door; vandaar geen doorzichtige tint.
-                          markeer === c.id ? "bg-tint-blauw" : "bg-card",
+                          markeer === c.id ? "bg-tint-blauw/100" : "bg-card",
                         )}
                       >
                         <span className="block font-display font-semibold tabular-nums">
@@ -776,18 +776,29 @@ export function GeldKaart({
                           {c.addition}
                         </span>
                         <span className="block text-[11.5px] tabular-nums text-muted-foreground">
-                          {c.price > 0 ? formatPrice(c.price) : ""}
+                          <span className="sr-only">prijs </span>
+                          {/* Een streepje als er geen prijs is: een lege regel
+                              neemt geen hoogte in en dan gaat de lijst golven. */}
+                          {c.price > 0 ? formatPrice(c.price) : "—"}
                         </span>
                       </td>
-                      <td className={cn(FREQUENTIE_KOLOM, "truncate px-2 py-1.5 align-top")}>
-                        {frequentieKaart(c)}
-                        {c.inactief_op && <span className="text-muted-foreground"> · gestopt</span>}
-                        {/* De naam eronder, klein, en alleen als hij er is. */}
-                        {c.klant_id && namen.get(c.klant_id) && (
-                          <span className="block truncate text-[11px] text-muted-foreground">
-                            {namen.get(c.klant_id)}
-                          </span>
-                        )}
+                      <td className="px-2 py-1.5 align-top">
+                        {/* De breedte staat op dit blokje en niet op de cel:
+                            een browser leest een breedte op een tabelcel als
+                            een wens, en lange tekst duwt de kolom dan alsnog
+                            breder. */}
+                        <div className={cn(FREQUENTIE_KOLOM, "truncate")}>
+                          {frequentieKaart(c)}
+                          {c.inactief_op && (
+                            <span className="text-muted-foreground"> · gestopt</span>
+                          )}
+                          {/* De naam eronder, klein, en alleen als hij er is. */}
+                          {c.klant_id && namen.get(c.klant_id) && (
+                            <span className="block truncate text-[11px] text-muted-foreground">
+                              {namen.get(c.klant_id)}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       {maanden.map((maand, k) => {
                         const vak = vakVoor(c, data, maand, peilMaand, concept[c.id]);
