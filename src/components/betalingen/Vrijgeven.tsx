@@ -186,7 +186,7 @@ export function Vrijgeven({ onLopen }: { onLopen: () => void }) {
               Grijs: de beginstand is nog niet klaar.{" "}
               <Link
                 to="/betalingen"
-                search={{ tab: "beginstand" }}
+                search={{ tab: "kaart" }}
                 className="underline-offset-2 hover:underline"
               >
                 Invullen

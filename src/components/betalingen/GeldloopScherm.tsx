@@ -137,6 +137,23 @@ export function GeldloopScherm({
       }));
   }, [data]);
 
+  // De adressen op volgorde van de lijst: met de pijltjes in het venster op
+  // de computer loop je daar doorheen. Je slaat over waar je toch niet aanbelt
+  // (niets open, niets ingetikt), net als de lijst zelf doet.
+  const volgorde = useMemo(() => straten.flatMap((s) => s.adressen), [straten]);
+  function spring(stap: number) {
+    setGekozen((nu) => {
+      if (!nu) return nu;
+      let i = volgorde.findIndex((a) => a.id === nu);
+      if (i < 0) return nu;
+      for (i += stap; i >= 0 && i < volgorde.length; i += stap) {
+        const a = volgorde[i]!;
+        if (heeftIetsOpen(a) || a.vanavond || a.methode === "overmaken") return a.id;
+      }
+      return nu;
+    });
+  }
+
   const zoekTerm = (zoeken ?? "").trim().toLowerCase();
   const wijken = new Set(straten.map((s) => s.wijk));
   const adres = (data?.adressen ?? []).find((a) => a.id === gekozen) ?? null;
@@ -327,6 +344,8 @@ export function GeldloopScherm({
         voorbij={voorbij}
         onSluit={() => setGekozen(null)}
         onVeranderd={() => void qc.invalidateQueries({ queryKey: ["geldloop-lijst", vrijgave.id] })}
+        onVorige={() => spring(-1)}
+        onVolgende={() => spring(1)}
       />
     </AppLayout>
   );

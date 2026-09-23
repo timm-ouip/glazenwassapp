@@ -29,7 +29,7 @@ import {
 import { useAuth, signOut } from "@/lib/auth";
 import { aantalOpenAanmeldingen } from "@/lib/aanmeldingen";
 import { heeftRecht, rolLabel, type Recht } from "@/lib/rechten";
-import { TABBLADEN, TABNAAM, type BetalingenTab } from "@/lib/betalingen";
+import { MENU_TABBLADEN, TABNAAM, type BetalingenTab } from "@/lib/betalingen";
 
 const OPSLAG = "zijbalk-ingeklapt";
 
@@ -102,8 +102,12 @@ export function useMenu() {
     if (p.to !== "/betalingen" || !isActief(p) || !heeftRecht(employee, "prijzen_zien")) return [];
     // Vrijgeven is van de eigenaar; de pagina zelf stuurt de rest terug naar
     // Vanavond, dus hier staat hij ook niet in de lijst.
-    const zichtbaar = TABBLADEN.filter((t) => t !== "vrijgeven" || employee?.rol === "eigenaar");
+    const zichtbaar = MENU_TABBLADEN.filter(
+      (t) => t !== "vrijgeven" || employee?.rol === "eigenaar",
+    );
     const gevraagd = String(zoek["tab"] ?? "");
+    // Pof staat niet in het menu; je opent hem vanaf het overzicht, dus dat
+    // blijft zolang het menu-item dat oplicht.
     const huidig = zichtbaar.find((t) => t === gevraagd) ?? "vanavond";
     // De gekozen wijk gaat mee: wissel je van tabblad, dan kijk je nog steeds
     // naar dezelfde wijk (de Beginstand rekent daarop).

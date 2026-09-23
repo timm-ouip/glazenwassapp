@@ -5,7 +5,6 @@ import { IconCash as Cash } from "@tabler/icons-react";
 
 import { AppLayout } from "@/components/AppLayout";
 import { Avondoverzicht } from "@/components/betalingen/Avondoverzicht";
-import { Beginstand } from "@/components/betalingen/Beginstand";
 import { GeldKaart } from "@/components/betalingen/GeldKaart";
 import { PofLijst } from "@/components/betalingen/PofLijst";
 import { GeldloopScherm } from "@/components/betalingen/GeldloopScherm";
@@ -50,18 +49,16 @@ function Betalingen() {
   // Vrijgeven is van de eigenaar; wie alleen bedragen ziet, kijkt mee.
   const tab: Tab = gevraagd === "vrijgeven" && !isEigenaar ? "vanavond" : gevraagd;
 
+  // De wijk en de straat gaan mee naar het volgende tabblad: kom je van de
+  // kaart terug, dan sta je weer in dezelfde straat.
   const naarTab = useCallback(
     (t: Tab) =>
       void navigate({
         to: "/betalingen",
-        search: { tab: t, ...(wijk ? { wijk } : {}) },
+        search: { tab: t, ...(wijk ? { wijk } : {}), ...(straat ? { straat } : {}) },
         replace: true,
       }),
-    [navigate, wijk],
-  );
-  const kiesWijk = useCallback(
-    (id: string) => void navigate({ to: "/betalingen", search: { tab, wijk: id }, replace: true }),
-    [navigate, tab],
+    [navigate, wijk, straat],
   );
   const kiesStraat = useCallback(
     (id: string) =>
@@ -86,11 +83,10 @@ function Betalingen() {
 
   return (
     <AppLayout titel={titel}>
-      {tab === "vanavond" && <Avondoverzicht />}
+      {tab === "vanavond" && <Avondoverzicht onPof={() => naarTab("pof")} />}
       {tab === "vrijgeven" && isEigenaar && <Vrijgeven onLopen={() => naarTab("lopen")} />}
-      {tab === "pof" && <PofLijst onKaart={kiesStraat} />}
-      {tab === "kaart" && <GeldKaart straatId={straat} onStraat={kiesStraat} />}
-      {tab === "beginstand" && <Beginstand wijkId={wijk} onWijk={kiesWijk} />}
+      {tab === "pof" && <PofLijst onKaart={kiesStraat} onTerug={() => naarTab("vanavond")} />}
+      {tab === "kaart" && <GeldKaart straatId={straat} wijkId={wijk} onStraat={kiesStraat} />}
     </AppLayout>
   );
 }

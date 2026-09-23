@@ -18,21 +18,28 @@ export const BETAALMETHODEN: { waarde: Betaalmethode; label: string }[] = [
 ];
 
 /**
- * De tabbladen van de Betalingen-pagina. Ze staan hier en niet in de route,
- * omdat het menu (de zijbalk en de balk onderin) ze als sublijstje toont: dat
- * menu staat op elke pagina, ook als Betalingen zelf nog niet geladen is.
+ * De weergaven van de Betalingen-pagina, zoals ze in het webadres staan.
+ * Ze staan hier en niet in de route, omdat het menu (de zijbalk en de balk
+ * onderin) ze als sublijstje toont: dat menu staat op elke pagina, ook als
+ * Betalingen zelf nog niet geladen is.
  */
-export const TABBLADEN = ["vanavond", "vrijgeven", "lopen", "pof", "kaart", "beginstand"] as const;
+export const TABBLADEN = ["vanavond", "vrijgeven", "lopen", "pof", "kaart"] as const;
 
 export type BetalingenTab = (typeof TABBLADEN)[number];
 
+/**
+ * Wat er in het menu staat. Pof is geen tabblad meer: dat is een lijst die je
+ * vanaf het overzicht opent. De beginstand ook niet: die vul je op de kaart
+ * in, en dat doe je maar één keer.
+ */
+export const MENU_TABBLADEN = ["vanavond", "vrijgeven", "lopen", "kaart"] as const;
+
 export const TABNAAM: Record<BetalingenTab, string> = {
-  vanavond: "Vanavond",
+  vanavond: "Overzicht",
   vrijgeven: "Vrijgeven",
   lopen: "Lopen",
   pof: "Pof",
   kaart: "Kaart",
-  beginstand: "Beginstand",
 };
 
 export function betaalmethodeLabel(m: Betaalmethode): string {

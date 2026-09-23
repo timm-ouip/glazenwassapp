@@ -361,7 +361,7 @@ function WijkDialoog({
                   </span>
                   <Link
                     to="/betalingen"
-                    search={{ tab: "beginstand", wijk: wijk.id }}
+                    search={{ tab: "kaart", wijk: wijk.id }}
                     className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline"
                     onClick={() => onOpenChange(false)}
                   >

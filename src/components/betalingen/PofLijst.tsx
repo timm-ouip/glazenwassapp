@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { IconArrowLeft as ArrowLeft } from "@tabler/icons-react";
 
 import { ROOD_VANAF } from "@/components/betalingen/GeldloopScherm";
 import { rekening } from "@/lib/betalingen";
@@ -18,7 +19,14 @@ function datumVan(iso: string): string {
  * Wie er nog moet betalen, het hoogste bedrag bovenaan. Vanaf drie
  * wasbeurten open kleurt een adres rood. Tegoed staat apart onderaan.
  */
-export function PofLijst({ onKaart }: { onKaart: (straat: string) => void }) {
+export function PofLijst({
+  onKaart,
+  onTerug,
+}: {
+  onKaart: (straat: string) => void;
+  /** Terug naar het overzicht; pof is geen tabblad meer. */
+  onTerug?: () => void;
+}) {
   const districts = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
   const [wijk, setWijk] = useState<string | null>(null);
   const pof = useQuery({
@@ -31,16 +39,25 @@ export function PofLijst({ onKaart }: { onKaart: (straat: string) => void }) {
   const totaal = open.reduce((t, r) => t + r.open, 0);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 pb-4 pt-1">
       <div className="flex flex-wrap items-center gap-1.5">
+        {onTerug && (
+          <button
+            type="button"
+            onClick={onTerug}
+            className="mr-1 flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-[13px] font-medium text-muted-foreground shadow-card hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" /> Overzicht
+          </button>
+        )}
         {[{ id: null, name: "Alle wijken" }, ...(districts.data ?? [])].map((d) => (
           <button
             key={d.id ?? "alle"}
             type="button"
             onClick={() => setWijk(d.id)}
-            className={`rounded-full border px-3 py-1 text-[13px] font-medium ${
+            className={`min-h-9 rounded-full border px-3.5 text-[13px] font-medium transition-colors ${
               wijk === d.id
-                ? "border-transparent bg-foreground text-background"
+                ? "border-transparent bg-primary text-primary-foreground"
                 : "border-border bg-card text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -56,7 +73,7 @@ export function PofLijst({ onKaart }: { onKaart: (straat: string) => void }) {
 
       {pof.isLoading && <p className="text-[13px] text-muted-foreground">Laden…</p>}
 
-      <section className="overflow-hidden rounded-[18px] border border-border bg-card shadow-card">
+      <section className="overflow-hidden rounded-[24px] border border-border bg-card shadow-card">
         {open.length === 0 && !pof.isLoading ? (
           <p className="p-4 text-[13px] text-muted-foreground">Er staat nergens iets open.</p>
         ) : (
@@ -69,7 +86,7 @@ export function PofLijst({ onKaart }: { onKaart: (straat: string) => void }) {
       </section>
 
       {tegoed.length > 0 && (
-        <section className="rounded-[18px] border border-border bg-card p-4 shadow-card">
+        <section className="rounded-[24px] border border-border bg-card p-4 shadow-card">
           <h2 className="mb-1 font-display text-[15px] font-semibold">Tegoed</h2>
           <p className="mb-2 text-[12.5px] text-muted-foreground">
             Te veel betaald, of een betaalde wasbeurt die later is weggehaald. Gaat vanzelf af van
