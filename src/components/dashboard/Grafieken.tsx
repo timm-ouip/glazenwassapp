@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { TEGEL_KLEUR, TEGEL_VAK, type TegelKleur } from "@/components/Tegel";
+import { TEGEL_VAK } from "@/components/Tegel";
 import { cn } from "@/lib/utils";
 
 /**
@@ -8,8 +8,9 @@ import { cn } from "@/lib/utils";
  * elkaar. Allemaal dezelfde afspraken:
  *
  * - één reeks heeft geen legenda; de titel zegt al wat je ziet.
- * - elk vak heeft één kleur voor de reeks en oranje voor de maand van nu; de
- *   pagina zet die kleuren met --grafiek-rustig en --grafiek-accent.
+ * - de vakken zijn neutraal: de kleur zit in de staven, de balken en de lijn.
+ *   Elke grafiek heeft één kleur voor de reeks en oranje voor de maand van nu;
+ *   de pagina zet die kleuren met --grafiek-rustig en --grafiek-accent.
  * - onder de muis staat het bedrag of het aantal (title), en een schermlezer
  *   krijgt de hele reeks als één zin voorgelezen.
  * - de lijn onderaan is de nullijn; er staan geen hulplijnen te veel.
@@ -26,23 +27,22 @@ export interface Punt {
 }
 
 /**
- * Het vak waar een grafiek in ligt. Het heeft dezelfde kleuren als de vakken
- * op Home: in Fel een kleurvlak, in Zakelijk een witte kaart met een randje.
- * De kleur van de staven zet de pagina er zelf bij, met --grafiek-rustig en
- * --grafiek-accent in de className.
+ * Het vak waar een grafiek in ligt: een gewone kaart, in elk thema. Wit op
+ * papier, bijna zwart in het donker — de kleur van de pagina zit in de
+ * grafiek zelf en niet in het vlak eromheen. --vak is de kleur van dat vlak,
+ * voor wat zich ervan los moet knippen (het randje om een bolletje in de
+ * lijngrafiek). De kleur van de staven zet de pagina er zelf bij, met
+ * --grafiek-rustig en --grafiek-accent in de className.
  */
 export function Paneel({
   titel,
   extra,
-  kleur = "donker",
   className,
   children,
 }: {
   titel: string;
   /** Rechtsboven: een totaal, een uitschieter of een legenda. */
   extra?: ReactNode;
-  /** Welk kleurvlak dit vak is; standaard het donkere. */
-  kleur?: TegelKleur;
   className?: string;
   children: ReactNode;
 }) {
@@ -51,9 +51,7 @@ export function Paneel({
       aria-label={titel}
       className={cn(
         TEGEL_VAK,
-        TEGEL_KLEUR[kleur],
-        // De schaduw hoort bij het vak en niet bij de kleur: anders zweven op
-        // dezelfde pagina twee panelen wel en de rest niet.
+        "bg-card text-card-foreground [--vak:var(--card)]",
         "shadow-card gap-3 p-4 md:rounded-[26px] md:p-5",
         className,
       )}

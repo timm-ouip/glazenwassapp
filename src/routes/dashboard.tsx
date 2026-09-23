@@ -414,7 +414,6 @@ function Dashboard() {
           <div className="grid gap-3 md:grid-cols-12 md:gap-4">
             <Paneel
               titel="Omzet per maand"
-              kleur="ijsblauw"
               className="md:col-span-7 fel:[--grafiek-rustig:var(--tint-blauw-mid)]"
               extra={
                 cijfers && hoogsteMaand >= 0 ? (
@@ -436,7 +435,7 @@ function Dashboard() {
               )}
             </Paneel>
 
-            <Paneel titel="Omzet per wijk" kleur="goud" className="md:col-span-5">
+            <Paneel titel="Omzet per wijk" className="md:col-span-5">
               {cijfers && adresInfo && (
                 <Balken
                   rijen={[...adresInfo.wijken]
@@ -459,7 +458,6 @@ function Dashboard() {
 
             <Paneel
               titel="Gewassen adressen per maand"
-              kleur="aqua"
               className="md:col-span-5"
               extra={
                 cijfers ? (
@@ -469,7 +467,7 @@ function Dashboard() {
             >
               {cijfers && (
                 <Lijn
-                  kleur="fel:text-tint-paars-mid"
+                  kleur="fel:text-tint-roze-mid"
                   punten={punten(cijfers.maandAdressen, (n) => `${n} adressen`)}
                   beschrijving={`Gewassen adressen per maand: ${cijfers.maandAdressen
                     .map((a, i) => `${MAANDEN[i]?.[0]} ${a}`)
@@ -520,7 +518,6 @@ function Dashboard() {
 
             <Paneel
               titel="Klachten"
-              kleur="creme"
               className="md:col-span-3"
               extra={
                 cijfers ? <PaneelExtra>{cijfers.klachtenTotaal} totaal</PaneelExtra> : undefined
@@ -543,7 +540,6 @@ function Dashboard() {
 
             <Paneel
               titel="Omzet per werkdag"
-              kleur="perzik"
               className="md:col-span-6 fel:[--grafiek-rustig:var(--tint-blauw-mid)]"
               extra={
                 cijfers && cijfers.werkdagen.some((d) => d > 0) ? (
@@ -586,7 +582,6 @@ function Dashboard() {
 
             <Paneel
               titel="Erbij en eraf"
-              kleur="ijsblauw"
               className="md:col-span-6"
               extra={
                 <Legenda

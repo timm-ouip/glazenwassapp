@@ -351,8 +351,11 @@
   --grafiek-accent: #ff5b1f;
   --grafiek-klein-rustig: rgb(243 238 229 / 55%);
   --grafiek-klein-accent: #f2b705;
-  --serie-contant: #f2b705;
-  --serie-overmaken: #a9d7d8;
+  /* Contant en overmaken liggen nu op een witte kaart en niet meer op een
+     donker vlak: dit zijn dezelfde twee kleuren als het icoontje bij een
+     betaling (BetaalIcoon), maar dan de kant die op wit leesbaar is. */
+  --serie-contant: #b98700;
+  --serie-overmaken: #0e7c7e;
 }
 
 .fel.dark {
@@ -425,6 +428,9 @@
   --tegel-creme: #f3eee5;
   --tegel-donker: #161616;
   --grafiek-rustig: #6f6c68;
+  /* Op de donkere kaart de lichte kant van goud en teal. */
+  --serie-contant: #f2b705;
+  --serie-overmaken: #a9d7d8;
 }
 
 /*

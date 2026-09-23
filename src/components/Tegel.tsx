@@ -9,9 +9,9 @@ import { IconArrowUpRight as NaarRechtsBoven } from "@tabler/icons-react";
  * kleuren van het ontwerp. In Zakelijk zijn alle vakken wit met een randje; de kleur van het vak zit daar
  * nog in één vierkantje naast het label (--tegel-*-accent, zie TegelKop).
  *
- * Elke kleur zet ook --vak: de kleur van het vlak zelf. Dat heeft iets nodig
- * dat op het vak ligt en zichzelf ervan los moet knippen, zoals het randje om
- * een bolletje in de lijngrafiek van het dashboard.
+ * Elke kleur zet ook --vak: de kleur van het vlak zelf, voor iets dat op het
+ * vak ligt en zichzelf ervan los moet knippen — een randje om een bolletje,
+ * bijvoorbeeld.
  */
 export const TEGEL_KLEUR = {
   oranje:
@@ -34,8 +34,6 @@ export const TEGEL_KLEUR = {
   ijsblauw:
     "bg-tegel-ijsblauw text-tegel-ijsblauw-ink [--tegel-accent:var(--tegel-ijsblauw-accent)] [--vak:var(--tegel-ijsblauw)]",
 } as const;
-
-export type TegelKleur = keyof typeof TEGEL_KLEUR;
 
 /** De vorm van elk vak. Een vak dat ergens heen gaat, krijgt ook de hover. */
 export const TEGEL_VAK = "flex min-w-0 flex-col rounded-[24px] zak:border zak:border-border";

@@ -29,13 +29,13 @@ export function BetaalIcoon({
         aria-hidden="true"
         className={cn(
           "size-4",
-          // In het thema Fel de goudgele en aquablauwe tint van de vlakken; in
-          // Zakelijk dezelfde twee kleuren als de grafiek "Contant en overmaken"
-          // op het dashboard, anders springt contant van kleur als je van de
-          // lijst naar het dashboard kijkt.
+          // Dezelfde twee kleuren als de grafiek "Contant en overmaken" op het
+          // dashboard, in elk thema: anders springt contant van kleur als je
+          // van de lijst naar het dashboard kijkt. De kleur zelf staat in
+          // styles.css (--serie-contant en --serie-overmaken).
           contant
-            ? "text-amber-500 fel:text-[#b98700] fel:dark:text-[#f2b705] zak:text-serie-contant"
-            : "text-teal-600 fel:text-[#0e7c7e] fel:dark:text-[#a9d7d8] zak:text-serie-overmaken",
+            ? "text-amber-500 fel:text-serie-contant zak:text-serie-contant"
+            : "text-teal-600 fel:text-serie-overmaken zak:text-serie-overmaken",
         )}
       />
     </span>
