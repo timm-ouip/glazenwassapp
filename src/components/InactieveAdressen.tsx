@@ -81,7 +81,7 @@ export function InactieveAdressen({
     <div className="overflow-x-auto rounded-[18px] border border-border bg-card shadow-card">
       <table className="w-full min-w-[44rem] text-[13px]">
         <thead>
-          <tr className="border-b border-border bg-card-header text-left text-[11px] font-medium text-muted-foreground/80">
+          <tr className="border-b border-border bg-card-header text-left text-[11px] font-medium text-muted-foreground/80 zak:bg-card zak:text-[10px] zak:font-bold zak:uppercase zak:tracking-[0.08em] zak:text-muted-foreground">
             <th className="px-3 py-2.5">adres</th>
             <th className="px-3 py-2.5">klant</th>
             <th className="px-3 py-2.5">reden</th>

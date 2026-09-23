@@ -27,6 +27,7 @@ import { Route as PrintenRouteImport } from './routes/printen'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PrullenbakRouteImport } from './routes/prullenbak'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as StijlgidsRouteImport } from './routes/stijlgids'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as UitnodigingRouteImport } from './routes/uitnodiging'
 
@@ -120,6 +121,11 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StijlgidsRoute = StijlgidsRouteImport.update({
+  id: '/stijlgids',
+  path: '/stijlgids',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TeamRoute = TeamRouteImport.update({
   id: '/team',
   path: '/team',
@@ -150,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/prullenbak': typeof PrullenbakRoute
   '/signup': typeof SignupRoute
+  '/stijlgids': typeof StijlgidsRoute
   '/team': typeof TeamRoute
   '/uitnodiging': typeof UitnodigingRoute
 }
@@ -172,6 +179,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/prullenbak': typeof PrullenbakRoute
   '/signup': typeof SignupRoute
+  '/stijlgids': typeof StijlgidsRoute
   '/team': typeof TeamRoute
   '/uitnodiging': typeof UitnodigingRoute
 }
@@ -195,6 +203,7 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/prullenbak': typeof PrullenbakRoute
   '/signup': typeof SignupRoute
+  '/stijlgids': typeof StijlgidsRoute
   '/team': typeof TeamRoute
   '/uitnodiging': typeof UitnodigingRoute
 }
@@ -219,6 +228,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/prullenbak'
     | '/signup'
+    | '/stijlgids'
     | '/team'
     | '/uitnodiging'
   fileRoutesByTo: FileRoutesByTo
@@ -241,6 +251,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/prullenbak'
     | '/signup'
+    | '/stijlgids'
     | '/team'
     | '/uitnodiging'
   id:
@@ -263,6 +274,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/prullenbak'
     | '/signup'
+    | '/stijlgids'
     | '/team'
     | '/uitnodiging'
   fileRoutesById: FileRoutesById
@@ -286,6 +298,7 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   PrullenbakRoute: typeof PrullenbakRoute
   SignupRoute: typeof SignupRoute
+  StijlgidsRoute: typeof StijlgidsRoute
   TeamRoute: typeof TeamRoute
   UitnodigingRoute: typeof UitnodigingRoute
 }
@@ -418,6 +431,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stijlgids': {
+      id: '/stijlgids'
+      path: '/stijlgids'
+      fullPath: '/stijlgids'
+      preLoaderRoute: typeof StijlgidsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/team': {
       id: '/team'
       path: '/team'
@@ -454,6 +474,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   PrullenbakRoute: PrullenbakRoute,
   SignupRoute: SignupRoute,
+  StijlgidsRoute: StijlgidsRoute,
   TeamRoute: TeamRoute,
   UitnodigingRoute: UitnodigingRoute,
 }

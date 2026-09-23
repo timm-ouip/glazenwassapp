@@ -78,12 +78,12 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
         // In Fel: alleen de pagina waar je bent krijgt kleur, een oranje pil.
         className={`flex h-12 items-center gap-3 rounded-[12px] px-3 text-[15px] fel:rounded-full fel:px-4 ${
           actief
-            ? "bg-card font-semibold shadow-card fel:bg-primary fel:text-primary-foreground fel:shadow-none"
+            ? "bg-card font-semibold shadow-card fel:bg-primary fel:text-primary-foreground fel:shadow-none zak:bg-sidebar-accent zak:text-sidebar-accent-foreground zak:shadow-none"
             : "text-foreground/85"
         }`}
       >
         <p.icon
-          className={`size-5 shrink-0 ${actief ? "text-tint-oranje-ink fel:text-primary-foreground" : "text-muted-foreground"}`}
+          className={`size-5 shrink-0 ${actief ? "text-tint-oranje-ink fel:text-primary-foreground zak:text-sidebar-accent-foreground" : "text-muted-foreground"}`}
         />
         <span className="truncate">{p.label}</span>
         {telletje > 0 && (
@@ -124,7 +124,7 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
               className={tabKlassen(isActief(p))}
             >
               <p.icon
-                className={`size-[21px] ${isActief(p) ? "text-tint-oranje-ink" : ""}`}
+                className={`size-[21px] ${isActief(p) ? "text-tint-oranje-ink zak:text-tint-groen-ink" : ""}`}
                 strokeWidth={isActief(p) ? 2.2 : 1.8}
               />
               <span className="truncate">{TABNAAM[p.to] ?? p.label}</span>
@@ -142,7 +142,7 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
             className={tabKlassen(meerActief)}
           >
             <Menu
-              className={`size-[21px] ${meerActief ? "text-tint-oranje-ink" : ""}`}
+              className={`size-[21px] ${meerActief ? "text-tint-oranje-ink zak:text-tint-groen-ink" : ""}`}
               strokeWidth={meerActief ? 2.2 : 1.8}
             />
             <span>Meer</span>
@@ -154,7 +154,7 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
       </div>
 
       <Drawer open={meerOpen} onOpenChange={setMeerOpen} shouldScaleBackground={false}>
-        <DrawerContent className="rounded-t-[22px] border-border bg-surface px-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <DrawerContent className="rounded-t-[22px] border-border bg-surface zak:bg-card px-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <DrawerTitle className="px-3 pt-3 pb-2 font-display text-lg font-bold">
             {company?.name ?? "Menu"}
           </DrawerTitle>

@@ -1362,7 +1362,7 @@ function Klanten() {
           <div className="overflow-x-auto rounded-[18px] border border-border bg-card shadow-card">
             <table className="w-full min-w-[64rem] text-[13px]">
               <thead>
-                <tr className="border-b border-border bg-card-header text-left text-[11px] font-medium text-muted-foreground/80">
+                <tr className="border-b border-border bg-card-header text-left text-[11px] font-medium text-muted-foreground/80 zak:bg-card zak:text-[10px] zak:font-bold zak:uppercase zak:tracking-[0.08em] zak:text-muted-foreground">
                   <th className="w-9 px-2 py-2.5" />
                   <th className="px-2 py-2.5">adres</th>
                   {KOLOMMEN.map((k) => (

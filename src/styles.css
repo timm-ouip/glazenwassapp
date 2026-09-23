@@ -5,6 +5,9 @@
 @custom-variant dark (&:is(.dark *));
 /* Alleen in het thema Fel (licht of donker); combineer met dark: voor Fel donker. */
 @custom-variant fel (&:is(.fel *));
+/* Alleen in het thema Zakelijk (licht of donker); combineer met dark: voor
+   Zakelijk donker. */
+@custom-variant zak (&:is(.zak *));
 
 /*
  * Design system definition.
@@ -760,6 +763,349 @@
 }
 :where(.fel.dark) :where([class*="bg-tint-roze/"]) {
   --tint-roze: #72243e;
+}
+
+/*
+ * Zakelijk. Het derde thema, naast crème en Fel, in een lichte (.zak) en een
+ * donkere versie (.zak.dark). Waar crème warm papier is en Fel kleurvlakken,
+ * is Zakelijk een kantoorprogramma: een koelgrijze ondergrond, witte kaarten
+ * met een dun randje in plaats van een schaduw, bijna zwarte knoppen en
+ * muntgroen als enige accent — dat zit alleen op de regel waar je staat.
+ *
+ * Kleur zit hier in de kleine dingen: het bolletje van een wijk, een statuspil,
+ * het icoontje bij een getal. Vlakken zijn wit of grijs, nooit een hele tegel
+ * vol kleur. Daarom wijzen alle --kaart-* en --tegel-* hier naar de kaart zelf,
+ * met een aparte --tegel-*-accent voor dat ene gekleurde vierkantje.
+ *
+ * De maten (hoe rond alles is) staan verderop bij elkaar, onder "Zakelijk: de
+ * maten" — niet hier, want die horen niet bij de kleuren.
+ */
+.zak {
+  /* Strakker dan crème: 10px in plaats van 12px. */
+  --radius: 0.625rem;
+
+  /* De neutralen. Eén koele grijstint (hoek rond 250 in hex-termen), van de
+     ondergrond tot de randen; niets warms ertussen. */
+  --background: #f4f5f7;
+  --surface: #eff1f4;
+  --foreground: #101828;
+  --card: #ffffff;
+  --card-header: #f7f8fa;
+  --card-foreground: #101828;
+  --popover: #ffffff;
+  --popover-foreground: #101828;
+  --primary: #0e1726;
+  --primary-foreground: #fcfefd;
+  --secondary: #f1f3f6;
+  --secondary-foreground: #101828;
+  --muted: #f1f3f6;
+  --muted-foreground: #667085;
+  --accent: #f1f3f6;
+  --accent-foreground: #101828;
+  --destructive: #b42318;
+  --destructive-foreground: #ffffff;
+  --border: #e9ebef;
+  --input: #dde1e7;
+  /* Muntgroen: de accentkleur van dit thema. Als ring om een veld waar je met
+     Tab op staat is hij donker genoeg om op wit te zien. */
+  --ring: #0f9d63;
+
+  /* Het merk blijft blauw, maar koeler dan in crème. */
+  --brand: #dbeafe;
+  --brand-foreground: #1e3a8a;
+  --brand-ink: #1d4ed8;
+
+  /* Betekeniskleuren: dezelfde betekenis als in crème, alleen koeler gemengd.
+     De inkt is de donkere kant van dezelfde kleur, de -mid zit ertussenin en
+     is voor een icoon of een balkje zonder vlak eronder. */
+  --tint-amber: #fef0cd;
+  --tint-amber-ink: #92400e;
+  --tint-groen: #dcfce7;
+  --tint-groen-ink: #15803d;
+  --tint-paars: #ede9fe;
+  --tint-paars-ink: #5b21b6;
+  --tint-rood: #fee2e2;
+  --tint-rood-ink: #b42318;
+  --tint-blauw: #dbeafe;
+  --tint-blauw-ink: #1d4ed8;
+  --tint-oranje: #ffedd5;
+  --tint-oranje-ink: #9a3412;
+  --tint-roze: #fce7f3;
+  --tint-roze-ink: #9d174d;
+  --tint-turkoois: #ccfbf1;
+  --tint-turkoois-ink: #0f766e;
+  --tint-limoen: #ecfccb;
+  --tint-limoen-ink: #3f6212;
+  --tint-geel: #fef3c7;
+  --tint-geel-ink: #854d0e;
+  --tint-blauw-mid: #2563eb;
+  --tint-groen-mid: #15803d;
+  --tint-rood-mid: #dc2626;
+  --tint-paars-mid: #6d28d9;
+  --tint-oranje-mid: #ea580c;
+  --tint-roze-mid: #db2777;
+  --tint-turkoois-mid: #0d9488;
+
+  /* Geen zwevende panelen meer: een haarlijn doet het werk, de schaduw is er
+     alleen nog om een kaart van het grijs los te maken. Optillen mag wel:
+     een tegel die je aanwijst krijgt een echte schaduw, anders voelt het dood. */
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 5%);
+  --shadow-tegel: 0 4px 10px rgb(16 24 40 / 7%), 0 14px 28px rgb(16 24 40 / 8%);
+  --schuifduim: rgb(16 24 40 / 18%);
+  --schuifduim-aan: rgb(16 24 40 / 32%);
+
+  /* De zijbalk is wit, met een lijn naar de pagina toe (die lijn zet de
+     zijbalk zelf). De pagina waar je bent, licht muntgroen op. */
+  --sidebar: #fdfdfe;
+  --sidebar-foreground: #101828;
+  --sidebar-primary: #a9efc8;
+  --sidebar-primary-foreground: #0b3b25;
+  --sidebar-accent: #a9efc8;
+  --sidebar-accent-foreground: #0b3b25;
+  --sidebar-border: #e9ebef;
+  --sidebar-ring: #0f9d63;
+
+  /* Wijkkleuren: nog lichter dan in crème, want ze liggen hier op wit en niet
+     op papier. De inkt erbij is diep genoeg om een bedrag op te lezen. */
+  --wijk-l: 0.952;
+  --wijk-c: 0.038;
+  --wijk-ink-l: 0.42;
+  --wijk-ink-c: 0.12;
+
+  /* Cijferkaarten en de vakken op Home zijn hier gewone witte kaarten. De
+     kleur van zo'n vak zit alleen nog in het vierkantje om het icoon
+     (--tegel-*-accent, zie Tegel.tsx en Cijferkaarten.tsx). */
+  --kaart-blauw: var(--card);
+  --kaart-blauw-ink: var(--card-foreground);
+  --kaart-amber: var(--card);
+  --kaart-amber-ink: var(--card-foreground);
+  --kaart-groen: var(--card);
+  --kaart-groen-ink: var(--card-foreground);
+  --kaart-paars: var(--card);
+  --kaart-paars-ink: var(--card-foreground);
+  --kaart-roze: var(--card);
+  --kaart-roze-ink: var(--card-foreground);
+
+  --tegel-oranje: var(--card);
+  --tegel-oranje-ink: var(--card-foreground);
+  --tegel-creme: var(--card);
+  --tegel-creme-ink: var(--card-foreground);
+  --tegel-geel: var(--card);
+  --tegel-geel-ink: var(--card-foreground);
+  --tegel-aqua: var(--card);
+  --tegel-aqua-ink: var(--card-foreground);
+  --tegel-perzik: var(--card);
+  --tegel-perzik-ink: var(--card-foreground);
+  --tegel-groen: var(--card);
+  --tegel-groen-ink: var(--card-foreground);
+  --tegel-donker: var(--card);
+  --tegel-donker-ink: var(--card-foreground);
+  --tegel-goud: var(--card);
+  --tegel-goud-ink: var(--card-foreground);
+  --tegel-paars: var(--card);
+  --tegel-paars-ink: var(--card-foreground);
+  --tegel-petrol: var(--card);
+  --tegel-petrol-ink: var(--card-foreground);
+  --tegel-ijsblauw: var(--card);
+  --tegel-ijsblauw-ink: var(--card-foreground);
+
+  /* Het gekleurde vierkantje op een verder witte tegel. */
+  --tegel-oranje-accent: #ea580c;
+  --tegel-creme-accent: #667085;
+  --tegel-geel-accent: #b45309;
+  --tegel-aqua-accent: #2563eb;
+  --tegel-perzik-accent: #db2777;
+  --tegel-groen-accent: #15803d;
+  --tegel-donker-accent: #101828;
+  --tegel-goud-accent: #b45309;
+  --tegel-paars-accent: #6d28d9;
+  --tegel-petrol-accent: #0d9488;
+  --tegel-ijsblauw-accent: #2563eb;
+
+  /* De staafjes: de maanden muntgroen, de maand waar je in zit diepgroen.
+     Bijna zwart zou hier niet werken: één staaf is soms zo breed als het halve
+     vak, en dan staat er een zwart blok op de pagina. */
+  --grafiek-rustig: #a9efc8;
+  --grafiek-accent: #0f9d63;
+  --grafiek-klein-rustig: #cfd6df;
+  --grafiek-klein-accent: #0f9d63;
+  --serie-contant: #0f9d63;
+  --serie-overmaken: #2563eb;
+
+  --chart-1: #2563eb;
+  --chart-2: #0d9488;
+  --chart-3: #7c3aed;
+  --chart-4: #d97706;
+  --chart-5: #db2777;
+}
+
+/*
+ * Zakelijk donker. Dezelfde indeling, omgekeerd licht: bijna zwart papier,
+ * kaarten een tint lichter met een zichtbare rand. De donkere knop wordt hier
+ * muntgroen met donkere tekst — een zwarte knop op zwart zie je niet.
+ * Alles wat naar var(--card) wijst (de tegels, de cijferkaarten) verhuist
+ * vanzelf mee; dat staat hieronder dus niet nog een keer.
+ */
+.zak.dark {
+  --background: #0e1013;
+  --surface: #171a1f;
+  --foreground: #f2f4f7;
+  --card: #171a1f;
+  --card-header: #1c2027;
+  --card-foreground: #f2f4f7;
+  --popover: #1c2027;
+  --popover-foreground: #f2f4f7;
+  --primary: #a9efc8;
+  --primary-foreground: #08301c;
+  --secondary: #232830;
+  --secondary-foreground: #f2f4f7;
+  --muted: #232830;
+  --muted-foreground: #9aa4b2;
+  --accent: #232830;
+  --accent-foreground: #f2f4f7;
+  --destructive: #f87171;
+  --destructive-foreground: #2a0b0b;
+  --border: #262b33;
+  --input: #2e343d;
+  --ring: #34d399;
+
+  --brand: #16243a;
+  --brand-foreground: #dbeafe;
+  --brand-ink: #8fbbf7;
+
+  --tint-amber: #2b2113;
+  --tint-amber-ink: #f0c07b;
+  --tint-groen: #10291d;
+  --tint-groen-ink: #6ee7a8;
+  --tint-paars: #1f1a2e;
+  --tint-paars-ink: #c4b5fd;
+  --tint-rood: #33181a;
+  --tint-rood-ink: #f59e9b;
+  --tint-blauw: #16243a;
+  --tint-blauw-ink: #8fbbf7;
+  --tint-oranje: #2c1a10;
+  --tint-oranje-ink: #f5b183;
+  --tint-roze: #2e1622;
+  --tint-roze-ink: #f3a8c8;
+  --tint-turkoois: #0f2a28;
+  --tint-turkoois-ink: #7dddd0;
+  --tint-limoen: #1e2a12;
+  --tint-limoen-ink: #bee58a;
+  --tint-geel: #2b2411;
+  --tint-geel-ink: #f2d48a;
+  --tint-blauw-mid: #6098f7;
+  --tint-groen-mid: #5dd69c;
+  --tint-rood-mid: #f87171;
+  --tint-paars-mid: #a78bfa;
+  --tint-oranje-mid: #f08c4b;
+  --tint-roze-mid: #ec7aae;
+  --tint-turkoois-mid: #5fc9ba;
+
+  /* Schaduw doet op zwart niets; de rand om de kaart doet het werk. */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-tegel: 0 0 0 1px rgb(255 255 255 / 10%), 0 12px 26px rgb(0 0 0 / 55%);
+  --schuifduim: rgb(255 255 255 / 16%);
+  --schuifduim-aan: rgb(255 255 255 / 30%);
+
+  --sidebar: #13161a;
+  --sidebar-foreground: #f2f4f7;
+  --sidebar-primary: #a9efc8;
+  --sidebar-primary-foreground: #0b3b25;
+  --sidebar-accent: #a9efc8;
+  --sidebar-accent-foreground: #0b3b25;
+  --sidebar-border: #262b33;
+  --sidebar-ring: #34d399;
+
+  --wijk-l: 0.3;
+  --wijk-c: 0.05;
+  --wijk-ink-l: 0.88;
+  --wijk-ink-c: 0.09;
+
+  --tegel-oranje-accent: #f08c4b;
+  --tegel-creme-accent: #9aa4b2;
+  --tegel-geel-accent: #e9a356;
+  --tegel-aqua-accent: #6098f7;
+  --tegel-perzik-accent: #ec7aae;
+  --tegel-groen-accent: #5dd69c;
+  --tegel-donker-accent: #f2f4f7;
+  --tegel-goud-accent: #e9a356;
+  --tegel-paars-accent: #a78bfa;
+  --tegel-petrol-accent: #5fc9ba;
+  --tegel-ijsblauw-accent: #6098f7;
+
+  /* Op zwart staan de staven gedempt en licht de maand waar je in zit op. */
+  --grafiek-rustig: #2f6952;
+  --grafiek-accent: #6ee7a8;
+  --grafiek-klein-rustig: #3b4250;
+  --grafiek-klein-accent: #6ee7a8;
+  --serie-contant: #6ee7a8;
+  --serie-overmaken: #6098f7;
+
+  --chart-1: #6098f7;
+  --chart-2: #5fc9ba;
+  --chart-3: #a78bfa;
+  --chart-4: #e9a356;
+  --chart-5: #ec7aae;
+
+  /* Het voortgangsbalkje achter een straatnaam in de planmodus. */
+  --voortgang: #234d38;
+}
+
+/*
+ * Zakelijk: de maten.
+ *
+ * De app zet zijn ronde hoeken in vaste pixels (rounded-[18px] en zo), op een
+ * paar honderd plekken. Die allemaal langslopen zou dit thema in elk bestand
+ * zetten; daarom worden ze hier in één keer omgerekend. Wil je het strakker of
+ * juist ronder, dan verzet je deze vijf regels en niets anders.
+ *
+ * De vuistregel: grote panelen 16, kaarten 14, regels en velden 10, kleine
+ * vierkantjes 8. Alles wat een pil hoort te zijn (knoppen, chips, statuspillen)
+ * staat als `zak:rounded-full` bij het onderdeel zelf.
+ */
+.zak :where(.rounded-\[28px\], .rounded-\[26px\], .rounded-\[24px\], .rounded-\[22px\]):not([class*="zak:rounded"]) {
+  border-radius: 16px;
+}
+
+.zak :where(.rounded-\[20px\], .rounded-\[18px\], .rounded-\[16px\]):not([class*="zak:rounded"]) {
+  border-radius: 14px;
+}
+
+.zak :where(.rounded-\[14px\], .rounded-\[12px\], .rounded-\[11px\]):not([class*="zak:rounded"]) {
+  border-radius: 10px;
+}
+
+.zak :where(.rounded-\[10px\], .rounded-\[9px\], .rounded-\[8px\]):not([class*="zak:rounded"]) {
+  border-radius: 8px;
+}
+
+/*
+ * Zakelijk heeft geen zwevende panelen: een kaart staat op de pagina met een
+ * haarlijn eromheen. De app zet die lijn niet overal zelf neer — veel kaarten
+ * hebben alleen `shadow-card` — dus krijgt zo'n kaart hier zijn rand van de
+ * schaduw. Kaarten die al een eigen rand hebben, slaan we over: anders staat
+ * er een dubbele lijn omheen.
+ */
+.zak :where(.shadow-card):not(.border):not([class*="border-"]) {
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 1px 2px rgb(16 24 40 / 4%);
+}
+
+.zak.dark :where(.shadow-card):not(.border):not([class*="border-"]) {
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 1px 2px rgb(0 0 0 / 40%);
+}
+
+/* En de maten die uit Tailwind zelf komen, zodat een kaart met rounded-xl er
+   niet naast ligt. */
+.zak :where(.rounded-3xl, .rounded-2xl):not([class*="zak:rounded"]) {
+  border-radius: 16px;
+}
+
+.zak :where(.rounded-xl):not([class*="zak:rounded"]) {
+  border-radius: 12px;
 }
 
 @layer base {

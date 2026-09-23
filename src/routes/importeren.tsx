@@ -1678,7 +1678,7 @@ function ImportPagina() {
 
             <div className="rounded-[18px] border border-border bg-card shadow-card">
               <table className="w-full table-fixed text-sm">
-                <thead className="bg-card-header text-left text-[11px] font-medium text-muted-foreground/80">
+                <thead className="bg-card-header text-left text-[11px] font-medium text-muted-foreground/80 zak:bg-card zak:text-[10px] zak:font-bold zak:uppercase zak:tracking-[0.08em] zak:text-muted-foreground">
                   <tr>
                     <th className="w-[15%] px-3 py-2">Straat</th>
                     <th className="w-20 px-3 py-2">Nr.</th>

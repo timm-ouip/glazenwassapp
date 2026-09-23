@@ -219,7 +219,7 @@ function TabbladenMenu({ p, lijst }: { p: Pagina; lijst: Subtab[] }) {
           type="button"
           title={p.label}
           aria-label={p.label}
-          className="flex h-10 items-center justify-center rounded-[12px] bg-card shadow-card fel:rounded-full fel:bg-primary fel:text-primary-foreground fel:shadow-none"
+          className="flex h-10 items-center justify-center rounded-[12px] bg-card shadow-card fel:rounded-full fel:bg-primary fel:text-primary-foreground fel:shadow-none zak:border zak:border-border zak:shadow-none"
         >
           <p.icon className="size-[17px] shrink-0 text-tint-oranje-ink fel:text-primary-foreground" />
         </button>
@@ -285,16 +285,17 @@ export function Zijbalk() {
         // gekleurd vlak: de kleur zit in het icoon, en het wit tilt de pagina
         // waar je bent op uit de rest. In Fel is het juist de enige plek met
         // kleur: een volle oranje pil, de rest van het menu blijft rustig.
-        className={`relative flex h-10 items-center rounded-[12px] text-[13.5px] transition-colors fel:rounded-full ${
+        // Zakelijk doet hetzelfde, maar dan muntgroen op een witte balk.
+        className={`relative flex h-10 items-center rounded-[12px] text-[13.5px] transition-colors fel:rounded-full zak:rounded-[10px] ${
           ingeklapt ? "justify-center px-0" : "gap-3 px-2.5 fel:px-3"
         } ${
           actief
-            ? "bg-card font-semibold shadow-card fel:bg-primary fel:text-primary-foreground fel:shadow-none"
-            : "border border-transparent text-foreground/75 hover:bg-card/70 hover:text-foreground"
+            ? "bg-card font-semibold shadow-card fel:bg-primary fel:text-primary-foreground fel:shadow-none zak:bg-sidebar-accent zak:text-sidebar-accent-foreground zak:shadow-none"
+            : "border border-transparent text-foreground/75 hover:bg-card/70 hover:text-foreground zak:hover:bg-accent"
         }`}
       >
         <p.icon
-          className={`size-[17px] shrink-0 ${actief ? "text-tint-oranje-ink fel:text-primary-foreground" : "text-muted-foreground"}`}
+          className={`size-[17px] shrink-0 ${actief ? "text-tint-oranje-ink fel:text-primary-foreground zak:text-sidebar-accent-foreground" : "text-muted-foreground"}`}
         />
         {!ingeklapt && <span className="truncate">{p.label}</span>}
         {/* Ingeklapt is er geen ruimte voor een getal: dan alleen een stip,
@@ -313,10 +314,10 @@ export function Zijbalk() {
 
   return (
     <aside
-      className={`${breed} sticky top-0 hidden h-screen md:flex shrink-0 flex-col gap-5 border-r border-border bg-surface px-3.5 py-5 fel:dark:bg-background transition-[width] duration-200 print:hidden`}
+      className={`${breed} sticky top-0 hidden h-screen md:flex shrink-0 flex-col gap-5 border-r border-border bg-surface px-3.5 py-5 fel:dark:bg-background zak:bg-sidebar zak:border-sidebar-border transition-[width] duration-200 print:hidden`}
     >
       <div className={`flex items-center ${ingeklapt ? "flex-col gap-3" : "gap-2.5"}`}>
-        <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[12px] bg-card shadow-card">
+        <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[12px] bg-card shadow-card zak:border zak:border-border zak:shadow-none">
           <Druppel className="size-[22px]" />
         </div>
         {/* Leeg tot het bedrijf geladen is: een placeholder die daarna
@@ -333,7 +334,7 @@ export function Zijbalk() {
           onClick={klap}
           aria-label={ingeklapt ? "Navigatie uitklappen" : "Navigatie inklappen"}
           title={ingeklapt ? "Uitklappen" : "Inklappen"}
-          className={`flex size-[26px] items-center justify-center rounded-[8px] bg-card text-muted-foreground shadow-card hover:text-foreground ${
+          className={`flex size-[26px] items-center justify-center rounded-[8px] bg-card text-muted-foreground shadow-card hover:text-foreground zak:border zak:border-border zak:shadow-none ${
             ingeklapt ? "" : "ml-auto"
           }`}
         >
@@ -388,7 +389,7 @@ export function Zijbalk() {
 
       <div className="mt-auto flex flex-col gap-2">
         {employee && !ingeklapt && (
-          <div className="flex items-center gap-2.5 rounded-[16px] bg-card p-2.5 shadow-card">
+          <div className="flex items-center gap-2.5 rounded-[16px] bg-card p-2.5 shadow-card zak:border zak:border-border zak:shadow-none">
             <div className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-brand text-xs font-semibold text-brand-foreground">
               {(employee.naam || employee.email).charAt(0).toUpperCase()}
             </div>
@@ -405,7 +406,7 @@ export function Zijbalk() {
           onClick={() => void signOut().then(() => void navigate({ to: "/login" }))}
           aria-label="Uitloggen"
           title="Uitloggen"
-          className={`flex h-10 items-center rounded-[12px] text-[13.5px] text-foreground/75 transition-colors hover:bg-card/70 hover:text-foreground ${
+          className={`flex h-10 items-center rounded-[12px] text-[13.5px] text-foreground/75 transition-colors hover:bg-card/70 hover:text-foreground zak:hover:bg-accent ${
             ingeklapt ? "justify-center px-0" : "gap-3 px-2.5"
           }`}
         >

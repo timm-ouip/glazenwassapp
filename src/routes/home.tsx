@@ -357,14 +357,14 @@ function Home() {
               className={cn(
                 VAK,
                 KLEUR.oranje,
-                "col-span-2 h-[156px] rounded-[28px] px-5 py-4 md:h-[270px] md:px-[26px] md:py-[22px]",
+                "col-span-2 h-[156px] rounded-[28px] px-5 py-4 md:h-[270px] md:px-[26px] md:py-[22px] zak:h-[136px] zak:md:h-[200px] zak:md:px-5 zak:md:py-4",
               )}
             >
-              <span className="flex items-center justify-between text-[13px] font-semibold md:text-[14px]">
+              <span className="flex items-center justify-between text-[13px] font-semibold md:text-[14px] zak:text-[10.5px] zak:font-bold zak:uppercase zak:tracking-[0.08em] zak:text-muted-foreground">
                 Planning vandaag
                 <ChevronRight className="size-[18px] md:size-5" aria-hidden="true" />
               </span>
-              <span className="mt-2.5 whitespace-nowrap font-display text-[60px] font-semibold leading-none tracking-[-0.05em] tabular-nums md:mt-[18px] md:text-[96px]">
+              <span className="mt-2.5 whitespace-nowrap font-display text-[60px] font-semibold leading-none tracking-[-0.05em] tabular-nums md:mt-[18px] md:text-[96px] zak:mt-2 zak:text-[32px] zak:tracking-[-0.02em] zak:md:mt-3 zak:md:text-[44px]">
                 {!dag ? (
                   leeg
                 ) : prijzenZien ? (
@@ -374,7 +374,7 @@ function Home() {
                 )}
               </span>
               <span className="mt-auto flex flex-col gap-[7px] md:gap-2.5">
-                <span className="truncate text-[13.5px] opacity-80 md:text-[15px]">
+                <span className="truncate text-[13.5px] opacity-80 md:text-[15px] zak:text-[12px] zak:text-muted-foreground zak:opacity-100 zak:md:text-[12.5px]">
                   {!dag
                     ? " "
                     : dag.adressen === 0 && dag.klussen === 0
@@ -415,14 +415,16 @@ function Home() {
               className={cn(
                 VAK,
                 KLEUR.donker,
-                "col-span-2 hidden h-[270px] rounded-[28px] px-6 pb-4 pt-5 md:flex",
+                "col-span-2 hidden h-[270px] rounded-[28px] px-6 pb-4 pt-5 md:flex zak:h-[200px] zak:px-5 zak:pt-4",
               )}
             >
               <span className="flex items-start justify-between gap-3">
                 <span className="flex flex-col gap-1">
-                  <span className="text-[14px] font-semibold">Omzet per maand</span>
+                  <span className="text-[14px] font-semibold zak:text-[10.5px] zak:font-bold zak:uppercase zak:tracking-[0.08em] zak:text-muted-foreground">
+                    Omzet per maand
+                  </span>
                   <span className="flex items-baseline gap-2">
-                    <span className="font-display text-[36px] font-semibold leading-none tracking-[-0.04em] tabular-nums">
+                    <span className="font-display text-[36px] font-semibold leading-none tracking-[-0.04em] tabular-nums zak:text-[28px] zak:tracking-[-0.02em]">
                       {dezeMaand ? (
                         <TelBedrag bedrag={dezeMaand.bedrag} onthoud="home-omzet" />
                       ) : (

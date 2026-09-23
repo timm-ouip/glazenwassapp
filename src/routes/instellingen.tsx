@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconBuilding as Building2,
+  IconCheck as Check,
   IconChevronDown as ChevronDown,
   IconChevronUp as ChevronUp,
   IconKey as KeyRound,
@@ -64,7 +65,17 @@ import {
 } from "@/lib/planninginstellingen";
 import type { PlanInstellingen } from "@/lib/dagplanning";
 import { AANNAME_BEDRAG_PER_DAG, meetTempo, MINIMUM_DAGEN, tempoVan } from "@/lib/wijkritme";
-import { bewaarThema, leesThema, themaLabels, type Thema } from "@/lib/thema";
+import {
+  bewaarThema,
+  familieKeuzes,
+  familieLabels,
+  familieOmschrijving,
+  familieVan,
+  keuzeLabels,
+  leesThema,
+  type Thema,
+  type ThemaFamilie,
+} from "@/lib/thema";
 import {
   assignRol,
   fetchTeam,
@@ -87,6 +98,14 @@ import { AppLayout } from "@/components/AppLayout";
 import { WijkToevoegenKnop } from "@/components/WijkKiezer";
 import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -799,7 +818,7 @@ function TeamTab() {
           Rechten en het prullenbakje nog te bereiken zijn. */}
       <div className="overflow-x-auto rounded-[18px] border border-border bg-card shadow-card">
         <table className="w-full min-w-[560px] text-sm">
-          <thead className="bg-card-header text-left text-[11px] font-medium text-muted-foreground/80">
+          <thead className="bg-card-header text-left text-[11px] font-medium text-muted-foreground/80 zak:bg-card zak:text-[10px] zak:font-bold zak:uppercase zak:tracking-[0.08em] zak:text-muted-foreground">
             <tr>
               <th className="px-3 py-2 font-medium">Naam</th>
               <th className="px-3 py-2 font-medium">E-mail</th>
@@ -1003,8 +1022,7 @@ function TeamledenKaart({ isEigenaar }: { isEigenaar: boolean }) {
   async function haalWeg(id: string, naam: string) {
     const ja = await bevestig({
       titel: `${naam} uit het team halen?`,
-      tekst:
-        "Hij verdwijnt uit de teamkeuze. Teams van dagen die geweest zijn blijven kloppen.",
+      tekst: "Hij verdwijnt uit de teamkeuze. Teams van dagen die geweest zijn blijven kloppen.",
       gevaarlijk: true,
     });
     if (!ja) return;
@@ -2112,12 +2130,40 @@ const THEMA_ICOON: Record<Thema, typeof Monitor> = {
   donker: Moon,
   "fel-licht": SunFel,
   "fel-donker": MoonFel,
+  "zak-licht": Sun,
+  "zak-donker": Moon,
 };
 
+/** Twee kleuren per thema, voor het vierkantje in de keuzelijst: de
+ *  ondergrond en de kleur waar je het thema aan herkent. */
+const THEMA_KLEUREN: Record<Thema, [grond: string, accent: string]> = {
+  systeem: ["#f7f3ea", "#b5d4f4"],
+  licht: ["#f7f3ea", "#b5d4f4"],
+  donker: ["#26241f", "#185fa5"],
+  "fel-licht": ["#f4f0e8", "#ff5b1f"],
+  "fel-donker": ["#000000", "#ff5b1f"],
+  "zak-licht": ["#f4f5f7", "#a9efc8"],
+  "zak-donker": ["#0e1013", "#a9efc8"],
+};
+
+function ThemaVoorbeeld({ thema }: { thema: Thema }) {
+  const [grond, accent] = THEMA_KLEUREN[thema];
+  return (
+    <span
+      aria-hidden="true"
+      className="flex size-5 shrink-0 items-center justify-center rounded-[6px] border border-border"
+      style={{ background: grond }}
+    >
+      <span className="size-2 rounded-full" style={{ background: accent }} />
+    </span>
+  );
+}
+
 /**
- * Licht of donker. Standaard volgt de app je systeem — zet je hem vast, dan
- * geldt dat alleen op dit apparaat. Fel licht en Fel donker zijn het thema
- * met de felle kleurvlakken; die staan altijd vast.
+ * Het thema, in één keuzelijst. Bovenaan de drie families — crème, Fel en
+ * Zakelijk — en per familie kies je licht of donker. Alleen crème kan met je
+ * systeem meelopen; dat is de stand waarin de app 's avonds vanzelf donker
+ * wordt. De keuze geldt op dit apparaat.
  */
 function WeergaveKaart() {
   const [thema, setThema] = useState<Thema>("systeem");
@@ -2141,32 +2187,63 @@ function WeergaveKaart() {
     bewaarThema(nieuw);
   }
 
+  const familie = familieVan(thema);
+  const HuidigIcoon = THEMA_ICOON[thema];
+
   return (
     <Kaart
       titel="Weergave"
-      uitleg="Standaard volgt de app je systeem. Je kunt hem ook vastzetten; dat geldt dan alleen op dit apparaat. Fel zet felle kleurvlakken op een lichte of een zwarte achtergrond."
+      uitleg="Kies hoe de app eruitziet. Crème is warm papier met zwevende panelen, Fel zet felle kleurvlakken neer en Zakelijk is de rustige: koelgrijs met witte kaarten. De keuze geldt alleen op dit apparaat."
     >
-      <div className="flex flex-wrap gap-2">
-        {(Object.keys(themaLabels) as Thema[]).map((t) => {
-          const Icoon = THEMA_ICOON[t];
-          const aan = thema === t;
-          return (
-            <button
-              key={t}
-              onClick={() => kies(t)}
-              aria-pressed={aan}
-              className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[13px] transition-colors ${
-                aan
-                  ? "border-primary bg-primary font-medium text-primary-foreground"
-                  : "border-border bg-card text-foreground hover:bg-accent"
-              }`}
-            >
-              <Icoon className="size-4" />
-              {themaLabels[t]}
-            </button>
-          );
-        })}
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full max-w-xs items-center gap-2.5 rounded-[12px] border border-border bg-card px-3 py-2 text-left text-[13px] transition-colors hover:bg-accent zak:rounded-full"
+          >
+            <ThemaVoorbeeld thema={thema} />
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">{familieLabels[familie]}</span>
+              <span className="block text-[11.5px] text-muted-foreground">
+                {keuzeLabels[thema]}
+                {thema === "systeem" ? " — volgt je apparaat" : ""}
+              </span>
+            </span>
+            <HuidigIcoon className="size-4 shrink-0 text-muted-foreground" />
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-64">
+          {(Object.keys(familieLabels) as ThemaFamilie[]).map((f, i) => (
+            <div key={f}>
+              {i > 0 && <DropdownMenuSeparator />}
+              <DropdownMenuLabel className="pb-1">
+                <span className="block">{familieLabels[f]}</span>
+                <span className="block text-[11px] font-normal text-muted-foreground">
+                  {familieOmschrijving[f]}
+                </span>
+              </DropdownMenuLabel>
+              {familieKeuzes[f].map((t) => {
+                const Icoon = THEMA_ICOON[t];
+                const aan = thema === t;
+                return (
+                  <DropdownMenuItem
+                    key={t}
+                    onSelect={() => kies(t)}
+                    className="gap-2.5"
+                    aria-current={aan ? "true" : undefined}
+                  >
+                    <ThemaVoorbeeld thema={t} />
+                    <Icoon className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="flex-1">{keuzeLabels[t]}</span>
+                    {aan && <Check className="size-4 shrink-0" />}
+                  </DropdownMenuItem>
+                );
+              })}
+            </div>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </Kaart>
   );
 }
