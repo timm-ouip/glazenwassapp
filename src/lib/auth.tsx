@@ -4,6 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { wisUndo } from "@/lib/undo";
 import { supabase } from "@/integrations/supabase/client";
+import { vergeetTellers } from "@/lib/tellers";
 
 export type Rol = "eigenaar" | "medewerker";
 
@@ -194,6 +195,7 @@ export function useAuth() {
 }
 
 export async function signOut() {
+  vergeetTellers();
   await supabase.auth.signOut();
 }
 

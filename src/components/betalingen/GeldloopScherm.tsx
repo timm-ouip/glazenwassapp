@@ -12,6 +12,7 @@ import {
 
 import { AppLayout } from "@/components/AppLayout";
 import { BetaalPaneel } from "@/components/betalingen/BetaalPaneel";
+import { GeldKaart } from "@/components/betalingen/GeldKaart";
 import { TelBedrag } from "@/components/TelBedrag";
 import { frequentieKort, maandKort } from "@/lib/betalingen";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@/lib/geldlopen";
 import { formatPrice, kantVan, type Kant } from "@/lib/klanten";
 import { useAuth } from "@/lib/auth";
+import { useRecht } from "@/lib/rechten";
 import {
   bijVerstuurd,
   metWachtende,
@@ -82,6 +84,7 @@ export function GeldloopScherm({
   });
   useGeldloopLive(vrijgave.id);
   const { employee } = useAuth();
+  const magBedragen = useRecht("prijzen_zien");
   const wachtrij = useWachtrij(employee?.id);
 
   // Een tik die binnen is, blijft in de lijst staan tot de verse lijst van
@@ -107,9 +110,14 @@ export function GeldloopScherm({
 
   const [gekozen, setGekozen] = useState<string | null>(null);
   const [zoeken, setZoeken] = useState<string | null>(null);
-  // Loop je met z'n tweeën, of zigzag je zelf de straat over? Dan zet deze
-  // knop de even en de oneven kant naast elkaar.
-  const [kanten, setKanten] = useState(false);
+  /**
+   * Hoe je de avond bekijkt. "Beide kanten" zet de even en de oneven kant
+   * naast elkaar — handig als je met z'n tweeën loopt of zelf de straat
+   * overzigzagt. "Kaart" laat de jaarkaart van deze straat zien, zoals de
+   * papieren kaart: hoe vaak stond het al open?
+   */
+  const [weergave, setWeergave] = useState<"lijst" | "kanten" | "kaart">("lijst");
+  const [kaartStraat, setKaartStraat] = useState<string | null>(null);
   const [uitgeklapt, setUitgeklapt] = useState<Set<string>>(new Set());
   const [nu, setNu] = useState(() => Date.now());
   useEffect(() => {
@@ -142,6 +150,12 @@ export function GeldloopScherm({
   // de computer loop je daar doorheen. Je slaat over waar je toch niet aanbelt
   // (niets open, niets ingetikt), net als de lijst zelf doet.
   const volgorde = useMemo(() => straten.flatMap((s) => s.adressen), [straten]);
+  // De kaart kijkt of zijn stratenlijst veranderde; dit scherm hertekent elke
+  // tik, dus zonder dit zou hij zich telkens opnieuw opbouwen.
+  const kaartStraten = useMemo(
+    () => straten.map((s, i) => ({ id: s.id, name: s.naam, sort_order: i })),
+    [straten],
+  );
   function spring(stap: number) {
     setGekozen((nu) => {
       if (!nu) return nu;
@@ -163,6 +177,12 @@ export function GeldloopScherm({
     .reduce((t, a) => t + Math.max(0, a.open), 0);
 
   function naarStraat(id: string) {
+    // In de kaartweergave is er niets om naartoe te scrollen: daar wissel je
+    // met het strookje van straat.
+    if (weergave === "kaart") {
+      setKaartStraat(id);
+      return;
+    }
     document.getElementById(`straat-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -184,32 +204,38 @@ export function GeldloopScherm({
   const schakelaar = useMemo(
     () => (
       <div className="flex items-center gap-0.5 rounded-full border border-border bg-card p-1 shadow-card">
-        {[
-          { aan: false, naam: "Lijst" },
-          { aan: true, naam: "Beide kanten" },
-        ].map((k) => (
+        {(
+          [
+            ["lijst", "Lijst"],
+            ["kanten", "Beide kanten"],
+            // De kaart komt uit geld_kaart, en die geeft niets terug zonder
+            // "prijzen zien": voor een geldloper zou het een leeg vak zijn.
+            ...(magBedragen ? ([["kaart", "Kaart"]] as const) : []),
+          ] as const
+        ).map(([w, naam]) => (
           <button
-            key={k.naam}
+            key={w}
             type="button"
-            aria-pressed={kanten === k.aan}
-            onClick={() => setKanten(k.aan)}
+            aria-pressed={weergave === w}
+            onClick={() => setWeergave(w)}
             className={`min-h-8 shrink-0 rounded-full px-3 text-[12.5px] font-medium transition-colors ${
-              kanten === k.aan
+              weergave === w
                 ? "bg-foreground text-background"
                 : "text-muted-foreground hover:bg-surface hover:text-foreground"
             }`}
           >
-            {k.naam}
+            {naam}
           </button>
         ))}
       </div>
     ),
-    [kanten],
+    [weergave, magBedragen],
   );
 
   return (
     <AppLayout titel={titel} onderbalk={onderbalk} acties={schakelaar}>
-      <div className="mx-auto max-w-2xl space-y-3 pb-6">
+      {/* De kaart is een brede tabel; de looplijst leest juist prettiger smal. */}
+      <div className={`mx-auto space-y-3 pb-6 ${weergave === "kaart" ? "max-w-5xl" : "max-w-2xl"}`}>
         {bovenaan}
         <div className="flex items-baseline justify-between gap-3 px-1 text-[13px] text-muted-foreground">
           <span>
@@ -262,66 +288,48 @@ export function GeldloopScherm({
           <p className="px-1 text-[13px] text-tint-rood-ink">{(lijst.error as Error).message}</p>
         )}
 
-        {straten.map((s) => {
-          const passend = zoekTerm
-            ? s.adressen.filter(
-                (a) =>
-                  `${a.house_number}${a.addition}`.toLowerCase().startsWith(zoekTerm) ||
-                  a.naam.toLowerCase().includes(zoekTerm),
-              )
-            : s.adressen;
-          if (passend.length === 0) return null;
-          // Wat vanavond aandacht vraagt; de rest klapt in.
-          const zichtbaar = zoekTerm
-            ? passend
-            : passend.filter((a) => heeftIetsOpen(a) || a.vanavond || a.methode === "overmaken");
-          const rust = passend.filter((a) => !zichtbaar.includes(a));
-          const open = uitgeklapt.has(s.id);
-          return (
-            <section
-              key={s.id}
-              id={`straat-${s.id}`}
-              className="scroll-mt-24 rounded-[18px] border border-border bg-card p-1.5 shadow-card"
-            >
-              <h2 className="flex items-baseline justify-between px-2.5 pb-1 pt-1.5">
-                <span className="font-display text-[15px] font-semibold">{s.naam}</span>
-                {wijken.size > 1 && (
-                  <span className="text-[11.5px] text-muted-foreground">{s.wijk}</span>
-                )}
-              </h2>
-              {kanten ? (
-                <BeideKanten adressen={passend} onKies={setGekozen} />
-              ) : (
-                <div className="divide-y divide-border/60">
-                  {zichtbaar.map((a) => (
-                    <AdresRij
-                      key={a.id}
-                      a={a}
-                      datum={vrijgave.datum}
-                      onKies={() => setGekozen(a.id)}
-                    />
-                  ))}
-                  {rust.length > 0 && (
-                    <button
-                      type="button"
-                      className="flex min-h-11 w-full items-center gap-2 px-2.5 text-[12.5px] text-muted-foreground"
-                      onClick={() =>
-                        setUitgeklapt((was) => {
-                          const nu = new Set(was);
-                          if (nu.has(s.id)) nu.delete(s.id);
-                          else nu.add(s.id);
-                          return nu;
-                        })
-                      }
-                    >
-                      <ChevronDown
-                        className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
-                      />
-                      {rust.length} {rust.length === 1 ? "adres" : "adressen"} zonder iets open
-                    </button>
+        {weergave === "kaart" ? (
+          <GeldKaart
+            compact
+            straatId={kaartStraat ?? straten[0]?.id}
+            onStraat={setKaartStraat}
+            straten={kaartStraten}
+          />
+        ) : null}
+
+        {weergave !== "kaart" &&
+          straten.map((s) => {
+            const passend = zoekTerm
+              ? s.adressen.filter(
+                  (a) =>
+                    `${a.house_number}${a.addition}`.toLowerCase().startsWith(zoekTerm) ||
+                    a.naam.toLowerCase().includes(zoekTerm),
+                )
+              : s.adressen;
+            if (passend.length === 0) return null;
+            // Wat vanavond aandacht vraagt; de rest klapt in.
+            const zichtbaar = zoekTerm
+              ? passend
+              : passend.filter((a) => heeftIetsOpen(a) || a.vanavond || a.methode === "overmaken");
+            const rust = passend.filter((a) => !zichtbaar.includes(a));
+            const open = uitgeklapt.has(s.id);
+            return (
+              <section
+                key={s.id}
+                id={`straat-${s.id}`}
+                className="scroll-mt-24 rounded-[18px] border border-border bg-card p-1.5 shadow-card"
+              >
+                <h2 className="flex items-baseline justify-between px-2.5 pb-1 pt-1.5">
+                  <span className="font-display text-[15px] font-semibold">{s.naam}</span>
+                  {wijken.size > 1 && (
+                    <span className="text-[11.5px] text-muted-foreground">{s.wijk}</span>
                   )}
-                  {open &&
-                    rust.map((a) => (
+                </h2>
+                {weergave === "kanten" ? (
+                  <BeideKanten adressen={passend} onKies={setGekozen} />
+                ) : (
+                  <div className="divide-y divide-border/60">
+                    {zichtbaar.map((a) => (
                       <AdresRij
                         key={a.id}
                         a={a}
@@ -329,11 +337,39 @@ export function GeldloopScherm({
                         onKies={() => setGekozen(a.id)}
                       />
                     ))}
-                </div>
-              )}
-            </section>
-          );
-        })}
+                    {rust.length > 0 && (
+                      <button
+                        type="button"
+                        className="flex min-h-11 w-full items-center gap-2 px-2.5 text-[12.5px] text-muted-foreground"
+                        onClick={() =>
+                          setUitgeklapt((was) => {
+                            const nu = new Set(was);
+                            if (nu.has(s.id)) nu.delete(s.id);
+                            else nu.add(s.id);
+                            return nu;
+                          })
+                        }
+                      >
+                        <ChevronDown
+                          className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
+                        />
+                        {rust.length} {rust.length === 1 ? "adres" : "adressen"} zonder iets open
+                      </button>
+                    )}
+                    {open &&
+                      rust.map((a) => (
+                        <AdresRij
+                          key={a.id}
+                          a={a}
+                          datum={vrijgave.datum}
+                          onKies={() => setGekozen(a.id)}
+                        />
+                      ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
 
         {/* Op de telefoon zit de balk boven de tabs (AppLayout zet hem daar);
             op een groter scherm plakt hij onderaan de lijst. */}

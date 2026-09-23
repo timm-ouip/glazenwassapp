@@ -23,6 +23,7 @@ import {
   TegelKop,
   TegelOnder,
 } from "@/components/Tegel";
+import { TelBedrag, TelGetal } from "@/components/TelBedrag";
 import { Button } from "@/components/ui/button";
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import { effectieveMethode } from "@/lib/betalingen";
@@ -339,7 +340,16 @@ function Dashboard() {
           <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
             <div className={cn(TEGEL_VAK, TEGEL_KLEUR.oranje, TEGEL_GEWOON, "md:h-[150px]")}>
               <TegelKop label={lopend ? "Omzet dit jaar" : `Omzet ${jaar}`} pijl={false} />
-              <TegelGetal klein>{cijfers ? euro(cijfers.totaal) : leeg}</TegelGetal>
+              <TegelGetal klein knippen={false}>
+                {cijfers ? (
+                  // Een ander jaar is een ander getal, geen verandering: met
+                  // een eigen key begint de teller opnieuw in plaats van
+                  // ernaartoe te lopen.
+                  <TelBedrag key={jaar} bedrag={cijfers.totaal} onthoud={`dash-omzet-${jaar}`} />
+                ) : (
+                  leeg
+                )}
+              </TegelGetal>
               <TegelOnder>
                 {cijfers
                   ? `${(cijfers.totaal / Math.max(1, aantalMaanden) || 0).toLocaleString("nl-NL", { style: "currency", currency: "EUR", maximumFractionDigits: 0 })} per maand`
@@ -349,7 +359,15 @@ function Dashboard() {
             <div className={cn(TEGEL_VAK, TEGEL_KLEUR.creme, TEGEL_GEWOON, "md:h-[150px]")}>
               <TegelKop label="Gewassen adressen" pijl={false} />
               <TegelGetal klein>
-                {cijfers ? cijfers.adressen.toLocaleString("nl-NL") : leeg}
+                {cijfers ? (
+                  <TelGetal
+                    key={jaar}
+                    waarde={cijfers.adressen}
+                    onthoud={`dash-gewassen-${jaar}`}
+                  />
+                ) : (
+                  leeg
+                )}
               </TegelGetal>
               <TegelOnder>
                 {cijfers
@@ -369,14 +387,26 @@ function Dashboard() {
               )}
             >
               <TegelKop label="Nog open" />
-              <TegelGetal klein>{pof ? euro(pof.bedrag) : leeg}</TegelGetal>
+              <TegelGetal klein knippen={false}>
+                {pof ? <TelBedrag bedrag={pof.bedrag} onthoud="dash-pof" /> : leeg}
+              </TegelGetal>
               <TegelOnder>
                 {pof ? `pof bij ${pof.adressen} ${pof.adressen === 1 ? "adres" : "adressen"}` : " "}
               </TegelOnder>
             </Link>
             <div className={cn(TEGEL_VAK, TEGEL_KLEUR.aqua, TEGEL_GEWOON, "md:h-[150px]")}>
               <TegelKop label="Nieuwe adressen" pijl={false} />
-              <TegelGetal klein>{cijfers ? cijfers.nieuweAdressen : leeg}</TegelGetal>
+              <TegelGetal klein>
+                {cijfers ? (
+                  <TelGetal
+                    key={jaar}
+                    waarde={cijfers.nieuweAdressen}
+                    onthoud={`dash-nieuw-${jaar}`}
+                  />
+                ) : (
+                  leeg
+                )}
+              </TegelGetal>
               <TegelOnder>{cijfers ? `erbij, ${cijfers.gestopt} eraf` : "\u00a0"}</TegelOnder>
             </div>
           </div>

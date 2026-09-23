@@ -128,7 +128,7 @@ export function SjablonenBeheer({ isEigenaar }: { isEigenaar: boolean }) {
       </div>
 
       {lijst.length > 0 && (
-        <ul className="divide-y divide-border rounded-[12px] border border-border">
+        <ul className="divide-y divide-border overflow-hidden rounded-[14px] bg-card shadow-card">
           {lijst.map((s) => (
             <li key={s.id} className="space-y-1 px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -449,7 +449,7 @@ export function KlantKanaal({ klantId }: { klantId: string }) {
   const uit = !magBewerken || bezig;
 
   return (
-    <div className="flex flex-col gap-2 rounded-[14px] border border-border px-3 py-2.5 text-[12.5px]">
+    <div className="flex flex-col gap-2 rounded-[14px] bg-surface px-3 py-2.5 text-[12.5px]">
       <div className="flex flex-wrap items-center gap-2">
         <label htmlFor={`kanaal-${klantId}`} className="font-medium">
           Aankondigingen via

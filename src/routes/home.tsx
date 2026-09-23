@@ -16,6 +16,7 @@ import {
 } from "@tabler/icons-react";
 
 import { AppLayout } from "@/components/AppLayout";
+import { TelBedrag, TelGetal } from "@/components/TelBedrag";
 import {
   TEGEL_GEWOON,
   TEGEL_KLEUR,
@@ -363,8 +364,14 @@ function Home() {
                 Planning vandaag
                 <ChevronRight className="size-[18px] md:size-5" aria-hidden="true" />
               </span>
-              <span className="mt-2.5 truncate font-display text-[60px] font-semibold leading-none tracking-[-0.05em] tabular-nums md:mt-[18px] md:text-[96px]">
-                {!dag ? leeg : prijzenZien ? formatPrice(dag.bedrag) : dag.adressen}
+              <span className="mt-2.5 whitespace-nowrap font-display text-[60px] font-semibold leading-none tracking-[-0.05em] tabular-nums md:mt-[18px] md:text-[96px]">
+                {!dag ? (
+                  leeg
+                ) : prijzenZien ? (
+                  <TelBedrag bedrag={dag.bedrag} onthoud="home-dag-bedrag" />
+                ) : (
+                  <TelGetal waarde={dag.adressen} onthoud="home-dag-adressen" />
+                )}
               </span>
               <span className="mt-auto flex flex-col gap-[7px] md:gap-2.5">
                 <span className="truncate text-[13.5px] opacity-80 md:text-[15px]">
@@ -416,7 +423,11 @@ function Home() {
                   <span className="text-[14px] font-semibold">Omzet per maand</span>
                   <span className="flex items-baseline gap-2">
                     <span className="font-display text-[36px] font-semibold leading-none tracking-[-0.04em] tabular-nums">
-                      {dezeMaand ? formatPrice(dezeMaand.bedrag) : leeg}
+                      {dezeMaand ? (
+                        <TelBedrag bedrag={dezeMaand.bedrag} onthoud="home-omzet" />
+                      ) : (
+                        leeg
+                      )}
                     </span>
                     {dezeMaand && (
                       <span className="text-[13px] text-tegel-donker-ink/70">
@@ -434,7 +445,13 @@ function Home() {
           {magKlantenZien && (
             <Link to="/klanten" className={cn(VAK, KLEUR.paars, GEWOON)}>
               <TegelKop label="Klanten" />
-              <TegelGetal>{bestand?.klaar ? bestand.adressen.length : leeg}</TegelGetal>
+              <TegelGetal>
+                {bestand?.klaar ? (
+                  <TelGetal waarde={bestand.adressen.length} onthoud="home-klanten" />
+                ) : (
+                  leeg
+                )}
+              </TegelGetal>
               <TegelOnder>
                 {!bestand?.klaar ? (
                   " "
@@ -460,7 +477,9 @@ function Home() {
               <TegelKop label="Betalingen" />
               {prijzenZien ? (
                 <>
-                  <TegelGetal>{pof ? formatPrice(pof.bedrag) : leeg}</TegelGetal>
+                  <TegelGetal knippen={false}>
+                    {pof ? <TelBedrag bedrag={pof.bedrag} onthoud="home-pof" /> : leeg}
+                  </TegelGetal>
                   <TegelOnder>
                     {!pof
                       ? " "
@@ -483,7 +502,9 @@ function Home() {
           {magPlannen && (
             <Link to="/" className={cn(VAK, KLEUR.aqua, GEWOON)}>
               <TegelKop label="Wijken" />
-              <TegelGetal>{bestand ? bestand.wijken : leeg}</TegelGetal>
+              <TegelGetal>
+                {bestand ? <TelGetal waarde={bestand.wijken} onthoud="home-wijken" /> : leeg}
+              </TegelGetal>
               <TegelOnder>{bestand ? `${bestand.straten} straten` : " "}</TegelOnder>
             </Link>
           )}
@@ -529,7 +550,11 @@ function Home() {
               <TegelKop label="Aanmeldingen" />
               <span className="mt-auto flex min-w-0 flex-col md:flex-row md:items-baseline md:gap-2">
                 <span className="font-display text-[38px] font-semibold leading-none tracking-[-0.04em] tabular-nums md:text-[40px]">
-                  {aanmeldQuery.data ?? leeg}
+                  {aanmeldQuery.data === undefined ? (
+                    leeg
+                  ) : (
+                    <TelGetal waarde={aanmeldQuery.data} onthoud="home-aanmeldingen" />
+                  )}
                 </span>
                 <span className="mt-1 truncate text-[12px] opacity-80 md:mt-0 md:text-[13px]">
                   {aanmeldQuery.data === undefined
@@ -555,8 +580,8 @@ function Home() {
                   </span>
                 )}
               </span>
-              <span className="mt-1.5 truncate font-display text-[24px] font-semibold leading-none tracking-[-0.03em] tabular-nums">
-                {dezeMaand ? formatPrice(dezeMaand.bedrag) : leeg}
+              <span className="mt-1.5 whitespace-nowrap font-display text-[24px] font-semibold leading-none tracking-[-0.03em] tabular-nums">
+                {dezeMaand ? <TelBedrag bedrag={dezeMaand.bedrag} onthoud="home-omzet" /> : leeg}
               </span>
               {maanden && <Staafjes maanden={maanden} soort="klein" />}
             </Link>

@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconAlertTriangle as AlertTriangle } from "@tabler/icons-react";
 
+import { VrijgeefVenster } from "@/components/betalingen/Vrijgeven";
+
 import { TelBedrag } from "@/components/TelBedrag";
 import {
   TEGEL_GEWOON,
@@ -42,10 +44,30 @@ function tijd(iso: string): string {
  * nog op te halen is (daar loopt iemand, dus dat komt vanzelf binnen), en de
  * pof in alle andere wijken — dat is wat er van vóór vanavond blijft staan.
  */
-export function Avondoverzicht({ onPof }: { onPof: () => void }) {
+export function Avondoverzicht({
+  onPof,
+  onLopen,
+  vrijgeefVenster,
+  onVrijgeefVenster,
+}: {
+  onPof: () => void;
+  onLopen: () => void;
+  /** Open het vrijgeefvenster, bijvoorbeeld vanuit het loopscherm. */
+  vrijgeefVenster?: boolean;
+  onVrijgeefVenster?: (open: boolean) => void;
+}) {
   const qc = useQueryClient();
   const isEigenaar = useAuth().employee?.rol === "eigenaar";
   const [datum, setDatum] = useState(vandaag());
+  const [eigenVenster, setEigenVenster] = useState(false);
+  const vrijgeven = vrijgeefVenster ?? eigenVenster;
+  const zetVrijgeven = (open: boolean) => {
+    setEigenVenster(open);
+    onVrijgeefVenster?.(open);
+  };
+  // Zolang er niets binnen is staat er een streepje: een bedrag van € 0,00
+  // dat alleen "nog niet geladen" betekent, leest als "alles is binnen".
+  const streep = <span className="opacity-40">—</span>;
   const avond = useQuery({
     queryKey: ["geld-avond", datum],
     queryFn: () => fetchAvond(datum),
@@ -83,6 +105,9 @@ export function Avondoverzicht({ onPof }: { onPof: () => void }) {
   const vanavond = openPosten.filter((r) => idsVanavond.has(r.wijk_id));
   const eerder = openPosten.filter((r) => !idsVanavond.has(r.wijk_id));
   const som = (lijst: typeof openPosten) => lijst.reduce((t, r) => t + r.open, 0);
+  const lopendeVrijgaven = (a?.vrijgaven ?? []).filter((v) => !v.ingetrokken_op);
+  const eindTijd = lopendeVrijgaven[0] ? tijd(lopendeVrijgaven[0].eind_op) : "";
+  const lopersVanavond = [...new Set(lopendeVrijgaven.flatMap((v) => v.lopers.map((l) => l.naam)))];
   // Wat de eigenaar moet zien: korting, mogelijk dubbel, laat binnengekomen,
   // en wat teruggedraaid is.
   const opvallend = (a?.gebeurtenissen ?? []).filter(
@@ -146,21 +171,28 @@ export function Avondoverzicht({ onPof }: { onPof: () => void }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
+      {(avond.isError || pofQuery.isError) && (
+        <p role="status" className="text-[13px] text-tint-rood-ink">
+          De cijfers konden niet opgehaald worden. Ververs de pagina om het opnieuw te proberen.
+        </p>
+      )}
+
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-5 md:gap-3">
         <div className={cn(TEGEL_VAK, TEGEL_KLEUR.groen, TEGEL_GEWOON, "md:h-[150px]")}>
           <TegelKop label="Opgehaald" pijl={false} />
           <TegelGetal klein knippen={false}>
-            <TelBedrag key={datum} bedrag={avond.data ? opgehaald : undefined} />
+            {avond.data ? <TelBedrag key={datum} bedrag={opgehaald} /> : streep}
           </TegelGetal>
           <TegelOnder>{geldig.filter((g) => g.soort === "betaald").length} keer betaald</TegelOnder>
         </div>
         <div className={cn(TEGEL_VAK, TEGEL_KLEUR.oranje, TEGEL_GEWOON, "md:h-[150px]")}>
           <TegelKop label="Nog op te halen" pijl={false} />
           <TegelGetal klein knippen={false}>
-            <TelBedrag
-              key={datum}
-              bedrag={pofQuery.data && districts.data ? som(vanavond) : undefined}
-            />
+            {pofQuery.data && districts.data ? (
+              <TelBedrag key={datum} bedrag={som(vanavond)} />
+            ) : (
+              streep
+            )}
           </TegelGetal>
           <TegelOnder>
             {idsVanavond.size === 0
@@ -182,7 +214,13 @@ export function Avondoverzicht({ onPof }: { onPof: () => void }) {
           )}
         >
           <TegelKop label="Pof" />
-          <TegelGetal klein>{formatPrice(som(eerder))}</TegelGetal>
+          <TegelGetal klein knippen={false}>
+            {pofQuery.data && districts.data ? (
+              <TelBedrag key={datum} bedrag={som(eerder)} />
+            ) : (
+              streep
+            )}
+          </TegelGetal>
           <TegelOnder>
             {pofQuery.isLoading
               ? "\u00a0"
@@ -191,9 +229,18 @@ export function Avondoverzicht({ onPof }: { onPof: () => void }) {
                 }`}
           </TegelOnder>
         </button>
+        <VrijgaveTegel
+          wijken={wijkenVanavond.map((d) => d.name)}
+          tot={eindTijd}
+          lopers={lopersVanavond}
+          magVrijgeven={isEigenaar}
+          onOpen={() => zetVrijgeven(true)}
+        />
         <div className={cn(TEGEL_VAK, TEGEL_KLEUR.paars, TEGEL_GEWOON, "md:h-[150px]")}>
           <TegelKop label="Korting" pijl={false} />
-          <TegelGetal klein>{formatPrice(korting)}</TegelGetal>
+          <TegelGetal klein knippen={false}>
+            {avond.data ? <TelBedrag key={datum} bedrag={korting} /> : streep}
+          </TegelGetal>
           <TegelOnder>{geldig.filter((g) => g.soort === "korting").length} keer</TegelOnder>
         </div>
       </div>
@@ -336,6 +383,58 @@ export function Avondoverzicht({ onPof }: { onPof: () => void }) {
           )}
         </section>
       </div>
+
+      <VrijgeefVenster
+        open={vrijgeven}
+        onSluit={() => zetVrijgeven(false)}
+        onLopen={() => {
+          zetVrijgeven(false);
+          onLopen();
+        }}
+      />
     </div>
+  );
+}
+
+/**
+ * Wie er vanavond loopt, en waar. De eigenaar opent er het venster mee waarin
+ * hij een wijk vrijgeeft; een ander leest alleen wat er open staat.
+ */
+function VrijgaveTegel({
+  wijken,
+  tot,
+  lopers,
+  magVrijgeven,
+  onOpen,
+}: {
+  wijken: string[];
+  tot: string;
+  lopers: string[];
+  magVrijgeven: boolean;
+  onOpen: () => void;
+}) {
+  const inhoud = (
+    <>
+      <TegelKop label="Vrijgegeven" pijl={magVrijgeven} />
+      {/* Namen, geen getal: bij één wijk zegt "1" niets. */}
+      <span className="mt-auto truncate text-[17px] font-semibold md:text-[20px]">
+        {wijken.length === 0 ? "Niemand" : wijken.join(", ")}
+      </span>
+      <TegelOnder>
+        {wijken.length === 0
+          ? magVrijgeven
+            ? "niemand loopt · vrijgeven"
+            : "niemand loopt vanavond"
+          : `${lopers.join(", ") || "niemand"} · tot ${tot}`}
+      </TegelOnder>
+    </>
+  );
+  const vorm = cn(TEGEL_VAK, TEGEL_KLEUR.ijsblauw, TEGEL_GEWOON, "md:h-[150px]");
+  return magVrijgeven ? (
+    <button type="button" onClick={onOpen} className={cn(vorm, TEGEL_KLIKBAAR, "text-left")}>
+      {inhoud}
+    </button>
+  ) : (
+    <div className={vorm}>{inhoud}</div>
   );
 }

@@ -328,7 +328,7 @@ export function PaaltjeKaart({
       )}
 
       {b.concept && !b.beantwoord_op && (
-        <div className="rounded-[12px] border border-border bg-card p-3">
+        <div className="rounded-[14px] bg-surface p-3">
           <p className="line-clamp-6 whitespace-pre-wrap text-[13px] leading-relaxed">
             {b.concept}
           </p>

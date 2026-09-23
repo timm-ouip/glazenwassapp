@@ -84,7 +84,7 @@ export function Dagrapporten() {
   }
   if (!rapporten.data?.length) {
     return (
-      <section className="max-w-xl rounded-[18px] border border-border bg-card p-5 shadow-card">
+      <section className="max-w-xl rounded-[24px] bg-card p-5 shadow-card">
         <p className="flex items-center gap-2 font-display text-[15px] font-semibold">
           <CalendarDays className="size-4 text-muted-foreground" /> Nog geen dagrapport
         </p>
@@ -108,7 +108,7 @@ export function Dagrapporten() {
 function RapportKaart({ r }: { r: Rapport }) {
   const i = r.inhoud;
   return (
-    <section className="rounded-[18px] border border-border bg-card p-4 shadow-card">
+    <section className="rounded-[24px] bg-card p-4 shadow-card">
       <div className="flex flex-wrap items-baseline gap-2">
         <h2 className="font-display text-[16px] font-semibold capitalize">{langeDatum(r.datum)}</h2>
         <span className="text-[12px] text-muted-foreground">

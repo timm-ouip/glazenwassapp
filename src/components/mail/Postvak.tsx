@@ -149,7 +149,7 @@ const MAX_SELECTIE = 50;
 
 // Op de telefoon zonder kaart eromheen, zoals in Gmail: de lijst loopt tot de rand.
 const PANEEL =
-  "min-h-0 flex-col overflow-hidden rounded-[18px] border border-border bg-card shadow-card max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:shadow-none";
+  "min-h-0 flex-col overflow-hidden rounded-[24px] bg-card shadow-card max-md:rounded-none max-md:bg-transparent max-md:shadow-none";
 
 /** Een vaste kleur per afzender voor het rondje met zijn letter. */
 const AFZENDER_KLEUREN = [
@@ -171,7 +171,14 @@ function zelfdeBron(a: Bron | null, b: Bron | null) {
 }
 
 /** Zonder onAankondigen (wie geen mail mag versturen) geen aankondigknop. */
-export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | undefined }) {
+export function Postvak({
+  onAankondigen,
+  kanaalKiezer,
+}: {
+  onAankondigen?: (() => void) | undefined;
+  /** Het blokje met mail, appjes en samen: het staat boven de mappen. */
+  kanaalKiezer?: React.ReactNode;
+}) {
   const mailbox = useQuery({ queryKey: ["mailbox"], queryFn: fetchMailbox });
   const gekoppeld = !!mailbox.data && mailbox.data.status !== "uit";
   const mappen = useQuery({
@@ -231,7 +238,7 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
 
   if (!gekoppeld) {
     return (
-      <section className="mx-auto mt-6 max-w-md rounded-[18px] border border-border bg-card p-6 text-center shadow-card">
+      <section className="mx-auto mt-6 max-w-md rounded-[24px] bg-card p-6 text-center shadow-card">
         <div className="mx-auto flex size-12 items-center justify-center rounded-[14px] bg-tint-blauw text-tint-blauw-ink">
           <Mail className="size-6" />
         </div>
@@ -294,26 +301,35 @@ export function Postvak({ onAankondigen }: { onAankondigen?: (() => void) | unde
         </p>
       )}
       <div className="grid h-[calc(100dvh-var(--plakrand)-5.5rem)] min-h-[520px] gap-3 max-md:-mx-3 max-md:h-[calc(100dvh-var(--plakrand)-var(--onderrand,0px)-4.5rem)] max-md:min-h-[420px] lg:grid-cols-[210px_minmax(280px,360px)_minmax(0,1fr)]">
-        <div className={cn(PANEEL, scherm === "mappen" ? "flex" : "hidden", "lg:flex")}>
-          <MapKolom
-            mappen={mappen.data ?? []}
-            categorieen={categorieen.data ?? []}
-            postvakId={postvak?.id ?? null}
-            wachtAantal={wacht.data ?? 0}
-            vlagAantal={vlag.data ?? 0}
-            prullenbakId={prullenbak?.id ?? null}
-            fout={mappen.isError}
-            actief={bron}
-            laatsteSync={mailbox.data?.laatste_sync ?? null}
-            kanSchrijven={kanSchrijven}
-            onKies={(nieuw) => {
-              setBron(nieuw);
-              setBerichtId(null);
-              setScherm("lijst");
-            }}
-            onNieuweMail={() => setOpzet({ aan: "", onderwerp: "", tekst: "" })}
-            onAankondigen={onAankondigen}
-          />
+        <div
+          className={cn(
+            "min-h-0 flex-col gap-3",
+            scherm === "mappen" ? "flex" : "hidden",
+            "lg:flex",
+          )}
+        >
+          {kanaalKiezer}
+          <div className={cn(PANEEL, "flex min-h-0 flex-1")}>
+            <MapKolom
+              mappen={mappen.data ?? []}
+              categorieen={categorieen.data ?? []}
+              postvakId={postvak?.id ?? null}
+              wachtAantal={wacht.data ?? 0}
+              vlagAantal={vlag.data ?? 0}
+              prullenbakId={prullenbak?.id ?? null}
+              fout={mappen.isError}
+              actief={bron}
+              laatsteSync={mailbox.data?.laatste_sync ?? null}
+              kanSchrijven={kanSchrijven}
+              onKies={(nieuw) => {
+                setBron(nieuw);
+                setBerichtId(null);
+                setScherm("lijst");
+              }}
+              onNieuweMail={() => setOpzet({ aan: "", onderwerp: "", tekst: "" })}
+              onAankondigen={onAankondigen}
+            />
+          </div>
         </div>
 
         <div className={cn(PANEEL, scherm === "lijst" ? "flex" : "hidden", "lg:flex")}>

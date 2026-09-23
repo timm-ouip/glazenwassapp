@@ -23,20 +23,19 @@ export const BETAALMETHODEN: { waarde: Betaalmethode; label: string }[] = [
  * onderin) ze als sublijstje toont: dat menu staat op elke pagina, ook als
  * Betalingen zelf nog niet geladen is.
  */
-export const TABBLADEN = ["vanavond", "vrijgeven", "lopen", "pof", "kaart"] as const;
+export const TABBLADEN = ["vanavond", "lopen", "pof", "kaart"] as const;
 
 export type BetalingenTab = (typeof TABBLADEN)[number];
 
 /**
  * Wat er in het menu staat. Pof is geen tabblad meer: dat is een lijst die je
- * vanaf het overzicht opent. De beginstand ook niet: die vul je op de kaart
- * in, en dat doe je maar één keer.
+ * vanaf het overzicht opent, net als het vrijgeven van een wijk. De beginstand
+ * ook niet: die vul je op de kaart in, en dat doe je maar één keer.
  */
-export const MENU_TABBLADEN = ["vanavond", "vrijgeven", "lopen", "kaart"] as const;
+export const MENU_TABBLADEN = ["vanavond", "lopen", "kaart"] as const;
 
 export const TABNAAM: Record<BetalingenTab, string> = {
   vanavond: "Overzicht",
-  vrijgeven: "Vrijgeven",
   lopen: "Lopen",
   pof: "Pof",
   kaart: "Kaart",

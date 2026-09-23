@@ -28,7 +28,7 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
   const { employee, company, thuis, werk, beheer, teDoen, isActief, subtabs } = useMenu();
   const navigate = useNavigate();
   const [meerOpen, setMeerOpen] = useState(false);
-  // De tabbladen van de pagina waar je bent (nu alleen Betalingen). Sta je er
+  // De tabbladen van de pagina waar je bent (Betalingen en Mail). Sta je er
   // al, dan klapt dezelfde knop ze open in plaats van niets te doen.
   const [tabsOpen, setTabsOpen] = useState(false);
   // Ongelezen mail in het postvak, als getal op de Mail-tab. Dezelfde vraag
@@ -199,7 +199,7 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
       <Drawer open={tabsOpen} onOpenChange={setTabsOpen} shouldScaleBackground={false}>
         <DrawerContent className="rounded-t-[22px] border-border bg-surface px-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <DrawerTitle className="px-3 pb-2 pt-3 font-display text-lg font-bold">
-            Betalingen
+            {alles.find(isActief)?.label ?? "Tabbladen"}
           </DrawerTitle>
           <Subtabs lijst={eigenTabs} groot onKies={() => setTabsOpen(false)} />
         </DrawerContent>

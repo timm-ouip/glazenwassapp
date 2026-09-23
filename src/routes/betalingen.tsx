@@ -8,7 +8,6 @@ import { Avondoverzicht } from "@/components/betalingen/Avondoverzicht";
 import { GeldKaart } from "@/components/betalingen/GeldKaart";
 import { PofLijst } from "@/components/betalingen/PofLijst";
 import { GeldloopScherm } from "@/components/betalingen/GeldloopScherm";
-import { Vrijgeven } from "@/components/betalingen/Vrijgeven";
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { TABBLADEN, TABNAAM, type BetalingenTab as Tab } from "@/lib/betalingen";
 import { fetchMijnGeldloop, type Vrijgave } from "@/lib/geldlopen";
@@ -43,11 +42,14 @@ function Betalingen() {
   useRequireAuth();
   const { tab: gevraagd, wijk, straat } = Route.useSearch();
   const navigate = useNavigate();
+  // Het venster om een wijk vrij te geven hoort bij het overzicht, maar de
+  // knop ernaartoe staat ook in het loopscherm. Deze pagina blijft bij het
+  // wisselen van tabblad staan, dus die stand kan hier bewaard worden.
+  const [vrijgeefVenster, setVrijgeefVenster] = useState(false);
   const { employee } = useAuth();
   const ziedBedragen = heeftRecht(employee, "prijzen_zien");
   const isEigenaar = employee?.rol === "eigenaar";
-  // Vrijgeven is van de eigenaar; wie alleen bedragen ziet, kijkt mee.
-  const tab: Tab = gevraagd === "vrijgeven" && !isEigenaar ? "vanavond" : gevraagd;
+  const tab: Tab = gevraagd;
 
   // De wijk en de straat gaan mee naar het volgende tabblad: kom je van de
   // kaart terug, dan sta je weer in dezelfde straat.
@@ -74,17 +76,21 @@ function Betalingen() {
   // zelf waar je bent.
   const titel = `Betalingen · ${TABNAAM[tab]}`;
 
-  // Vrijgeven is van de eigenaar: een ander krijgt die knop niet te zien, want
-  // de pagina zou hem meteen terugzetten op Vanavond.
+  // Een wijk vrijgeven is van de eigenaar, en gebeurt in een venster op het
+  // overzicht: daar stuurt de knop hem dus heen.
   if (tab === "lopen")
-    return (
-      <Lopen titel={titel} onVrijgeven={isEigenaar ? () => naarTab("vrijgeven") : undefined} />
-    );
+    return <Lopen titel={titel} onVrijgeven={isEigenaar ? () => naarTab("vanavond") : undefined} />;
 
   return (
     <AppLayout titel={titel}>
-      {tab === "vanavond" && <Avondoverzicht onPof={() => naarTab("pof")} />}
-      {tab === "vrijgeven" && isEigenaar && <Vrijgeven onLopen={() => naarTab("lopen")} />}
+      {tab === "vanavond" && (
+        <Avondoverzicht
+          onPof={() => naarTab("pof")}
+          onLopen={() => naarTab("lopen")}
+          vrijgeefVenster={vrijgeefVenster}
+          onVrijgeefVenster={setVrijgeefVenster}
+        />
+      )}
       {tab === "pof" && <PofLijst onKaart={kiesStraat} onTerug={() => naarTab("vanavond")} />}
       {tab === "kaart" && <GeldKaart straatId={straat} wijkId={wijk} onStraat={kiesStraat} />}
     </AppLayout>

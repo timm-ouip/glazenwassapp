@@ -226,6 +226,10 @@
   --input: oklch(0.902 0.008 78);
   --ring: #85B7EB;
   --shadow-card: 0 1px 2px oklch(0.4 0.02 70 / 5%), 0 4px 12px oklch(0.4 0.02 70 / 5%);
+  /* Het duimpje van een schuifbalk: dezelfde warme grijstint als de randen,
+     zodat hij bij het papier hoort in plaats van er een systeemstreep op. */
+  --schuifduim: oklch(0.4 0.02 70 / 18%);
+  --schuifduim-aan: oklch(0.4 0.02 70 / 34%);
   /* Een tegel die je optilt als je eroverheen gaat. In het donker doet een
      diepere schaduw niets, dus daar wordt de rand om de kaart wat sterker. */
   --shadow-tegel: 0 3px 8px oklch(0.4 0.02 70 / 8%), 0 14px 30px oklch(0.4 0.02 70 / 12%);
@@ -374,6 +378,8 @@
   /* Schaduw doet in het donker niets; een dun randje licht wel. */
   --shadow-card: 0 0 0 1px oklch(1 0 0 / 10%);
   --shadow-tegel: 0 0 0 1px oklch(1 0 0 / 18%), 0 12px 26px oklch(0 0 0 / 45%);
+  --schuifduim: oklch(1 0 0 / 16%);
+  --schuifduim-aan: oklch(1 0 0 / 30%);
 
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
@@ -437,6 +443,8 @@
   --ring: #ff5b1f;
   --shadow-card: 0 1px 2px rgb(20 20 19 / 4%), 0 4px 12px rgb(20 20 19 / 4%);
   --shadow-tegel: 0 3px 8px rgb(20 20 19 / 8%), 0 14px 30px rgb(20 20 19 / 10%);
+  --schuifduim: rgb(20 20 19 / 18%);
+  --schuifduim-aan: rgb(20 20 19 / 34%);
 
   /* De vlakken. */
   --tint-amber: #f2b705;
@@ -572,6 +580,8 @@
   /* Schaduw doet op zwart niets; een haarlijntje wel. */
   --shadow-card: 0 0 0 1px rgb(255 255 255 / 6%);
   --shadow-tegel: 0 0 0 1px rgb(255 255 255 / 12%), 0 12px 26px rgb(0 0 0 / 50%);
+  --schuifduim: rgb(255 255 255 / 14%);
+  --schuifduim-aan: rgb(255 255 255 / 28%);
 
   --grond-vlak: #000000;
   --grond-kaart: #111111;
@@ -933,4 +943,36 @@
   .erbij {
     display: none;
   }
+}
+
+/* De schuifbalken. De grijze systeembalk met zijn bak eromheen past niet bij
+   panelen die zweven, dus: geen bak, een dun afgerond duimpje in de kleur van
+   het thema, en pas als je de muis in dat vlak hebt. Op de telefoon tekent
+   het systeem toch zijn eigen zwevende balkje; daar verandert dit niets. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--schuifduim) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  /* De rand is doorzichtig en wordt niet meegekleurd (background-clip), dus
+     het duimpje is smaller dan de baan: het raakt de tekst niet. */
+  background-color: var(--schuifduim);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--schuifduim-aan);
 }

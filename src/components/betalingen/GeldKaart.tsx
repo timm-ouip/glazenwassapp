@@ -167,11 +167,17 @@ export function GeldKaart({
   straatId,
   wijkId: gevraagdeWijk,
   onStraat,
+  straten,
+  compact = false,
 }: {
   straatId: string | undefined;
   /** Een wijk zonder straat, bijvoorbeeld vanuit het wijkmenu. */
   wijkId?: string | undefined;
   onStraat: (id: string) => void;
+  /** Alleen deze straten in het strookje, bijvoorbeeld die van vanavond. */
+  straten?: { id: string; name: string; sort_order: number }[] | undefined;
+  /** Meekijken zonder de rest: geen wijken, geen zoeken, geen invullen. */
+  compact?: boolean;
 }) {
   const qc = useQueryClient();
   const isEigenaar = useAuth().employee?.rol === "eigenaar";
@@ -212,10 +218,11 @@ export function GeldKaart({
   const wijk = (districts.data ?? []).find((d) => d.id === wijkId);
   const stratenVanWijk = useMemo(
     () =>
+      straten ??
       (streets.data ?? [])
         .filter((s) => s.district_id === wijkId)
         .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)),
-    [streets.data, wijkId],
+    [straten, streets.data, wijkId],
   );
 
   // Zonder keuze: de eerste straat van de eerste wijk.
@@ -443,7 +450,7 @@ export function GeldKaart({
   return (
     <div className="space-y-3 pb-4 pt-1">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap gap-1.5">
+        <div className={cn("flex flex-wrap gap-1.5", compact && "hidden")}>
           {(districts.data ?? []).map((d) => (
             <button
               key={d.id}
@@ -487,26 +494,80 @@ export function GeldKaart({
       </div>
 
       <div className="flex flex-wrap items-start gap-2">
-        <div className="flex h-9 w-full items-center gap-2 rounded-full border border-border bg-card px-3 shadow-card sm:w-64">
-          <Search className="size-4 shrink-0 text-muted-foreground" />
-          <input
-            inputMode="search"
-            className="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
-            placeholder="Straat, nummer of naam"
-            value={zoek}
-            onChange={(e) => setZoek(e.target.value)}
-          />
-          {zoek !== "" && (
-            <button
-              type="button"
-              aria-label="Zoeken leegmaken"
-              className="shrink-0 text-muted-foreground hover:text-foreground"
-              onClick={() => setZoek("")}
-            >
-              <X className="size-4" />
-            </button>
-          )}
-        </div>
+        {!compact && (
+          // Het zoekvak, en daaronder de knop om in te vullen: die past in de
+          // ruimte die het strookje met straten ernaast toch overlaat.
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-64">
+            <div className="flex h-9 items-center gap-2 rounded-full border border-border bg-card px-3 shadow-card">
+              <Search className="size-4 shrink-0 text-muted-foreground" />
+              <input
+                inputMode="search"
+                className="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
+                placeholder="Straat, nummer of naam"
+                value={zoek}
+                onChange={(e) => setZoek(e.target.value)}
+              />
+              {zoek !== "" && (
+                <button
+                  type="button"
+                  aria-label="Zoeken leegmaken"
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={() => setZoek("")}
+                >
+                  <X className="size-4" />
+                </button>
+              )}
+            </div>
+
+            {isEigenaar && peil && (
+              <div className="flex flex-wrap items-center gap-2">
+                {invullen ? (
+                  <>
+                    <Button size="sm" className="rounded-full" onClick={() => setInvullen(false)}>
+                      Klaar met invullen
+                    </Button>
+                    <div className="flex items-center gap-0.5 rounded-full border border-border bg-card p-1 shadow-card">
+                      {(["kaart", "bedragen"] as const).map((w) => (
+                        <button
+                          key={w}
+                          type="button"
+                          aria-pressed={weergave === w}
+                          onClick={() => setWeergave(w)}
+                          className={cn(
+                            "min-h-7 rounded-full px-3 text-[12.5px] font-medium transition-colors",
+                            weergave === w
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {w === "kaart" ? "Aanvinken" : "Bedragen"}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    // Is alles ingevuld en daarna een keer gelopen, dan hoeft
+                    // er niets meer bij: dan is het alleen nog bewerken.
+                    variant={alGelopen ? "outline" : "default"}
+                    className="rounded-full"
+                    onClick={() => {
+                      setInvullen(true);
+                      setWeergave("kaart");
+                      // Meteen verder met het toetsenbord, in de startmaand
+                      // van het eerste adres.
+                      naarVak(0, startKolom);
+                    }}
+                  >
+                    <Pencil className="size-3.5" />
+                    {alGelopen ? "Bewerken" : "Pofjes invullen"}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {zoekTerm.length > 0 ? (
           <div className="min-w-0 flex-1">
@@ -549,7 +610,8 @@ export function GeldKaart({
                   className={cn(
                     "min-h-9 shrink-0 rounded-full border px-3.5 text-[12.5px] font-medium transition-colors",
                     s.id === straatId
-                      ? "border-transparent bg-accent text-accent-foreground"
+                      ? // De straat waar je bent moet er echt uitspringen.
+                        "border-transparent bg-primary font-semibold text-primary-foreground shadow-card"
                       : "border-border bg-card text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -570,73 +632,16 @@ export function GeldKaart({
         )}
       </div>
 
-      {isEigenaar && peil && (
-        <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted-foreground">
-          {invullen ? (
-            <>
-              <Button size="sm" className="rounded-full" onClick={() => setInvullen(false)}>
-                Klaar met invullen
-              </Button>
-              <div className="flex items-center gap-0.5 rounded-full border border-border bg-card p-1 shadow-card">
-                {(["kaart", "bedragen"] as const).map((w) => (
-                  <button
-                    key={w}
-                    type="button"
-                    aria-pressed={weergave === w}
-                    onClick={() => setWeergave(w)}
-                    className={cn(
-                      "min-h-7 rounded-full px-3 text-[12.5px] font-medium transition-colors",
-                      weergave === w
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {w === "kaart" ? "Aanvinken" : "Bedragen typen"}
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : alGelopen ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => {
-                setInvullen(true);
-                setWeergave("kaart");
-                naarVak(0, startKolom);
-              }}
-            >
-              <Pencil className="size-3.5" />
-              Bewerken
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              className="rounded-full"
-              onClick={() => {
-                setInvullen(true);
-                setWeergave("kaart");
-                // Meteen verder met het toetsenbord, in de startmaand van het eerste adres.
-                naarVak(0, startKolom);
-              }}
-            >
-              <Pencil className="size-3.5" />
-              Pofjes invullen
-            </Button>
-          )}
-          {invullen && weergave === "kaart" && (
-            <span>
-              Tik de maanden tot en met {MAANDNAMEN[Number(peil.slice(5, 7)) - 1]}{" "}
-              {peil.slice(0, 4)} aan die op de kaart nog open stonden (een 0). Wooshy rekent de
-              beginstand uit met de prijs van nu.
-              <span className="hidden sm:inline">
-                {" "}
-                Met het toetsenbord: pijltjes om te lopen, 0 voor pof, Backspace om weg te halen.
-              </span>
-            </span>
-          )}
-        </div>
+      {invullen && weergave === "kaart" && peil && (
+        <p className="text-[12.5px] text-muted-foreground">
+          Tik de maanden tot en met {MAANDNAMEN[Number(peil.slice(5, 7)) - 1]} {peil.slice(0, 4)}{" "}
+          aan die op de kaart nog open stonden (een 0). Wooshy rekent de beginstand uit met de prijs
+          van nu.
+          <span className="hidden sm:inline">
+            {" "}
+            Met het toetsenbord: pijltjes om te lopen, 0 voor pof, Backspace om weg te halen.
+          </span>
+        </p>
       )}
 
       {invullen && wijk && peil && (
@@ -650,7 +655,7 @@ export function GeldKaart({
         />
       )}
 
-      {!peil && wijk && (
+      {!peil && wijk && !compact && (
         <>
           {isEigenaar ? (
             <BeginstandStarten wijk={wijk} magStarten onGestart={vernieuwWijk} />
@@ -676,6 +681,19 @@ export function GeldKaart({
         />
       ) : (
         <>
+          {/* Waar je bent, groot: in het strookje erboven raak je dat kwijt
+              zodra je naar de tabel scrolt. */}
+          {straat && (
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-1">
+              <h2 className="font-display text-[19px] font-semibold tracking-[-0.02em] md:text-[21px]">
+                {straat.name}
+              </h2>
+              {wijk && <span className="text-[13px] text-muted-foreground">{wijk.name}</span>}
+              <span className="text-[13px] text-muted-foreground">
+                · {adressen.length} {adressen.length === 1 ? "adres" : "adressen"}
+              </span>
+            </div>
+          )}
           <section className="overflow-x-auto rounded-[24px] border border-border bg-card shadow-card">
             <table ref={tabel} className="w-full min-w-[640px] border-collapse text-[13px]">
               <thead>
@@ -804,6 +822,12 @@ export function GeldKaart({
               </tbody>
             </table>
             {kaart.isLoading && <p className="p-3 text-[13px] text-muted-foreground">Laden…</p>}
+            {kaart.isError && (
+              <p className="p-3 text-[13px] text-tint-rood-ink">
+                De kaart kon niet opgehaald worden. Ververs de pagina, of vraag de eigenaar of je
+                bedragen mag zien.
+              </p>
+            )}
           </section>
 
           <p className="text-[12px] text-muted-foreground">

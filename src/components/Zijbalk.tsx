@@ -30,6 +30,7 @@ import { useAuth, signOut } from "@/lib/auth";
 import { aantalOpenAanmeldingen } from "@/lib/aanmeldingen";
 import { heeftRecht, rolLabel, type Recht } from "@/lib/rechten";
 import { MENU_TABBLADEN, TABNAAM, type BetalingenTab } from "@/lib/betalingen";
+import { MAIL_BLADEN, MAIL_BLADNAAM, MAIL_BLADRECHT, type MailBlad } from "@/lib/mailbladen";
 
 const OPSLAG = "zijbalk-ingeklapt";
 
@@ -95,29 +96,47 @@ export function useMenu() {
 
   /**
    * De tabbladen van de pagina waar je bent, als sublijstje onder het
-   * menu-item. Alleen Betalingen heeft ze, en alleen voor wie bedragen mag
-   * zien: een geldloper krijgt daar toch maar één lijst te zien.
+   * menu-item. Betalingen en Mail hebben ze; de rest van de app past op één
+   * pagina.
    */
   const subtabs = (p: Pagina): Subtab[] => {
-    if (p.to !== "/betalingen" || !isActief(p) || !heeftRecht(employee, "prijzen_zien")) return [];
-    // Vrijgeven is van de eigenaar; de pagina zelf stuurt de rest terug naar
-    // Vanavond, dus hier staat hij ook niet in de lijst.
-    const zichtbaar = MENU_TABBLADEN.filter(
-      (t) => t !== "vrijgeven" || employee?.rol === "eigenaar",
-    );
-    const gevraagd = String(zoek["tab"] ?? "");
-    // Pof staat niet in het menu; je opent hem vanaf het overzicht, dus dat
-    // blijft zolang het menu-item dat oplicht.
-    const huidig = zichtbaar.find((t) => t === gevraagd) ?? "vanavond";
-    // De gekozen wijk gaat mee: wissel je van tabblad, dan kijk je nog steeds
-    // naar dezelfde wijk (de Beginstand rekent daarop).
-    const wijk = typeof zoek["wijk"] === "string" ? (zoek["wijk"] as string) : undefined;
-    return zichtbaar.map((t) => ({
-      tab: t,
-      label: TABNAAM[t],
-      actief: t === huidig,
-      zoek: { tab: t, ...(wijk ? { wijk } : {}) },
-    }));
+    if (!isActief(p)) return [];
+    if (p.to === "/betalingen") {
+      // Alleen voor wie bedragen mag zien: een geldloper krijgt daar toch maar
+      // één lijst te zien.
+      if (!heeftRecht(employee, "prijzen_zien")) return [];
+      const gevraagd = String(zoek["tab"] ?? "");
+      // Pof staat niet in het menu; je opent hem vanaf het overzicht, dus dat
+      // blijft zolang het menu-item dat oplicht.
+      const huidig = MENU_TABBLADEN.find((t) => t === gevraagd) ?? "vanavond";
+      // De gekozen wijk gaat mee: wissel je van tabblad, dan kijk je nog
+      // steeds naar dezelfde wijk.
+      const wijk = typeof zoek["wijk"] === "string" ? (zoek["wijk"] as string) : undefined;
+      return MENU_TABBLADEN.map((t) => ({
+        sleutel: t,
+        naar: "/betalingen" as const,
+        label: TABNAAM[t],
+        actief: t === huidig,
+        zoek: { tab: t, ...(wijk ? { wijk } : {}) },
+      }));
+    }
+    if (p.to === "/mailing") {
+      const zichtbaar = MAIL_BLADEN.filter((b) => {
+        const recht = MAIL_BLADRECHT[b];
+        return recht === "eigenaar" ? employee?.rol === "eigenaar" : heeftRecht(employee, recht);
+      });
+      if (zichtbaar.length < 2) return [];
+      const gevraagd = String(zoek["blad"] ?? "");
+      const huidig = zichtbaar.find((b) => b === gevraagd) ?? zichtbaar[0]!;
+      return zichtbaar.map((b) => ({
+        sleutel: b,
+        naar: "/mailing" as const,
+        label: MAIL_BLADNAAM[b],
+        actief: b === huidig,
+        zoek: { blad: b },
+      }));
+    }
+    return [];
   };
 
   return {
@@ -134,12 +153,13 @@ export function useMenu() {
 
 /** Een tabblad van de pagina waar je bent, zoals het menu het toont. */
 export type Subtab = {
-  tab: BetalingenTab;
+  sleutel: string;
   label: string;
   actief: boolean;
-  /** Wat er in het webadres komt te staan als je erop klikt. */
-  zoek: { tab: BetalingenTab; wijk?: string };
-};
+} & (
+  | { naar: "/betalingen"; zoek: { tab: BetalingenTab; wijk?: string } }
+  | { naar: "/mailing"; zoek: { blad: MailBlad } }
+);
 
 export type { Pagina };
 
@@ -160,23 +180,32 @@ export function Subtabs({
   if (lijst.length === 0) return null;
   return (
     <div className="mb-1 ml-[22px] flex flex-col gap-0.5 border-l border-border pl-2">
-      {lijst.map((s) => (
-        <Link
-          key={s.tab}
-          to="/betalingen"
-          search={s.zoek}
-          onClick={onKies}
-          className={`flex items-center rounded-[10px] transition-colors ${
-            groot ? "h-12 px-3 text-[15px] fel:rounded-full" : "h-9 px-2.5 text-[12.5px]"
-          } ${
-            s.actief
-              ? "bg-card font-semibold shadow-card fel:shadow-none"
-              : "text-foreground/65 hover:bg-card/70 hover:text-foreground"
-          }`}
-        >
-          {s.label}
-        </Link>
-      ))}
+      {lijst.map((s) => {
+        // Twee takken, want de router wil per pagina weten wat er in het
+        // webadres mag staan.
+        const klassen = `flex items-center rounded-[10px] transition-colors ${
+          groot ? "h-12 px-3 text-[15px] fel:rounded-full" : "h-9 px-2.5 text-[12.5px]"
+        } ${
+          s.actief
+            ? "bg-card font-semibold shadow-card fel:shadow-none"
+            : "text-foreground/65 hover:bg-card/70 hover:text-foreground"
+        }`;
+        return s.naar === "/mailing" ? (
+          <Link key={s.sleutel} to="/mailing" search={s.zoek} onClick={onKies} className={klassen}>
+            {s.label}
+          </Link>
+        ) : (
+          <Link
+            key={s.sleutel}
+            to="/betalingen"
+            search={s.zoek}
+            onClick={onKies}
+            className={klassen}
+          >
+            {s.label}
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -190,17 +219,23 @@ function TabbladenMenu({ p, lijst }: { p: Pagina; lijst: Subtab[] }) {
           type="button"
           title={p.label}
           aria-label={p.label}
-          className="flex h-10 items-center justify-center rounded-[12px] border border-border bg-card shadow-card fel:rounded-full fel:border-transparent fel:bg-primary fel:text-primary-foreground fel:shadow-none"
+          className="flex h-10 items-center justify-center rounded-[12px] bg-card shadow-card fel:rounded-full fel:bg-primary fel:text-primary-foreground fel:shadow-none"
         >
           <p.icon className="size-[17px] shrink-0 text-tint-oranje-ink fel:text-primary-foreground" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="right" align="start" className="w-44">
         {lijst.map((s) => (
-          <DropdownMenuItem key={s.tab} asChild>
-            <Link to="/betalingen" search={s.zoek} className={s.actief ? "font-semibold" : ""}>
-              {s.label}
-            </Link>
+          <DropdownMenuItem key={s.sleutel} asChild>
+            {s.naar === "/mailing" ? (
+              <Link to="/mailing" search={s.zoek} className={s.actief ? "font-semibold" : ""}>
+                {s.label}
+              </Link>
+            ) : (
+              <Link to="/betalingen" search={s.zoek} className={s.actief ? "font-semibold" : ""}>
+                {s.label}
+              </Link>
+            )}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -254,7 +289,7 @@ export function Zijbalk() {
           ingeklapt ? "justify-center px-0" : "gap-3 px-2.5 fel:px-3"
         } ${
           actief
-            ? "border border-border bg-card font-semibold shadow-card fel:border-transparent fel:bg-primary fel:text-primary-foreground fel:shadow-none"
+            ? "bg-card font-semibold shadow-card fel:bg-primary fel:text-primary-foreground fel:shadow-none"
             : "border border-transparent text-foreground/75 hover:bg-card/70 hover:text-foreground"
         }`}
       >
@@ -281,7 +316,7 @@ export function Zijbalk() {
       className={`${breed} sticky top-0 hidden h-screen md:flex shrink-0 flex-col gap-5 border-r border-border bg-surface px-3.5 py-5 fel:dark:bg-background transition-[width] duration-200 print:hidden`}
     >
       <div className={`flex items-center ${ingeklapt ? "flex-col gap-3" : "gap-2.5"}`}>
-        <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[12px] border border-border bg-card">
+        <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[12px] bg-card shadow-card">
           <Druppel className="size-[22px]" />
         </div>
         {/* Leeg tot het bedrijf geladen is: een placeholder die daarna
@@ -298,7 +333,7 @@ export function Zijbalk() {
           onClick={klap}
           aria-label={ingeklapt ? "Navigatie uitklappen" : "Navigatie inklappen"}
           title={ingeklapt ? "Uitklappen" : "Inklappen"}
-          className={`flex size-[26px] items-center justify-center rounded-[7px] border border-border bg-card text-muted-foreground hover:text-foreground ${
+          className={`flex size-[26px] items-center justify-center rounded-[8px] bg-card text-muted-foreground shadow-card hover:text-foreground ${
             ingeklapt ? "" : "ml-auto"
           }`}
         >
@@ -353,7 +388,7 @@ export function Zijbalk() {
 
       <div className="mt-auto flex flex-col gap-2">
         {employee && !ingeklapt && (
-          <div className="flex items-center gap-2.5 rounded-[14px] border border-border bg-card p-2.5 shadow-card">
+          <div className="flex items-center gap-2.5 rounded-[16px] bg-card p-2.5 shadow-card">
             <div className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-brand text-xs font-semibold text-brand-foreground">
               {(employee.naam || employee.email).charAt(0).toUpperCase()}
             </div>

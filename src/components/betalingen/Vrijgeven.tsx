@@ -5,6 +5,9 @@ import { toast } from "sonner";
 import { IconAlertTriangle as AlertTriangle, IconLockOpen as LockOpen } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useBevestig } from "@/components/Bevestig";
@@ -337,5 +340,46 @@ export function Vrijgeven({ onLopen }: { onLopen: () => void }) {
         })}
       </section>
     </div>
+  );
+}
+
+/**
+ * Hetzelfde scherm als venster: op de computer een popup, op de telefoon een
+ * paneel dat omhoog schuift. Vrijgeven is geen eigen pagina meer — er staat
+ * te weinig op — maar een tegel op het overzicht die dit opent.
+ */
+export function VrijgeefVenster({
+  open,
+  onSluit,
+  onLopen,
+}: {
+  open: boolean;
+  onSluit: () => void;
+  onLopen: () => void;
+}) {
+  const mobiel = useIsMobile();
+  const Titel = mobiel ? DrawerTitle : DialogTitle;
+  const inhoud = (
+    <>
+      <Titel className="shrink-0 px-4 pt-3 font-display text-[20px] font-semibold tracking-[-0.02em] md:px-5 md:pt-4">
+        Een wijk vrijgeven
+      </Titel>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 md:px-5 md:pb-5">
+        <Vrijgeven onLopen={onLopen} />
+      </div>
+    </>
+  );
+  return mobiel ? (
+    <Drawer open={open} onOpenChange={(o) => !o && onSluit()}>
+      <DrawerContent className="max-h-[94dvh] rounded-t-[24px] border-0 bg-card">
+        {inhoud}
+      </DrawerContent>
+    </Drawer>
+  ) : (
+    <Dialog open={open} onOpenChange={(o) => !o && onSluit()}>
+      <DialogContent className="flex max-h-[88dvh] w-[min(720px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden border-0 bg-card p-0 sm:rounded-[24px]">
+        {inhoud}
+      </DialogContent>
+    </Dialog>
   );
 }

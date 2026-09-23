@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { formatPrice } from "@/lib/klanten";
+import { LAATSTE_STANDEN } from "@/lib/tellers";
 
 /** Hoe lang het tellen duurt. Kort genoeg om niet in de weg te zitten. */
 const DUUR = 520;
@@ -29,51 +30,50 @@ function zachtjes() {
 }
 
 /**
- * Een bedrag dat oploopt terwijl je kijkt.
- *
- * Verandert het bedrag, dan telt hij ernaartoe in plaats van te verspringen,
- * en zweeft er kort omhoog wat erbij kwam ("+ € 17,50"). Tijdens het
- * geldlopen zie je zo aan de tegel dat er net iemand betaald heeft, en ook
- * hoeveel, zonder dat je de lijst erbij hoeft te pakken.
+ * Het tellen zelf, voor een bedrag en voor een gewoon aantal.
  *
  * Zolang er nog geen stand binnen is (`undefined`) gebeurt er niets, en de
  * eerste die komt wordt gewoon neergezet: een teller die bij het openen van de
- * pagina van nul omhoogkruipt laat alleen maar even een bedrag zien dat niet
- * klopt. Is de teller aan iets anders toe — een andere dag, een andere avond —
- * geef hem dan een `key` mee, dan begint hij opnieuw.
+ * pagina van nul omhoogkruipt laat alleen maar even een getal zien dat niet
+ * klopt. Kent hij de vorige stand nog uit `LAATSTE_STANDEN`, dan telt hij daarvandaan.
  */
-export function TelBedrag({ bedrag }: { bedrag: number | undefined }) {
-  const [getoond, setGetoond] = useState(bedrag ?? 0);
+function useTeller(waarde: number | undefined, onthoud: string | undefined, metErbij: boolean) {
+  // Eén keer bij het opbouwen ophalen: daarna is het onze eigen stand.
+  const [begin] = useState(() =>
+    onthoud === undefined ? undefined : LAATSTE_STANDEN.get(onthoud),
+  );
+  const [getoond, setGetoond] = useState(begin ?? waarde ?? 0);
   const [tellend, setTellend] = useState(false);
   const [erbij, setErbij] = useState<{ bedrag: number; sleutel: number } | null>(null);
   /** Wat er op dit moment op het scherm staat. */
-  const opScherm = useRef(bedrag ?? 0);
+  const opScherm = useRef(begin ?? waarde ?? 0);
   /** De laatste stand die binnenkwam; `null` zolang dat er nog geen is. */
-  const vorige = useRef<number | null>(bedrag ?? null);
+  const vorige = useRef<number | null>(begin ?? waarde ?? null);
   const beeldje = useRef<number | null>(null);
   const klokje = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (bedrag === undefined) return;
+    if (waarde === undefined) return;
     const van = vorige.current;
-    vorige.current = bedrag;
+    vorige.current = waarde;
+    if (onthoud !== undefined) LAATSTE_STANDEN.set(onthoud, waarde);
     if (van === null) {
-      opScherm.current = bedrag;
-      setGetoond(bedrag);
+      opScherm.current = waarde;
+      setGetoond(waarde);
       return;
     }
-    if (Math.abs(bedrag - van) < 0.005) return;
+    if (Math.abs(waarde - van) < 0.005) return;
 
     // Staat de app op de achtergrond, dan tekent de browser niets en zou de
-    // teller blijven staan op een bedrag dat niet meer klopt.
+    // teller blijven staan op een getal dat niet meer klopt.
     if (zachtjes() || document.hidden) {
-      opScherm.current = bedrag;
-      setGetoond(bedrag);
+      opScherm.current = waarde;
+      setGetoond(waarde);
       return;
     }
 
-    if (bedrag > van) {
-      setErbij({ bedrag: bedrag - van, sleutel: Date.now() });
+    if (metErbij && waarde > van) {
+      setErbij({ bedrag: waarde - van, sleutel: Date.now() });
       if (klokje.current) clearTimeout(klokje.current);
       klokje.current = setTimeout(() => setErbij(null), OPRUIMEN);
     }
@@ -88,7 +88,7 @@ export function TelBedrag({ bedrag }: { bedrag: number | undefined }) {
     const stap = (nu: number) => {
       const t = Math.min(1, (nu - start) / DUUR);
       const soepel = 1 - Math.pow(1 - t, 3);
-      opScherm.current = vanaf + (bedrag - vanaf) * soepel;
+      opScherm.current = vanaf + (waarde - vanaf) * soepel;
       setGetoond(opScherm.current);
       if (t < 1) {
         beeldje.current = requestAnimationFrame(stap);
@@ -98,7 +98,7 @@ export function TelBedrag({ bedrag }: { bedrag: number | undefined }) {
       }
     };
     beeldje.current = requestAnimationFrame(stap);
-  }, [bedrag]);
+  }, [waarde, onthoud, metErbij]);
 
   useEffect(
     () => () => {
@@ -108,6 +108,22 @@ export function TelBedrag({ bedrag }: { bedrag: number | undefined }) {
     [],
   );
 
+  return { getoond, tellend, erbij, setErbij };
+}
+
+/**
+ * Een bedrag dat oploopt terwijl je kijkt.
+ *
+ * Verandert het bedrag, dan telt hij ernaartoe in plaats van te verspringen,
+ * en zweeft er kort omhoog wat erbij kwam ("+ € 17,50"). Tijdens het
+ * geldlopen zie je zo aan de tegel dat er net iemand betaald heeft, en ook
+ * hoeveel, zonder dat je de lijst erbij hoeft te pakken.
+ *
+ * Is de teller aan iets anders toe — een andere dag, een andere avond — geef
+ * hem dan een `key` mee, dan begint hij opnieuw.
+ */
+export function TelBedrag({ bedrag, onthoud }: { bedrag: number | undefined; onthoud?: string }) {
+  const { getoond, tellend, erbij, setErbij } = useTeller(bedrag, onthoud, true);
   return (
     <span className="relative inline-block">
       {tellend ? metCenten.format(getoond) : formatPrice(getoond)}
@@ -123,4 +139,17 @@ export function TelBedrag({ bedrag }: { bedrag: number | undefined }) {
       )}
     </span>
   );
+}
+
+/**
+ * Hetzelfde, maar voor een aantal: klanten, wijken, aanmeldingen.
+ *
+ * Zonder het zwevende "+ 3" ernaast: bij geld wil je weten hoeveel erbij
+ * kwam, bij een aantal zie je dat aan het getal zelf. Met `onthoud` telt het
+ * vak ook bij tegen de stand van de vorige keer dat je keek, zodat je na het
+ * aanpassen van een wijk op Home ziet dat het getal opliep.
+ */
+export function TelGetal({ waarde, onthoud }: { waarde: number | undefined; onthoud?: string }) {
+  const { getoond } = useTeller(waarde, onthoud, false);
+  return <>{Math.round(getoond).toLocaleString("nl-NL")}</>;
 }

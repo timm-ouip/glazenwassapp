@@ -65,7 +65,7 @@ export function WhatsAppGesprekken() {
 
   if (!koppeling.data || koppeling.data.status === "uit") {
     return (
-      <div className="rounded-[18px] border border-border bg-card p-6 text-center shadow-card">
+      <div className="rounded-[24px] bg-card p-6 text-center shadow-card">
         <MessageCircle className="mx-auto size-6 text-muted-foreground" />
         <p className="mt-2 text-[14px] font-medium">WhatsApp is nog niet gekoppeld</p>
         <p className="mt-1 text-[12.5px] text-muted-foreground">
@@ -86,7 +86,7 @@ export function WhatsAppGesprekken() {
   return (
     <div
       className={cn(
-        "grid h-[calc(100vh-220px)] min-h-[420px] overflow-hidden rounded-[18px] border border-border bg-card shadow-card md:grid-cols-[300px_1fr]",
+        "grid h-[calc(100vh-220px)] min-h-[420px] overflow-hidden rounded-[24px] bg-card shadow-card md:grid-cols-[300px_1fr]",
         metKlant && "xl:grid-cols-[300px_minmax(0,1fr)_250px]",
       )}
     >

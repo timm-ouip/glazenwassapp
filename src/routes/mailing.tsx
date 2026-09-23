@@ -10,8 +10,8 @@
  * telling die de browser zelf maakt kan er net naast zitten, en dan klopt de
  * bevestiging niet met de werkelijkheid.
  */
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconAlertTriangle as AlertTriangle,
@@ -27,6 +27,7 @@ import {
   IconDots as MoreHorizontal,
   IconInbox as Inbox,
   IconMessages as Messages,
+  IconBrandWhatsapp as WhatsApp,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 
@@ -46,8 +47,9 @@ import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WhatsAppGesprekken } from "@/components/whatsapp/WhatsAppGesprekken";
+import { fetchMappen } from "@/lib/mailbox";
+import { fetchGesprekken } from "@/lib/whatsapp";
 import { datumVoluit, fetchSjablonen, fetchWhatsAppKoppeling } from "@/lib/whatsapp";
 import {
   fetchCustomersMetInactief,
@@ -78,6 +80,7 @@ import {
   type AankondigKanaal,
   type Controle,
 } from "@/lib/mailing";
+import { MAIL_BLADEN, MAIL_BLADNAAM, type MailBlad, type MailKanaal } from "@/lib/mailbladen";
 import { heeftRecht } from "@/lib/rechten";
 import { kwamAan, perAdres, useAankondigingen } from "@/lib/aankondigingen";
 import { telAdressen } from "@/lib/overslaan-keuze";
@@ -85,16 +88,23 @@ import { telAdressen } from "@/lib/overslaan-keuze";
 interface MailingSearch {
   /** De dag die al gekozen is, bijvoorbeeld vanaf de planningspagina. */
   dag?: string;
+  /** Welk blad je bekijkt; het menu zet hem in het webadres. */
+  blad?: MailBlad;
 }
 
 export const Route = createFileRoute("/mailing")({
   beforeLoad: async () => {
     await requireSession();
   },
-  validateSearch: (search: Record<string, unknown>): MailingSearch =>
-    typeof search["dag"] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(search["dag"])
-      ? { dag: search["dag"] }
-      : {},
+  validateSearch: (search: Record<string, unknown>): MailingSearch => {
+    const blad = String(search["blad"] ?? "");
+    return {
+      ...(typeof search["dag"] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(search["dag"])
+        ? { dag: search["dag"] }
+        : {}),
+      ...((MAIL_BLADEN as readonly string[]).includes(blad) ? { blad: blad as MailBlad } : {}),
+    };
+  },
   head: () => ({
     meta: [
       { title: "Mailing — Wooshy" },
@@ -117,96 +127,122 @@ Komt het niet uit? Antwoord dan gewoon even op deze mail, dan slaan we deze keer
 Met vriendelijke groet,
 De Ramensopperij`;
 
-const WEERGAVE_OPSLAG = "wooshy.mail-weergave";
+/** Welk kanaal je het laatst koos. Wie per klant werkt, wil dat morgen weer. */
+const KANAAL_OPSLAG = "wooshy.mail-kanaal";
+
+function leesKanaal(): MailKanaal {
+  try {
+    const k = typeof window === "undefined" ? null : localStorage.getItem(KANAAL_OPSLAG);
+    return k === "postvak" || k === "whatsapp" || k === "samen" ? k : "samen";
+  } catch {
+    return "samen";
+  }
+}
 
 function Mailing() {
   useRequireAuth();
-  const { dag } = Route.useSearch();
-  // Het postvak is voor wie mail mag lezen; het rapport en het dagrapport
-  // blijven bij de eigenaar. Kom je vanaf de planning met een dag, dan wil je
-  // aankondigen.
+  const { dag, blad: gevraagd } = Route.useSearch();
+  const navigate = useNavigate();
   const { employee } = useAuth();
-  // Lezen: het postvak. Versturen: opstellen en wat er verstuurd is.
+  // Lezen: het postvak. Versturen: aankondigen en wat er verstuurd is. Het
+  // rapport en het dagrapport blijven bij de eigenaar.
   const toonPostvak = heeftRecht(employee, "mail_lezen");
   const toonVersturen = heeftRecht(employee, "mail_versturen");
   const toonRapport = employee?.rol === "eigenaar";
-  type Blad = "postvak" | "whatsapp" | "opstellen" | "verstuurd" | "rapport" | "dagrapport";
-  const mag: Record<Blad, boolean> = {
+  const mag: Record<MailBlad, boolean> = {
     postvak: toonPostvak,
-    whatsapp: toonPostvak,
     opstellen: toonVersturen,
     verstuurd: toonVersturen,
-    rapport: toonRapport,
     dagrapport: toonRapport,
+    rapport: toonRapport,
   };
-  const startBlad: Blad = (dag && toonVersturen) || !toonPostvak ? "opstellen" : "postvak";
-  const [blad, setBlad] = useState<Blad>(startBlad);
+  // Kom je vanaf de planning met een dag mee, dan wil je aankondigen.
+  const startBlad: MailBlad = (dag && toonVersturen) || !toonPostvak ? "opstellen" : "postvak";
+  // Het blad staat in het webadres, want het menu zet de tabbladen neer. Mag
+  // je een blad niet zien, dan kijk je naar je eigen startblad.
+  const blad: MailBlad = gevraagd && mag[gevraagd] ? gevraagd : startBlad;
+  const naarBlad = (b: MailBlad) =>
+    void navigate({
+      to: "/mailing",
+      search: (oud: MailingSearch) => ({ ...oud, blad: b }),
+      replace: true,
+    });
 
-  // De rol is er soms pas na het eerste renderen. Dan het startblad alsnog
-  // één keer kiezen (de eigenaar hoort op Postvak te beginnen), en daarna
-  // alleen terugzetten als je op een blad staat dat je niet mag zien.
-  const startGekozen = useRef(false);
-  useEffect(() => {
-    if (!employee) return;
-    if (!startGekozen.current) {
-      startGekozen.current = true;
-      if (blad !== startBlad) setBlad(startBlad);
-      return;
-    }
-    if (!mag[blad]) setBlad(startBlad);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employee, toonPostvak, toonVersturen, toonRapport, blad]);
-
-  // Op de telefoon: bovenin wissel je tussen gesprekken per klant en het hele
-  // postvak. Die keuze onthouden we, want wie per klant werkt, wil dat morgen weer.
   const mobiel = useIsMobile();
   // Gesprekken zijn per klant; wie geen klanten mag zien, heeft daar niets aan.
   const toonGesprekken = ["klanten_bekijken", "klanten_bewerken", "planning"].some((r) =>
     heeftRecht(employee, r as Parameters<typeof heeftRecht>[1]),
   );
-  // Meteen bij het aanmaken lezen: anders haalt Gesprekken eerst al zijn lijsten op
-  // en springt hij daarna pas naar het postvak. De telefoonweergave tekent de
-  // server niet, dus localStorage is er hier altijd.
-  const [gekozenWeergave, setWeergave] = useState<"gesprekken" | "postvak">(() => {
+  // Meteen bij het aanmaken lezen: anders haalt Gesprekken eerst al zijn
+  // lijsten op en springt hij daarna pas naar het postvak.
+  const [gekozenKanaal, setKanaal] = useState<MailKanaal>(leesKanaal);
+  const kanaal: MailKanaal = toonGesprekken ? gekozenKanaal : "postvak";
+  function kiesKanaal(k: MailKanaal) {
+    setKanaal(k);
+    if (blad !== "postvak") naarBlad("postvak");
     try {
-      return typeof window !== "undefined" && localStorage.getItem(WEERGAVE_OPSLAG) === "postvak"
-        ? "postvak"
-        : "gesprekken";
-    } catch {
-      return "gesprekken";
-    }
-  });
-  const weergave = toonGesprekken ? gekozenWeergave : "postvak";
-  function kiesWeergave(w: "gesprekken" | "postvak") {
-    setWeergave(w);
-    setBlad("postvak");
-    try {
-      localStorage.setItem(WEERGAVE_OPSLAG, w);
+      localStorage.setItem(KANAAL_OPSLAG, k);
     } catch {
       // Niet kunnen onthouden is geen reden om niet te wisselen.
     }
   }
 
+  // De tellertjes achter de kanalen. Allebei dezelfde sleutel als de lijsten
+  // zelf gebruiken, dus dit kost geen extra verkeer.
+  const mappen = useQuery({
+    queryKey: ["mail-mappen"],
+    queryFn: fetchMappen,
+    enabled: toonPostvak,
+    staleTime: 60_000,
+  });
+  const waGesprekken = useQuery({
+    queryKey: ["wa-gesprekken"],
+    queryFn: fetchGesprekken,
+    enabled: toonPostvak && toonGesprekken,
+    staleTime: 30_000,
+  });
+  const ongelezenMail = (mappen.data ?? []).find((m) => m.rol === "postvak")?.ongelezen ?? 0;
+  const ongelezenWa = (waGesprekken.data ?? []).reduce((t, g) => t + g.ongelezen, 0);
+
+  const kiezer = (richting: "kolom" | "rij") =>
+    toonGesprekken ? (
+      <KanaalKiezer
+        kanaal={kanaal}
+        richting={richting}
+        ongelezenMail={ongelezenMail}
+        ongelezenWa={ongelezenWa}
+        onKies={kiesKanaal}
+      />
+    ) : null;
+
+  /** Wat er onder het gekozen kanaal hoort te staan. */
+  const postvakInhoud = (kanaalKiezer: ReactNode) =>
+    kanaal === "postvak" ? (
+      <Postvak
+        kanaalKiezer={kanaalKiezer}
+        onAankondigen={toonVersturen ? () => naarBlad("opstellen") : undefined}
+      />
+    ) : (
+      <div className="grid gap-3 md:grid-cols-[210px_minmax(0,1fr)]">
+        {/* Ook op een tablet in de lengte: daar telt de app je niet als
+            telefoon, en zonder dit blokje kom je niet meer terug bij je mail. */}
+        {kanaalKiezer}
+        {kanaal === "whatsapp" ? <WhatsAppGesprekken /> : <Gesprekken />}
+      </div>
+    );
+
   if (mobiel && toonPostvak) {
-    const extra = blad !== "postvak" && blad !== "whatsapp";
-    const extraNaam: Record<Blad, string> = {
-      postvak: "",
-      whatsapp: "",
-      opstellen: "Aankondigen",
-      verstuurd: "Verstuurd",
-      rapport: "Rapport",
-      dagrapport: "Dagrapport",
-    };
+    const extra = blad !== "postvak";
     return (
       <AppLayout titel="Mail">
         {extra ? (
           <>
             <button
               type="button"
-              onClick={() => setBlad("postvak")}
+              onClick={() => naarBlad("postvak")}
               className="mb-3 flex items-center gap-1.5 text-[14px] font-medium"
             >
-              <ArrowLeft className="size-5" /> {extraNaam[blad]}
+              <ArrowLeft className="size-5" /> {MAIL_BLADNAAM[blad]}
             </button>
             {blad === "opstellen" && <Opstellen beginDag={dag} />}
             {blad === "verstuurd" && <Verstuurd />}
@@ -215,75 +251,8 @@ function Mailing() {
           </>
         ) : (
           <>
-            <div className="mb-3 flex items-center gap-2">
-              {toonGesprekken ? (
-                <div className="flex flex-1 rounded-full bg-card p-[3px] shadow-card">
-                  {(
-                    [
-                      ["gesprekken", Messages, "Gesprekken"],
-                      ["postvak", Inbox, "Postvak"],
-                    ] as const
-                  ).map(([w, Icoon, label]) => (
-                    <button
-                      key={w}
-                      type="button"
-                      onClick={() => kiesWeergave(w)}
-                      aria-pressed={weergave === w}
-                      className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 text-[14px] ${
-                        weergave === w
-                          ? "bg-primary font-medium text-primary-foreground"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      <Icoon className="size-4" /> {label}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex-1" />
-              )}
-              {(toonVersturen || toonRapport) && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="size-9 shrink-0 rounded-full bg-card"
-                      aria-label="Meer mail"
-                    >
-                      <MoreHorizontal className="size-5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-52">
-                    {toonVersturen && (
-                      <>
-                        <DropdownMenuItem onSelect={() => setBlad("opstellen")}>
-                          <Send className="size-4" /> Aankondigen
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setBlad("verstuurd")}>
-                          <MailCheck className="size-4" /> Verstuurd
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                    {toonRapport && (
-                      <>
-                        <DropdownMenuItem onSelect={() => setBlad("dagrapport")}>
-                          <Check className="size-4" /> Dagrapport
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setBlad("rapport")}>
-                          <Users className="size-4" /> Rapport
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-            {weergave === "gesprekken" ? (
-              <Gesprekken />
-            ) : (
-              <Postvak onAankondigen={toonVersturen ? () => setBlad("opstellen") : undefined} />
-            )}
+            <div className="mb-3">{kiezer("rij")}</div>
+            {postvakInhoud(null)}
           </>
         )}
       </AppLayout>
@@ -292,56 +261,87 @@ function Mailing() {
 
   return (
     <AppLayout
-      titel="Mailing"
-      kruimel="Overzicht / Mailing"
+      titel={`Mail · ${MAIL_BLADNAAM[blad]}`}
       onderschrift="Je mail, de aankondigingen per wasdag, en wat er terugkomt."
     >
-      <Tabs value={blad} onValueChange={(v) => setBlad(v as typeof blad)}>
-        {/* Zes tabbladen: op een tablet naast de zijbalk net te breed, dan
-            schuift de balk zelf in plaats van de hele pagina. */}
-        <TabsList className="mb-4 max-w-full justify-start overflow-x-auto [scrollbar-width:none]">
-          {toonPostvak && <TabsTrigger value="postvak">Postvak</TabsTrigger>}
-          {toonPostvak && <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>}
-          {toonVersturen && <TabsTrigger value="opstellen">Opstellen</TabsTrigger>}
-          {toonVersturen && <TabsTrigger value="verstuurd">Verstuurd</TabsTrigger>}
-          {/* Het rapport ziet alleen de eigenaar (RLS); een medewerker zou hier
-              een altijd lege lijst zien. */}
-          {toonRapport && <TabsTrigger value="rapport">Rapport</TabsTrigger>}
-          {toonRapport && <TabsTrigger value="dagrapport">Dagrapport</TabsTrigger>}
-        </TabsList>
-
-        {toonPostvak && (
-          <TabsContent value="postvak">
-            <Postvak onAankondigen={toonVersturen ? () => setBlad("opstellen") : undefined} />
-          </TabsContent>
-        )}
-        {toonPostvak && (
-          <TabsContent value="whatsapp">
-            <WhatsAppGesprekken />
-          </TabsContent>
-        )}
-        {toonVersturen && (
-          <TabsContent value="opstellen">
-            <Opstellen beginDag={dag} />
-          </TabsContent>
-        )}
-        {toonVersturen && (
-          <TabsContent value="verstuurd">
-            <Verstuurd />
-          </TabsContent>
-        )}
-        {toonRapport && (
-          <TabsContent value="dagrapport">
-            <Dagrapporten />
-          </TabsContent>
-        )}
-        {toonRapport && (
-          <TabsContent value="rapport">
-            <Rapport />
-          </TabsContent>
-        )}
-      </Tabs>
+      {blad === "postvak" && toonPostvak && postvakInhoud(kiezer("kolom"))}
+      {blad === "opstellen" && toonVersturen && <Opstellen beginDag={dag} />}
+      {blad === "verstuurd" && toonVersturen && <Verstuurd />}
+      {blad === "dagrapport" && toonRapport && <Dagrapporten />}
+      {blad === "rapport" && toonRapport && <Rapport />}
     </AppLayout>
+  );
+}
+
+/**
+ * De kanalen: gewone mail, appjes, of allebei door elkaar per klant.
+ *
+ * Op de computer een blokje bovenin de mappenkolom, op de telefoon dezelfde
+ * drie als een pil boven de lijst. Achter Postvak en Appjes staat hoeveel er
+ * ongelezen is; bij Samen niet, want dat is die twee bij elkaar.
+ */
+function KanaalKiezer({
+  kanaal,
+  richting,
+  ongelezenMail,
+  ongelezenWa,
+  onKies,
+}: {
+  kanaal: MailKanaal;
+  richting: "kolom" | "rij";
+  ongelezenMail: number;
+  ongelezenWa: number;
+  onKies: (k: MailKanaal) => void;
+}) {
+  const kanalen = [
+    { k: "postvak" as const, icoon: Inbox, label: "Postvak", aantal: ongelezenMail },
+    { k: "whatsapp" as const, icoon: WhatsApp, label: "Appjes", aantal: ongelezenWa },
+    { k: "samen" as const, icoon: Messages, label: "Samen", aantal: 0 },
+  ];
+  const kolom = richting === "kolom";
+  return (
+    <div
+      className={`flex bg-card shadow-card ${
+        kolom ? "flex-col gap-0.5 rounded-[18px] p-1.5" : "gap-0.5 rounded-full p-[3px]"
+      }`}
+    >
+      {kanalen.map(({ k, icoon: Icoon, label, aantal }) => {
+        const aan = kanaal === k;
+        return (
+          <button
+            key={k}
+            type="button"
+            aria-pressed={aan}
+            onClick={() => onKies(k)}
+            className={`flex items-center transition-colors ${
+              kolom
+                ? "gap-2.5 rounded-[12px] px-2.5 py-2 text-[13.5px]"
+                : "flex-1 justify-center gap-1.5 rounded-full py-1.5 text-[14px]"
+            } ${
+              aan
+                ? "bg-primary font-medium text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Icoon
+              className={`size-[18px] shrink-0 ${
+                k === "whatsapp" && !aan ? "text-tint-groen-mid" : ""
+              }`}
+            />
+            {label}
+            {aantal > 0 && (
+              <span
+                className={`${kolom ? "ml-auto" : ""} rounded-full px-1.5 text-[11px] font-semibold ${
+                  aan ? "bg-primary-foreground/20" : "bg-tint-rood text-tint-rood-ink"
+                }`}
+              >
+                {aantal}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1401,7 +1401,7 @@ function Rapport() {
       {rijen.map((w) => (
         <article
           key={w.id}
-          className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[16px] border border-border bg-card px-4 py-3 shadow-card ${
+          className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[18px] bg-card px-4 py-3 shadow-card ${
             w.teruggedraaid_op ? "opacity-60" : ""
           }`}
         >
@@ -1474,7 +1474,7 @@ function Verstuurd() {
       {lijst.map((m) => (
         <article
           key={m.id}
-          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[16px] border border-border bg-card px-4 py-3 shadow-card"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[18px] bg-card px-4 py-3 shadow-card"
         >
           <Mail className="size-4 shrink-0 text-muted-foreground" />
           <span className="text-[13.5px] font-semibold">{m.onderwerp}</span>
@@ -1508,7 +1508,7 @@ function Verstuurd() {
 
 function Kaart({ titel, children }: { titel: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-[18px] border border-border bg-card p-4 shadow-card">
+    <section className="rounded-[24px] bg-card p-4 shadow-card">
       <h2 className="mb-2.5 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
         {titel}
       </h2>
