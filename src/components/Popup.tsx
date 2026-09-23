@@ -52,10 +52,25 @@ export function PopupKader({
  * bovenaan een pagina: het vlak is de lichte tint, het tegeltje een stap
  * dieper, de tekst de donkere kant ervan. Zo hoort een straat-schermpje bij
  * de tegel "Straten", en een dag bij het groen van de omzet.
+ *
+ * Kastanje is de uitzondering: dat is in élk thema een diep vlak met lichte
+ * tekst. Daarom staat er bij die kleur ook een eigen `sub` — de gewone grijze
+ * ondertiteltekst is in de lichte thema's donkergrijs en verdwijnt dan in de
+ * band. Om dezelfde reden zet de klachtpopup het sluitkruisje zelf licht
+ * (zie DeurDialogen.tsx): dat kruisje tekent de dialoog buiten deze strook,
+ * dus het weet niet welke kleur eronder ligt.
  */
-export type PopupKleur = "blauw" | "amber" | "groen" | "paars" | "roze" | "geel" | "rood";
+export type PopupKleur =
+  | "blauw"
+  | "amber"
+  | "groen"
+  | "paars"
+  | "roze"
+  | "geel"
+  | "rood"
+  | "kastanje";
 
-const KOPKLEUREN: Record<PopupKleur, { band: string; tegel: string }> = {
+const KOPKLEUREN: Record<PopupKleur, { band: string; tegel: string; sub?: string }> = {
   blauw: { band: "bg-accent text-accent-foreground", tegel: "bg-accent-foreground/15" },
   amber: { band: "bg-tint-amber text-tint-amber-ink", tegel: "bg-tint-amber-ink/15" },
   groen: { band: "bg-tint-groen text-tint-groen-ink", tegel: "bg-tint-groen-ink/15" },
@@ -63,6 +78,11 @@ const KOPKLEUREN: Record<PopupKleur, { band: string; tegel: string }> = {
   roze: { band: "bg-tint-roze text-tint-roze-ink", tegel: "bg-tint-roze-ink/15" },
   geel: { band: "bg-tint-geel text-tint-geel-ink", tegel: "bg-tint-geel-ink/15" },
   rood: { band: "bg-tint-rood text-tint-rood-ink", tegel: "bg-tint-rood-ink/15" },
+  kastanje: {
+    band: "bg-tint-kastanje text-tint-kastanje-ink",
+    tegel: "bg-tint-kastanje-ink/15",
+    sub: "text-tint-kastanje-ink/75",
+  },
 };
 
 export function PopupKop({
@@ -105,7 +125,9 @@ export function PopupKop({
               {titel}
             </DialogTitle>
             {subtitel && (
-              <div className="mt-0.5 truncate text-[13px] text-muted-foreground">{subtitel}</div>
+              <div className={cn("mt-0.5 truncate text-[13px]", kleuren.sub ?? "text-muted-foreground")}>
+                {subtitel}
+              </div>
             )}
           </div>
         </div>

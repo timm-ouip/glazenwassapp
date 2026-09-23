@@ -13,7 +13,7 @@ import { heeftRecht, rolLabel } from "@/lib/rechten";
 /** Wat je op de telefoon het vaakst opent, staat los in de balk. De rest zit
  *  achter "Meer" — net als in een bank- of fotoapp. Wijken staat niet los:
  *  daar kom je via Home of via Meer. */
-const VAST = ["/home", "/planning", "/klanten", "/mailing", "/betalingen"];
+const VAST = ["/home", "/planning", "/mailing", "/betalingen"];
 /** Meer dan dit past niet naast "Meer". De eigenaar houdt zo zijn vier vaste
  *  tabs; een geldloper, die alleen Betalingen heeft, krijgt die als tab. */
 const MAX_TABS = 4;

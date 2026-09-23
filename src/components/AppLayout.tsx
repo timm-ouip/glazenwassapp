@@ -163,7 +163,14 @@ export function AppLayout({
         {actiePositie === "onder" && balk}
         {/* Onderaan ruimte voor wat er op de telefoon onderin zweeft: de tabs, de
             balk erboven en de Paaltje-knop, zodat je de laatste regel vrij kunt scrollen. */}
-        <main className="min-w-0 flex-1 px-3 pb-[calc(var(--onderrand,0px)+5rem)] md:px-6 md:pb-4">
+        {/* Lucht tussen de kop en de inhoud. Staan er cijferkaarten of een
+            knoppenbalk tussen, dan zorgen die er al voor; anders plakt de
+            eerste tegel tegen de titelbalk aan. */}
+        <main
+          className={`min-w-0 flex-1 px-3 pb-[calc(var(--onderrand,0px)+5rem)] md:px-6 md:pb-4 ${
+            zonderTitelbalk || kop || (acties && actiePositie !== "titelbalk") ? "" : "pt-3 md:pt-4"
+          }`}
+        >
           {mag ? (
             children
           ) : (

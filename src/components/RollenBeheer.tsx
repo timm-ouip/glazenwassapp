@@ -2,9 +2,14 @@
  * Rollen maken en de rechten per rol aanvinken. Alleen voor de eigenaar; de
  * database weigert het voor iedereen anders.
  */
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconLoader2 as Loader2, IconPlus as Plus, IconTrash as Trash2 } from "@tabler/icons-react";
+import {
+  IconChevronDown as ChevronDown,
+  IconLoader2 as Loader2,
+  IconPlus as Plus,
+  IconTrash as Trash2,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { useBevestig } from "@/components/Bevestig";
@@ -73,6 +78,12 @@ function RolKaart({
   const [naam, setNaam] = useState(rol.naam);
   const [rechten, setRechten] = useState<Recht[]>(rol.rechten);
   const [bezig, setBezig] = useState(false);
+  // Acht vinkjes per rol maken van drie rollen een pagina schuiven. Ingeklapt
+  // zie je de namen van de rechten op een regel; een nieuwe rol staat open,
+  // want daar kom je juist voor.
+  const [open, setOpen] = useState(!rol.id);
+  // Zodat de knop kan zeggen wát hij open- en dichtklapt.
+  const vinkjesId = useId();
 
   const gewijzigd =
     !rol.id ||
@@ -160,7 +171,29 @@ function RolKaart({
           </Button>
         </div>
       </div>
-      <div className="mt-2.5 grid gap-1.5 sm:grid-cols-2">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={vinkjesId}
+        aria-label={`Rechten van ${naam.trim() || "deze rol"} tonen of verbergen`}
+        onClick={() => setOpen((was) => !was)}
+        className="mt-2 flex min-h-9 w-full items-center gap-2 rounded-[10px] px-1.5 text-left text-[12.5px] text-muted-foreground hover:bg-accent/50"
+      >
+        <ChevronDown
+          className={`size-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+        <span className="min-w-0 flex-1 truncate">
+          {rechten.length === 0
+            ? "Geen rechten"
+            : RECHTEN.filter((r) => rechten.includes(r.sleutel))
+                .map((r) => r.label)
+                .join(" · ")}
+        </span>
+        <span className="shrink-0">
+          {rechten.length} van {RECHTEN.length}
+        </span>
+      </button>
+      <div id={vinkjesId} className={`mt-1 grid gap-1.5 sm:grid-cols-2 ${open ? "" : "hidden"}`}>
         {RECHTEN.map((r) => (
           <label
             key={r.sleutel}

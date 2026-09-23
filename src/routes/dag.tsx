@@ -23,6 +23,7 @@ import { dagVast, zetDagVast } from "@/lib/dagslot";
 
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
+import { VergetenStrook } from "@/components/VergetenStrook";
 import { Cijferkaarten } from "@/components/Cijferkaarten";
 import { Button } from "@/components/ui/button";
 import { VerplaatsNaarKnop } from "@/components/VerplaatsNaarKnop";
@@ -151,6 +152,16 @@ interface Straat {
 interface DagRegel {
   prijs: number;
   notitie: string | null;
+  /**
+   * Een geldloper hoorde aan de deur dat hier deze maand niet gewassen is. De
+   * regel blijft op de dag staan — rood, zodat je ziet dat het misging — maar
+   * het bedrag is vervallen en telt nergens meer mee.
+   */
+  nietGewassen?: boolean;
+  /** Wie het terugmeldde. */
+  nietGewassenDoor?: string | null;
+  /** Wat de beurt zou hebben gekost, om door te strepen. */
+  prijsVervallen?: number;
 }
 
 /**
@@ -360,7 +371,20 @@ function DagPagina() {
     const wijkIndex = new Map((districtsQuery.data ?? []).map((d, i) => [d.id, i]));
     const wijkNaam = new Map((districtsQuery.data ?? []).map((d) => [d.id, d.name]));
     const regelVan = new Map<string | null, DagRegel>(
-      regels.map((r) => [r.customer_id, { prijs: Number(r.prijs), notitie: r.notitie ?? null }]),
+      regels.map((r) => [
+        r.customer_id,
+        {
+          prijs: Number(r.prijs),
+          notitie: r.notitie ?? null,
+          ...(r.niet_gewassen
+            ? {
+                nietGewassen: true,
+                nietGewassenDoor: r.niet_gewassen_naam ?? null,
+                prijsVervallen: Number(r.prijs_vervallen ?? 0),
+              }
+            : {}),
+        },
+      ]),
     );
 
     // Hoeveel straten telt een subgroep in totaal? Daar meten we "compleet"
@@ -1113,6 +1137,8 @@ function DagPagina() {
       ) : (
         <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_19rem]">
           <div className="min-w-0 space-y-3">
+            {/* Wat een geldloper terugmeldde: hier is niet gewassen. */}
+            <VergetenStrook datum={datum} />
             {/* Aan het eind van de dag: afmelden wat gedaan is. Pas dan staat
                 het open bij de klant (en kan de geldloper het ophalen). */}
             <DagKlaar
@@ -1510,7 +1536,9 @@ function StraatRij({
           // Wat er die dag anders ging gaat vóór de vaste notitie: dát is wat
           // je onderweg moet weten, en het bedrag ernaast hoort erbij.
           const anders = regel?.notitie?.trim() ?? "";
-          const aangepast = anders !== "" || (regel && regel.prijs !== prijsVoorMaand(c, maand));
+          const nietGewassen = regel?.nietGewassen ?? false;
+          const aangepast =
+            !nietGewassen && (anders !== "" || (regel && regel.prijs !== prijsVoorMaand(c, maand)));
           const gekozen = keuze.has(c.id);
           const klachten = klachtenBij(c);
           const { className: rijKnop, ...rijRest } = selecteren
@@ -1526,9 +1554,11 @@ function StraatRij({
               className={`flex items-center gap-2 rounded-[9px] px-2.5 py-[3px] text-[12.5px] ${rijKnop ?? ""} ${
                 gekozen
                   ? "bg-accent text-accent-foreground"
-                  : anders
-                    ? "bg-tint-oranje text-tint-oranje-ink"
-                    : ""
+                  : nietGewassen
+                    ? "bg-tint-rood text-tint-rood-ink"
+                    : anders
+                      ? "bg-tint-oranje text-tint-oranje-ink"
+                      : ""
               }`}
             >
               {selecteren && (
@@ -1566,16 +1596,36 @@ function StraatRij({
                   ⏰ {beloofd.get(c.id)}
                 </span>
               )}
+              {/* Teruggemeld aan de deur: hier is deze maand niet gewassen.
+                  De beurt blijft staan, maar hij is niet gedaan en kost niets. */}
+              {nietGewassen && (
+                <span
+                  className="shrink-0 rounded-full bg-tint-rood-ink px-2 py-[1px] text-[10.5px] font-medium text-tint-rood"
+                  title={
+                    regel?.nietGewassenDoor
+                      ? `${regel.nietGewassenDoor} hoorde aan de deur dat hier niet gewassen is`
+                      : "Aan de deur teruggemeld: hier is niet gewassen"
+                  }
+                >
+                  niet gewassen
+                </span>
+              )}
               <span
                 className={`min-w-0 flex-1 truncate ${
-                  anders ? "italic" : gekozen ? "" : "text-muted-foreground"
+                  anders ? "italic" : gekozen || nietGewassen ? "" : "text-muted-foreground"
                 }`}
               >
                 {anders || notitie}
               </span>
               {prijzenZien && (
                 <span className={`shrink-0 tabular-nums ${aangepast ? "font-medium" : ""}`}>
-                  {formatPrice(regel?.prijs ?? c.price)}
+                  {nietGewassen ? (
+                    <span className="line-through opacity-70">
+                      {formatPrice(regel?.prijsVervallen ?? c.price)}
+                    </span>
+                  ) : (
+                    formatPrice(regel?.prijs ?? c.price)
+                  )}
                 </span>
               )}
             </li>

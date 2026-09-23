@@ -67,6 +67,12 @@
   --color-tint-turkoois-mid: var(--tint-turkoois-mid);
   --color-tint-geel: var(--tint-geel);
   --color-tint-geel-ink: var(--tint-geel-ink);
+  --color-tint-salie: var(--tint-salie);
+  --color-tint-salie-ink: var(--tint-salie-ink);
+  --color-tint-kastanje: var(--tint-kastanje);
+  --color-tint-kastanje-ink: var(--tint-kastanje-ink);
+  --color-tint-grafiet: var(--tint-grafiet);
+  --color-tint-grafiet-ink: var(--tint-grafiet-ink);
   --color-kaart-blauw: var(--kaart-blauw);
   --color-kaart-blauw-ink: var(--kaart-blauw-ink);
   --color-kaart-amber: var(--kaart-amber);
@@ -156,12 +162,12 @@
   --background: oklch(0.971 0.008 78);
   --surface: oklch(0.944 0.012 78);
   --foreground: oklch(0.245 0.008 70);
-  --card: oklch(0.995 0.002 80);
+  --card: oklch(1 0.002 80);
   /* Dieper dan de kaart zelf: de kopstrook van een straatkaart moet je
      zien liggen. In het donker is deze kleur juist lichter dan de kaart. */
   --card-header: oklch(0.944 0.012 78);
   --card-foreground: oklch(0.245 0.008 70);
-  --popover: oklch(0.995 0.002 80);
+  --popover: oklch(1 0.002 80);
   --popover-foreground: oklch(0.245 0.008 70);
   /* Donkere knoppen zijn warm zwart, geen marineblauw: op crème valt een
      blauwzweem op als vuil. */
@@ -217,6 +223,27 @@
      betekeniskleuren af, zodat het opvalt zonder te waarschuwen. */
   --tint-geel: #FBF3D0;
   --tint-geel-ink: #6B4E07;
+  /* Salie: de knop waarmee je een adres afrondt. Eén kleur voor alle thema's,
+     net als de vier gekozen kleuren verderop — donker genoeg voor het papier en
+     licht genoeg voor het zwart, dus hij hoeft niet om te draaien. De tekst
+     erop is bijna zwart: wit haalt op dit groen de leesnorm niet. */
+  --tint-salie: #7EA16B;
+  --tint-salie-ink: #0F2408;
+  /* Kastanje: een klacht. De diepe kant van rood, zodat hij niet samenvalt met
+     het zalmrood van "er kwam geen geld". Net als salie één waarde voor alle
+     thema's, maar dan een diep vlak met lichte tekst — dus niet in de lijst met
+     felle vlakken verderop, en wie hem gebruikt zet er text-tint-kastanje-ink
+     bij. */
+  --tint-kastanje: #551B14;
+  --tint-kastanje-ink: #F3EEE5;
+  /* Grafiet: de knop waarmee de wasbeurt eraf gaat. Net als salie en
+     kastanje één waarde voor alle thema's. Hij is expres een tikje lichter
+     dan de kaart in het donker, zodat hij vanzelf naar voren komt en geen
+     randje nodig heeft; op papier leest hij als een zwarte knop. Ook deze
+     staat niet in de lijst met felle vlakken verderop: het is een diep vlak
+     met lichte tekst, dus zet er text-tint-grafiet-ink bij. */
+  --tint-grafiet: #2E2E2E;
+  --tint-grafiet-ink: #F3EEE5;
   --secondary: oklch(0.955 0.007 78);
   --secondary-foreground: oklch(0.3 0.008 70);
   --muted: oklch(0.957 0.007 78);
@@ -228,7 +255,9 @@
   --border: oklch(0.902 0.008 78);
   --input: oklch(0.902 0.008 78);
   --ring: #85B7EB;
-  --shadow-card: 0 1px 2px oklch(0.4 0.02 70 / 5%), 0 4px 12px oklch(0.4 0.02 70 / 5%);
+  /* Zonder randje om de vakken doet de schaduw het werk: iets dieper dan een
+     haarlijn, zodat een wit paneel los komt te liggen van het crème papier. */
+  --shadow-card: 0 1px 2px oklch(0.35 0.02 70 / 7%), 0 6px 18px oklch(0.35 0.02 70 / 9%);
   /* Het duimpje van een schuifbalk: dezelfde warme grijstint als de randen,
      zodat hij bij het papier hoort in plaats van er een systeemstreep op. */
   --schuifduim: oklch(0.4 0.02 70 / 18%);
@@ -319,10 +348,10 @@
   --background: oklch(0.165 0.006 75);
   --surface: oklch(0.205 0.008 75);
   --foreground: oklch(0.955 0.004 80);
-  --card: oklch(0.215 0.008 75);
-  --card-header: oklch(0.255 0.009 75);
+  --card: oklch(0.235 0.008 75);
+  --card-header: oklch(0.275 0.009 75);
   --card-foreground: oklch(0.955 0.004 80);
-  --popover: oklch(0.235 0.009 75);
+  --popover: oklch(0.255 0.009 75);
   --popover-foreground: oklch(0.955 0.004 80);
   --primary: oklch(0.94 0.006 80);
   --primary-foreground: oklch(0.22 0.008 70);
@@ -444,7 +473,7 @@
   --border: #e6e0d5;
   --input: #e2dcd0;
   --ring: #ff5b1f;
-  --shadow-card: 0 1px 2px rgb(20 20 19 / 4%), 0 4px 12px rgb(20 20 19 / 4%);
+  --shadow-card: 0 1px 2px rgb(20 20 19 / 6%), 0 6px 18px rgb(20 20 19 / 8%);
   --shadow-tegel: 0 3px 8px rgb(20 20 19 / 8%), 0 14px 30px rgb(20 20 19 / 10%);
   --schuifduim: rgb(20 20 19 / 18%);
   --schuifduim-aan: rgb(20 20 19 / 34%);
@@ -564,34 +593,34 @@
 
 .fel.dark {
   --background: #000000;
-  --surface: #161616;
+  --surface: #212121;
   --foreground: #f3eee5;
-  --card: #111111;
-  --card-header: #1a1a1a;
+  --card: #191919;
+  --card-header: #222222;
   --card-foreground: #f3eee5;
-  --popover: #1a1a1a;
+  --popover: #232323;
   --popover-foreground: #f3eee5;
-  --secondary: #1c1c1c;
+  --secondary: #262626;
   --secondary-foreground: #f3eee5;
-  --muted: #1a1a1a;
+  --muted: #242424;
   --muted-foreground: #9c9993;
-  --accent: #1f1f1f;
+  --accent: #2a2a2a;
   --accent-foreground: #f3eee5;
   --destructive: #e5484d;
   --border: rgb(255 255 255 / 10%);
   --input: rgb(255 255 255 / 14%);
   /* Schaduw doet op zwart niets; een haarlijntje wel. */
-  --shadow-card: 0 0 0 1px rgb(255 255 255 / 6%);
+  --shadow-card: 0 0 0 1px rgb(255 255 255 / 9%);
   --shadow-tegel: 0 0 0 1px rgb(255 255 255 / 12%), 0 12px 26px rgb(0 0 0 / 50%);
   --schuifduim: rgb(255 255 255 / 14%);
   --schuifduim-aan: rgb(255 255 255 / 28%);
 
   --grond-vlak: #000000;
-  --grond-kaart: #111111;
-  --grond-zacht: #1a1a1a;
+  --grond-kaart: #191919;
+  --grond-zacht: #242424;
   --grond-rand: rgb(255 255 255 / 10%);
-  --grond-surface: #161616;
-  --grond-kop: #1a1a1a;
+  --grond-surface: #212121;
+  --grond-kop: #222222;
   /* Op zwart is de tekst de felle kleur zelf. */
   --grond-tekst: #f3eee5;
   --grond-grijs: #9c9993;
@@ -652,7 +681,8 @@
     .bg-tint-paars,
     .bg-tint-rood,
     .bg-tint-oranje,
-    .bg-tint-roze
+    .bg-tint-roze,
+    .bg-tint-salie
   ),
 :where(.fel [data-selecteren]) :where([class*="in-data-[selecteren]:bg-tint-"]) {
   --foreground: #141413;
@@ -1175,7 +1205,8 @@
       .bg-tint-paars,
       .bg-tint-rood,
       .bg-tint-oranje,
-      .bg-tint-roze
+      .bg-tint-roze,
+      .bg-tint-salie
     ),
   :where(.fel [data-selecteren]) :where([class*="in-data-[selecteren]:bg-tint-"]),
   :where(.fel [data-selecteren]) :where([class*="in-data-[selecteren]:bg-transparent"]) {

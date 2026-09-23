@@ -29,6 +29,17 @@ export interface WasdagRegel {
    * adres, net als het bedrag hierboven.
    */
   notitie?: string | null;
+  /**
+   * Een geldloper hoorde aan de deur dat er deze maand niet gewassen is. De
+   * regel blijft staan zodat je ziet dát het misging, maar het bedrag telt
+   * nergens meer mee: `prijs` is dan 0 en het oorspronkelijke bedrag staat in
+   * `prijs_vervallen`.
+   */
+  niet_gewassen?: boolean;
+  /** Wie het terugmeldde, voor op de dag. */
+  niet_gewassen_naam?: string | null;
+  /** Wat de beurt zou hebben gekost, om doorgestreept te tonen. */
+  prijs_vervallen?: number;
 }
 
 /**
@@ -62,7 +73,9 @@ export function toonDatum(datum: string): string {
 export async function fetchWasdag(datum: string): Promise<WasdagRegel[]> {
   const { data, error } = await supabase
     .from("wasdag_regels")
-    .select("customer_id,notitie,ploeg_nr,volgorde,rest,vaste_start,wasdag_prijzen(prijs)")
+    .select(
+      "customer_id,notitie,ploeg_nr,volgorde,rest,vaste_start,niet_gewassen_op,niet_gewassen_naam,wasdag_prijzen(prijs)",
+    )
     .eq("datum", datum);
   if (error) throw error;
   // Het bedrag staat in wasdag_prijzen; zonder het recht "prijzen zien" is dat 0.
@@ -74,17 +87,79 @@ export async function fetchWasdag(datum: string): Promise<WasdagRegel[]> {
       volgorde: number | null;
       rest: boolean | null;
       vaste_start: string | null;
+      niet_gewassen_op: string | null;
+      niet_gewassen_naam: string | null;
       wasdag_prijzen: { prijs: number } | { prijs: number }[] | null;
     }[]
   ).map((r) => ({
     customer_id: r.customer_id,
     notitie: r.notitie,
-    prijs: Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0),
+    ...vervallenPrijs(r, Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0)),
     ploeg_nr: r.ploeg_nr,
     volgorde: r.volgorde,
     rest: r.rest ?? false,
     vaste_start: r.vaste_start ? r.vaste_start.slice(0, 5) : null,
   }));
+}
+
+/**
+ * Het bedrag van een regel, en of hij vervallen is. Een beurt die als "niet
+ * gewassen" is teruggemeld kost niets meer: `prijs` gaat op 0, zodat geen
+ * enkele optelling in de app hem nog meeneemt — de dag, de maand, het
+ * dashboard. Wat hij zou hebben gekost blijft bewaard om door te strepen.
+ */
+function vervallenPrijs(
+  r: { niet_gewassen_op: string | null; niet_gewassen_naam: string | null },
+  prijs: number,
+): Pick<WasdagRegel, "prijs" | "prijs_vervallen" | "niet_gewassen" | "niet_gewassen_naam"> {
+  if (!r.niet_gewassen_op) return { prijs };
+  return {
+    prijs: 0,
+    prijs_vervallen: prijs,
+    niet_gewassen: true,
+    niet_gewassen_naam: r.niet_gewassen_naam,
+  };
+}
+
+/**
+ * De adressen waar een geldloper aan de deur terugmeldde dat er niet gewassen
+ * is, tussen twee datums. Een klein lijstje — meestal een handvol per maand —
+ * zodat de wijkenpagina het kan laten zien zonder de hele maandplanning op te
+ * halen.
+ */
+export async function fetchNietGewassen(
+  vanaf: string,
+  tot: string,
+): Promise<{ customer_id: string; datum: string }[]> {
+  const { data, error } = await supabase
+    .from("wasdag_regels")
+    .select("customer_id,datum")
+    .gte("datum", vanaf)
+    .lte("datum", tot)
+    .not("niet_gewassen_op", "is", null);
+  if (error) throw error;
+  const gemeld = ((data ?? []) as { customer_id: string | null; datum: string }[]).filter(
+    (r): r is { customer_id: string; datum: string } => r.customer_id !== null,
+  );
+  if (gemeld.length === 0) return [];
+
+  // Staat het adres deze maand alweer op een gewone dag — opnieuw ingepland
+  // of alsnog gewassen — dan is het ingehaald en hoeft de melding er niet
+  // meer bij te staan.
+  const { data: ingehaald, error: fout } = await supabase
+    .from("wasdag_regels")
+    .select("customer_id")
+    .gte("datum", vanaf)
+    .lte("datum", tot)
+    .is("niet_gewassen_op", null)
+    .in("customer_id", [...new Set(gemeld.map((r) => r.customer_id))]);
+  if (fout) throw fout;
+  const klaar = new Set(
+    ((ingehaald ?? []) as { customer_id: string | null }[])
+      .map((r) => r.customer_id)
+      .filter((id): id is string => id !== null),
+  );
+  return gemeld.filter((r) => !klaar.has(r.customer_id));
 }
 
 /** Eén regel met de dag erbij, voor het maandoverzicht. */
@@ -99,7 +174,9 @@ export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagD
   const data = await haalAllePaginas((van, totRij) =>
     supabase
       .from("wasdag_regels")
-      .select("id,datum,customer_id,ploeg_nr,volgorde,rest,vaste_start,wasdag_prijzen(prijs)")
+      .select(
+        "id,datum,customer_id,ploeg_nr,volgorde,rest,vaste_start,niet_gewassen_op,niet_gewassen_naam,wasdag_prijzen(prijs)",
+      )
       .gte("datum", vanaf)
       .lte("datum", tot)
       .order("datum", { ascending: true })
@@ -114,12 +191,14 @@ export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagD
       volgorde: number | null;
       rest: boolean | null;
       vaste_start: string | null;
+      niet_gewassen_op: string | null;
+      niet_gewassen_naam: string | null;
       wasdag_prijzen: { prijs: number } | { prijs: number }[] | null;
     }[]
   ).map((r) => ({
     datum: r.datum,
     customer_id: r.customer_id,
-    prijs: Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0),
+    ...vervallenPrijs(r, Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0)),
     ploeg_nr: r.ploeg_nr,
     volgorde: r.volgorde,
     rest: r.rest ?? false,

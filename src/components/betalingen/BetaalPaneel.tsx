@@ -8,19 +8,21 @@ import {
   IconDoorOff as DoorOff,
   IconFolder as Folder,
   IconWalletOff as WalletOff,
+  IconX as Kruis,
 } from "@tabler/icons-react";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { KortingDialoog, BedragDialoog, KlachtDialoog } from "@/components/betalingen/DeurDialogen";
 import { GeldloopDossier } from "@/components/betalingen/GeldloopDossier";
+import { useBevestig } from "@/components/Bevestig";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { frequentieKort, rekening } from "@/lib/betalingen";
+import { frequentieZin, rekening } from "@/lib/betalingen";
 import { useAuth } from "@/lib/auth";
 import {
+  geldloopNietGewassen,
   heeftIetsOpen,
   nieuweTik,
-  nietGewassen,
   type GeldloopAdres,
   type Tik,
   type Vrijgave,
@@ -32,9 +34,9 @@ type Venster = "korting" | "bedrag" | "klacht" | "dossier" | null;
 
 /**
  * Wat je ziet als je een adres aantikt: bovenin wat je leest (wie, wat er
- * open staat en waarvoor), onderin wat je aantikt — eerst de vier gele
- * knoppen, dan Niet thuis en Geen geld, en helemaal onderaan de grote groene
- * Betaald.
+ * open staat en waarvoor), onderin wat je aantikt — eerst de rij van vier
+ * (Korting, Deel betaald, Klacht en Dossier), dan Niet thuis, Geen geld en
+ * Niet gewassen, en helemaal onderaan de grote saliegroene Betaald.
  *
  * Op de telefoon schuift het van onderen omhoog, zodat alles onder je duim
  * zit. Op de computer is dat onhandig: daar staat hetzelfde als een venster
@@ -62,6 +64,7 @@ export function BetaalPaneel({
 }) {
   const { employee } = useAuth();
   const mobiel = useIsMobile();
+  const bevestig = useBevestig();
   const isEigenaar = employee?.rol === "eigenaar";
   const [venster, setVenster] = useState<Venster>(null);
   // Het laatst gekozen adres vasthouden terwijl het paneel dichtschuift.
@@ -118,7 +121,6 @@ export function BetaalPaneel({
   }
 
   const regels = a ? rekening(a.delen) : [];
-  const nietDezeMaand = a ? nietGewassen(a, vrijgave.datum) : null;
   const open = a && heeftIetsOpen(a);
   const kanTikken = !!a && (!voorbij || isEigenaar);
   const vanMij = a?.vanavond && (a.vanavond.door === employee?.id || isEigenaar);
@@ -126,6 +128,31 @@ export function BetaalPaneel({
   function betaalAlles() {
     if (!a || !open || !kanTikken) return;
     void tik({ soort: "betaald", bedrag: a.open }, `Betaald ${formatPrice(a.open)}`, true);
+  }
+
+  /**
+   * Er is hier helemaal niet gewassen — vergeten, of er kon niemand bij. De
+   * beurt blijft op de dag staan, maar telt niet meer mee: het bedrag vervalt
+   * en het adres telt weer als niet gewassen.
+   */
+  async function meldNietGewassen() {
+    if (!a) return;
+    const nummer = `${a.house_number}${a.addition}`;
+    const ja = await bevestig({
+      titel: `Nummer ${nummer} niet gewassen?`,
+      tekst:
+        "De beurt blijft op de dag staan, maar telt niet meer mee: het bedrag vervalt en hij kleurt rood. Het adres telt weer als niet gewassen, zodat je hem opnieuw kunt inplannen.",
+      bevestigLabel: "Niet gewassen",
+    });
+    if (!ja) return;
+    try {
+      await geldloopNietGewassen(a.id, vrijgave.datum);
+      onVeranderd();
+      onSluit();
+      toast.success(`Niet gewassen · nr ${nummer}`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   }
 
   /** Het toetsenbord in het venster op de computer. */
@@ -160,20 +187,14 @@ export function BetaalPaneel({
             {a.addition}
             {a.naam && <span className="font-normal"> · {a.naam}</span>}
           </Titel>
-          <span className="shrink-0 text-[12.5px] text-muted-foreground">{frequentieKort(a)}</span>
+          <span className="shrink-0 text-[12.5px] text-muted-foreground">{frequentieZin(a)}</span>
         </div>
         <p className="text-[13px] text-muted-foreground">
           {a.straat}
           {a.note && ` · ${a.note}`}
         </p>
-        {nietDezeMaand && (
-          <p className="mt-2 w-fit rounded-full bg-tint-geel px-2.5 py-0.5 text-[12.5px] text-tint-geel-ink">
-            {nietDezeMaand}: ze rekenen misschien niet op je
-          </p>
-        )}
-
         {a.klachten.length > 0 && (
-          <div className="mt-3 space-y-1 rounded-[14px] bg-tint-rood px-3 py-2 text-[13px] text-tint-rood-ink">
+          <div className="mt-3 space-y-1 rounded-[14px] bg-tint-kastanje px-3 py-2 text-[13px] text-tint-kastanje-ink">
             {a.klachten.map((k, i) => (
               <p key={i} className="flex gap-2">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {k}
@@ -195,7 +216,7 @@ export function BetaalPaneel({
           <div
             className={`mt-3 flex items-center gap-2 rounded-[14px] px-3 py-2 text-[13px] ${
               a.vanavond.soort === "betaald"
-                ? "bg-tint-groen text-tint-groen-ink"
+                ? "bg-tint-salie text-tint-salie-ink"
                 : "bg-surface text-foreground"
             }`}
           >
@@ -310,7 +331,7 @@ export function BetaalPaneel({
           )}
           <div className="mb-2 grid grid-cols-4 gap-1.5">
             <DeurKnop
-              kleur="geel"
+              kleur="amber"
               smal
               icoon={<Discount className="size-[18px]" />}
               disabled={!open}
@@ -319,28 +340,26 @@ export function BetaalPaneel({
               Korting
             </DeurKnop>
             <DeurKnop
-              kleur="geel"
+              kleur="groen"
               smal
               icoon={<Coin className="size-[18px]" />}
-
+              disabled={!open}
               onClick={() => setVenster("bedrag")}
             >
-              Ander bedrag
+              Deel betaald
             </DeurKnop>
             <DeurKnop
-              kleur="geel"
+              kleur="kastanje"
               smal
               icoon={<AlertTriangle className="size-[18px]" />}
-
               onClick={() => setVenster("klacht")}
             >
               Klacht
             </DeurKnop>
             <DeurKnop
-              kleur="geel"
+              kleur="amber"
               smal
               icoon={<Folder className="size-[18px]" />}
-
               onClick={() => setVenster("dossier")}
             >
               Dossier
@@ -348,11 +367,10 @@ export function BetaalPaneel({
           </div>
           {open && (
             <>
-              <div className="mb-2 grid grid-cols-2 gap-2">
+              <div className="mb-2 grid grid-cols-3 gap-2">
                 <DeurKnop
                   kleur="rood"
                   icoon={<DoorOff className="size-[18px]" />}
-
                   onClick={() => void tik({ soort: "niet_thuis" }, "Niet thuis", true)}
                 >
                   Niet thuis
@@ -360,14 +378,20 @@ export function BetaalPaneel({
                 <DeurKnop
                   kleur="rood"
                   icoon={<WalletOff className="size-[18px]" />}
-
                   onClick={() => void tik({ soort: "geen_geld" }, "Geen geld", true)}
                 >
                   Geen geld
                 </DeurKnop>
+                <DeurKnop
+                  kleur="grafiet"
+                  icoon={<Kruis className="size-[18px]" />}
+                  onClick={() => void meldNietGewassen()}
+                >
+                  Niet gewassen
+                </DeurKnop>
               </div>
               <DeurKnop
-                kleur="groen"
+                kleur="salie"
                 icoon={<Check className="size-[22px]" />}
 
                 onClick={betaalAlles}
@@ -468,15 +492,30 @@ function Chip({
 }
 
 /**
- * De knoppen aan de deur. Dezelfde vorm voor alle drie de kleuren, zodat het
- * één rij knoppen lijkt die alleen in betekenis verschilt: geel is opzoeken of
- * aanpassen, rood is er kwam geen geld, groen is betaald. De gele staan met
- * z'n vieren op een rij en zijn daarom half zo breed.
+ * De knoppen aan de deur. Dezelfde vorm voor alle kleuren, zodat het één rij
+ * knoppen lijkt die alleen in betekenis verschilt. De kleur zegt wat er
+ * gebeurt: amber is opzoeken of aanpassen, groen is er komt een deel binnen,
+ * kastanje is een klacht, rood is er kwam geen geld, grafiet is de wasbeurt
+ * gaat eraf, en salie is helemaal betaald. De vier bovenste staan op een rij
+ * en zijn daarom half zo breed.
  */
+const SMAL = "min-h-14 flex-col gap-1 px-1 text-[11.5px] leading-tight";
+
 const DEURKLEUR = {
-  geel: "min-h-14 flex-col gap-1 px-1 text-[11.5px] leading-tight bg-tint-geel text-tint-geel-ink",
-  rood: "min-h-14 text-[15px] bg-tint-rood text-tint-rood-ink",
-  groen: "min-h-16 text-[19px] bg-tint-groen-ink text-white",
+  amber: `${SMAL} bg-tint-amber text-tint-amber-ink`,
+  // Deel betaald groen: er komt geld binnen, alleen niet alles.
+  groen: `${SMAL} bg-tint-groen text-tint-groen-ink`,
+  // Een klacht blijft rood, maar niet hetzelfde rood als de pof hieronder:
+  // kastanje is de diepe kant van dezelfde familie.
+  kastanje: `${SMAL} bg-tint-kastanje text-tint-kastanje-ink`,
+  rood: "min-h-14 text-[13.5px] bg-tint-rood text-tint-rood-ink",
+  // Grafiet valt buiten het hele geldverhaal, en dat klopt: dit gaat niet over
+  // de centen maar over het werk. De wasbeurt gaat eraf en het adres komt
+  // terug in de planning.
+  grafiet: "min-h-14 text-[13.5px] bg-tint-grafiet text-tint-grafiet-ink",
+  // Salie met bijna zwarte tekst. Het lichte groen haalde met witte letters de
+  // leesnorm niet; deze kleur staat in elk thema hetzelfde op het scherm.
+  salie: "min-h-16 text-[19px] bg-tint-salie text-tint-salie-ink",
 } as const;
 
 function DeurKnop({

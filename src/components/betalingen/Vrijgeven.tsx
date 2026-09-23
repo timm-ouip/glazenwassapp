@@ -10,6 +10,7 @@ import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { StratenVerdelenPaneel } from "@/components/betalingen/StratenVerdelenPaneel";
 import { useBevestig } from "@/components/Bevestig";
 import { useAuth } from "@/lib/auth";
 import { dagKort } from "@/lib/betalingen";
@@ -70,6 +71,8 @@ export function Vrijgeven({ onLopen }: { onLopen: () => void }) {
     enabled: !!company,
   });
 
+  // Bij welke avond het verdeelpaneel openstaat.
+  const [verdelen, setVerdelen] = useState<string | null>(null);
   const [datum, setDatum] = useState(vandaag());
   const [wijken, setWijken] = useState<Set<string>>(new Set());
   const [gekozen, setGekozen] = useState<Set<string>>(new Set());
@@ -313,6 +316,14 @@ export function Vrijgeven({ onLopen }: { onLopen: () => void }) {
                       Meekijken
                     </Button>
                   )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => setVerdelen((was) => (was === v.id ? null : v.id))}
+                  >
+                    {verdelen === v.id ? "Verdelen sluiten" : "Straten verdelen"}
+                  </Button>
                   <label className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
                     Tot
                     <Input
@@ -335,6 +346,7 @@ export function Vrijgeven({ onLopen }: { onLopen: () => void }) {
                   </Button>
                 </div>
               )}
+              {actief && verdelen === v.id && <StratenVerdelenPaneel vrijgave={v} />}
             </div>
           );
         })}

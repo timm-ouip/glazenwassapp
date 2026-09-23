@@ -20,7 +20,7 @@ import { useAuth } from "@/lib/auth";
 import {
   effectieveMethode,
   fetchGeldStandWijk,
-  frequentieKort,
+  frequentieKaart,
   zetBeginstand,
 } from "@/lib/betalingen";
 import { fetchVrijgaven } from "@/lib/geldlopen";
@@ -448,7 +448,7 @@ export function GeldKaart({
   }, [alleStraten, stratenVanWijk]);
 
   return (
-    <div className="space-y-3 pb-4 pt-1">
+    <div className="space-y-3 pb-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className={cn("flex flex-wrap gap-1.5", compact && "hidden")}>
           {(districts.data ?? []).map((d) => (
@@ -593,7 +593,9 @@ export function GeldKaart({
             )}
           </div>
         ) : (
-          <div className="min-w-0 flex-1">
+          // Bij het geldlopen staat het strookje op de telefoon onderin, bij je
+          // duim; daar zou het hier dubbel staan.
+          <div className={cn("min-w-0 flex-1", compact && "max-md:hidden")}>
             <div
               ref={stratenVak}
               className={cn(
@@ -699,7 +701,7 @@ export function GeldKaart({
               <thead>
                 <tr className="text-[11.5px] text-muted-foreground">
                   <th className="px-3 py-2 text-left font-medium">Nr</th>
-                  <th className="px-2 py-2 text-left font-medium">Naam</th>
+                  <th className="px-2 py-2 text-left font-medium">Frequentie</th>
                   <th className="px-2 py-2 text-right font-medium">€</th>
                   {MAANDEN.map((m, i) => (
                     <th
@@ -739,11 +741,14 @@ export function GeldKaart({
                         {c.addition}
                       </td>
                       <td className="max-w-[10rem] truncate px-2 py-1.5">
-                        {c.klant_id ? namen.get(c.klant_id) : ""}
-                        <span className="block text-[11px] text-muted-foreground">
-                          {frequentieKort(c)}
-                          {c.inactief_op ? " · gestopt" : ""}
-                        </span>
+                        {frequentieKaart(c)}
+                        {c.inactief_op && <span className="text-muted-foreground"> · gestopt</span>}
+                        {/* De naam eronder, klein, en alleen als hij er is. */}
+                        {c.klant_id && namen.get(c.klant_id) && (
+                          <span className="block truncate text-[11px] text-muted-foreground">
+                            {namen.get(c.klant_id)}
+                          </span>
+                        )}
                       </td>
                       <td className="px-2 py-1.5 text-right tabular-nums">
                         {c.price > 0 ? formatPrice(c.price) : ""}
@@ -793,7 +798,7 @@ export function GeldKaart({
                                 vak.soort === "betaald"
                                   ? vak.korting
                                     ? "bg-tint-paars text-tint-paars-ink"
-                                    : "bg-tint-groen text-tint-groen-ink"
+                                    : "bg-tint-salie text-tint-salie-ink"
                                   : vak.soort === "open"
                                     ? vak.nogOpen
                                       ? "bg-tint-rood text-tint-rood-ink"

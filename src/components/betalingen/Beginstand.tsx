@@ -12,7 +12,7 @@ import { formatPrice, sortCustomers, type Customer, type District } from "@/lib/
 import {
   dagKort,
   effectieveMethode,
-  frequentieKort,
+  frequentieZin,
   startWijk,
   zetBeginstand,
   zetWijkKlaar,
@@ -355,7 +355,7 @@ export function BeginstandBedragen({
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[13px]">{naam || " "}</p>
                       <p className="truncate text-[11.5px] text-muted-foreground">
-                        {frequentieKort(c)}
+                        {frequentieZin(c)}
                         {c.price > 0 && ` · ${formatPrice(c.price)}`}
                         {anders && ` · nu open ${formatPrice(nuOpen)}`}
                       </p>
