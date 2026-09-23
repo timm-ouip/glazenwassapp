@@ -194,7 +194,7 @@ export function BetaalPaneel({
           {a.note && ` · ${a.note}`}
         </p>
         {a.klachten.length > 0 && (
-          <div className="mt-3 space-y-1 rounded-[14px] bg-tint-oranje px-3 py-2 text-[13px] text-tint-oranje-ink">
+          <div className="mt-3 space-y-1 rounded-[14px] bg-tint-kastanje px-3 py-2 text-[13px] text-tint-kastanje-ink">
             {a.klachten.map((k, i) => (
               <p key={i} className="flex gap-2">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {k}
@@ -349,7 +349,7 @@ export function BetaalPaneel({
               Deel betaald
             </DeurKnop>
             <DeurKnop
-              kleur="oranje"
+              kleur="kastanje"
               smal
               icoon={<AlertTriangle className="size-[18px]" />}
               onClick={() => setVenster("klacht")}
@@ -383,7 +383,7 @@ export function BetaalPaneel({
                   Geen geld
                 </DeurKnop>
                 <DeurKnop
-                  kleur="kastanje"
+                  kleur="grafiet"
                   icoon={<Kruis className="size-[18px]" />}
                   onClick={() => void meldNietGewassen()}
                 >
@@ -495,9 +495,9 @@ function Chip({
  * De knoppen aan de deur. Dezelfde vorm voor alle kleuren, zodat het één rij
  * knoppen lijkt die alleen in betekenis verschilt. De kleur zegt wat er
  * gebeurt: amber is opzoeken of aanpassen, groen is er komt een deel binnen,
- * oranje vraagt om aandacht, rood is er kwam geen geld, kastanje is de
- * wasbeurt gaat eraf, en salie is helemaal betaald. De vier bovenste staan op
- * een rij en zijn daarom half zo breed.
+ * kastanje is een klacht, rood is er kwam geen geld, grafiet is de wasbeurt
+ * gaat eraf, en salie is helemaal betaald. De vier bovenste staan op een rij
+ * en zijn daarom half zo breed.
  */
 const SMAL = "min-h-14 flex-col gap-1 px-1 text-[11.5px] leading-tight";
 
@@ -505,14 +505,14 @@ const DEURKLEUR = {
   amber: `${SMAL} bg-tint-amber text-tint-amber-ink`,
   // Deel betaald groen: er komt geld binnen, alleen niet alles.
   groen: `${SMAL} bg-tint-groen text-tint-groen-ink`,
-  // Klacht is in het thema Fel de enige felle kleur in die rij en springt er
-  // daar meteen uit. In crème is oranje een zacht pasteltintje dat dicht bij
-  // amber ligt; daar leest de rij dus rustiger dan hier bedoeld.
-  oranje: `${SMAL} bg-tint-oranje text-tint-oranje-ink`,
+  // Een klacht blijft rood, maar niet hetzelfde rood als de pof hieronder:
+  // kastanje is de diepe kant van dezelfde familie.
+  kastanje: `${SMAL} bg-tint-kastanje text-tint-kastanje-ink`,
   rood: "min-h-14 text-[13.5px] bg-tint-rood text-tint-rood-ink",
-  // Kastanje, want dit gaat niet over geld maar over het werk zelf: de wasbeurt
-  // gaat eraf en het adres komt terug in de planning.
-  kastanje: "min-h-14 text-[13.5px] bg-tint-kastanje text-tint-kastanje-ink",
+  // Grafiet valt buiten het hele geldverhaal, en dat klopt: dit gaat niet over
+  // de centen maar over het werk. De wasbeurt gaat eraf en het adres komt
+  // terug in de planning.
+  grafiet: "min-h-14 text-[13.5px] bg-tint-grafiet text-tint-grafiet-ink",
   // Salie met bijna zwarte tekst. Het lichte groen haalde met witte letters de
   // leesnorm niet; deze kleur staat in elk thema hetzelfde op het scherm.
   salie: "min-h-16 text-[19px] bg-tint-salie text-tint-salie-ink",

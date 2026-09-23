@@ -68,6 +68,8 @@
   --color-tint-salie-ink: var(--tint-salie-ink);
   --color-tint-kastanje: var(--tint-kastanje);
   --color-tint-kastanje-ink: var(--tint-kastanje-ink);
+  --color-tint-grafiet: var(--tint-grafiet);
+  --color-tint-grafiet-ink: var(--tint-grafiet-ink);
   --color-kaart-blauw: var(--kaart-blauw);
   --color-kaart-blauw-ink: var(--kaart-blauw-ink);
   --color-kaart-amber: var(--kaart-amber);
@@ -224,12 +226,21 @@
      erop is bijna zwart: wit haalt op dit groen de leesnorm niet. */
   --tint-salie: #7EA16B;
   --tint-salie-ink: #0F2408;
-  /* Kastanje: de knop waarmee de wasbeurt eraf gaat. Net als salie één waarde
-     voor alle thema's, maar dan een diep vlak met lichte tekst — dus niet in de
-     lijst met felle vlakken verderop, en wie hem gebruikt zet er
-     text-tint-kastanje-ink bij. */
+  /* Kastanje: een klacht. De diepe kant van rood, zodat hij niet samenvalt met
+     het zalmrood van "er kwam geen geld". Net als salie één waarde voor alle
+     thema's, maar dan een diep vlak met lichte tekst — dus niet in de lijst met
+     felle vlakken verderop, en wie hem gebruikt zet er text-tint-kastanje-ink
+     bij. */
   --tint-kastanje: #551B14;
   --tint-kastanje-ink: #F3EEE5;
+  /* Grafiet: de knop waarmee de wasbeurt eraf gaat. Net als salie en
+     kastanje één waarde voor alle thema's. Hij is expres een tikje lichter
+     dan de kaart in het donker, zodat hij vanzelf naar voren komt en geen
+     randje nodig heeft; op papier leest hij als een zwarte knop. Ook deze
+     staat niet in de lijst met felle vlakken verderop: het is een diep vlak
+     met lichte tekst, dus zet er text-tint-grafiet-ink bij. */
+  --tint-grafiet: #2E2E2E;
+  --tint-grafiet-ink: #F3EEE5;
   --secondary: oklch(0.955 0.007 78);
   --secondary-foreground: oklch(0.3 0.008 70);
   --muted: oklch(0.957 0.007 78);

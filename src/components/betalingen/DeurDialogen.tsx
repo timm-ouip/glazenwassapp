@@ -401,7 +401,7 @@ export function BedragDialoog({
   );
 }
 
-/** Een klacht aan de deur: komt in het dossier van de klant, oranje. */
+/** Een klacht aan de deur: komt in het dossier van de klant, kastanje. */
 export function KlachtDialoog({
   open,
   adres,
@@ -439,9 +439,12 @@ export function KlachtDialoog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onSluit()}>
-      <PopupKader className="sm:max-w-sm">
+      {/* Het sluitkruisje staat buiten de kopstrook en neemt de tekstkleur van
+          de kaart over — op de diepe kastanje band is dat in de lichte thema's
+          bijna onzichtbaar. Daarom hier licht gezet. */}
+      <PopupKader className="sm:max-w-sm [&>button]:text-tint-kastanje-ink">
         <PopupKop
-          kleur="oranje"
+          kleur="kastanje"
           icoon={<AlertTriangle className="size-[22px]" />}
           titel="Klacht"
           subtitel={`Nr ${adres.house_number}${adres.addition}${adres.naam ? ` · ${adres.naam}` : ""}`}
