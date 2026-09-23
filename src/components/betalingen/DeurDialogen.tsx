@@ -349,7 +349,9 @@ export function BedragDialoog({
                   >
                     <span
                       className={`flex size-5 shrink-0 items-center justify-center rounded-[6px] border ${
-                        aan ? "border-transparent bg-tint-groen-ink text-white" : "border-border"
+                        aan
+                          ? "border-transparent bg-tint-groen-ink text-tint-groen"
+                          : "border-border"
                       }`}
                     >
                       {aan && <Check className="size-3.5" />}

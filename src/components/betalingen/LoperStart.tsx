@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 /** De vorm van de twee brede vakken, zoals de vakken op Home. */
 const GROOT_VAK =
-  "col-span-2 flex flex-col h-[156px] rounded-[28px] px-5 py-4 md:h-[240px] md:px-[26px] md:py-[22px]";
+  "col-span-2 flex flex-col h-[156px] rounded-[28px] px-5 py-4 md:h-[240px] md:px-[26px] md:py-[22px] zak:h-[136px] zak:md:h-[180px] zak:md:px-5 zak:md:py-4";
 
 /** Een balkje in de kleur van het vak zelf. */
 function Balk({ procent, label }: { procent: number; label: string }) {
@@ -98,11 +98,11 @@ export function LoperStart({
         <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
           <div className={cn(TEGEL_VAK, TEGEL_KLEUR.groen, GROOT_VAK)}>
             <TegelKop label="Jij nog te doen" pijl={false} />
-            <span className="mt-2.5 whitespace-nowrap font-display text-[52px] font-semibold leading-none tracking-[-0.05em] tabular-nums md:mt-[18px] md:text-[80px]">
+            <span className="mt-2.5 whitespace-nowrap font-display text-[52px] font-semibold leading-none tracking-[-0.05em] tabular-nums md:mt-[18px] md:text-[80px] zak:mt-2 zak:text-[32px] zak:tracking-[-0.02em] zak:md:mt-3 zak:md:text-[44px]">
               {o ? <TelGetal waarde={o.mijn_open} /> : leeg}
             </span>
             <div className="mt-auto flex flex-col gap-[7px] md:gap-2.5">
-              <span className="truncate text-[13px] opacity-80 md:text-[14.5px]">
+              <span className="truncate text-[13px] opacity-80 md:text-[14.5px] zak:text-[12px] zak:text-muted-foreground zak:opacity-100 zak:md:text-[12.5px]">
                 {o
                   ? `${o.mijn_open === 1 ? "adres" : "adressen"} in ${o.mijn_straten_open} ${
                       o.mijn_straten_open === 1 ? "straat" : "straten"
@@ -117,11 +117,11 @@ export function LoperStart({
 
           <div className={cn(TEGEL_VAK, TEGEL_KLEUR.oranje, GROOT_VAK)}>
             <TegelKop label="Samen nog te gaan" pijl={false} />
-            <span className="mt-2.5 whitespace-nowrap font-display text-[52px] font-semibold leading-none tracking-[-0.05em] tabular-nums md:mt-[18px] md:text-[80px]">
+            <span className="mt-2.5 whitespace-nowrap font-display text-[52px] font-semibold leading-none tracking-[-0.05em] tabular-nums md:mt-[18px] md:text-[80px] zak:mt-2 zak:text-[32px] zak:tracking-[-0.02em] zak:md:mt-3 zak:md:text-[44px]">
               {o ? <TelGetal waarde={o.samen_open} /> : leeg}
             </span>
             <div className="mt-auto flex flex-col gap-[7px] md:gap-2.5">
-              <span className="truncate text-[13px] opacity-80 md:text-[14.5px]">
+              <span className="truncate text-[13px] opacity-80 md:text-[14.5px] zak:text-[12px] zak:text-muted-foreground zak:opacity-100 zak:md:text-[12.5px]">
                 {o
                   ? `${o.samen_open === 1 ? "adres" : "adressen"} in de hele wijk · ${samenProcent}% gelopen`
                   : " "}
