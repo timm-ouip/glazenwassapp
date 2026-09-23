@@ -11,28 +11,29 @@ import { IconArrowUpRight as NaarRechtsBoven } from "@tabler/icons-react";
  *
  * Elke kleur zet ook --vak: de kleur van het vlak zelf, voor iets dat op het
  * vak ligt en zichzelf ervan los moet knippen — een randje om een bolletje,
- * bijvoorbeeld.
+ * bijvoorbeeld. En --vorm-kleur: de tweede kleur voor de uitgeknipte vorm die
+ * achter de tekst van het vak kan liggen (Vorm.tsx).
  */
 export const TEGEL_KLEUR = {
   oranje:
-    "bg-tegel-oranje text-tegel-oranje-ink [--tegel-accent:var(--tegel-oranje-accent)] [--vak:var(--tegel-oranje)]",
+    "bg-tegel-oranje text-tegel-oranje-ink [--tegel-accent:var(--tegel-oranje-accent)] [--vak:var(--tegel-oranje)] [--vorm-kleur:var(--tegel-oranje-vorm)]",
   creme:
-    "bg-tegel-creme text-tegel-creme-ink [--tegel-accent:var(--tegel-creme-accent)] [--vak:var(--tegel-creme)] shadow-card",
-  geel: "bg-tegel-geel text-tegel-geel-ink [--tegel-accent:var(--tegel-geel-accent)] [--vak:var(--tegel-geel)]",
-  aqua: "bg-tegel-aqua text-tegel-aqua-ink [--tegel-accent:var(--tegel-aqua-accent)] [--vak:var(--tegel-aqua)]",
+    "bg-tegel-creme text-tegel-creme-ink [--tegel-accent:var(--tegel-creme-accent)] [--vak:var(--tegel-creme)] [--vorm-kleur:var(--tegel-creme-vorm)] shadow-card",
+  geel: "bg-tegel-geel text-tegel-geel-ink [--tegel-accent:var(--tegel-geel-accent)] [--vak:var(--tegel-geel)] [--vorm-kleur:var(--tegel-geel-vorm)]",
+  aqua: "bg-tegel-aqua text-tegel-aqua-ink [--tegel-accent:var(--tegel-aqua-accent)] [--vak:var(--tegel-aqua)] [--vorm-kleur:var(--tegel-aqua-vorm)]",
   perzik:
-    "bg-tegel-perzik text-tegel-perzik-ink [--tegel-accent:var(--tegel-perzik-accent)] [--vak:var(--tegel-perzik)]",
+    "bg-tegel-perzik text-tegel-perzik-ink [--tegel-accent:var(--tegel-perzik-accent)] [--vak:var(--tegel-perzik)] [--vorm-kleur:var(--tegel-perzik-vorm)]",
   groen:
-    "bg-tegel-groen text-tegel-groen-ink [--tegel-accent:var(--tegel-groen-accent)] [--vak:var(--tegel-groen)]",
+    "bg-tegel-groen text-tegel-groen-ink [--tegel-accent:var(--tegel-groen-accent)] [--vak:var(--tegel-groen)] [--vorm-kleur:var(--tegel-groen-vorm)]",
   donker:
-    "bg-tegel-donker text-tegel-donker-ink [--tegel-accent:var(--tegel-donker-accent)] [--vak:var(--tegel-donker)] shadow-card",
-  goud: "bg-tegel-goud text-tegel-goud-ink [--tegel-accent:var(--tegel-goud-accent)] [--vak:var(--tegel-goud)]",
+    "bg-tegel-donker text-tegel-donker-ink [--tegel-accent:var(--tegel-donker-accent)] [--vak:var(--tegel-donker)] [--vorm-kleur:var(--tegel-donker-vorm)] shadow-card",
+  goud: "bg-tegel-goud text-tegel-goud-ink [--tegel-accent:var(--tegel-goud-accent)] [--vak:var(--tegel-goud)] [--vorm-kleur:var(--tegel-goud-vorm)]",
   paars:
-    "bg-tegel-paars text-tegel-paars-ink [--tegel-accent:var(--tegel-paars-accent)] [--vak:var(--tegel-paars)]",
+    "bg-tegel-paars text-tegel-paars-ink [--tegel-accent:var(--tegel-paars-accent)] [--vak:var(--tegel-paars)] [--vorm-kleur:var(--tegel-paars-vorm)]",
   petrol:
-    "bg-tegel-petrol text-tegel-petrol-ink [--tegel-accent:var(--tegel-petrol-accent)] [--vak:var(--tegel-petrol)]",
+    "bg-tegel-petrol text-tegel-petrol-ink [--tegel-accent:var(--tegel-petrol-accent)] [--vak:var(--tegel-petrol)] [--vorm-kleur:var(--tegel-petrol-vorm)]",
   ijsblauw:
-    "bg-tegel-ijsblauw text-tegel-ijsblauw-ink [--tegel-accent:var(--tegel-ijsblauw-accent)] [--vak:var(--tegel-ijsblauw)]",
+    "bg-tegel-ijsblauw text-tegel-ijsblauw-ink [--tegel-accent:var(--tegel-ijsblauw-accent)] [--vak:var(--tegel-ijsblauw)] [--vorm-kleur:var(--tegel-ijsblauw-vorm)]",
 } as const;
 
 /** De vorm van elk vak. Een vak dat ergens heen gaat, krijgt ook de hover. */

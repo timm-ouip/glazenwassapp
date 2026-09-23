@@ -347,6 +347,22 @@
   --tegel-petrol-ink: #E8F3F2;
   --tegel-ijsblauw: #CDE6F5;
   --tegel-ijsblauw-ink: #10344C;
+  /* De uitgeknipte vorm die achter de tekst van een vak ligt (Vorm.tsx). Per
+     vak een tweede kleur uit ditzelfde palet, altijd aan dezelfde kant als de
+     inkt: op een vak met bijna zwarte tekst een lichte vorm, op een diep vak
+     juist een diepere tint van datzelfde vak. Zo kan de vorm het cijfer nooit
+     moeilijker leesbaar maken. */
+  --tegel-oranje-vorm: #f2b705;
+  --tegel-creme-vorm: #efeae0;
+  --tegel-geel-vorm: #ffc7b0;
+  --tegel-aqua-vorm: #f2b705;
+  --tegel-perzik-vorm: #f2b705;
+  --tegel-groen-vorm: #146b4a;
+  --tegel-donker-vorm: #302c26;
+  --tegel-goud-vorm: #ffe3b6;
+  --tegel-paars-vorm: #a9d7d8;
+  --tegel-petrol-vorm: #12474b;
+  --tegel-ijsblauw-vorm: #ffffff;
   --grafiek-rustig: #c9c2b6;
   --grafiek-accent: #ff5b1f;
   --grafiek-klein-rustig: rgb(243 238 229 / 55%);
@@ -427,6 +443,8 @@
   --kaart-amber: #f3eee5;
   --tegel-creme: #f3eee5;
   --tegel-donker: #161616;
+  --tegel-creme-vorm: #e3dccd;
+  --tegel-donker-vorm: #2b2b2b;
   --grafiek-rustig: #6f6c68;
   /* Op de donkere kaart de lichte kant van goud en teal. */
   --serie-contant: #f2b705;
@@ -626,6 +644,30 @@
 }
 :where(.fel.dark) :where([class*="bg-tint-roze/"]) {
   --tint-roze: #72243e;
+}
+
+/*
+ * De uitgeknipte vormen op de vakken (Vorm.tsx). Ze liggen achter de tekst:
+ * het vak krijgt een eigen stapel (isolation) en de vorm een negatieve laag,
+ * waardoor hij boven de kleur van het vak valt maar onder alles wat erin
+ * staat. Zonder --vorm-kleur is hij doorzichtig en zie je niets.
+ *
+ * Ze horen bij Fel. In Zakelijk zijn de vakken wit met een randje en past er
+ * geen vorm bij, en wie ze in Instellingen uitzet krijgt `geen-vormen` op de
+ * pagina (src/lib/thema.ts).
+ */
+:where(:has(> .vak-vorm)) {
+  isolation: isolate;
+}
+.vak-vorm {
+  position: absolute;
+  z-index: -1;
+  color: var(--vorm-kleur, transparent);
+  pointer-events: none;
+}
+.zak .vak-vorm,
+.geen-vormen .vak-vorm {
+  display: none;
 }
 
 /*

@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vormen in Fel — voorbeeldpagina's</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/*
+ * Eén thema in licht en donker, met op elk vak een andere uitgeknipte vorm:
+ * vlek, blad, palmblad, golven, slinger, bloem, schelpen, wig. De kleuren zijn
+ * precies die van Fel zoals het nu in de app zit (src/styles.css); nieuw is
+ * alleen de vorm, in een tweede kleur uit datzelfde palet.
+ *
+ * Regel die overal geldt: de vorm ligt onder de tekst en mag die nooit
+ * moeilijker leesbaar maken. Op een vak met bijna zwarte letters is de vorm dus
+ * ook licht, en op een diep vak (flesgroen, petrol, zwart) juist een diepere
+ * tint van datzelfde vak. De vorm loopt van de rand af, zoals op de plaat: je
+ * ziet er een stuk van.
+ */
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: #12110f; color: #f3eee5;
+  font-family: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, .cijfer { font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; }
+.schil { max-width: 1240px; margin: 0 auto; padding: 28px 24px 80px; }
+.titel { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; }
+.onder { margin: 0 0 20px; color: #a5a09a; font-size: 14px; max-width: 74ch; line-height: 1.55; }
+.onder b { color: #f3eee5; font-weight: 600; }
+.kiezer { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
+.kiezer button {
+  font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  padding: 9px 16px; border-radius: 999px; border: 1px solid rgb(255 255 255 / 16%);
+  background: #1e1c19; color: #f3eee5;
+}
+.kiezer button:hover { background: #2a2724; }
+.kiezer button[aria-pressed="true"] { background: #f3eee5; color: #16150f; border-color: #f3eee5; }
+.kopje { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #78736c; margin: 34px 0 10px; }
+.slot { color: #a5a09a; font-size: 13.5px; line-height: 1.6; max-width: 76ch; margin-top: 26px; }
+.slot b { color: #f3eee5; font-weight: 600; }
+
+/* ---------- Fel, precies zoals het nu in de app zit ---------- */
+.demo {
+  --grond: #f4f0e8; --kaart: #ffffff; --rand: #e6e0d5;
+  --ink: #141413; --grijs: #5c5954;
+  --knop: #ff5b1f; --knop-ink: #140600;
+  --oranje: #ff5b1f; --amber: #f2b705; --aqua: #a9d7d8; --perzik: #ffc7b0;
+  --groen: #0c4a30; --paars: #7F7CAF; --petrol: #1A5E63; --zwart: #141413;
+}
+.demo.donker {
+  --grond: #000000; --kaart: #191919; --rand: rgb(255 255 255 / 10%);
+  --ink: #f3eee5; --grijs: #9c9993;
+  /* Net als in de app is het zwarte vak in het donker een tikje lichter dan
+     de ondergrond, anders zie je het niet liggen. */
+  --zwart: #161616;
+}
+.demo.uit .vorm { display: none; }
+
+.scherm {
+  background: var(--grond); color: var(--ink);
+  border-radius: 18px; padding: 26px; border: 1px solid rgb(255 255 255 / 8%);
+}
+.rij { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.bol {
+  width: 40px; height: 40px; border-radius: 999px; flex: none;
+  background: var(--knop); color: var(--knop-ink);
+  display: grid; place-items: center; font-weight: 700; font-size: 15px;
+}
+.groet { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+.dagregel { font-size: 13px; color: var(--grijs); margin: 2px 0 0; }
+.zoek {
+  margin-left: auto; display: flex; align-items: center; height: 38px; padding: 0 15px;
+  border-radius: 999px; background: var(--kaart); border: 1px solid var(--rand);
+  color: var(--grijs); font-size: 13px;
+}
+.knop { height: 38px; padding: 0 18px; border-radius: 999px; background: var(--knop); color: var(--knop-ink); font-size: 14px; font-weight: 600; display: flex; align-items: center; }
+
+.rooster { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.vak {
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column;
+  border-radius: 26px; padding: 18px 20px; min-height: 176px;
+  background: var(--vlak); color: var(--vlak-ink);
+}
+.vak.breed { grid-column: span 2; min-height: 254px; }
+.vak > *:not(.vorm) { position: relative; z-index: 1; }
+.vorm { position: absolute; z-index: 0; color: var(--tweede); pointer-events: none; }
+.vorm svg { display: block; width: 100%; height: 100%; }
+.label { display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 600; }
+/* Het pijltje ligt vaak op de vorm; te bleek zou het daar wegvallen. */
+.label .pijl { opacity: .9; }
+.cijfer { margin-top: auto; font-size: 54px; font-weight: 600; letter-spacing: -0.045em; line-height: 1; font-variant-numeric: tabular-nums; }
+.vak.breed .cijfer { font-size: 86px; }
+.regel { margin-top: 6px; font-size: 13px; opacity: .9; }
+.balkje { height: 7px; border-radius: 999px; background: color-mix(in srgb, currentColor 22%, transparent); margin-top: 12px; overflow: hidden; }
+.balkje i { display: block; height: 100%; border-radius: 999px; background: currentColor; }
+.staven { display: flex; align-items: flex-end; gap: 7px; height: 104px; margin-top: auto; }
+.staven i { flex: 1; border-radius: 6px 6px 3px 3px; background: rgb(243 238 229 / 55%); }
+.staven i.nu { background: var(--amber); }
+
+/* ---------- De lege pagina: daar mag de vorm het werk doen ---------- */
+.leeg {
+  position: relative; overflow: hidden; border-radius: 26px; margin-top: 12px;
+  background: var(--kaart); color: var(--ink); border: 1px solid var(--rand);
+  min-height: 200px; display: flex; flex-direction: column; justify-content: center;
+  padding: 26px 30px; --tweede: var(--aqua);
+}
+.leeg h3 { margin: 0 0 6px; font-size: 20px; font-family: "Outfit", sans-serif; font-weight: 600; }
+.leeg p { margin: 0; font-size: 14px; color: var(--grijs); max-width: 44ch; }
+.leeg > *:not(.vorm) { position: relative; z-index: 1; }
+
+/* ---------- De vormen los, en hoe hard ze mogen zijn ---------- */
+.staal-rooster { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.staal {
+  position: relative; overflow: hidden; border-radius: 22px; height: 180px;
+  background: var(--vlak); color: var(--vlak-ink);
+  display: flex; align-items: flex-end; padding: 16px 18px;
+}
+.staal .naam { position: relative; z-index: 1; font-size: 14px; font-weight: 600; }
+.drieluik { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.drieluik .vak { min-height: 196px; }
+.onderschrift { font-size: 12.5px; color: #8b8680; margin-top: 8px; }
+
+@media (max-width: 1100px) {
+  .rooster, .staal-rooster, .drieluik { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vak.breed { grid-column: span 2; }
+  .vak.breed .cijfer { font-size: 56px; }
+}
+@media (max-width: 620px) {
+  .rooster, .staal-rooster, .drieluik { grid-template-columns: minmax(0, 1fr); }
+  .vak.breed { grid-column: span 1; }
+  .cijfer, .vak.breed .cijfer { font-size: 40px; }
+  .groet { font-size: 20px; }
+  .scherm { padding: 16px; }
+  .zoek, .knop { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="schil">
+  <h1 class="titel">Uitgeknipte vormen op de vakken van Fel</h1>
+  <p class="onder">
+    Eén thema, in licht en donker — zelfde kleuren als nu: oranje, amber, aqua,
+    perzik, flesgroen, paars, petrol en zwart. Nieuw is alleen de <b>vorm</b> op
+    elk vak, elke keer een andere, in een tweede kleur uit datzelfde palet. De
+    vorm loopt van de rand af en blijft onder de tekst door: op een vak met
+    zwarte letters is de vorm licht, op een diep vak juist diep. Zet ze even uit
+    en aan om te zien wat het doet.
+  </p>
+
+  <div class="kiezer" id="kiezer">
+    <button data-k="licht" aria-pressed="true">Fel licht</button>
+    <button data-k="donker" aria-pressed="false">Fel donker</button>
+    <button id="uitknop" aria-pressed="true">Vormen</button>
+  </div>
+
+  <div class="demo" id="demo">
+
+    <p class="kopje">Home</p>
+    <div class="scherm">
+      <div class="rij">
+        <div class="bol">T</div>
+        <div>
+          <h2 class="groet">Goedemorgen, Timmie</h2>
+          <p class="dagregel">dinsdag 23 september · week 39</p>
+        </div>
+        <div class="zoek">Zoek een adres</div>
+        <div class="knop">+ Nieuw</div>
+      </div>
+
+      <div class="rooster">
+
+        <!-- Planning: de vlek -->
+        <div class="vak breed" style="--vlak: var(--oranje); --vlak-ink: #140600; --tweede: var(--amber)">
+          <span class="vorm" style="right:-40px; bottom:-70px; width:300px; height:250px">
+            <svg viewBox="0 0 200 200" aria-hidden="true"><path fill="currentColor" d="M104 6c46-6 92 28 94 74s-32 94-78 106S22 172 14 126 58 12 104 6Z"/></svg>
+          </span>
+          <span class="label">Planning vandaag <span class="pijl">›</span></span>
+          <span class="cijfer">€ 842,50</span>
+          <span class="regel">63 adressen · 2 extra opdrachten · nog 18 te gaan</span>
+          <span class="balkje"><i style="width:71%"></i></span>
+        </div>
+
+        <!-- Omzet: het blad, in een lichtere groentint -->
+        <div class="vak breed" style="--vlak: var(--groen); --vlak-ink: #f3eee5; --tweede: #146B4A">
+          <span class="vorm" style="left:-30px; top:-40px; width:230px; height:230px">
+            <svg viewBox="0 0 200 200" aria-hidden="true"><path fill="currentColor" d="M10 190C10 96 96 10 190 10c0 94-86 180-180 180Z"/></svg>
+          </span>
+          <span class="label">Omzet per maand <span class="pijl">↗</span></span>
+          <span class="cijfer" style="font-size:40px; margin-top:10px">€ 14.280</span>
+          <div class="staven">
+            <i style="height:46%"></i><i style="height:38%"></i><i style="height:57%"></i>
+            <i style="height:64%"></i><i style="height:52%"></i><i style="height:71%"></i>
+            <i style="height:60%"></i><i style="height:44%"></i><i class="nu" style="height:83%"></i>
+            <i style="height:30%"></i><i style="height:26%"></i><i style="height:34%"></i>
+          </div>
+        </div>
+
+        <!-- Klanten: het palmblad -->
+        <div class="vak" style="--vlak: var(--paars); --vlak-ink: #0B0A14; --tweede: var(--aqua)">
+          <span class="vorm" style="right:-44px; bottom:-40px; width:200px; height:200px">
+            <svg viewBox="0 0 200 200" aria-hidden="true">
+              <g fill="currentColor" transform="translate(186,196)">
+                <ellipse cx="0" cy="-80" rx="15" ry="82" transform="rotate(-8)"/>
+                <ellipse cx="0" cy="-80" rx="15" ry="82" transform="rotate(-32)"/>
+                <ellipse cx="0" cy="-80" rx="15" ry="82" transform="rotate(-56)"/>
+                <ellipse cx="0" cy="-80" rx="15" ry="82" transform="rotate(-80)"/>
+              </g>
+            </svg>
+          </span>
+          <span class="label">Klanten <span class="pijl">↗</span></span>
+          <span class="cijfer">1.284</span>
+          <span class="regel">adressen, allemaal met naam</span>
+        </div>
+
+        <!-- Betalingen: de golven -->
+        <div class="vak" style="--vlak: var(--amber); --vlak-ink: #1c1400; --tweede: var(--perzik)">
+          <span class="vorm" style="left:0; bottom:-6px; width:100%; height:120px">
+            <svg viewBox="0 0 240 120" preserveAspectRatio="none" aria-hidden="true">
+              <g fill="none" stroke="currentColor" stroke-width="22" stroke-linecap="round">
+                <path d="M-20 42C20 2 60 82 100 42S180 2 260 42"/>
+                <path d="M-20 92C20 52 60 132 100 92S180 52 260 92"/>
+              </g>
+            </svg>
+          </span>
+          <span class="label">Betalingen <span class="pijl">↗</span></span>
+          <span class="cijfer">€ 310</span>
+          <span class="regel">contant op te halen vanavond</span>
+        </div>
+
+        <!-- Wijken: de slinger. Amber en niet oranje: op dit lichte vak met
+             zwarte letters moet ook de vorm licht genoeg blijven. -->
+        <div class="vak" style="--vlak: var(--aqua); --vlak-ink: #0b2324; --tweede: var(--amber)">
+          <span class="vorm" style="right:-24px; top:-30px; width:170px; height:230px">
+            <svg viewBox="0 0 170 230" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="40" stroke-linecap="round"
+                    d="M40 210C40 150 150 160 150 110S40 80 40 20"/>
+            </svg>
+          </span>
+          <span class="label">Wijken <span class="pijl">↗</span></span>
+          <span class="cijfer">7</span>
+          <span class="regel">182 straten</span>
+        </div>
+
+        <!-- Mailbox: de bloem, diep op diep -->
+        <div class="vak" style="--vlak: var(--petrol); --vlak-ink: #E8F3F2; --tweede: #12474b">
+          <span class="vorm" style="right:-46px; top:-46px; width:190px; height:190px">
+            <svg viewBox="0 0 200 200" aria-hidden="true">
+              <g fill="currentColor">
+                <ellipse cx="100" cy="56" rx="25" ry="56"/>
+                <ellipse cx="100" cy="56" rx="25" ry="56" transform="rotate(60 100 100)"/>
+                <ellipse cx="100" cy="56" rx="25" ry="56" transform="rotate(120 100 100)"/>
+                <ellipse cx="100" cy="56" rx="25" ry="56" transform="rotate(180 100 100)"/>
+                <ellipse cx="100" cy="56" rx="25" ry="56" transform="rotate(240 100 100)"/>
+                <ellipse cx="100" cy="56" rx="25" ry="56" transform="rotate(300 100 100)"/>
+              </g>
+            </svg>
+          </span>
+          <span class="label">Mailbox <span class="pijl">↗</span></span>
+          <span class="cijfer">4</span>
+          <span class="regel">nieuwe berichten</span>
+        </div>
+
+        <!-- Aanmeldingen: de schelpen -->
+        <div class="vak" style="--vlak: var(--perzik); --vlak-ink: #3a1406; --tweede: var(--amber)">
+          <span class="vorm" style="right:-30px; bottom:-30px; width:190px; height:150px">
+            <svg viewBox="0 0 190 150" aria-hidden="true">
+              <g fill="currentColor">
+                <circle cx="30" cy="120" r="34"/><circle cx="76" cy="96" r="34"/>
+                <circle cx="122" cy="72" r="34"/><circle cx="168" cy="48" r="34"/>
+              </g>
+            </svg>
+          </span>
+          <span class="label">Aanmeldingen <span class="pijl">↗</span></span>
+          <span class="cijfer">3</span>
+          <span class="regel">nog te beoordelen</span>
+        </div>
+
+        <!-- Zwart vak: de wig -->
+        <div class="vak" style="--vlak: var(--zwart); --vlak-ink: #f3eee5; --tweede: #302C26">
+          <span class="vorm" style="left:0; bottom:0; width:100%; height:130px">
+            <svg viewBox="0 0 240 130" preserveAspectRatio="none" aria-hidden="true">
+              <path fill="currentColor" d="M0 130V52C80-14 240 16 240 130Z"/>
+            </svg>
+          </span>
+          <span class="label">Printen <span class="pijl">›</span></span>
+          <span class="cijfer" style="font-size:34px">morgen</span>
+          <span class="regel">looplijst voor Madestein</span>
+        </div>
+
+      </div>
+
+      <!-- Een lege pagina: hier mag de vorm het hele vlak hebben -->
+      <div class="leeg">
+        <span class="vorm" style="right:-40px; top:-60px; width:260px; height:260px">
+          <svg viewBox="0 0 200 200" aria-hidden="true"><path fill="currentColor" d="M10 190C10 96 96 10 190 10c0 94-86 180-180 180Z"/></svg>
+        </span>
+        <h3>Nog geen aanmeldingen</h3>
+        <p>Zodra iemand zich via het formulier aanmeldt, staat hij hier — met adres, postcode en het bedrag dat je hem rekent.</p>
+      </div>
+    </div>
+
+    <p class="kopje">De acht vormen bij elkaar</p>
+    <div class="staal-rooster">
+      <div class="staal" style="--vlak: var(--oranje); --vlak-ink: #140600; --tweede: var(--amber)">
+        <span class="vorm" style="right:-30px; top:-30px; width:180px; height:180px">
+          <svg viewBox="0 0 200 200" aria-hidden="true"><path fill="currentColor" d="M104 6c46-6 92 28 94 74s-32 94-78 106S22 172 14 126 58 12 104 6Z"/></svg>
+        </span>
+        <span class="naam">Vlek</span>
+      </div>
+      <div class="staal" style="--vlak: var(--aqua); --vlak-ink: #0b2324; --tweede: var(--groen)">
+        <span class="vorm" style="right:-24px; top:-24px; width:175px; height:175px">
+          <svg viewBox="0 0 200 200" aria-hidden="true"><path fill="currentColor" d="M10 190C10 96 96 10 190 10c0 94-86 180-180 180Z"/></svg>
+        </span>
+        <span class="naam">Blad</span>
+      </div>
+      <div class="staal" style="--vlak: var(--paars); --vlak-ink: #0B0A14; --tweede: var(--aqua)">
+        <span class="vorm" style="right:-40px; bottom:-30px; width:190px; height:190px">
+          <svg viewBox="0 0 200 200" aria-hidden="true">
+            <g fill="currentColor" transform="translate(186,196)">
+              <ellipse cx="0" cy="-80" rx="15" ry="82" transform="rotate(-8)"/>
+              <ellipse cx="0" cy="-80" rx="15" ry="82" transform="rotate(-32)"/>
+              <ellipse cx="0" cy="-80" rx="15" ry="82" transform="rotate(-56)"/>
+              <ellipse cx="0" cy="-80" rx="15" ry="82" transform="rotate(-80)"/>
+            </g>
+          </svg>
+        </span>
+        <span class="naam">Palmblad</span>
+      </div>
+      <div class="staal" style="--vlak: var(--amber); --vlak-ink: #1c1400; --tweede: var(--perzik)">
+        <span class="vorm" style="left:0; top:20px; width:100%; height:150px">
+          <svg viewBox="0 0 240 150" preserveAspectRatio="none" aria-hidden="true">
+            <g fill="none" stroke="currentColor" stroke-width="24" stroke-linecap="round">
+              <path d="M-20 40C20 0 60 80 100 40S180 0 260 40"/>
+              <path d="M-20 100C20 60 60 140 100 100S180 60 260 100"/>
+            </g>
+          </svg>
+        </span>
+        <span class="naam">Golven</span>
+      </div>
+      <div class="staal" style="--vlak: var(--perzik); --vlak-ink: #3a1406; --tweede: var(--amber)">
+        <span class="vorm" style="right:-26px; bottom:-26px; width:190px; height:150px">
+          <svg viewBox="0 0 190 150" aria-hidden="true">
+            <g fill="currentColor">
+              <circle cx="30" cy="120" r="34"/><circle cx="76" cy="96" r="34"/>
+              <circle cx="122" cy="72" r="34"/><circle cx="168" cy="48" r="34"/>
+            </g>
+          </svg>
+        </span>
+        <span class="naam">Schelpen</span>
+      </div>
+      <div class="staal" style="--vlak: var(--groen); --vlak-ink: #f3eee5; --tweede: #146B4A">
+        <span class="vorm" style="right:-16px; top:-20px; width:160px; height:210px">
+          <svg viewBox="0 0 170 230" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="40" stroke-linecap="round"
+                  d="M40 210C40 150 150 160 150 110S40 80 40 20"/>
+          </svg>
+        </span>
+        <span class="naam">Slinger</span>
+      </div>
+      <div class="staal" style="--vlak: var(--petrol); --vlak-ink: #E8F3F2; --tweede: #12474b">
+        <span class="vorm" style="left:-36px; top:-36px; width:180px; height:180px">
+          <svg viewBox="0 0 200 200" aria-hidden="true">
+            <g fill="currentColor">
+              <ellipse cx="100" cy="56" rx="25" ry="56"/>
+              <ellipse cx="100" cy="56" rx="25" ry="56" transform="rotate(60 100 100)"/>
+              <ellipse cx="100" cy="56" rx="25" ry="56" transform="rotate(120 100 100)"/>
+              <ellipse cx="100" cy="56" rx="25" ry="56" transform="rotate(180 100 100)"/>
+              <ellipse cx="100" cy="56" rx="25" ry="56" transform="rotate(240 100 100)"/>
+              <ellipse cx="100" cy="56" rx="25" ry="56" transform="rotate(300 100 100)"/>
+            </g>
+          </svg>
+        </span>
+        <span class="naam">Bloem</span>
+      </div>
+      <div class="staal" style="--vlak: var(--zwart); --vlak-ink: #f3eee5; --tweede: #302C26">
+        <span class="vorm" style="left:0; bottom:0; width:100%; height:120px">
+          <svg viewBox="0 0 240 120" preserveAspectRatio="none" aria-hidden="true">
+            <path fill="currentColor" d="M0 120V46C80-16 240 14 240 120Z"/>
+          </svg>
+        </span>
+        <span class="naam">Wig</span>
+      </div>
+    </div>
+
+    <p class="kopje">Hoe hard mag hij zijn?</p>
+    <div class="drieluik">
+      <div>
+        <div class="vak" style="--vlak: var(--oranje); --vlak-ink: #140600; --tweede: rgb(20 20 19 / 9%)">
+          <span class="vorm" style="right:-30px; bottom:-50px; width:230px; height:200px">
+            <svg viewBox="0 0 200 200" aria-hidden="true"><path fill="currentColor" d="M104 6c46-6 92 28 94 74s-32 94-78 106S22 172 14 126 58 12 104 6Z"/></svg>
+          </span>
+          <span class="label">Planning vandaag <span class="pijl">›</span></span>
+          <span class="cijfer" style="font-size:44px">€ 842,50</span>
+        </div>
+        <p class="onderschrift">Fluisterend: dezelfde kleur, een tikje donkerder.</p>
+      </div>
+      <div>
+        <div class="vak" style="--vlak: var(--oranje); --vlak-ink: #140600; --tweede: var(--perzik)">
+          <span class="vorm" style="right:-30px; bottom:-50px; width:230px; height:200px">
+            <svg viewBox="0 0 200 200" aria-hidden="true"><path fill="currentColor" d="M104 6c46-6 92 28 94 74s-32 94-78 106S22 172 14 126 58 12 104 6Z"/></svg>
+          </span>
+          <span class="label">Planning vandaag <span class="pijl">›</span></span>
+          <span class="cijfer" style="font-size:44px">€ 842,50</span>
+        </div>
+        <p class="onderschrift">Halverwege: een buurkleur uit het palet.</p>
+      </div>
+      <div>
+        <div class="vak" style="--vlak: var(--oranje); --vlak-ink: #140600; --tweede: var(--amber)">
+          <span class="vorm" style="right:-30px; bottom:-50px; width:230px; height:200px">
+            <svg viewBox="0 0 200 200" aria-hidden="true"><path fill="currentColor" d="M104 6c46-6 92 28 94 74s-32 94-78 106S22 172 14 126 58 12 104 6Z"/></svg>
+          </span>
+          <span class="label">Planning vandaag <span class="pijl">›</span></span>
+          <span class="cijfer" style="font-size:44px">€ 842,50</span>
+        </div>
+        <p class="onderschrift">Vol: twee kleuren tegen elkaar, zoals op de plaat.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="slot">
+    Eén vorm per vak, en niet op elk vak in dezelfde hoek — dan gaat het rijtje
+    leven. <b>Waar ik voor zou oppassen:</b> een vorm onder een lange lijst met
+    adressen, want daar moet je snel een huisnummer kunnen vinden. Op de vakken
+    van Home en op een lege pagina is het juist precies goed.
+  </p>
+</div>
+
+<script>
+  // Licht of donker, en een knop om de vormen even weg te halen.
+  const demo = document.getElementById("demo");
+  const uitknop = document.getElementById("uitknop");
+  document.getElementById("kiezer").addEventListener("click", (e) => {
+    const knop = e.target.closest("button");
+    if (!knop) return;
+    if (knop === uitknop) {
+      // Ingedrukt betekent hier: de vormen staan aan.
+      const uit = demo.classList.toggle("uit");
+      uitknop.setAttribute("aria-pressed", String(!uit));
+      return;
+    }
+    for (const b of document.querySelectorAll("#kiezer button[data-k]")) {
+      b.setAttribute("aria-pressed", String(b === knop));
+    }
+    demo.classList.toggle("donker", knop.dataset.k === "donker");
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Palet Doek — voorbeeldpagina's</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/*
+ * Voorbeeldpagina's voor een nieuw palet, gebouwd van de kleuren uit de plaat
+ * die Timmie liet zien: diepe, verzadigde vlakken op warm crème. Geen
+ * app-code: alles staat in dit ene bestand, zodat je het kunt openen zonder
+ * in te loggen.
+ *
+ * De knoppen bovenaan zetten een klasse op de demo. Elke klasse vult dezelfde
+ * lijst variabelen in, dus de pagina's eronder zijn in elk thema precies
+ * hetzelfde scherm — alleen de kleuren verschillen.
+ */
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  background: #12110f;
+  color: #f3eee5;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, .cijfer { font-family: "Outfit", ui-sans-serif, system-ui, sans-serif; }
+
+/* ---------- De schil om de voorbeelden heen ---------- */
+.schil { max-width: 1240px; margin: 0 auto; padding: 28px 24px 80px; }
+.titel { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; }
+.onder { margin: 0 0 22px; color: #a5a09a; font-size: 14px; max-width: 70ch; line-height: 1.5; }
+.kiezer { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.kiezer button {
+  font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  padding: 9px 16px; border-radius: 999px; border: 1px solid rgb(255 255 255 / 16%);
+  background: #1e1c19; color: #f3eee5; transition: background .15s, border-color .15s;
+}
+.kiezer button:hover { background: #2a2724; }
+.kiezer button[aria-pressed="true"] { background: #f3eee5; color: #16150f; border-color: #f3eee5; }
+.strip { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 26px; }
+.strip span { width: 54px; height: 34px; border-radius: 8px; }
+.uitleg { color: #a5a09a; font-size: 13px; margin: 0 0 26px; max-width: 78ch; line-height: 1.55; }
+.uitleg b { color: #f3eee5; font-weight: 600; }
+.kopje { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #78736c; margin: 34px 0 10px; }
+
+/* ---------- De variabelen die elk thema invult ---------- */
+.demo {
+  --radius-vak: 26px;
+  --radius-knop: 999px;
+  --rand-vak: transparent;
+  --schaduw: 0 3px 8px rgb(20 20 19 / 8%), 0 14px 30px rgb(20 20 19 / 10%);
+  --label-kleur: inherit;
+  --label-maat: 14px;
+  --label-spatie: 0;
+  --label-caps: none;
+  --label-dik: 600;
+  --cijfer-maat: 54px;
+  --vierkant: none;          /* het gekleurde blokje bij het label (Zakelijk) */
+  --streep: 0px;             /* gekleurde streep bovenaan een vak (Zakelijk kleur) */
+}
+
+/* === Fel — het thema dat er nu in zit === */
+.v-fel {
+  --grond: #f4f0e8; --kaart: #ffffff; --zacht: #efeae0; --rand: #e6e0d5;
+  --ink: #141413; --grijs: #5c5954;
+  --knop: #ff5b1f; --knop-ink: #140600;
+  --t-groot: #ff5b1f;  --t-groot-ink: #140600;
+  --t-omzet: #141413;  --t-omzet-ink: #f3eee5;
+  --t-klanten: #7F7CAF; --t-klanten-ink: #0B0A14;
+  --t-betaal: #f2b705; --t-betaal-ink: #1c1400;
+  --t-wijk: #a9d7d8;   --t-wijk-ink: #0b2324;
+  --t-mail: #1A5E63;   --t-mail-ink: #E8F3F2;
+  --t-aanmeld: #ffc7b0; --t-aanmeld-ink: #3a1406;
+  --t-klein: #141413;  --t-klein-ink: #f3eee5;
+  --balk-rustig: rgb(243 238 229 / 55%); --balk-accent: #f2b705;
+  --goed: #7EA16B; --goed-ink: #0F2408;
+  --klacht: #551B14; --klacht-ink: #F3EEE5;
+  --chip: rgb(20 20 19 / 8%);
+}
+
+/* === Doek — de kleuren die de plaat wél heeft en de app niet: roze, olijf,
+       lila, kobalt, baksteen en grijs, op zandgeel papier. Vlak, zonder
+       schaduw, net als gouache. === */
+.v-doek {
+  --grond: #F4E2BF; --kaart: #FCF5E6; --zacht: #EBD7AF; --rand: #DEC793;
+  --ink: #1C1508; --grijs: #6E6142;
+  --knop: #B3301F; --knop-ink: #FFEDE6;
+  --t-groot: #E9629C;  --t-groot-ink: #2A0716;   /* roze */
+  --t-omzet: #0B4737;  --t-omzet-ink: #F2E6C9;   /* flesgroen */
+  --t-klanten: #3A64AE; --t-klanten-ink: #EAF0FB; /* kobalt */
+  --t-betaal: #8A8524; --t-betaal-ink: #171502;  /* olijf */
+  --t-wijk: #DDB3DE;   --t-wijk-ink: #2A1030;    /* lila */
+  --t-mail: #B3301F;   --t-mail-ink: #FFEDE6;    /* baksteen */
+  --t-aanmeld: #EDE79B; --t-aanmeld-ink: #2A2705; /* lichtgeel */
+  --t-klein: #B9BCB8;  --t-klein-ink: #17190F;   /* grijs */
+  --balk-rustig: rgb(242 230 201 / 45%); --balk-accent: #EDE79B;
+  --goed: #2E9B4F; --goed-ink: #04220E;
+  --klacht: #B3301F; --klacht-ink: #FFEDE6;
+  --chip: rgb(28 21 8 / 10%);
+  --schaduw: none;
+  --blob: #F0A62B;
+}
+
+/* === Doek donker — precies dezelfde vlakken, zwart papier === */
+.v-doek-donker {
+  --grond: #0B0A08; --kaart: #17150F; --zacht: #201D16; --rand: rgb(242 230 201 / 14%);
+  --ink: #F2E6C9; --grijs: #9C9384;
+  --knop: #B3301F; --knop-ink: #FFEDE6;
+  --t-groot: #E9629C;  --t-groot-ink: #2A0716;
+  --t-omzet: #0B4737;  --t-omzet-ink: #F2E6C9;
+  --t-klanten: #3A64AE; --t-klanten-ink: #EAF0FB;
+  --t-betaal: #8A8524; --t-betaal-ink: #171502;
+  --t-wijk: #DDB3DE;   --t-wijk-ink: #2A1030;
+  --t-mail: #B3301F;   --t-mail-ink: #FFEDE6;
+  --t-aanmeld: #EDE79B; --t-aanmeld-ink: #2A2705;
+  --t-klein: #B9BCB8;  --t-klein-ink: #17190F;
+  --balk-rustig: rgb(242 230 201 / 30%); --balk-accent: #EDE79B;
+  --goed: #2E9B4F; --goed-ink: #04220E;
+  --klacht: #B3301F; --klacht-ink: #FFEDE6;
+  --chip: rgb(242 230 201 / 10%);
+  --schaduw: 0 0 0 1px rgb(242 230 201 / 12%);
+  --blob: #F0A62B;
+}
+
+/* === Doek rustig — hetzelfde palet, maar de meeste vlakken zijn zand, room
+       of grijs. Twee diepe kleuren dragen de pagina, roze is het enige
+       uitroepteken. === */
+.v-doek-rustig {
+  --grond: #F1E7D3; --kaart: #FCF7EC; --zacht: #E8DCC2; --rand: #DED0B1;
+  --ink: #1C1508; --grijs: #6E6142;
+  --knop: #29445E; --knop-ink: #EAF1F7;
+  --t-groot: #29445E;  --t-groot-ink: #EAF1F7;   /* marine */
+  --t-omzet: #0B4737;  --t-omzet-ink: #F2E6C9;
+  --t-klanten: #E7CD9B; --t-klanten-ink: #1C1508; /* zand, een tint dieper dan het papier */
+  --t-betaal: #EDE79B; --t-betaal-ink: #2A2705;
+  --t-wijk: #B9BCB8;   --t-wijk-ink: #17190F;
+  --t-mail: #8A8524;   --t-mail-ink: #171502;
+  --t-aanmeld: #E9629C; --t-aanmeld-ink: #2A0716;
+  --t-klein: #FCF7EC;  --t-klein-ink: #1C1508;
+  --balk-rustig: rgb(242 230 201 / 42%); --balk-accent: #EDE79B;
+  --goed: #2E9B4F; --goed-ink: #04220E;
+  --klacht: #B3301F; --klacht-ink: #FFEDE6;
+  --chip: rgb(28 21 8 / 9%);
+  --schaduw: none;
+  --blob: #3A64AE;
+}
+.v-doek-rustig .vak.klein { border: 1px solid var(--rand); }
+
+/* === Zakelijk — het tweede thema zoals het nu is === */
+.v-zak, .v-zak-kleur {
+  --radius-vak: 12px; --radius-knop: 10px;
+  --rand-vak: var(--rand);
+  --schaduw: 0 1px 2px rgb(16 24 40 / 5%);
+  --label-kleur: var(--grijs); --label-maat: 11px; --label-spatie: .08em;
+  --label-caps: uppercase; --label-dik: 700;
+  --cijfer-maat: 32px;
+  --vierkant: block;
+}
+.v-zak {
+  --grond: #f4f5f7; --kaart: #ffffff; --zacht: #f1f3f6; --rand: #e9ebef;
+  --ink: #101828; --grijs: #5e6777;
+  --knop: #0e1726; --knop-ink: #fcfefd;
+  --t-groot: var(--kaart);  --t-groot-ink: var(--ink);  --a-groot: #ea580c;
+  --t-omzet: var(--kaart);  --t-omzet-ink: var(--ink);  --a-omzet: #101828;
+  --t-klanten: var(--kaart); --t-klanten-ink: var(--ink); --a-klanten: #6d28d9;
+  --t-betaal: var(--kaart); --t-betaal-ink: var(--ink); --a-betaal: #b45309;
+  --t-wijk: var(--kaart);   --t-wijk-ink: var(--ink);   --a-wijk: #2563eb;
+  --t-mail: var(--kaart);   --t-mail-ink: var(--ink);   --a-mail: #0d9488;
+  --t-aanmeld: var(--kaart); --t-aanmeld-ink: var(--ink); --a-aanmeld: #db2777;
+  --t-klein: var(--kaart);  --t-klein-ink: var(--ink);  --a-klein: #101828;
+  --balk-rustig: #a9efc8; --balk-accent: #0f9d63;
+  --goed: #0f9d63; --goed-ink: #ffffff;
+  --klacht: #fee2e2; --klacht-ink: #b42318;
+  --chip: #f1f3f6;
+}
+
+/* === Zakelijk kleur — dezelfde kantoorpagina, maar met het palet in de
+       kleine dingen: een streepje boven elk vak, het blokje bij het label,
+       de staven, en één gekleurd vak per pagina. === */
+.v-zak-kleur {
+  --grond: #F3F2EE; --kaart: #ffffff; --zacht: #EDEBE5; --rand: #E4E1D8;
+  --ink: #16151A; --grijs: #615E57;
+  --knop: #29445E; --knop-ink: #F3F7FB;
+  --streep: 3px;
+  --t-groot: #29445E;  --t-groot-ink: #EAF1F7;  --a-groot: #E9629C;
+  --t-omzet: var(--kaart);  --t-omzet-ink: var(--ink);  --a-omzet: #0B4737;
+  --t-klanten: var(--kaart); --t-klanten-ink: var(--ink); --a-klanten: #3A64AE;
+  --t-betaal: var(--kaart); --t-betaal-ink: var(--ink); --a-betaal: #5C5814;
+  --t-wijk: var(--kaart);   --t-wijk-ink: var(--ink);   --a-wijk: #6B4FA8;
+  --t-mail: var(--kaart);   --t-mail-ink: var(--ink);   --a-mail: #1A5E63;
+  --t-aanmeld: var(--kaart); --t-aanmeld-ink: var(--ink); --a-aanmeld: #B3301F;
+  --t-klein: var(--kaart);  --t-klein-ink: var(--ink);  --a-klein: #29445E;
+  --balk-rustig: #D6D3C8; --balk-accent: #3A64AE;
+  --goed: #2E7D46; --goed-ink: #ffffff;
+  --klacht: #F6E0DB; --klacht-ink: #A32E1D;
+  --chip: #EDEBE5;
+}
+
+/* ---------- Het scherm zelf ---------- */
+.scherm {
+  background: var(--grond); color: var(--ink);
+  border-radius: 18px; overflow: hidden;
+  padding: 26px 26px 30px;
+  border: 1px solid rgb(255 255 255 / 8%);
+}
+.rij { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.bol {
+  width: 40px; height: 40px; border-radius: 999px; flex: none;
+  background: var(--knop); color: var(--knop-ink);
+  display: grid; place-items: center; font-weight: 700; font-size: 15px;
+}
+.groet { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+.dagregel { font-size: 13px; color: var(--grijs); margin: 2px 0 0; }
+.zoek {
+  margin-left: auto; display: flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 15px; border-radius: var(--radius-knop);
+  background: var(--kaart); border: 1px solid var(--rand); color: var(--grijs); font-size: 13px;
+}
+.knop {
+  height: 38px; padding: 0 18px; border-radius: var(--radius-knop);
+  background: var(--knop); color: var(--knop-ink);
+  font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px;
+}
+
+.rooster { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.vak {
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column;
+  border-radius: var(--radius-vak);
+  background: var(--vlak); color: var(--vlak-ink);
+  border: 1px solid var(--rand-vak);
+  padding: 18px 20px; min-height: 172px;
+}
+.vak::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: var(--streep);
+  background: var(--accent);
+}
+.vak.breed { grid-column: span 2; min-height: 250px; }
+.vak > * { position: relative; }
+.vorm {
+  display: none; position: absolute; right: -54px; bottom: -78px;
+  width: 300px; height: 250px; background: var(--blob);
+  border-radius: 62% 38% 45% 55% / 55% 48% 52% 45%;
+}
+.v-doek .vorm, .v-doek-donker .vorm, .v-doek-rustig .vorm { display: block; }
+.vak.klein { min-height: 74px; padding: 14px 16px; align-self: start; }
+.label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--label-maat); font-weight: var(--label-dik);
+  letter-spacing: var(--label-spatie); text-transform: var(--label-caps);
+  color: var(--label-kleur);
+}
+.label .pijl { margin-left: auto; opacity: .75; font-size: 15px; }
+.blokje { display: var(--vierkant); width: 9px; height: 9px; border-radius: 3px; background: var(--accent); flex: none; }
+.cijfer {
+  margin-top: auto; font-size: var(--cijfer-maat); font-weight: 600;
+  letter-spacing: -0.045em; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.vak.breed .cijfer { font-size: calc(var(--cijfer-maat) * 1.6); }
+.cijfer.mid { font-size: calc(var(--cijfer-maat) * 0.8); }
+.cijfer.klein { font-size: calc(var(--cijfer-maat) * 0.62); }
+.regel { margin-top: 6px; font-size: 13px; opacity: .85; }
+.v-zak .regel, .v-zak-kleur .regel { color: var(--grijs); opacity: 1; font-size: 12px; }
+.v-zak .vak.breed .cijfer, .v-zak-kleur .vak.breed .cijfer { font-size: calc(var(--cijfer-maat) * 1.38); }
+.balkje { height: 7px; border-radius: 999px; background: color-mix(in srgb, currentColor 22%, transparent); margin-top: 12px; overflow: hidden; }
+.balkje i { display: block; height: 100%; border-radius: 999px; background: currentColor; }
+
+.staven { display: flex; align-items: flex-end; gap: 7px; height: 108px; margin-top: auto; }
+.staven i { flex: 1; border-radius: 6px 6px 3px 3px; background: var(--balk-rustig); }
+.staven i.nu { background: var(--balk-accent); }
+.maanden { display: flex; gap: 7px; margin-top: 7px; font-size: 10px; opacity: .6; }
+.maanden span { flex: 1; text-align: center; }
+
+/* ---------- Tweede blok: telefoon + lijst ---------- */
+.tweeluik { display: grid; grid-template-columns: 392px minmax(0, 1fr); gap: 18px; align-items: start; }
+.telefoon {
+  border-radius: 34px; padding: 14px 12px 18px; background: var(--grond); color: var(--ink);
+  border: 8px solid #26231e; box-shadow: var(--schaduw);
+}
+.tel-kop { display: flex; align-items: center; gap: 10px; padding: 4px 6px 12px; }
+.tel-kop b { font-size: 17px; font-family: "Outfit", sans-serif; letter-spacing: -.01em; }
+.tel-kop .datum { font-size: 12px; color: var(--grijs); }
+.lijst { background: var(--kaart); border: 1px solid var(--rand); border-radius: var(--radius-vak); overflow: hidden; box-shadow: var(--schaduw); }
+.lijst-kop {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+  background: var(--zacht); font-size: 13px; font-weight: 700;
+  border-bottom: 1px solid var(--rand);
+}
+.lijst-kop .telling { margin-left: auto; font-weight: 600; color: var(--grijs); font-size: 12px; }
+.adres { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--rand); font-size: 14px; }
+.adres:last-child { border-bottom: 0; }
+.adres .nr { font-weight: 700; min-width: 34px; font-variant-numeric: tabular-nums; }
+.adres .naam { color: var(--ink); }
+.adres .prijs { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+.vink {
+  width: 30px; height: 30px; border-radius: 999px; flex: none;
+  display: grid; place-items: center; font-size: 14px; font-weight: 700;
+  background: var(--goed); color: var(--goed-ink);
+}
+.vink.leeg { background: transparent; border: 1.5px solid var(--rand); color: transparent; }
+.pil {
+  font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+  background: var(--chip); color: inherit;
+}
+.pil.klacht { background: var(--klacht); color: var(--klacht-ink); }
+.pil.contant { background: var(--t-betaal); color: var(--t-betaal-ink); }
+.v-zak-kleur .hero .label { color: color-mix(in srgb, var(--vlak-ink) 82%, transparent); }
+.v-zak-kleur .hero .regel { color: color-mix(in srgb, var(--vlak-ink) 85%, transparent); opacity: 1; }
+.v-zak .pil.contant, .v-zak-kleur .pil.contant { background: var(--chip); color: var(--a-betaal); }
+.klaar-knop { margin: 14px 6px 0; display: flex; }
+.klaar-knop span {
+  flex: 1; text-align: center; padding: 13px; border-radius: var(--radius-knop);
+  background: var(--knop); color: var(--knop-ink); font-weight: 700; font-size: 15px;
+}
+@media (max-width: 1100px) {
+  .tweeluik { grid-template-columns: minmax(0, 1fr); }
+  .telefoon { max-width: 392px; }
+  .rooster { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.wijkbol { width: 12px; height: 12px; border-radius: 999px; flex: none; }
+</style>
+</head>
+<body>
+<div class="schil">
+  <h1 class="titel">Vijf keer dezelfde twee schermen</h1>
+  <p class="onder">
+    Klik een thema aan; de schermen eronder blijven hetzelfde, alleen de kleuren
+    wisselen. <b>Doek</b> pakt juist de kleuren die de app nog niet heeft — roze,
+    olijf, lila, kobalt, baksteen en grijs — op zandgeel papier, vlak en zonder
+    schaduw. <b>Doek rustig</b> is hetzelfde palet met de meeste vlakken in zand
+    en room, en roze als enige uitroepteken. <b>Zakelijk kleur</b> is de
+    kantoorpagina met die kleuren in de kleine dingen, plus één gekleurd vak.
+  </p>
+
+  <div class="kiezer" id="kiezer">
+    <button data-v="v-doek" aria-pressed="true">Doek</button>
+    <button data-v="v-doek-donker" aria-pressed="false">Doek donker</button>
+    <button data-v="v-doek-rustig" aria-pressed="false">Doek rustig</button>
+    <button data-v="v-zak-kleur" aria-pressed="false">Zakelijk kleur</button>
+    <button data-v="v-fel" aria-pressed="false">Fel (zoals het nu is)</button>
+    <button data-v="v-zak" aria-pressed="false">Zakelijk (zoals het nu is)</button>
+  </div>
+
+  <div class="strip" title="De kleuren uit de plaat">
+    <span style="background:#E4501E"></span><span style="background:#F0A62B"></span>
+    <span style="background:#E9629C"></span><span style="background:#F09480"></span>
+    <span style="background:#F7E4C3"></span><span style="background:#EDE79B"></span>
+    <span style="background:#2E9B4F"></span><span style="background:#0B4737"></span>
+    <span style="background:#8A8524"></span><span style="background:#3A64AE"></span>
+    <span style="background:#29445E"></span><span style="background:#86B2C8"></span>
+    <span style="background:#5B4FA8"></span><span style="background:#DDB3DE"></span>
+    <span style="background:#A96A16"></span><span style="background:#B3301F"></span>
+    <span style="background:#F0BC9B"></span><span style="background:#B9BCB8"></span>
+  </div>
+
+  <div class="demo v-doek" id="demo">
+
+    <p class="kopje">Home op de computer</p>
+    <div class="scherm">
+      <div class="rij">
+        <div class="bol">T</div>
+        <div>
+          <h2 class="groet">Goedemorgen, Timmie</h2>
+          <p class="dagregel">dinsdag 23 september · week 39</p>
+        </div>
+        <div class="zoek">Zoek een adres</div>
+        <div class="knop">+ Nieuw</div>
+      </div>
+
+      <div class="rooster">
+        <div class="vak breed hero" style="--vlak: var(--t-groot); --vlak-ink: var(--t-groot-ink); --accent: var(--a-groot, var(--t-groot))">
+          <span class="vorm" aria-hidden="true"></span>
+          <span class="label"><span class="blokje"></span>Planning vandaag<span class="pijl">›</span></span>
+          <span class="cijfer">€ 842,50</span>
+          <span class="regel">63 adressen · 2 extra opdrachten · nog 18 te gaan</span>
+          <span class="balkje"><i style="width: 71%"></i></span>
+        </div>
+
+        <div class="vak breed" style="--vlak: var(--t-omzet); --vlak-ink: var(--t-omzet-ink); --accent: var(--a-omzet, var(--t-omzet))">
+          <span class="label"><span class="blokje"></span>Omzet per maand<span class="pijl">↗</span></span>
+          <span class="cijfer mid" style="margin-top: 10px">€ 14.280</span>
+          <div class="staven">
+            <i style="height:46%"></i><i style="height:38%"></i><i style="height:57%"></i>
+            <i style="height:64%"></i><i style="height:52%"></i><i style="height:71%"></i>
+            <i style="height:60%"></i><i style="height:44%"></i><i class="nu" style="height:83%"></i>
+            <i style="height:30%"></i><i style="height:26%"></i><i style="height:34%"></i>
+          </div>
+          <div class="maanden">
+            <span>jan</span><span>feb</span><span>mrt</span><span>apr</span><span>mei</span><span>jun</span>
+            <span>jul</span><span>aug</span><span>sep</span><span>okt</span><span>nov</span><span>dec</span>
+          </div>
+        </div>
+
+        <div class="vak" style="--vlak: var(--t-klanten); --vlak-ink: var(--t-klanten-ink); --accent: var(--a-klanten, var(--t-klanten))">
+          <span class="label"><span class="blokje"></span>Klanten<span class="pijl">↗</span></span>
+          <span class="cijfer">1.284</span>
+          <span class="regel">adressen, allemaal met naam</span>
+        </div>
+
+        <div class="vak" style="--vlak: var(--t-betaal); --vlak-ink: var(--t-betaal-ink); --accent: var(--a-betaal, var(--t-betaal))">
+          <span class="label"><span class="blokje"></span>Betalingen<span class="pijl">↗</span></span>
+          <span class="cijfer">€ 310</span>
+          <span class="regel">contant op te halen vanavond</span>
+        </div>
+
+        <div class="vak" style="--vlak: var(--t-wijk); --vlak-ink: var(--t-wijk-ink); --accent: var(--a-wijk, var(--t-wijk))">
+          <span class="label"><span class="blokje"></span>Wijken<span class="pijl">↗</span></span>
+          <span class="cijfer">7</span>
+          <span class="regel">182 straten</span>
+        </div>
+
+        <div class="vak" style="--vlak: var(--t-mail); --vlak-ink: var(--t-mail-ink); --accent: var(--a-mail, var(--t-mail))">
+          <span class="label"><span class="blokje"></span>Mailbox<span class="pijl">↗</span></span>
+          <span class="cijfer">4</span>
+          <span class="regel">nieuwe berichten</span>
+        </div>
+
+        <div class="vak" style="--vlak: var(--t-aanmeld); --vlak-ink: var(--t-aanmeld-ink); --accent: var(--a-aanmeld, var(--t-aanmeld))">
+          <span class="label"><span class="blokje"></span>Aanmeldingen<span class="pijl">↗</span></span>
+          <span class="cijfer">3</span>
+          <span class="regel">nog te beoordelen</span>
+        </div>
+
+        <div class="vak klein" style="--vlak: var(--t-klein); --vlak-ink: var(--t-klein-ink); --accent: var(--a-klein, var(--t-klein))">
+          <span class="label"><span class="blokje"></span>Importeren<span class="pijl">›</span></span>
+          <span class="regel">een Excel-lijst inlezen</span>
+        </div>
+        <div class="vak klein" style="--vlak: var(--t-klein); --vlak-ink: var(--t-klein-ink); --accent: var(--a-klein, var(--t-klein))">
+          <span class="label"><span class="blokje"></span>Instellingen<span class="pijl">›</span></span>
+          <span class="regel">team, wijken en mail</span>
+        </div>
+        <div class="vak klein" style="--vlak: var(--t-klein); --vlak-ink: var(--t-klein-ink); --accent: var(--a-klein, var(--t-klein))">
+          <span class="label"><span class="blokje"></span>Geschiedenis<span class="pijl">›</span></span>
+          <span class="regel">weggelegd, terug te zetten</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="kopje">De dag in de straat, en dezelfde lijst op de computer</p>
+    <div class="scherm">
+      <div class="tweeluik">
+
+        <div class="telefoon">
+          <div class="tel-kop">
+            <div class="bol" style="width:34px;height:34px;font-size:13px">T</div>
+            <div>
+              <b>Madestein</b>
+              <div class="datum">dinsdag 23 september · 63 adressen</div>
+            </div>
+          </div>
+
+          <div class="lijst">
+            <div class="lijst-kop">
+              <span class="wijkbol" style="background: var(--a-wijk, var(--t-wijk))"></span>
+              Vlierboomstraat <span class="telling">12 · € 148</span>
+            </div>
+            <div class="adres"><span class="vink">✓</span><span class="nr">112</span><span class="naam">Fam. de Groot</span><span class="prijs">€ 12,50</span></div>
+            <div class="adres"><span class="vink">✓</span><span class="nr">114</span><span class="naam">Kapsalon Nova</span><span class="pil contant">contant</span><span class="prijs">€ 22,00</span></div>
+            <div class="adres"><span class="vink leeg">✓</span><span class="nr">116</span><span class="naam">J. Bakker</span><span class="prijs">€ 11,00</span></div>
+            <div class="adres"><span class="vink leeg">✓</span><span class="nr">118</span><span class="naam">Mevr. Aydin</span><span class="pil klacht">klacht</span><span class="prijs">€ 13,50</span></div>
+            <div class="adres"><span class="vink leeg">✓</span><span class="nr">120</span><span class="naam">Fam. Visser</span><span class="prijs">€ 12,50</span></div>
+          </div>
+
+          <div class="lijst" style="margin-top: 10px">
+            <div class="lijst-kop">
+              <span class="wijkbol" style="background: var(--a-aanmeld, var(--t-aanmeld))"></span>
+              Dunne Bierkade <span class="telling">8 · € 96</span>
+            </div>
+            <div class="adres"><span class="vink leeg">✓</span><span class="nr">7</span><span class="naam">B. Overmeer</span><span class="prijs">€ 14,00</span></div>
+            <div class="adres"><span class="vink leeg">✓</span><span class="nr">9</span><span class="naam">Praktijk Zuid</span><span class="prijs">€ 18,00</span></div>
+          </div>
+
+          <div class="klaar-knop"><span>Dag klaar</span></div>
+        </div>
+
+        <div>
+          <div class="rij" style="margin-bottom: 14px">
+            <div>
+              <h2 class="groet" style="font-size: 22px">Klanten · Madestein</h2>
+              <p class="dagregel">1.284 adressen · 182 straten</p>
+            </div>
+            <div class="zoek">Zoek straat</div>
+            <div class="knop">+ Klant</div>
+          </div>
+
+          <div class="lijst">
+            <div class="lijst-kop"><span class="wijkbol" style="background: var(--a-klanten, var(--t-klanten))"></span>Loosduinsekade<span class="telling">24 adressen</span></div>
+            <div class="adres"><span class="nr">3</span><span class="naam">Fam. Rietveld</span><span class="pil">8 weken</span><span class="prijs">€ 12,50</span></div>
+            <div class="adres"><span class="nr">5</span><span class="naam">Bakkerij Smit</span><span class="pil contant">contant</span><span class="prijs">€ 26,00</span></div>
+            <div class="adres"><span class="nr">7</span><span class="naam">W. de Boer</span><span class="pil">4 weken</span><span class="prijs">€ 11,00</span></div>
+            <div class="adres"><span class="nr">9</span><span class="naam">Fam. Yildiz</span><span class="pil klacht">klacht open</span><span class="prijs">€ 13,00</span></div>
+            <div class="adres"><span class="nr">11</span><span class="naam">Leeg — nog zonder naam</span><span class="pil">nieuw</span><span class="prijs">€ 12,50</span></div>
+          </div>
+
+          <div class="rooster" style="grid-template-columns: repeat(3, minmax(0,1fr)); margin-top: 14px">
+            <div class="vak" style="min-height: 120px; --vlak: var(--t-omzet); --vlak-ink: var(--t-omzet-ink); --accent: var(--a-omzet, var(--t-omzet))">
+              <span class="label"><span class="blokje"></span>Deze week</span>
+              <span class="cijfer klein">€ 3.140</span>
+            </div>
+            <div class="vak" style="min-height: 120px; --vlak: var(--t-betaal); --vlak-ink: var(--t-betaal-ink); --accent: var(--a-betaal, var(--t-betaal))">
+              <span class="label"><span class="blokje"></span>Open</span>
+              <span class="cijfer klein">€ 410</span>
+            </div>
+            <div class="vak" style="min-height: 120px; --vlak: var(--t-wijk); --vlak-ink: var(--t-wijk-ink); --accent: var(--a-wijk, var(--t-wijk))">
+              <span class="label"><span class="blokje"></span>Afgemeld</span>
+              <span class="cijfer klein">71%</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <p class="uitleg" style="margin-top: 30px">
+    De vlakken zijn in licht en donker precies dezelfde kleur — net als nu in Fel.
+    Waar het vlak diep is (kobalt, baksteen, flesgroen, marine) staat er lichte
+    tekst op; op de heldere vlakken (roze, olijf, lila, lichtgeel, grijs, zand)
+    juist bijna zwarte. Zo blijft alles leesbaar in de zon.
+  </p>
+</div>
+
+<script>
+  // De knoppen bovenaan: eentje tegelijk aan, en de klasse gaat naar de demo.
+  const demo = document.getElementById("demo");
+  document.getElementById("kiezer").addEventListener("click", (e) => {
+    const knop = e.target.closest("button[data-v]");
+    if (!knop) return;
+    for (const b of document.querySelectorAll("#kiezer button")) {
+      b.setAttribute("aria-pressed", String(b === knop));
+    }
+    demo.className = "demo " + knop.dataset.v;
+  });
+</script>
+</body>
+</html>

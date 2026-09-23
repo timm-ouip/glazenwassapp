@@ -100,6 +100,39 @@ export function pasThemaToe(thema: Thema) {
   document.documentElement.classList.toggle("fel", isFel(thema));
 }
 
+/**
+ * De uitgeknipte vormen op de vakken van Fel (Vorm.tsx). Standaard staan ze
+ * aan; wie ze niet wil, zet ze uit in Instellingen. Net als het thema hoort de
+ * keuze bij dit apparaat en niet bij je account, dus staat hij in
+ * localStorage. Uit is de uitzondering, dus die bewaren we; aan is gewoon
+ * niets bewaard.
+ */
+export const VORMEN_OPSLAG = "glazenwas.vormen";
+
+export function leesVormen(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return window.localStorage.getItem(VORMEN_OPSLAG) !== "uit";
+  } catch {
+    return true;
+  }
+}
+
+export function pasVormenToe(aan: boolean) {
+  if (typeof document === "undefined") return;
+  document.documentElement.classList.toggle("geen-vormen", !aan);
+}
+
+export function bewaarVormen(aan: boolean) {
+  try {
+    if (aan) window.localStorage.removeItem(VORMEN_OPSLAG);
+    else window.localStorage.setItem(VORMEN_OPSLAG, "uit");
+  } catch {
+    // Privémodus: dan geldt de keuze alleen zolang dit tabblad open staat.
+  }
+  pasVormenToe(aan);
+}
+
 export function bewaarThema(thema: Thema) {
   try {
     if (thema === "systeem") window.localStorage.removeItem(THEMA_OPSLAG);
@@ -126,4 +159,5 @@ var el=document.documentElement;
 if(d)el.classList.add("dark");
 el.classList.toggle("zak",z);
 el.classList.toggle("fel",!z);
+if(localStorage.getItem(${JSON.stringify(VORMEN_OPSLAG)})==="uit")el.classList.add("geen-vormen");
 }catch(e){}})();`;

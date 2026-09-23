@@ -67,12 +67,15 @@ import type { PlanInstellingen } from "@/lib/dagplanning";
 import { AANNAME_BEDRAG_PER_DAG, meetTempo, MINIMUM_DAGEN, tempoVan } from "@/lib/wijkritme";
 import {
   bewaarThema,
+  bewaarVormen,
   familieKeuzes,
   familieLabels,
   familieOmschrijving,
   familieVan,
   keuzeLabels,
+  isFel,
   leesThema,
+  leesVormen,
   type Thema,
   type ThemaFamilie,
 } from "@/lib/thema";
@@ -2165,10 +2168,14 @@ function ThemaVoorbeeld({ thema }: { thema: Thema }) {
  */
 function WeergaveKaart() {
   const [thema, setThema] = useState<Thema>("systeem");
+  const [vormen, setVormen] = useState(true);
 
   // Pas na het hydrateren inlezen: op de server bestaat localStorage niet,
   // en het themascript in de <head> heeft de klasse dan al gezet.
-  useEffect(() => setThema(leesThema()), []);
+  useEffect(() => {
+    setThema(leesThema());
+    setVormen(leesVormen());
+  }, []);
 
   // Volgt de app het systeem, dan moet hij meebewegen als je dat 's avonds
   // omzet zonder de pagina te herladen.
@@ -2242,6 +2249,27 @@ function WeergaveKaart() {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* De uitgeknipte vormen op de vakken van Home. Ze horen bij Fel; in
+          Zakelijk zijn de vakken wit en staat er niets, dus zeggen we dat
+          erbij in plaats van de schakelaar te verstoppen. */}
+      <label className="mt-3 flex max-w-xs items-center gap-2.5 text-[13px]">
+        <Switch
+          checked={vormen}
+          onCheckedChange={(aan) => {
+            setVormen(aan);
+            bewaarVormen(aan);
+          }}
+        />
+        <span>
+          Vormen op de vakken
+          <span className="block text-[11.5px] text-muted-foreground">
+            {isFel(thema)
+              ? "uitgeknipte figuren achter de cijfers op Home"
+              : "alleen in Fel te zien"}
+          </span>
+        </span>
+      </label>
     </Kaart>
   );
 }

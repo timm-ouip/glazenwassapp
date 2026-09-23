@@ -19,6 +19,7 @@ import {
 } from "@tabler/icons-react";
 
 import { Cijferkaarten } from "@/components/Cijferkaarten";
+import { Vorm } from "@/components/Vorm";
 import {
   TEGEL_GEWOON,
   TEGEL_KLEUR,
@@ -121,19 +122,28 @@ function Stijlgids() {
           />
         </Blok>
 
-        <Blok titel="Vakken" uitleg="De tegels van Home en het dashboard.">
+        <Blok
+          titel="Vakken"
+          uitleg="De tegels van Home en het dashboard, met de uitgeknipte vorm die in Fel achter de cijfers ligt."
+        >
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className={`${TEGEL_VAK} ${TEGEL_KLIKBAAR} ${TEGEL_GEWOON} ${TEGEL_KLEUR.aqua}`}>
+              <Vorm
+                naam="slinger"
+                plek="-right-5 -top-6 h-[130px] w-[95px] md:-right-6 md:-top-8 md:h-[210px] md:w-[155px]"
+              />
               <TegelKop label="Klanten" />
               <TegelGetal>1.248</TegelGetal>
               <TegelOnder>37 zonder wijk</TegelOnder>
             </div>
             <div className={`${TEGEL_VAK} ${TEGEL_KLIKBAAR} ${TEGEL_GEWOON} ${TEGEL_KLEUR.groen}`}>
+              <Vorm naam="blad" plek="-left-7 -top-8 size-[140px] md:size-[190px]" />
               <TegelKop label="Betalingen" />
               <TegelGetal>€ 642</TegelGetal>
               <TegelOnder>vanavond opgehaald</TegelOnder>
             </div>
             <div className={`${TEGEL_VAK} ${TEGEL_KLIKBAAR} ${TEGEL_GEWOON} ${TEGEL_KLEUR.geel}`}>
+              <Vorm naam="golven" plek="inset-x-0 bottom-0 h-[60px] md:h-[110px]" />
               <TegelKop label="Aanmeldingen" />
               <TegelGetal>4</TegelGetal>
               <TegelOnder>nog te beoordelen</TegelOnder>

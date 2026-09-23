@@ -17,6 +17,7 @@ import {
 
 import { AppLayout } from "@/components/AppLayout";
 import { TelBedrag, TelGetal } from "@/components/TelBedrag";
+import { Vorm } from "@/components/Vorm";
 import {
   TEGEL_GEWOON,
   TEGEL_KLEUR,
@@ -360,6 +361,10 @@ function Home() {
                 "col-span-2 h-[156px] rounded-[28px] px-5 py-4 md:h-[270px] md:px-[26px] md:py-[22px] zak:h-[136px] zak:md:h-[200px] zak:md:px-5 zak:md:py-4",
               )}
             >
+              <Vorm
+                naam="vlek"
+                plek="-bottom-14 -right-8 size-[170px] md:-bottom-[70px] md:-right-10 md:size-[300px]"
+              />
               <span className="flex items-center justify-between text-[13px] font-semibold md:text-[14px] zak:text-[10.5px] zak:font-bold zak:uppercase zak:tracking-[0.08em] zak:text-muted-foreground">
                 Planning vandaag
                 <ChevronRight className="size-[18px] md:size-5" aria-hidden="true" />
@@ -418,6 +423,7 @@ function Home() {
                 "col-span-2 hidden h-[270px] rounded-[28px] px-6 pb-4 pt-5 md:flex zak:h-[200px] zak:px-5 zak:pt-4",
               )}
             >
+              <Vorm naam="blad" plek="-left-8 -top-10 size-[230px]" />
               <span className="flex items-start justify-between gap-3">
                 <span className="flex flex-col gap-1">
                   <span className="text-[14px] font-semibold zak:text-[10.5px] zak:font-bold zak:uppercase zak:tracking-[0.08em] zak:text-muted-foreground">
@@ -446,6 +452,10 @@ function Home() {
 
           {magKlantenZien && (
             <Link to="/klanten" className={cn(VAK, KLEUR.paars, GEWOON)}>
+              <Vorm
+                naam="palmblad"
+                plek="-bottom-8 -right-9 size-[130px] md:-bottom-10 md:-right-11 md:size-[200px]"
+              />
               <TegelKop label="Klanten" />
               <TegelGetal>
                 {bestand?.klaar ? (
@@ -476,6 +486,7 @@ function Home() {
               search={{ tab: prijzenZien ? "pof" : "lopen" }}
               className={cn(VAK, KLEUR.geel, GEWOON)}
             >
+              <Vorm naam="golven" plek="inset-x-0 bottom-0 h-[60px] md:h-[110px]" />
               <TegelKop label="Betalingen" />
               {prijzenZien ? (
                 <>
@@ -503,6 +514,10 @@ function Home() {
 
           {magPlannen && (
             <Link to="/" className={cn(VAK, KLEUR.aqua, GEWOON)}>
+              <Vorm
+                naam="slinger"
+                plek="-right-5 -top-6 h-[130px] w-[95px] md:-right-6 md:-top-8 md:h-[210px] md:w-[155px]"
+              />
               <TegelKop label="Wijken" />
               <TegelGetal>
                 {bestand ? <TelGetal waarde={bestand.wijken} onthoud="home-wijken" /> : leeg}
@@ -513,6 +528,10 @@ function Home() {
 
           {magMail && (
             <Link to="/mailing" className={cn(VAK, KLEUR.petrol, GEWOON)}>
+              <Vorm
+                naam="bloem"
+                plek="-right-8 -top-8 size-[120px] md:-right-10 md:-top-10 md:size-[180px]"
+              />
               <span className="flex items-center justify-between">
                 <span className="flex size-7 items-center justify-center rounded-[8px] bg-tegel-petrol-ink text-tegel-petrol md:size-8 md:rounded-[9px]">
                   <Mail className="size-[17px] md:size-[18px]" stroke={2.2} aria-hidden="true" />
@@ -549,6 +568,10 @@ function Home() {
                 "h-[116px] px-4 py-3.5 md:h-[128px] md:px-5 md:py-4",
               )}
             >
+              <Vorm
+                naam="schelpen"
+                plek="-bottom-5 -right-5 h-[85px] w-[110px] md:-bottom-6 md:-right-6 md:h-[110px] md:w-[140px]"
+              />
               <TegelKop label="Aanmeldingen" />
               <span className="mt-auto flex min-w-0 flex-col md:flex-row md:items-baseline md:gap-2">
                 <span className="font-display text-[38px] font-semibold leading-none tracking-[-0.04em] tabular-nums md:text-[40px]">
