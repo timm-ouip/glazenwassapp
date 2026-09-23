@@ -1,0 +1,14 @@
+// De naam van de worker bij Cloudflare, en dus het adres van de app:
+// https://paaltjesystems.wasapp.workers.dev
+//
+// Zonder dit bestand verzint nitro bij elke build zelf een naam uit de map
+// waarin je bouwt. In de hoofdmap werd dat "timm-ouip-glazenwassapp" en in
+// een worktree iets heel anders, waarna een deploy per ongeluk een nieuwe,
+// lege worker aanmaakte in plaats van de echte site bij te werken. Hier staat
+// hij vast, waar je ook bouwt.
+//
+// De rest van .output/server/wrangler.json maakt de build zelf; dit bestand
+// vult alleen aan.
+{
+  "name": "paaltjesystems"
+}
