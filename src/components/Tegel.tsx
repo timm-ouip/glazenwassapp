@@ -6,8 +6,7 @@ import { IconArrowUpRight as NaarRechtsBoven } from "@tabler/icons-react";
  * getal en een regel eronder.
  *
  * De kleuren komen uit --tegel-* in styles.css: in het thema Fel de felle
- * kleuren van het ontwerp, in crème de zachte tinten en witte kaarten. In
- * Zakelijk zijn alle vakken wit met een randje; de kleur van het vak zit daar
+ * kleuren van het ontwerp. In Zakelijk zijn alle vakken wit met een randje; de kleur van het vak zit daar
  * nog in één vierkantje naast het label (--tegel-*-accent, zie TegelKop).
  */
 export const TEGEL_KLEUR = {

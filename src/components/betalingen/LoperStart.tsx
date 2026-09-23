@@ -4,7 +4,7 @@ import { IconArrowRight as Pijl } from "@tabler/icons-react";
 
 import { AppLayout } from "@/components/AppLayout";
 import { TelBedrag, TelGetal } from "@/components/TelBedrag";
-import { TEGEL_KLEUR, TEGEL_VAK, TegelKop } from "@/components/Tegel";
+import { TEGEL_KLEUR, TEGEL_VAK, TegelGetal, TegelKop, TegelOnder } from "@/components/Tegel";
 import { useAuth } from "@/lib/auth";
 import { fetchGeldloopLijst, useGeldloopLive, type Vrijgave } from "@/lib/geldlopen";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,10 @@ import { cn } from "@/lib/utils";
 /** De vorm van de twee brede vakken, zoals de vakken op Home. */
 const GROOT_VAK =
   "col-span-2 flex flex-col h-[156px] rounded-[28px] px-5 py-4 md:h-[240px] md:px-[26px] md:py-[22px] zak:h-[136px] zak:md:h-[180px] zak:md:px-5 zak:md:py-4";
+
+/** Het vak eronder, over de hele breedte: korter, want er staat minder in. */
+const BREED_VAK =
+  "col-span-2 flex flex-col h-[116px] rounded-[24px] px-4 py-3.5 md:col-span-4 md:h-[140px] md:rounded-[26px] md:px-5 md:py-[18px] zak:h-[104px] zak:md:h-[120px]";
 
 /** Een balkje in de kleur van het vak zelf. */
 function Balk({ procent, label }: { procent: number; label: string }) {
@@ -131,24 +135,20 @@ export function LoperStart({
               )}
             </div>
           </div>
-        </div>
 
-        <div className="rounded-[20px] bg-card px-4 py-3 shadow-card">
-          <p className="text-[13px] text-muted-foreground">
-            Jij afgerekend: <b className="font-semibold text-foreground">{mijnTikken.betaald}</b> ·
-            niet thuis <b className="font-semibold text-foreground">{mijnTikken.nietThuis}</b> ·
-            geen geld <b className="font-semibold text-foreground">{mijnTikken.geenGeld}</b>
-          </p>
-          {/* Wat hij zelf ophaalde mag hij zien; het teamtotaal blijft bij
-              de eigenaar. */}
-          {o && (
-            <p className="mt-0.5 text-[13px] text-muted-foreground">
-              Opgehaald:{" "}
-              <b className="font-semibold text-foreground">
-                <TelBedrag key={vrijgave.id} bedrag={o.mij} />
-              </b>
-            </p>
-          )}
+          {/* Wat jij op zak hebt, als vak over de hele breedte onder de twee
+              andere. Het bedrag dat hij zelf ophaalde mag hij zien; het
+              teamtotaal blijft bij de eigenaar. */}
+          <div className={cn(TEGEL_VAK, TEGEL_KLEUR.petrol, BREED_VAK)}>
+            <TegelKop label="Jouw avond" pijl={false} />
+            <TegelGetal klein knippen={false}>
+              {o ? <TelBedrag key={vrijgave.id} bedrag={o.mij} /> : leeg}
+            </TegelGetal>
+            <TegelOnder>
+              {mijnTikken.betaald} afgerekend · {mijnTikken.nietThuis} niet thuis ·{" "}
+              {mijnTikken.geenGeld} geen geld
+            </TegelOnder>
+          </div>
         </div>
 
         <button

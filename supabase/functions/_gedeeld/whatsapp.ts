@@ -265,7 +265,7 @@ export function leesWijziging(
  * - binnengekomen: een rij van de klant (of uit de geschiedenis);
  * - verstuurd vanuit de WhatsApp Business-app (herkomst business_app): een
  *   rij met bron app, net als Meta's echo;
- * - verstuurd vanuit Wooshy zelf (herkomst cloud_api): die rij schreven we
+ * - verstuurd vanuit Paaltje Systems zelf (herkomst cloud_api): die rij schreven we
  *   al bij het versturen, dus alleen de status.
  */
 export function leesKapsoGebeurtenis(item: Record<string, unknown>, companyId: string): Webhookinhoud {

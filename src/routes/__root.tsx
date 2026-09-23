@@ -79,14 +79,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { title: "Wooshy" },
+      { title: "Paaltje Systems" },
       { name: "description", content: "Klanten per straat, prijzen en printlijsten per maand." },
-      // De naam onder het icoon als je Wooshy op je beginscherm zet. De
+      // De naam onder het icoon als je Paaltje Systems op je beginscherm zet. De
       // balkkleur (theme-color) staat in RootShell.
-      { name: "apple-mobile-web-app-title", content: "Wooshy" },
+      { name: "apple-mobile-web-app-title", content: "Paaltje Systems" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "mobile-web-app-capable", content: "yes" },
-      { property: "og:title", content: "Wooshy" },
+      { property: "og:title", content: "Paaltje Systems" },
       {
         property: "og:description",
         content: "Klanten per straat, prijzen en printlijsten per maand.",
@@ -120,10 +120,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    // Het themascript hieronder zet .dark op dit element vóór React
-    // hydrateert. Dat is precies de bedoeling, maar React ziet het als een
-    // verschil met wat de server stuurde en klaagt erover.
-    <html lang="en" suppressHydrationWarning>
+    // Het themascript hieronder zet .dark (en zo nodig .zak in plaats van
+    // .fel) op dit element vóór React hydrateert. Dat is precies de bedoeling,
+    // maar React ziet het als een verschil met wat de server stuurde en klaagt
+    // erover. De klasse staat er alvast op: zonder .fel of .zak heeft de
+    // stylesheet geen kleuren, en Fel is waar de app standaard in staat.
+    <html lang="en" className="fel" suppressHydrationWarning>
       <head>
         {/* Vóór de stylesheet aan bod komt: anders flitst het lichte thema
             even op bij elke paginalading. */}
@@ -131,8 +133,8 @@ function RootShell({ children }: { children: ReactNode }) {
         {/* Kleur van de balk om de app heen op telefoons, licht en donker.
             Hier en niet in head(): die houdt van twee tags met dezelfde
             naam er maar één over. */}
-        <meta name="theme-color" content="#F8F5F0" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#141311" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#F4F0E8" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
         <HeadContent />
       </head>
       <body>

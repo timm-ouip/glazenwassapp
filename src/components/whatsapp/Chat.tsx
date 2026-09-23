@@ -118,7 +118,7 @@ function Antwoordveld({
       setTekst("");
       if (!uit.bewaard) {
         toast.warning(
-          "Verstuurd, maar Wooshy kon het niet bewaren. Het staat wel op de telefoon van de klant.",
+          "Verstuurd, maar Paaltje Systems kon het niet bewaren. Het staat wel op de telefoon van de klant.",
         );
       }
       void qc.invalidateQueries({ queryKey: ["wa-berichten", telefoon] });
@@ -318,7 +318,7 @@ function Media({
 /**
  * Wat Paaltje met het laatste bericht van de klant deed of van plan is: een
  * ingepland antwoord (tegen te houden of meteen te versturen), een voorstel
- * om te gebruiken, of iets wat hij in Wooshy veranderde (geel, terug te
+ * om te gebruiken, of iets wat hij in Paaltje Systems veranderde (geel, terug te
  * draaien).
  */
 function PaaltjeStrook({

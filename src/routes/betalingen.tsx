@@ -35,7 +35,7 @@ export const Route = createFileRoute("/betalingen")({
       ...(/^[0-9a-f-]{36}$/.test(straat) ? { straat } : {}),
     };
   },
-  head: () => ({ meta: [{ title: "Betalingen — Wooshy" }] }),
+  head: () => ({ meta: [{ title: "Betalingen — Paaltje Systems" }] }),
   component: Betalingen,
 });
 
@@ -78,9 +78,17 @@ function Betalingen() {
   const titel = `Betalingen · ${TABNAAM[tab]}`;
 
   // Een wijk vrijgeven is van de eigenaar, en gebeurt in een venster op het
-  // overzicht: daar stuurt de knop hem dus heen.
+  // overzicht: daar stuurt de knop hem dus heen. Wie bedragen mag zien heeft
+  // zijn loopcijfers al op het overzicht staan, dus die gaat hier meteen de
+  // straat in; de knop linksboven brengt hem terug naar dat overzicht.
   if (tab === "lopen")
-    return <Lopen titel={titel} onVrijgeven={isEigenaar ? () => naarTab("vanavond") : undefined} />;
+    return (
+      <Lopen
+        titel={titel}
+        onVrijgeven={isEigenaar ? () => naarTab("vanavond") : undefined}
+        naarOverzicht={() => naarTab("vanavond")}
+      />
+    );
 
   return (
     <AppLayout titel={titel}>
@@ -103,9 +111,12 @@ function Betalingen() {
 function Lopen({
   titel = "Geldlopen",
   onVrijgeven,
+  naarOverzicht,
 }: {
   titel?: string;
   onVrijgeven?: (() => void) | undefined;
+  /** Er is elders al een overzicht: sla het startscherm over en ga daarheen terug. */
+  naarOverzicht?: (() => void) | undefined;
 }) {
   const avonden = useQuery({
     queryKey: ["mijn-geldloop"],
@@ -158,7 +169,7 @@ function Lopen({
       </div>
     ) : undefined;
 
-  if (!begonnen) {
+  if (!begonnen && !naarOverzicht) {
     return (
       <LoperStart
         vrijgave={vrijgave}
@@ -177,7 +188,7 @@ function Lopen({
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
-            onClick={() => setBegonnen(false)}
+            onClick={naarOverzicht ?? (() => setBegonnen(false))}
             className="flex min-h-10 items-center gap-1.5 rounded-full bg-card px-3.5 text-[13px] font-medium shadow-card"
           >
             <ChevronLeft className="size-4" />

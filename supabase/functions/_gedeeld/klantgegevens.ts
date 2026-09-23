@@ -61,7 +61,7 @@ export interface Herkend {
   via: "telefoon" | "adres";
   /** Het mailadres dat daarom aan de klant gekoppeld is (leeg als de mail er geen had). */
   email: string;
-  /** Het adres stond er zonder klant, en Wooshy maakte deze klant zelf aan. */
+  /** Het adres stond er zonder klant, en Paaltje Systems maakte deze klant zelf aan. */
   aangemaakt?: boolean;
   /** Bij `aangemaakt`: het adres waar de nieuwe klant aan hangt. */
   customer_id?: string;
@@ -79,7 +79,7 @@ export interface KlantGegevens {
     velden: Partial<Record<Veld, string>>;
     herkend?: Herkend;
     bleven: Veld[];
-    /** Waarden (zie `vergelijkbaar`) die Wooshy niet nog eens invult. */
+    /** Waarden (zie `vergelijkbaar`) die Paaltje Systems niet nog eens invult. */
     waarden: string[];
   };
 }
@@ -233,7 +233,7 @@ async function zoekAdres(db: Db, companyId: string, g: Gevonden): Promise<AdresR
  *  - Telefoonnummer klopt bij precies één klant → herkend.
  *  - Adres klopt en de naam ook → herkend. Alleen het adres → een gok.
  *  - Adres klopt maar er hangt nog geen klant aan → `leegAdres`: dan mag
- *    Wooshy de klant zelf aanmaken (zie maakKlantBijAdres).
+ *    Paaltje Systems de klant zelf aanmaken (zie maakKlantBijAdres).
  *  - Wijzen telefoon en adres naar twee verschillende klanten → niets.
  *
  * Klanten en adressen in `afgewezen` (eerder teruggedraaid bij deze mail) tellen niet.
@@ -316,7 +316,7 @@ export async function herken(
 
 /**
  * Hoort dit mailadres echt bij de klant: op de klant zelf, of door een mens
- * gekoppeld? Een koppeling die Wooshy zelf maakte (bron 'paaltje') telt niet.
+ * gekoppeld? Een koppeling die Paaltje Systems zelf maakte (bron 'paaltje') telt niet.
  */
 export async function zekerGekoppeld(db: Db, companyId: string, email: string, klantId: string): Promise<boolean> {
   const adres = email.trim().toLowerCase();
@@ -334,11 +334,11 @@ export async function zekerGekoppeld(db: Db, companyId: string, email: string, k
 }
 
 /**
- * Een adres dat in Wooshy staat maar nog geen klant heeft: de klant aanmaken
+ * Een adres dat in Paaltje Systems staat maar nog geen klant heeft: de klant aanmaken
  * met naam, telefoon en adres uit de mail, en aan het adres hangen. Net zoals
  * de aanmeldpagina een lege plek vult. Het mailadres komt niet op de klant
  * zelf: dat kan iedereen typen. Dat koppelt paaltje-lezen apart, als koppeling
- * van Wooshy, tot een mens op Klopt klikt.
+ * van Paaltje Systems, tot een mens op Klopt klikt.
  *
  * Geeft het id van de nieuwe klant, of null als het adres intussen al een
  * klant kreeg (dan is de net gemaakte klant meteen weer weg).
@@ -390,11 +390,11 @@ export async function maakKlantBijAdres(
   return klant.id;
 }
 
-/** Zoveel klanten mag Wooshy per bedrijf per uur zelf aanmaken: een rem tegen een reeks nagemaakte mails. */
+/** Zoveel klanten mag Paaltje Systems per bedrijf per uur zelf aanmaken: een rem tegen een reeks nagemaakte mails. */
 const MAX_AANGEMAAKT_PER_UUR = 5;
 
 /**
- * Mag Wooshy bij dit adres zelf een klant aanmaken? Niet als iemand dat bij een
+ * Mag Paaltje Systems bij dit adres zelf een klant aanmaken? Niet als iemand dat bij een
  * eerdere mail (van wie dan ook) al terugdraaide, en niet als hij dit uur al
  * een handvol klanten aanmaakte.
  */

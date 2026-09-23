@@ -1,5 +1,5 @@
 /**
- * De mail in Wooshy lezen: lijsten per map en één bericht in zijn geheel.
+ * De mail in Paaltje Systems lezen: lijsten per map en één bericht in zijn geheel.
  *
  * Alles hier is lezen, rechtstreeks uit de database; RLS laat alleen de
  * eigenaar bij de berichten. Wat de mailbox verandert (gelezen, weggooien,
@@ -71,7 +71,7 @@ export type KlantVeld =
   | "plaats";
 
 /**
- * Wat Wooshy met de klantgegevens in een mail deed (zie
+ * Wat Paaltje Systems met de klantgegevens in een mail deed (zie
  * supabase/functions/_gedeeld/klantgegevens.ts, waar het ontstaat).
  */
 export interface KlantGegevens {
@@ -92,7 +92,7 @@ export interface KlantGegevens {
     aangemaakt?: boolean;
     customer_id?: string;
   };
-  /** Lege velden die Wooshy bij deze klant invulde. */
+  /** Lege velden die Paaltje Systems bij deze klant invulde. */
   toegevoegd?: { klant_id: string; velden: Partial<Record<KlantVeld, string>> };
   /** Wat in de mail anders is dan bij de klant, en niet meer in een leeg vak paste. */
   anders?: { telefoon?: string; email?: string; adres?: string };
@@ -339,7 +339,7 @@ const BERICHT_KOLOMMEN = `${REGEL_KOLOMMEN},cc,antwoord_naar,tekst,html,afgekapt
 /**
  * Eén mail, zolang hij nog op de server staat en niet weggelegd is. Het
  * dossier vraagt ook mail die uit de mailbox weg is (`ookUitMailbox`): die
- * bewaart Wooshy voor de klant.
+ * bewaart Paaltje Systems voor de klant.
  */
 export async function fetchBericht(id: string, ookUitMailbox = false): Promise<Bericht | null> {
   let query = supabase
@@ -817,7 +817,7 @@ export function lijstDatum(iso: string): string {
  * formulieren al tegen; dit gaat over wat het kader níet tegenhoudt:
  *
  *  - links met een eigen `target` of een `javascript:`-adres, die een venster
- *    openen dat nog vat heeft op het Wooshy-tabblad;
+ *    openen dat nog vat heeft op het Paaltje Systems-tabblad;
  *  - een eigen `<base>` in de mail, die onze instellingen zou overschrijven.
  *
  * DOMParser voert niets uit: hij bouwt alleen de boom, zodat we die kunnen

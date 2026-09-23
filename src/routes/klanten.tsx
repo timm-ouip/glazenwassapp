@@ -108,7 +108,7 @@ export const Route = createFileRoute("/klanten")({
   },
   head: () => ({
     meta: [
-      { title: "Klanten — Wooshy" },
+      { title: "Klanten — Paaltje Systems" },
       {
         name: "description",
         content:
@@ -445,7 +445,7 @@ const KlantRegelMobiel = memo(function KlantRegelMobiel({
           <WhatsApp className="size-5" /> WhatsApp
         </a>
         <a
-          // Het mailcontact met deze klant in Wooshy zelf: de berichten in
+          // Het mailcontact met deze klant in Paaltje Systems zelf: de berichten in
           // het dossier, waar je ook meteen een nieuwe mail schrijft. Zonder
           // recht op mail je eigen mailapp.
           href={!mailInApp && mail ? `mailto:${mail}` : undefined}

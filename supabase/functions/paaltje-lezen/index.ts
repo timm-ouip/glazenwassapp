@@ -402,7 +402,7 @@ async function leesEen(
       customer_id?: string;
     } | null = opTelefoonOfAdres;
     // Het adres staat er wel, maar er hangt nog geen klant aan (bijvoorbeeld net
-    // geïmporteerd): dan maakt Wooshy de klant zelf aan. Een lege plek vullen
+    // geïmporteerd): dan maakt Paaltje Systems de klant zelf aan. Een lege plek vullen
     // mag, net als op de aanmeldpagina; het gele vakje heeft Ongedaan maken.
     if (!herkend && leegAdres && (await magKlantAanmaken(db, mail.company_id, leegAdres))) {
       const nieuw = await maakKlantBijAdres(db, mail.company_id, leegAdres, uit.aanmelding, mail.van_naam);
@@ -441,8 +441,8 @@ async function leesEen(
           .eq("id", mail.id);
         if (terugFout) throw new Error(`Herkende klant bewaren: ${terugFout.message}`);
       } catch (e) {
-        // Maakte Wooshy de klant net aan, dan die meteen weer weg: anders blijft
-        // er een klant op het adres staan zonder dat bewaard is dat Wooshy hem
+        // Maakte Paaltje Systems de klant net aan, dan die meteen weer weg: anders blijft
+        // er een klant op het adres staan zonder dat bewaard is dat Paaltje Systems hem
         // maakte, en kun je hem niet meer ongedaan maken.
         if (herkend.aangemaakt && herkend.customer_id) {
           await draaiAanmakenTerug(db, mail.company_id, herkend.customer_id, herkend.klant_id);

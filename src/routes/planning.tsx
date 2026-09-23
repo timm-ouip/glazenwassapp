@@ -197,7 +197,7 @@ export const Route = createFileRoute("/planning")({
   }),
   head: () => ({
     meta: [
-      { title: "Planning — Wooshy" },
+      { title: "Planning — Paaltje Systems" },
       {
         name: "description",
         content: "Wat er per dag gewassen wordt, en wat een maand heeft opgeleverd.",

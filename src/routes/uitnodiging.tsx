@@ -24,7 +24,7 @@ export const Route = createFileRoute("/uitnodiging")({
   }),
   head: () => ({
     meta: [
-      { title: "Uitnodiging accepteren — Wooshy" },
+      { title: "Uitnodiging accepteren — Paaltje Systems" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -206,8 +206,8 @@ function UitnodigingPagina() {
             <CardDescription>
               {stand.soort === "code"
                 ? stand.bestaand
-                  ? "Je bent uitgenodigd voor het team in Wooshy. Je hebt al een account: log in met je eigen wachtwoord."
-                  : "Je bent uitgenodigd voor het team in Wooshy. Kies je naam en een wachtwoord om te beginnen."
+                  ? "Je bent uitgenodigd voor het team in Paaltje Systems. Je hebt al een account: log in met je eigen wachtwoord."
+                  : "Je bent uitgenodigd voor het team in Paaltje Systems. Kies je naam en een wachtwoord om te beginnen."
                 : "Stel je naam en wachtwoord in om te beginnen"}
             </CardDescription>
           )}

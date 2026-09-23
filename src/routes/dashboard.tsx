@@ -45,7 +45,7 @@ export const Route = createFileRoute("/dashboard")({
   beforeLoad: async () => {
     await requireSession();
   },
-  head: () => ({ meta: [{ title: "Dashboard — Wooshy" }] }),
+  head: () => ({ meta: [{ title: "Dashboard — Paaltje Systems" }] }),
   component: Dashboard,
 });
 

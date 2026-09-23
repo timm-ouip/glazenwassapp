@@ -76,7 +76,7 @@ export const Route = createFileRoute("/importeren")({
   },
   head: () => ({
     meta: [
-      { title: "Excel importeren — Wooshy" },
+      { title: "Excel importeren — Paaltje Systems" },
       {
         name: "description",
         content:

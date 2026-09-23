@@ -28,7 +28,7 @@ export function Tabbalk({ boven }: { boven?: ReactNode }) {
   const { employee, company, thuis, werk, beheer, teDoen, isActief, subtabs } = useMenu();
   const navigate = useNavigate();
   const [meerOpen, setMeerOpen] = useState(false);
-  // De tabbladen van de pagina waar je bent (Betalingen en Mail). Sta je er
+  // De tabbladen van de pagina waar je bent (alleen Mail heeft ze). Sta je er
   // al, dan klapt dezelfde knop ze open in plaats van niets te doen.
   const [tabsOpen, setTabsOpen] = useState(false);
   // Ongelezen mail in het postvak, als getal op de Mail-tab. Dezelfde vraag

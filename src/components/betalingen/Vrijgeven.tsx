@@ -389,7 +389,7 @@ export function VrijgeefVenster({
     </Drawer>
   ) : (
     <Dialog open={open} onOpenChange={(o) => !o && onSluit()}>
-      <DialogContent className="flex max-h-[88dvh] w-[min(720px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden border-0 bg-card p-0 sm:rounded-[24px]">
+      <DialogContent className="flex max-h-[88dvh] w-[min(1000px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden border-0 bg-card p-0 sm:rounded-[24px]">
         {inhoud}
       </DialogContent>
     </Dialog>

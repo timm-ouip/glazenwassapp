@@ -92,7 +92,7 @@ export async function fetchMappen(): Promise<MailMap[]> {
   );
 }
 
-/** Hoeveel mails er al in Wooshy staan, per map-id. Eén vraag voor alle mappen. */
+/** Hoeveel mails er al in Paaltje Systems staan, per map-id. Eén vraag voor alle mappen. */
 export async function telOpgehaald(): Promise<Record<string, number>> {
   const { data, error } = await db.rpc("mail_tellingen");
   if (error) throw error;

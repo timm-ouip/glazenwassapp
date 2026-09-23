@@ -135,7 +135,7 @@ export const inviteEmployee = createServerFn({ method: "POST" })
     });
     if (zoekFout) throw new Error("Uitnodigen mislukte");
     // Eén melding voor alles wat niet kan: anders vertelt hij aan elke
-    // eigenaar of een adres ergens anders in Wooshy gebruikt wordt.
+    // eigenaar of een adres ergens anders in Paaltje Systems gebruikt wordt.
     const kanNiet = "Dit e-mailadres kan nu niet uitgenodigd worden.";
     if (bestaandId) {
       const { data: al } = await supabaseAdmin
@@ -247,7 +247,7 @@ export const inviteEmployee = createServerFn({ method: "POST" })
     if (mailFout) {
       await trekIn();
       throw new Error(
-        `${mailFout.message}. Koppel je bedrijfsmail bij Instellingen → mail, dan verstuurt Wooshy de uitnodiging zelf.`,
+        `${mailFout.message}. Koppel je bedrijfsmail bij Instellingen → mail, dan verstuurt Paaltje Systems de uitnodiging zelf.`,
       );
     }
     return { via: "supabase" };
@@ -261,7 +261,7 @@ type Uitnodiging =
       id: string;
       email: string;
       companyId: string;
-      /** Dit adres heeft al een eigen Wooshy-account (bevestigd): zie accepteerUitnodiging. */
+      /** Dit adres heeft al een eigen Paaltje Systems-account (bevestigd): zie accepteerUitnodiging. */
       bestaand: boolean;
     }
   | { status: "verlopen" | "ongeldig" | "gebruikt" };
@@ -357,7 +357,9 @@ export const accepteerUitnodiging = createServerFn({ method: "POST" })
     const u = await zoekUitnodiging(supabaseAdmin, data.id, data.code);
     if (u.status !== "geldig") throw new Error(WAAROM_NIET[u.status]);
     if (u.bestaand) {
-      throw new Error("Er is al een Wooshy-account met dit adres. Log in met je eigen wachtwoord.");
+      throw new Error(
+        "Er is al een Paaltje Systems-account met dit adres. Log in met je eigen wachtwoord.",
+      );
     }
 
     const { error: pwFout } = await supabaseAdmin.auth.admin.updateUserById(u.id, {

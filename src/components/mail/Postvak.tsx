@@ -7,7 +7,7 @@
  *
  * Naast de mappen van de mailserver staan de mappen van Paaltje: wat op jou
  * wacht, zijn categorieën, en de post die geen klantmail is. Die bestaan
- * alleen in Wooshy; op je telefoon staat alles gewoon in het postvak.
+ * alleen in Paaltje Systems; op je telefoon staat alles gewoon in het postvak.
  *
  * Wat je hier met een mail doet (lezen, weggooien, beantwoorden) gebeurt ook
  * op de mailserver, zodat je telefoon hetzelfde laat zien.
@@ -244,7 +244,7 @@ export function Postvak({
         </div>
         <h2 className="mt-3 font-display text-[18px] font-semibold">Koppel eerst je mailbox</h2>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Dan haalt Wooshy al je mail op, niet alleen de antwoorden op aankondigingen.
+          Dan haalt Paaltje Systems al je mail op, niet alleen de antwoorden op aankondigingen.
         </p>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           <Button asChild className="rounded-full">
@@ -293,7 +293,7 @@ export function Postvak({
     <>
       {mailbox.data?.status === "fout" && (
         <p className="mb-3 rounded-[12px] bg-tint-amber px-3 py-2 text-[13px] text-tint-amber-ink">
-          Wooshy kan niet meer inloggen bij je mailbox.{" "}
+          Paaltje Systems kan niet meer inloggen bij je mailbox.{" "}
           <Link to="/instellingen" search={{ tab: "mail" }} className="font-medium underline">
             Vul het wachtwoord opnieuw in
           </Link>
@@ -378,7 +378,7 @@ export function Postvak({
               <p className="p-6 text-center text-[13px] text-muted-foreground">
                 {mappen.isError
                   ? "De mappen konden niet geladen worden."
-                  : "Wooshy haalt je mail op…"}
+                  : "Paaltje Systems haalt je mail op…"}
               </p>
             </div>
           )}
@@ -704,7 +704,7 @@ function MapKolom({
       <p className="px-1 text-[11.5px] leading-snug text-muted-foreground">
         {laatsteSync
           ? `Bijgewerkt ${lijstDatum(laatsteSync)}`
-          : "Wooshy haalt je mail voor het eerst op…"}
+          : "Paaltje Systems haalt je mail voor het eerst op…"}
       </p>
     </div>
   );
@@ -2329,7 +2329,8 @@ function Mailweergave({
           </div>
           {b.afgekapt && (
             <p className="mx-5 mt-3 rounded-[10px] bg-tint-geel px-3 py-1.5 text-[12px] text-tint-geel-ink">
-              Deze mail is groot; Wooshy toont alleen het begin. De hele mail staat in je mailbox.
+              Deze mail is groot; Paaltje Systems toont alleen het begin. De hele mail staat in je
+              mailbox.
             </p>
           )}
           {b.html ? (
@@ -2381,7 +2382,7 @@ function BijlageKnop({
       const b = await haalBijlage(berichtId, index);
       const url = URL.createObjectURL(b.blob);
       // Alleen typen die geen script kunnen draaien. Een SVG ("image/svg+xml")
-      // of html zou in een eigen tabblad als Wooshy zelf meedoen: die downloaden.
+      // of html zou in een eigen tabblad als Paaltje Systems zelf meedoen: die downloaden.
       const bekijkbaar = [
         "image/png",
         "image/jpeg",
@@ -2437,7 +2438,7 @@ function grootte(bytes: number): string {
  * bevatten; zonder toegang tot de app kan hij niets. Plaatjes van internet
  * laden we niet: daarmee ziet een verzender wanneer je zijn mail opent. Links
  * zijn eerst nagelopen (veiligeMailHtml) en gaan open zonder lijntje terug naar
- * Wooshy en zonder te verraden waar je vandaan komt.
+ * Paaltje Systems en zonder te verraden waar je vandaan komt.
  *
  * Met `meegroeien` wordt het kader op de telefoon zo hoog als de mail, zodat
  * je de mail met de rest van de pagina mee scrolt. Daarvoor draait er één

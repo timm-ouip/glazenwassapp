@@ -1,5 +1,5 @@
 /**
- * Het dagrapport samenstellen: wat Wooshy sinds de vorige keer deed.
+ * Het dagrapport samenstellen: wat Paaltje Systems sinds de vorige keer deed.
  *
  * Alleen tellen en opsommen, geen taalmodel: een rapport over wat de assistent
  * deed hoort niet door diezelfde assistent geschreven te worden.
@@ -97,7 +97,7 @@ export async function stelSamen(db: Db, companyId: string, vanaf: Date, tot: Dat
   ) as { id: string }[] | null;
   const postvakken = (mappen ?? []).map((m) => m.id);
 
-  // 1. Binnengekomen: in deze periode in Wooshy gekomen. De ontvangstdatum
+  // 1. Binnengekomen: in deze periode in Paaltje Systems gekomen. De ontvangstdatum
   //    alleen met marge, zodat de eerste koppeling (een jaar oude mail) niet als
   //    "nieuw" telt, maar een mail van 06:29 die om 06:31 werd opgehaald wel.
   let rijen: { id: string; is_klantmail: boolean | null; paaltje_status: string }[] = [];
@@ -219,7 +219,7 @@ export async function stelSamen(db: Db, companyId: string, vanaf: Date, tot: Dat
     await db.from("mailboxen").select("status,fout,laatste_sync").eq("company_id", companyId).maybeSingle(),
     "Mailbox",
   ) as { status: string; fout: string; laatste_sync: string | null } | null;
-  if (box?.status === "fout") problemen.push("Wooshy kan niet meer inloggen bij je mailbox. Vul het wachtwoord opnieuw in.");
+  if (box?.status === "fout") problemen.push("Paaltje Systems kan niet meer inloggen bij je mailbox. Vul het wachtwoord opnieuw in.");
   else if (box?.fout) problemen.push(`De mailbox gaf een storing: ${eenRegel(box.fout, 160)}`);
 
   const nieuweFouten = await db
@@ -401,7 +401,7 @@ export function wijzigingZin(w: RapportInhoud["zelfGedaan"][number]): string {
 
 /** Het rapport als platte tekst, voor in de mail. */
 export function alsTekst(r: RapportInhoud, appUrl: string): string {
-  const regels: string[] = ["Goedemorgen,", "", "Dit is wat Wooshy sinds het vorige rapport deed.", ""];
+  const regels: string[] = ["Goedemorgen,", "", "Dit is wat Paaltje Systems sinds het vorige rapport deed.", ""];
 
   if (r.problemen.length > 0) {
     regels.push("LET OP", ...r.problemen.map((p) => `- ${p}`), "");
@@ -422,7 +422,7 @@ export function alsTekst(r: RapportInhoud, appUrl: string): string {
 
   if (r.zelfGedaan.length > 0) {
     regels.push("Paaltje deed zelf:", ...r.zelfGedaan.map((w) => `- ${wijzigingZin(w)}`));
-    regels.push("  (Terugdraaien kan in Wooshy onder Mailing → Rapport.)", "");
+    regels.push("  (Terugdraaien kan in Paaltje Systems onder Mailing → Rapport.)", "");
   }
 
   // Een ouder rapport dat nog gemaild moet worden, heeft nog geen klachten.
@@ -463,6 +463,6 @@ export function alsTekst(r: RapportInhoud, appUrl: string): string {
   if (r.opmerkingen.length > 0) {
     regels.push("", ...r.opmerkingen.map((o) => `(${o})`));
   }
-  regels.push("", `Bekijk alles in Wooshy: ${appUrl}/mailing`, "", "Groet,", "Paaltje");
+  regels.push("", `Bekijk alles in Paaltje Systems: ${appUrl}/mailing`, "", "Groet,", "Paaltje");
   return regels.join("\n");
 }

@@ -1,5 +1,5 @@
 /**
- * Het privacybeleid van Wooshy. Openbaar, zonder inlog: Meta vraagt dit adres
+ * Het privacybeleid van Paaltje Systems. Openbaar, zonder inlog: Meta vraagt dit adres
  * voor de WhatsApp-koppeling, en klanten moeten het kunnen lezen. Het anker
  * #gegevens-verwijderen is de uitleg die Meta vraagt voor het wissen van
  * gegevens.
@@ -9,11 +9,11 @@ import { createFileRoute } from "@tanstack/react-router";
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
-      { title: "Privacybeleid — Wooshy" },
+      { title: "Privacybeleid — Paaltje Systems" },
       {
         name: "description",
         content:
-          "Hoe Wooshy en De Ramensopperij omgaan met klantgegevens, mail en WhatsApp-berichten.",
+          "Hoe Paaltje Systems en De Ramensopperij omgaan met klantgegevens, mail en WhatsApp-berichten.",
       },
     ],
   }),
@@ -29,7 +29,7 @@ function Privacy() {
       <article className="mx-auto flex max-w-[68ch] flex-col gap-8 text-[15px] leading-relaxed">
         <header className="flex flex-col gap-2">
           <p className="text-[12px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
-            Wooshy · De Ramensopperij
+            Paaltje Systems · De Ramensopperij
           </p>
           <h1 className="font-display text-3xl font-semibold tracking-[-0.02em]">Privacybeleid</h1>
           <p className="text-muted-foreground">Bijgewerkt op {BIJGEWERKT}.</p>
@@ -37,10 +37,10 @@ function Privacy() {
 
         <Blok titel="Wie zijn wij">
           <p>
-            Wooshy is de planningsapp van glazenwassersbedrijf De Ramensopperij. Bedrijven die
-            Wooshy gebruiken, plannen er hun werk mee en houden er contact mee met hun klanten, per
-            mail en per WhatsApp. Het bedrijf waarvan jij klant bent, is verantwoordelijk voor jouw
-            gegevens; De Ramensopperij levert en beheert de app.
+            Paaltje Systems is de planningsapp van glazenwassersbedrijf De Ramensopperij. Bedrijven
+            die Paaltje Systems gebruiken, plannen er hun werk mee en houden er contact mee met hun
+            klanten, per mail en per WhatsApp. Het bedrijf waarvan jij klant bent, is
+            verantwoordelijk voor jouw gegevens; De Ramensopperij levert en beheert de app.
           </p>
           <p>
             Vragen over je gegevens? Mail naar{" "}
@@ -75,24 +75,24 @@ function Privacy() {
 
         <Blok titel="Paaltje, de digitale assistent">
           <p>
-            Wooshy heeft een digitale assistent, Paaltje. Die leest binnenkomende berichten, deelt
-            ze in (bijvoorbeeld een verzoek om over te slaan) en kan een antwoord voorstellen of
-            versturen. Nu doet hij dat bij mail; WhatsApp-berichten gaat hij binnenkort ook lezen.
-            Daarvoor gaan de tekst van je bericht en de gegevens die nodig zijn om te antwoorden
-            naar een AI-dienst (Anthropic). Die gebruikt ze alleen om het antwoord te maken, niet om
-            zijn modellen te trainen. Je kunt altijd een mens spreken: zeg het in je bericht, of bel
-            of mail het bedrijf.
+            Paaltje Systems heeft een digitale assistent, Paaltje. Die leest binnenkomende
+            berichten, deelt ze in (bijvoorbeeld een verzoek om over te slaan) en kan een antwoord
+            voorstellen of versturen. Nu doet hij dat bij mail; WhatsApp-berichten gaat hij
+            binnenkort ook lezen. Daarvoor gaan de tekst van je bericht en de gegevens die nodig
+            zijn om te antwoorden naar een AI-dienst (Anthropic). Die gebruikt ze alleen om het
+            antwoord te maken, niet om zijn modellen te trainen. Je kunt altijd een mens spreken:
+            zeg het in je bericht, of bel of mail het bedrijf.
           </p>
         </Blok>
 
         <Blok titel="WhatsApp">
           <p>
             Berichten via WhatsApp lopen via het WhatsApp Business Platform van Meta, en via Kapso,
-            een partner van Meta die ons nummer aan Wooshy koppelt. Stuur je ons een bericht, dan
-            gebruiken we je nummer om je te antwoorden. Foto's en spraakberichten die je meestuurt,
-            bewaren we bij je berichten. Wil je geen WhatsApp-berichten meer van ons, laat het ons
-            weten (bijvoorbeeld door <strong>stop</strong> te sturen); dan gebruiken we voortaan
-            mail.
+            een partner van Meta die ons nummer aan Paaltje Systems koppelt. Stuur je ons een
+            bericht, dan gebruiken we je nummer om je te antwoorden. Foto's en spraakberichten die
+            je meestuurt, bewaren we bij je berichten. Wil je geen WhatsApp-berichten meer van ons,
+            laat het ons weten (bijvoorbeeld door <strong>stop</strong> te sturen); dan gebruiken we
+            voortaan mail.
           </p>
         </Blok>
 
@@ -114,12 +114,12 @@ function Privacy() {
         <Blok titel="Wie helpt ons daarbij">
           <p>We werken met deze diensten, die je gegevens alleen voor ons verwerken:</p>
           <ul className="list-disc space-y-1 pl-5">
-            <li>Supabase — de database en opslag van Wooshy.</li>
+            <li>Supabase — de database en opslag van Paaltje Systems.</li>
             <li>Cloudflare — het online zetten van de app.</li>
             <li>Meta (WhatsApp Business Platform) — WhatsApp-berichten.</li>
             <li>
-              Kapso — de koppeling tussen WhatsApp en Wooshy. Kapso zit in de Verenigde Staten; je
-              WhatsApp-berichten gaan daarom ook via servers daar.
+              Kapso — de koppeling tussen WhatsApp en Paaltje Systems. Kapso zit in de Verenigde
+              Staten; je WhatsApp-berichten gaan daarom ook via servers daar.
             </li>
             <li>Anthropic — de AI achter Paaltje.</li>
             <li>Brevo en onze mailprovider — het versturen en ontvangen van mail.</li>

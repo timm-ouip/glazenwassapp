@@ -22,7 +22,7 @@ import { vandaag } from "@/lib/wasdag";
 
 /**
  * De beginstand: de pof van de papieren kaarten, één keer per wijk ingevuld.
- * Tot en met de gekozen dag zit alles daarin; daarna rekent Wooshy zelf.
+ * Tot en met de gekozen dag zit alles daarin; daarna rekent Paaltje Systems zelf.
  *
  * Dit is geen eigen pagina meer. De stukken hieronder staan op de kaart
  * (GeldKaart), want daar vink je de maanden aan en daar hoort het bedrag bij:
@@ -79,8 +79,8 @@ export function BeginstandStarten({
       </h2>
       <p className="mt-1 text-[13px] text-muted-foreground">
         Neem de kaarten van deze wijk erbij en vul per adres in wat er nog open staat. Alles tot en
-        met de dag hieronder zit in die beginstand. Vanaf de dag erna telt Wooshy zelf: elke
-        afgemelde wasbeurt en klus komt erbij, elke betaling gaat eraf.
+        met de dag hieronder zit in die beginstand. Vanaf de dag erna telt Paaltje Systems zelf:
+        elke afgemelde wasbeurt en klus komt erbij, elke betaling gaat eraf.
       </p>
       {wijk.betaalmethode === "overmaken" && (
         <p className="mt-2 text-[13px] text-tint-amber-ink">
@@ -342,7 +342,7 @@ export function BeginstandBedragen({
                 const s = standVan.get(c.id);
                 const bedrag = leesBedrag(invoer[c.id] ?? "") ?? 0;
                 const naam = c.klant_id ? naamVan(c.klant_id) : "";
-                // Wat Wooshy er sinds de beginstand zelf bij telde (of wat er al
+                // Wat Paaltje Systems er sinds de beginstand zelf bij telde (of wat er al
                 // betaald is): dan klopt "open" niet meer met het vakje.
                 const nuOpen = s ? s.open : 0;
                 const anders = s && Math.abs(nuOpen - (s.beginstand?.bedrag ?? 0)) > 0.005;

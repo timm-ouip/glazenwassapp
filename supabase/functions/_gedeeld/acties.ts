@@ -54,7 +54,7 @@ export interface MailStand {
   klant_id: string | null;
   /**
    * Is het mailadres echt van deze klant (op de klant zelf, of door een mens
-   * gekoppeld)? Onwaar als Wooshy de klant alleen aan telefoon of adres in de
+   * gekoppeld)? Onwaar als Paaltje Systems de klant alleen aan telefoon of adres in de
    * mail herkende: dat kan iedereen typen, dus dan voert Paaltje niets zelf door.
    */
   klant_zeker?: boolean;

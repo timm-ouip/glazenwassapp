@@ -231,7 +231,7 @@ export async function fetchKlantBijTelefoon(
   return await klantenMetAdressen([...new Set(ids)], vandaag);
 }
 
-/** Een appje waarin Wooshy iets met klantgegevens deed (of dat terugdraaide). */
+/** Een appje waarin Paaltje Systems iets met klantgegevens deed (of dat terugdraaide). */
 export interface WaKlantgegevens {
   id: string;
   klant_id: string | null;
@@ -239,7 +239,7 @@ export interface WaKlantgegevens {
 }
 
 /**
- * De appjes in dit gesprek waar Wooshy klantgegevens uit haalde, nieuwste
+ * De appjes in dit gesprek waar Paaltje Systems klantgegevens uit haalde, nieuwste
  * eerst: voor het gele vakje (met Klopt en Ongedaan maken) en "Anders in het
  * appje" in de klanttegel.
  */
@@ -277,7 +277,7 @@ export function bevestigWaKlant(berichtId: string, klantId: string): Promise<{ o
   return roep({ actie: "klant_bevestigen", bericht_id: berichtId, klant_id: klantId });
 }
 
-/** "Ongedaan maken": terugdraaien wat Wooshy uit dit appje bij de klant zette. */
+/** "Ongedaan maken": terugdraaien wat Paaltje Systems uit dit appje bij de klant zette. */
 export function draaiWaKlantgegevensTerug(
   berichtId: string,
 ): Promise<{ ok: true; bleven: string[] }> {
@@ -342,7 +342,7 @@ export interface BerichtWijziging {
   teruggedraaid_op: string | null;
 }
 
-/** Wat Paaltje na dit bericht in Wooshy veranderde (alleen de eigenaar ziet dit). */
+/** Wat Paaltje na dit bericht in Paaltje Systems veranderde (alleen de eigenaar ziet dit). */
 export async function fetchWijzigingenVan(berichtId: string): Promise<BerichtWijziging[]> {
   const { data, error } = await supabase
     .from("mail_wijzigingen")

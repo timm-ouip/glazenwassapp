@@ -21,6 +21,7 @@ import {
   boek,
   draaiGeldloopWijzigingTerug,
   draaiStraatWijzigingTerug,
+  fetchGeldloopLijst,
   fetchGeldloopWijzigingen,
   fetchStraatWijzigingen,
   nieuweTik,
@@ -66,7 +67,8 @@ export function Avondoverzicht({
   onVrijgeefVenster?: (open: boolean) => void;
 }) {
   const qc = useQueryClient();
-  const isEigenaar = useAuth().employee?.rol === "eigenaar";
+  const { employee } = useAuth();
+  const isEigenaar = employee?.rol === "eigenaar";
   const [datum, setDatum] = useState(vandaag());
   const [eigenVenster, setEigenVenster] = useState(false);
   const vrijgeven = vrijgeefVenster ?? eigenVenster;
@@ -145,6 +147,30 @@ export function Avondoverzicht({
   const procentGelopen = samenAdressen > 0 ? Math.round((gelopen / samenAdressen) * 100) : 0;
   const eindTijd = lopendeVrijgaven[0] ? tijd(lopendeVrijgaven[0].eind_op) : "";
   const lopersVanavond = [...new Set(lopendeVrijgaven.flatMap((v) => v.lopers.map((l) => l.naam)))];
+
+  // De avond zoals de geldlopers hem zien. De cijfers komen uit dezelfde
+  // lijst als het loopscherm, zodat er op beide schermen hetzelfde staat —
+  // dus ook dezelfde regel voor wat "loopt nu" is: begonnen, en van vandaag.
+  // Loopt er meer dan één team, dan is het jouw avond die telt.
+  const nu = Date.now();
+  const begonnenAvonden =
+    datum === vandaag() ? lopendeVrijgaven.filter((v) => Date.parse(v.begin_op) <= nu) : [];
+  const mijnAvond = begonnenAvonden.find((v) => v.lopers.some((l) => l.id === employee?.id));
+  const ikLoopMee = Boolean(mijnAvond);
+  const loopId = (mijnAvond ?? begonnenAvonden[0])?.id;
+  // De database geeft deze lijst alleen aan de eigenaar en aan wie die avond
+  // zelf loopt; een ander zou er een geweigerde vraag per minuut aan
+  // overhouden, dus die vragen we niet eens.
+  const loop = useQuery({
+    queryKey: ["geldloop-lijst", loopId],
+    queryFn: () => fetchGeldloopLijst(loopId as string),
+    enabled: Boolean(loopId) && (isEigenaar || ikLoopMee),
+    refetchInterval: 60_000,
+  });
+  const o = loop.data?.opgehaald;
+  const samenTotaal = (o?.samen_open ?? 0) + (o?.samen_gedaan ?? 0);
+  const samenProcent =
+    samenTotaal > 0 ? Math.round(((o?.samen_gedaan ?? 0) / samenTotaal) * 100) : 0;
   // Wat de eigenaar moet zien: korting, mogelijk dubbel, laat binnengekomen,
   // en wat teruggedraaid is.
   const opvallend = (a?.gebeurtenissen ?? []).filter(
@@ -173,6 +199,7 @@ export function Avondoverzicht({
       // Een teruggezette wasbeurt staat weer in de planning en telt weer mee
       // in wat er open staat.
       void qc.invalidateQueries({ queryKey: ["vergeten"] });
+      void qc.invalidateQueries({ queryKey: ["geldloop-lijst"] });
       void qc.invalidateQueries({ queryKey: ["wasdag"] });
       void qc.invalidateQueries({ queryKey: ["wasdagen"] });
       void qc.invalidateQueries({ queryKey: ["geld-pof"] });
@@ -199,6 +226,7 @@ export function Avondoverzicht({
       toast.success(`Teruggedraaid: ${soortLabel(g.soort).toLowerCase()} bij ${g.adres}`);
       void qc.invalidateQueries({ queryKey: ["geld-avond", datum] });
       void qc.invalidateQueries({ queryKey: ["geld-pof"] });
+      void qc.invalidateQueries({ queryKey: ["geldloop-lijst"] });
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -226,7 +254,7 @@ export function Avondoverzicht({
         </span>
       </div>
 
-      {(avond.isError || pofQuery.isError) && (
+      {(avond.isError || pofQuery.isError || loop.isError) && (
         <p role="status" className="text-[13px] text-tint-rood-ink">
           De cijfers konden niet opgehaald worden. Ververs de pagina om het opnieuw te proberen.
         </p>
@@ -284,6 +312,69 @@ export function Avondoverzicht({
             )}
           </div>
         </div>
+        {/* De avond in adressen, zoals de geldlopers hem zien. Alleen vandaag,
+            en de vakken over jezelf alleen als je zelf loopt. */}
+        {ikLoopMee && (
+          <div className={cn(TEGEL_VAK, TEGEL_KLEUR.aqua, TEGEL_GEWOON, "md:h-[150px]")}>
+            <TegelKop label="Jij nog te doen" pijl={false} />
+            <TegelGetal klein>{o ? <TelGetal waarde={o.mijn_open} /> : streep}</TegelGetal>
+            <TegelOnder>
+              {o
+                ? `${o.mijn_open === 1 ? "adres" : "adressen"} in ${o.mijn_straten_open} ${
+                    o.mijn_straten_open === 1 ? "straat" : "straten"
+                  } · ${o.mijn_gedaan} gelopen`
+                : "\u00a0"}
+            </TegelOnder>
+          </div>
+        )}
+        {(isEigenaar || ikLoopMee) && (
+          <div
+            className={cn(
+              TEGEL_VAK,
+              TEGEL_KLEUR.creme,
+              TEGEL_GEWOON,
+              "md:h-[150px]",
+              // Loopt er niemand naast je, dan vult dit vak de plek van het
+              // vak ernaast op, zodat de rij niet half leeg blijft.
+              !ikLoopMee && "col-span-2",
+            )}
+          >
+            <TegelKop label="Samen nog te gaan" pijl={false} />
+            <TegelGetal klein>{o ? <TelGetal waarde={o.samen_open} /> : streep}</TegelGetal>
+            <TegelOnder>
+              {o
+                ? `${o.samen_open === 1 ? "adres" : "adressen"} in de hele wijk · ${samenProcent}% gelopen`
+                : loopId
+                  ? "\u00a0"
+                  : "er loopt nu niemand"}
+            </TegelOnder>
+          </div>
+        )}
+        {/* Het vak waarmee je de straat in gaat: Lopen staat niet meer in
+            het menu, je gaat er hiervandaan heen. */}
+        {ikLoopMee && (
+          <button
+            type="button"
+            onClick={onLopen}
+            className={cn(
+              TEGEL_VAK,
+              TEGEL_KLIKBAAR,
+              TEGEL_KLEUR.petrol,
+              TEGEL_GEWOON,
+              "col-span-2 text-left md:h-[150px]",
+            )}
+          >
+            <TegelKop label="Jouw avond" />
+            <TegelGetal klein knippen={false}>
+              {o ? <TelBedrag key={loopId} bedrag={o.mij} /> : streep}
+            </TegelGetal>
+            <TegelOnder>
+              {o
+                ? `${o.mij_aantal} keer afgerekend · ${o.mijn_gedaan > 0 ? "verder lopen" : "beginnen"}`
+                : "\u00a0"}
+            </TegelOnder>
+          </button>
+        )}
         <button
           type="button"
           onClick={onPof}

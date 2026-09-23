@@ -224,13 +224,13 @@ export const Route = createFileRoute("/")({
   }),
   head: () => ({
     meta: [
-      { title: "Wooshy — straten, prijzen en maandplanning" },
+      { title: "Paaltje Systems — straten, prijzen en maandplanning" },
       {
         name: "description",
         content:
           "Beheer je glazenwasklanten per straat in een compacte tabel, met prijzen, notities en een filter voor even of oneven maanden.",
       },
-      { property: "og:title", content: "Wooshy" },
+      { property: "og:title", content: "Paaltje Systems" },
       {
         property: "og:description",
         content:

@@ -199,7 +199,7 @@ function MailRegel({
               {!m.op_server && (
                 <span
                   className="rounded-full bg-muted px-2 py-px"
-                  title="Weggegooid in het postvak of gewist op de telefoon; Wooshy bewaart hem voor het dossier."
+                  title="Weggegooid in het postvak of gewist op de telefoon; Paaltje Systems bewaart hem voor het dossier."
                 >
                   niet meer in mailbox
                 </span>
@@ -221,7 +221,7 @@ function MailRegel({
             <>
               {bericht.data.afgekapt && (
                 <p className="mb-2 rounded-[10px] bg-tint-geel px-3 py-1.5 text-[12px] text-tint-geel-ink">
-                  Deze mail is groot; Wooshy toont alleen het begin.
+                  Deze mail is groot; Paaltje Systems toont alleen het begin.
                 </p>
               )}
               {bericht.data.html ? (

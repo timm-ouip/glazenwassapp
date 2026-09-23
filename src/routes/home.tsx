@@ -50,7 +50,7 @@ export const Route = createFileRoute("/home")({
     // Dagplanning vastgezet op dit toestel: de app opent meteen op vandaag.
     if (typeof window !== "undefined" && naarDagBijOpstarten()) throw redirect({ to: "/dag" });
   },
-  head: () => ({ meta: [{ title: "Home — Wooshy" }] }),
+  head: () => ({ meta: [{ title: "Home — Paaltje Systems" }] }),
   component: Home,
 });
 
@@ -308,7 +308,7 @@ function Home() {
           {/* Op de telefoon: het merk en je account, zoals een app opent. */}
           <div className="flex items-center justify-between pb-1 md:hidden">
             <span className="font-display text-[22px] font-semibold tracking-[-0.02em]">
-              Wooshy
+              Paaltje Systems
             </span>
             <Link
               to="/instellingen"

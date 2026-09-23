@@ -72,7 +72,7 @@ export const Route = createFileRoute("/berichten")({
       : {}),
   }),
   head: () => ({
-    meta: [{ title: "Berichten — Wooshy" }],
+    meta: [{ title: "Berichten — Paaltje Systems" }],
   }),
   component: Berichten,
 });
@@ -539,7 +539,7 @@ function MailBubbel({
               <>
                 {bericht.data.afgekapt && (
                   <p className="mb-2 rounded-[10px] bg-tint-geel px-3 py-1.5 text-[12px] text-tint-geel-ink">
-                    Deze mail is groot; Wooshy toont alleen het begin.
+                    Deze mail is groot; Paaltje Systems toont alleen het begin.
                   </p>
                 )}
                 {bericht.data.html ? (
@@ -771,7 +771,7 @@ function AntwoordBalk({
       setTekst("");
       if (!uit.bewaard) {
         toast.warning(
-          "Verstuurd, maar Wooshy kon het niet bewaren. Het staat wel op de telefoon van de klant.",
+          "Verstuurd, maar Paaltje Systems kon het niet bewaren. Het staat wel op de telefoon van de klant.",
         );
       }
       onVerstuurd();

@@ -146,7 +146,7 @@ type Uitslag = { via: "mailbox" | "brevo"; van: string } | { via: "geen" } | { f
  * Versturen zoals het dagrapport: vanaf de eigen mailbox als die werkt, en
  * anders via Brevo, maar alleen vanaf het domein van een mailbox die dit
  * bedrijf ooit met het echte wachtwoord koppelde. Het Brevo-account is van
- * heel Wooshy; zonder die controle kon een bedrijf mailen namens een ander.
+ * heel Paaltje Systems; zonder die controle kon een bedrijf mailen namens een ander.
  */
 async function verstuur(
   db: Db,
@@ -203,7 +203,7 @@ async function verstuur(
 }
 
 /**
- * De mail zelf. Zegt wie er uitnodigt, voor welk bedrijf, wat Wooshy is en
+ * De mail zelf. Zegt wie er uitnodigt, voor welk bedrijf, wat Paaltje Systems is en
  * tot wanneer de link werkt, zodat niemand hoeft te raden of dit echt is.
  */
 function uitnodigingsmail(m: {
@@ -224,7 +224,7 @@ function uitnodigingsmail(m: {
 
   const tekst = [
     "Hoi,",
-    `${wie} nodigt je uit om mee te werken in Wooshy. Dat is de app waarin ${m.bedrijf} de klanten, de planning en het werk van de dag bijhoudt.`,
+    `${wie} nodigt je uit om mee te werken in Paaltje Systems. Dat is de app waarin ${m.bedrijf} de klanten, de planning en het werk van de dag bijhoudt.`,
     `Zo doe je mee:\n1. Open de link hieronder.\n2. Vul je naam in en kies een wachtwoord.\n3. Daarna log je in met ${m.email} en dat wachtwoord.`,
     m.link,
     `De link werkt tot ${tot}. Is hij verlopen, vraag ${opnieuw} dan om een nieuwe.`,
@@ -239,7 +239,7 @@ function uitnodigingsmail(m: {
     'font-size:15px;line-height:1.6;color:#1f2320;max-width:560px">',
     p("Hoi,"),
     p(
-      `<strong>${veilig(wie)}</strong> nodigt je uit om mee te werken in Wooshy. Dat is de app waarin ${veilig(m.bedrijf)} de klanten, de planning en het werk van de dag bijhoudt.`,
+      `<strong>${veilig(wie)}</strong> nodigt je uit om mee te werken in Paaltje Systems. Dat is de app waarin ${veilig(m.bedrijf)} de klanten, de planning en het werk van de dag bijhoudt.`,
     ),
     p(
       `Klik op de knop, vul je naam in en kies een wachtwoord. Daarna log je in met <strong>${veilig(m.email)}</strong> en dat wachtwoord.`,

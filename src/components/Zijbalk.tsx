@@ -19,7 +19,6 @@ import {
   type TablerIcon as LucideIcon,
 } from "@tabler/icons-react";
 
-import { Druppel } from "@/components/Merk";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,7 +28,6 @@ import {
 import { useAuth, signOut } from "@/lib/auth";
 import { aantalOpenAanmeldingen } from "@/lib/aanmeldingen";
 import { heeftRecht, rolLabel, type Recht } from "@/lib/rechten";
-import { MENU_TABBLADEN, TABNAAM, type BetalingenTab } from "@/lib/betalingen";
 import { MAIL_BLADEN, MAIL_BLADNAAM, MAIL_BLADRECHT, type MailBlad } from "@/lib/mailbladen";
 
 const OPSLAG = "zijbalk-ingeklapt";
@@ -96,30 +94,12 @@ export function useMenu() {
 
   /**
    * De tabbladen van de pagina waar je bent, als sublijstje onder het
-   * menu-item. Betalingen en Mail hebben ze; de rest van de app past op één
-   * pagina.
+   * menu-item. Alleen Mail heeft ze; de rest van de app past op één pagina.
+   * Betalingen staat er niet tussen: daar open je alles vanaf het overzicht,
+   * met de vakken erop.
    */
   const subtabs = (p: Pagina): Subtab[] => {
     if (!isActief(p)) return [];
-    if (p.to === "/betalingen") {
-      // Alleen voor wie bedragen mag zien: een geldloper krijgt daar toch maar
-      // één lijst te zien.
-      if (!heeftRecht(employee, "prijzen_zien")) return [];
-      const gevraagd = String(zoek["tab"] ?? "");
-      // Pof staat niet in het menu; je opent hem vanaf het overzicht, dus dat
-      // blijft zolang het menu-item dat oplicht.
-      const huidig = MENU_TABBLADEN.find((t) => t === gevraagd) ?? "vanavond";
-      // De gekozen wijk gaat mee: wissel je van tabblad, dan kijk je nog
-      // steeds naar dezelfde wijk.
-      const wijk = typeof zoek["wijk"] === "string" ? (zoek["wijk"] as string) : undefined;
-      return MENU_TABBLADEN.map((t) => ({
-        sleutel: t,
-        naar: "/betalingen" as const,
-        label: TABNAAM[t],
-        actief: t === huidig,
-        zoek: { tab: t, ...(wijk ? { wijk } : {}) },
-      }));
-    }
     if (p.to === "/mailing") {
       const zichtbaar = MAIL_BLADEN.filter((b) => {
         const recht = MAIL_BLADRECHT[b];
@@ -156,10 +136,8 @@ export type Subtab = {
   sleutel: string;
   label: string;
   actief: boolean;
-} & (
-  | { naar: "/betalingen"; zoek: { tab: BetalingenTab; wijk?: string } }
-  | { naar: "/mailing"; zoek: { blad: MailBlad } }
-);
+  zoek: { blad: MailBlad };
+};
 
 export type { Pagina };
 
@@ -181,8 +159,6 @@ export function Subtabs({
   return (
     <div className="mb-1 ml-[22px] flex flex-col gap-0.5 border-l border-border pl-2">
       {lijst.map((s) => {
-        // Twee takken, want de router wil per pagina weten wat er in het
-        // webadres mag staan.
         const klassen = `flex items-center rounded-[10px] transition-colors ${
           groot ? "h-12 px-3 text-[15px] fel:rounded-full" : "h-9 px-2.5 text-[12.5px]"
         } ${
@@ -190,18 +166,8 @@ export function Subtabs({
             ? "bg-card font-semibold shadow-card fel:shadow-none"
             : "text-foreground/65 hover:bg-card/70 hover:text-foreground"
         }`;
-        return s.naar === "/mailing" ? (
+        return (
           <Link key={s.sleutel} to="/mailing" search={s.zoek} onClick={onKies} className={klassen}>
-            {s.label}
-          </Link>
-        ) : (
-          <Link
-            key={s.sleutel}
-            to="/betalingen"
-            search={s.zoek}
-            onClick={onKies}
-            className={klassen}
-          >
             {s.label}
           </Link>
         );
@@ -227,15 +193,9 @@ function TabbladenMenu({ p, lijst }: { p: Pagina; lijst: Subtab[] }) {
       <DropdownMenuContent side="right" align="start" className="w-44">
         {lijst.map((s) => (
           <DropdownMenuItem key={s.sleutel} asChild>
-            {s.naar === "/mailing" ? (
-              <Link to="/mailing" search={s.zoek} className={s.actief ? "font-semibold" : ""}>
-                {s.label}
-              </Link>
-            ) : (
-              <Link to="/betalingen" search={s.zoek} className={s.actief ? "font-semibold" : ""}>
-                {s.label}
-              </Link>
-            )}
+            <Link to="/mailing" search={s.zoek} className={s.actief ? "font-semibold" : ""}>
+              {s.label}
+            </Link>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -317,15 +277,14 @@ export function Zijbalk() {
       className={`${breed} sticky top-0 hidden h-screen md:flex shrink-0 flex-col gap-5 border-r border-border bg-surface px-3.5 py-5 fel:dark:bg-background zak:bg-sidebar zak:border-sidebar-border transition-[width] duration-200 print:hidden`}
     >
       <div className={`flex items-center ${ingeklapt ? "flex-col gap-3" : "gap-2.5"}`}>
-        <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[12px] bg-card shadow-card zak:border zak:border-border zak:shadow-none">
-          <Druppel className="size-[22px]" />
-        </div>
         {/* Leeg tot het bedrijf geladen is: een placeholder die daarna
             verspringt leest slechter dan even niets. */}
         {!ingeklapt && (
           // Over twee regels: bedrijfsnamen zijn langer dan de 236px die de
-          // balk breed is, en afkappen maakt er "Wassersapp be…" van.
-          <span className="line-clamp-2 min-w-0 flex-1 font-display text-[15px] font-bold leading-tight">
+          // balk breed is, en afkappen maakt er "Wassersapp be…" van. Zelfde
+          // letter en dezelfde strakke spatiëring als de paginakop rechts
+          // ervan, zodat het één geheel is.
+          <span className="line-clamp-2 min-w-0 flex-1 font-display text-[16px] font-semibold leading-tight tracking-[-0.02em]">
             {company?.name ?? ""}
           </span>
         )}

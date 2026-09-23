@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 // gaat, rustig voor de rest, en een dikkere oranje ring als je er met Tab op
 // staat. In Zakelijk is hij ook een pil, maar dan bijna zwart en zonder
 // schaduw — één donkere knop per scherm, de rest heeft alleen een randje.
-// In crème blijft alles zoals het was.
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 fel:rounded-full fel:focus-visible:ring-2 fel:focus-visible:ring-offset-2 fel:focus-visible:ring-offset-background zak:rounded-full zak:focus-visible:ring-2 zak:focus-visible:ring-offset-2 zak:focus-visible:ring-offset-background",
   {

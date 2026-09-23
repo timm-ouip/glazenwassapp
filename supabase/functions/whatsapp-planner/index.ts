@@ -3,7 +3,7 @@
  *
  * Paaltje plant een antwoord in met een wachttijd, zodat de glazenwasser eerst
  * zelf kan reageren. Vlak voor het versturen kijken we alles opnieuw na:
- *  - antwoordde iemand intussen (in de app op de telefoon of in Wooshy)?
+ *  - antwoordde iemand intussen (in de app op de telefoon of in Paaltje Systems)?
  *  - kwam er van de klant nog een bericht bij? Dan leest Paaltje dat eerst.
  *  - valt het binnen de antwoordtijden? Anders schuift het door.
  *  - is het 24-uursvenster van WhatsApp nog open?

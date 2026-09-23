@@ -118,7 +118,7 @@ export const Route = createFileRoute("/printen")({
 
   head: () => ({
     meta: [
-      { title: "Printlijst maken — Wooshy" },
+      { title: "Printlijst maken — Paaltje Systems" },
       {
         name: "description",
         content:

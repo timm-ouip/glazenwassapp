@@ -1,5 +1,5 @@
 /**
- * De mailbox bij de provider spiegelen naar Wooshy.
+ * De mailbox bij de provider spiegelen naar Paaltje Systems.
  *
  * Eén ronde loopt twee keer langs de mappen.
  *
@@ -14,7 +14,7 @@
  * ronde. Die volgorde doet ertoe: een mail die op de telefoon van de ene map
  * naar de andere ging, staat na de eerste lus overal als "niet meer gezien",
  * en kan in de tweede lus aan zijn nieuwe plek gehangen worden (op
- * Message-ID) — met alles wat Wooshy er zelf aan had hangen.
+ * Message-ID) — met alles wat Paaltje Systems er zelf aan had hangen.
  *
  * "Niet meer gezien" is nooit meteen weg: pas na twee dagen wordt zo'n rij
  * echt verwijderd. Dat geldt ook voor een hele map die van de server
@@ -255,7 +255,7 @@ export async function haalOp(
     } catch {
       // Geen of onleesbaar wachtwoord: dit gaat niet vanzelf over. Maar net
       // ontkoppeld ("uit") mag niet ineens "fout" worden.
-      const tekst = "Wooshy kent het wachtwoord niet meer. Koppel de mailbox opnieuw.";
+      const tekst = "Paaltje Systems kent het wachtwoord niet meer. Koppel de mailbox opnieuw.";
       await meldFout(tekst, { status: "fout" });
       return { nieuw: 0, klaar: false, fout: tekst };
     }
@@ -631,7 +631,7 @@ export function bijlagenUit(structuur: Structuur | undefined): { naam: string; t
 
 /**
  * De bijlagen mét hun deelnummer. Altijd in dezelfde volgorde als
- * `bijlagenUit`: bijlage 3 in Wooshy is bijlage 3 hier.
+ * `bijlagenUit`: bijlage 3 in Paaltje Systems is bijlage 3 hier.
  */
 export function bijlageDelen(
   structuur: Structuur | undefined,

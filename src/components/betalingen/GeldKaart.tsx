@@ -326,7 +326,9 @@ export function GeldKaart({
     else nu.delete(maand);
     const lijst = [...nu].sort();
     if (c.price <= 0 && lijst.length > 0) {
-      toast.error("Dit adres heeft nog geen prijs, dus Wooshy weet niet wat een maand kost.");
+      toast.error(
+        "Dit adres heeft nog geen prijs, dus Paaltje Systems weet niet wat een maand kost.",
+      );
       return;
     }
     wijzigConcept(c.id, lijst);
@@ -637,8 +639,8 @@ export function GeldKaart({
       {invullen && weergave === "kaart" && peil && (
         <p className="text-[12.5px] text-muted-foreground">
           Tik de maanden tot en met {MAANDNAMEN[Number(peil.slice(5, 7)) - 1]} {peil.slice(0, 4)}{" "}
-          aan die op de kaart nog open stonden (een 0). Wooshy rekent de beginstand uit met de prijs
-          van nu.
+          aan die op de kaart nog open stonden (een 0). Paaltje Systems rekent de beginstand uit met
+          de prijs van nu.
           <span className="hidden sm:inline">
             {" "}
             Met het toetsenbord: pijltjes om te lopen, 0 voor pof, Backspace om weg te halen.

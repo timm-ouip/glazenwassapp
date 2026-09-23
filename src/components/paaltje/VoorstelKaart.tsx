@@ -2,9 +2,9 @@
  * Eén voorstel van Paaltje: samenvatting, de regels (adres · klant · veld ·
  * oud → nieuw), en de knoppen die passen bij de status en jouw rechten.
  *
- * Dezelfde geel-vakje-stijl als `WooshyVakje` in de mail (zie
+ * Dezelfde geel-vakje-stijl als `AutomatischVakje` in de mail (zie
  * `src/components/mail/KlantKaart.tsx`) voor "doorgevoerd, met Ongedaan
- * maken" — dat is overal in Wooshy hetzelfde teken.
+ * maken" — dat is overal in Paaltje Systems hetzelfde teken.
  */
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";

@@ -40,7 +40,7 @@ export const MAX_ONTVANGERS = 20;
 export const MAX_ONDERWERP = 300;
 export const MAX_TEKST = 50_000;
 /**
- * Hoeveel mails Wooshy per mailbox mag versturen. Mijndomein staat er zo'n 10
+ * Hoeveel mails Paaltje Systems per mailbox mag versturen. Mijndomein staat er zo'n 10
  * per 5 minuten toe; wij blijven daaronder, zodat een knop die blijft hangen
  * of een overgenomen account het adres niet op een zwarte lijst krijgt.
  * Aankondigingen gaan via Brevo en tellen hier niet mee.
@@ -135,7 +135,7 @@ export async function mapMetRol(db: Db, box: Box, rol: MapRol) {
 }
 
 export const VERANDERD =
-  "Deze mail is intussen op de server veranderd. Wacht even tot Wooshy hem opnieuw heeft opgehaald.";
+  "Deze mail is intussen op de server veranderd. Wacht even tot Paaltje Systems hem opnieuw heeft opgehaald.";
 
 /** De map waar een mail in stond voor hij in de prullenbak ging, als die er nog is. */
 export async function vorigeMap(db: Db, box: Box, id: string) {
@@ -233,7 +233,7 @@ export async function verplaats(
     let { error } = await db.from("berichten").update(nieuwePlek).eq("id", plek.id);
     if (error?.code === "23505") {
       // Een ophaalronde was sneller en zette de mail al als nieuwe rij in de
-      // doelmap. Die rij is kaal; de onze heeft wat Wooshy eraan hing. Dus
+      // doelmap. Die rij is kaal; de onze heeft wat Paaltje Systems eraan hing. Dus
       // die weg, en de onze op zijn plek.
       await db
         .from("berichten")
@@ -307,7 +307,7 @@ export function adressenUit(lijst: unknown): Adres[] | null {
   return uit;
 }
 
-/** Hoe vaak deze mailbox sinds `sinds` via Wooshy probeerde te versturen. */
+/** Hoe vaak deze mailbox sinds `sinds` via Paaltje Systems probeerde te versturen. */
 export async function verstuurdSinds(db: Db, box: Box, sinds: Date): Promise<number> {
   const { count, error } = await db
     .from("mail_verzendpogingen")
@@ -453,7 +453,7 @@ export async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Ve
       client.append(verzonden.pad, opgemaakt.bericht, ["\\Seen"], new Date()),
     );
 
-    // Meteen in Wooshy zetten, zodat hij in Verzonden staat zonder op de
+    // Meteen in Paaltje Systems zetten, zodat hij in Verzonden staat zonder op de
     // volgende ophaalronde te wachten. Zonder nummer van de server laten we het
     // aan die ronde over.
     if (res && typeof res.uid === "number" && res.uidValidity !== undefined) {
@@ -485,9 +485,9 @@ export async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Ve
         },
         { onConflict: "map_id,uidvalidity,uid", ignoreDuplicates: true },
       );
-      // Staat hij op de server maar niet in Wooshy, dan haalt de volgende
+      // Staat hij op de server maar niet in Paaltje Systems, dan haalt de volgende
       // ronde hem op. Geen reden om de gebruiker lastig te vallen.
-      if (error) console.error("kopie in Wooshy:", error.message);
+      if (error) console.error("kopie in Paaltje Systems:", error.message);
     }
   } catch (e) {
     kopieFout = "De mail is verstuurd, maar de kopie in Verzonden lukte niet.";

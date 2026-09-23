@@ -1,5 +1,5 @@
 /**
- * Paaltje als assistent in heel Wooshy: praten, opzoeken, en wijzigingen
+ * Paaltje als assistent in heel Paaltje Systems: praten, opzoeken, en wijzigingen
  * klaarzetten als voorstel.
  *
  * Paaltje voert zelf nooit iets door. Hij zet een voorstel klaar (een lijst
@@ -1600,7 +1600,7 @@ export const STATUS_TEKST: Record<Status, string> = {
 /** Het vaste deel van de instructies. Verandert niet per bericht, zodat het in de cache blijft. */
 export function systeemPrompt(bedrijfNaam: string, snelkeuzes: Snelkeuze[], r: Rechten): string {
   const regels = [
-    `Je heet Paaltje en je bent de assistent van glazenwassersbedrijf ${bedrijfNaam}, in de app Wooshy.`,
+    `Je heet Paaltje en je bent de assistent van glazenwassersbedrijf ${bedrijfNaam}, in de app Paaltje Systems.`,
     "Medewerkers van het bedrijf stellen je vragen over klanten en adressen, en vragen je dingen aan te passen.",
     "",
     "Hoe je praat:",
@@ -1707,7 +1707,7 @@ export function systeemPrompt(bedrijfNaam: string, snelkeuzes: Snelkeuze[], r: R
 const LEES_UITLEG = {
   name: "lees_uitleg",
   description: [
-    "Zoek op hoe iets in de app Wooshy werkt: welk scherm het is, waar de knop zit, wat iets betekent.",
+    "Zoek op hoe iets in de app Paaltje Systems werkt: welk scherm het is, waar de knop zit, wat iets betekent.",
     "Gebruik dit bij elke vraag die met 'hoe', 'waar' of 'wat betekent' over de app zelf gaat, en",
     "antwoord nooit uit je hoofd: een knop die er niet is, is erger dan geen antwoord.",
     "Onderwerpen:",

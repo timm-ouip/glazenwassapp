@@ -107,7 +107,7 @@ export const Route = createFileRoute("/mailing")({
   },
   head: () => ({
     meta: [
-      { title: "Mailing — Wooshy" },
+      { title: "Mailing — Paaltje Systems" },
       {
         name: "description",
         content: "Een aankondiging sturen naar alle klanten van een ingeplande dag.",
@@ -889,7 +889,7 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
                   </p>
                 )}
                 <p className="mt-2 text-[12px] text-muted-foreground">
-                  {"{naam}"}, {"{adres}"} en {"{datum}"} vult Wooshy per klant in.
+                  {"{naam}"}, {"{adres}"} en {"{datum}"} vult Paaltje Systems per klant in.
                   {sjabloon?.categorie === "marketing" &&
                     " Nieuws en acties gaan alleen naar klanten die daar apart ja op zeiden."}
                 </p>

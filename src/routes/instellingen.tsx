@@ -152,7 +152,7 @@ export const Route = createFileRoute("/instellingen")({
     }
     return uit;
   },
-  head: () => ({ meta: [{ title: "Instellingen — Wooshy" }] }),
+  head: () => ({ meta: [{ title: "Instellingen — Paaltje Systems" }] }),
   component: Instellingen,
 });
 
@@ -227,14 +227,14 @@ function Instellingen() {
             </div>
             <Kaart
               titel="Mailbox"
-              uitleg="Je gewone mail in Wooshy: alles wat binnenkomt, niet alleen antwoorden op aankondigingen."
+              uitleg="Je gewone mail in Paaltje Systems: alles wat binnenkomt, niet alleen antwoorden op aankondigingen."
             >
               <MailboxInstellingen isEigenaar={isEigenaar} />
             </Kaart>
             <div className="mt-4">
               <Kaart
                 titel="WhatsApp"
-                uitleg="Je zakelijke WhatsApp in Wooshy. Je nummer blijft gewoon werken in de app op je telefoon."
+                uitleg="Je zakelijke WhatsApp in Paaltje Systems. Je nummer blijft gewoon werken in de app op je telefoon."
               >
                 <WhatsAppInstellingen
                   isEigenaar={isEigenaar}
@@ -2126,8 +2126,6 @@ function PaaltjeAssistentKaart() {
 
 const THEMA_ICOON: Record<Thema, typeof Monitor> = {
   systeem: Monitor,
-  licht: Sun,
-  donker: Moon,
   "fel-licht": SunFel,
   "fel-donker": MoonFel,
   "zak-licht": Sun,
@@ -2137,9 +2135,8 @@ const THEMA_ICOON: Record<Thema, typeof Monitor> = {
 /** Twee kleuren per thema, voor het vierkantje in de keuzelijst: de
  *  ondergrond en de kleur waar je het thema aan herkent. */
 const THEMA_KLEUREN: Record<Thema, [grond: string, accent: string]> = {
-  systeem: ["#f7f3ea", "#b5d4f4"],
-  licht: ["#f7f3ea", "#b5d4f4"],
-  donker: ["#26241f", "#185fa5"],
+  // "Systeem" is Fel dat meewisselt, dus het vierkantje toont Fel licht.
+  systeem: ["#f4f0e8", "#ff5b1f"],
   "fel-licht": ["#f4f0e8", "#ff5b1f"],
   "fel-donker": ["#000000", "#ff5b1f"],
   "zak-licht": ["#f4f5f7", "#a9efc8"],
@@ -2160,10 +2157,11 @@ function ThemaVoorbeeld({ thema }: { thema: Thema }) {
 }
 
 /**
- * Het thema, in één keuzelijst. Bovenaan de drie families — crème, Fel en
- * Zakelijk — en per familie kies je licht of donker. Alleen crème kan met je
- * systeem meelopen; dat is de stand waarin de app 's avonds vanzelf donker
- * wordt. De keuze geldt op dit apparaat.
+ * Het thema, in één keuzelijst. Bovenaan de twee families — Fel en Zakelijk —
+ * en per familie kies je licht of donker. Alleen Fel kan met je systeem
+ * meelopen; dat is de stand waarin de app 's avonds vanzelf donker wordt, en
+ * de stand waar de app in staat als je niets kiest. De keuze geldt op dit
+ * apparaat.
  */
 function WeergaveKaart() {
   const [thema, setThema] = useState<Thema>("systeem");
@@ -2193,7 +2191,7 @@ function WeergaveKaart() {
   return (
     <Kaart
       titel="Weergave"
-      uitleg="Kies hoe de app eruitziet. Crème is warm papier met zwevende panelen, Fel zet felle kleurvlakken neer en Zakelijk is de rustige: koelgrijs met witte kaarten. De keuze geldt alleen op dit apparaat."
+      uitleg="Kies hoe de app eruitziet. Fel zet felle kleurvlakken neer met grote cijfers, Zakelijk is de rustige: koelgrijs met witte kaarten. De keuze geldt alleen op dit apparaat."
     >
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

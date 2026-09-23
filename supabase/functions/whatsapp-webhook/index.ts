@@ -6,7 +6,7 @@
  * Geen ingelogde gebruiker, dus zonder JWT-controle. Het slot is de
  * handtekening: Meta ondertekent elke body met het app-geheim
  * (WHATSAPP_APP_SECRET). Klopt die niet, dan doen we niets. Dat is het geheim
- * van de Meta-app van Wooshy: alle bedrijven koppelen via die ene app.
+ * van de Meta-app van Paaltje Systems: alle bedrijven koppelen via die ene app.
  *
  * Via Kapso komt hetzelfde binnen op `?aanbieder=kapso`, in Kapso's eigen
  * vorm en ondertekend met KAPSO_WEBHOOK_SECRET (kop X-Webhook-Signature).

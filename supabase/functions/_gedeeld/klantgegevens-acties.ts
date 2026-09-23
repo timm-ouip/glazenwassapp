@@ -1,5 +1,5 @@
 /**
- * Wat een mens doet met wat Wooshy zelf deed met klantgegevens uit een
+ * Wat een mens doet met wat Paaltje Systems zelf deed met klantgegevens uit een
  * bericht (zie klantgegevens.ts): bevestigen ("Klopt") of terugdraaien
  * ("Ongedaan maken"). Voor mail (mail-acties) en WhatsApp (functie whatsapp)
  * dezelfde regels; alleen wat er aan de klant gekoppeld werd verschilt: bij
@@ -68,7 +68,7 @@ export async function bevestigKlant(db: Db, bereik: Bereik, id: string, klantId:
   if (klantFout) throw new Error(`Klant opzoeken: ${klantFout.message}`);
   if (!rij || !klant) return { status: 404, body: { fout: `${w.die} of klant bestaat niet.` } };
 
-  // Het mailadres of het nummer bij de klant; had Wooshy dat al zelf gedaan,
+  // Het mailadres of het nummer bij de klant; had Paaltje Systems dat al zelf gedaan,
   // dan is het nu door een mens bevestigd.
   const koppeling =
     bereik.kanaal === "mail"
@@ -92,7 +92,7 @@ export async function bevestigKlant(db: Db, bereik: Bereik, id: string, klantId:
   }
 
   // Een mens koppelt bewust: een eerder teruggedraaide klant mag dan weer, en
-  // wat teruggedraaid was mag Wooshy weer aanvullen. Een herkenning van deze
+  // wat teruggedraaid was mag Paaltje Systems weer aanvullen. Een herkenning van deze
   // klant is nu bevestigd en hoeft niet meer ongedaan gemaakt te kunnen worden.
   const kg: KlantGegevens = { ...leesKlantgegevens(rij.klantgegevens) };
   if (kg.herkend?.klant_id === klant.id) delete kg.herkend;
@@ -130,13 +130,13 @@ export async function bevestigKlant(db: Db, bereik: Bereik, id: string, klantId:
 }
 
 /**
- * Terugdraaien wat Wooshy met de klantgegevens uit een bericht deed. Een vak
- * gaat alleen weer leeg als er nog precies staat wat Wooshy invulde: heeft
+ * Terugdraaien wat Paaltje Systems met de klantgegevens uit een bericht deed. Een vak
+ * gaat alleen weer leeg als er nog precies staat wat Paaltje Systems invulde: heeft
  * iemand het intussen aangepast, dan blijft het staan (dat staat in `bleven`).
  *
  * Een herkende klant gaat van het bericht af, het zelf gekoppelde mailadres
  * of nummer ook, en Paaltje leest het opnieuw zonder die klant. Wat
- * teruggedraaid is doet Wooshy bij opnieuw lezen niet nog eens.
+ * teruggedraaid is doet Paaltje Systems bij opnieuw lezen niet nog eens.
  */
 export async function draaiKlantgegevensTerug(db: Db, bereik: Bereik, id: string): Promise<Uitkomst> {
   const w = woord(bereik);
@@ -183,7 +183,7 @@ export async function draaiKlantgegevensTerug(db: Db, bereik: Bereik, id: string
   const nieuw: KlantGegevens = {
     ...kg,
     // De klant, en bij een zelf aangemaakte klant ook het adres: anders maakt
-    // Wooshy bij opnieuw lezen gewoon weer een klant aan op dat adres.
+    // Paaltje Systems bij opnieuw lezen gewoon weer een klant aan op dat adres.
     afgewezen: herkend
       ? [
           ...new Set([
@@ -264,7 +264,7 @@ export async function draaiKlantgegevensTerug(db: Db, bereik: Bereik, id: string
     }
   }
 
-  // Wat Wooshy zelf aan de klant koppelde gaat er weer af: bij mail het
+  // Wat Paaltje Systems zelf aan de klant koppelde gaat er weer af: bij mail het
   // mailadres, bij WhatsApp het nummer. Alleen als Paaltje het deed.
   if (herkend && UUID.test(String(herkend.klant_id))) {
     const koppeling =
@@ -332,7 +332,7 @@ export async function draaiKlantgegevensTerug(db: Db, bereik: Bereik, id: string
     }
   }
 
-  // Maakte Wooshy de klant zelf aan bij een adres zonder klant, dan gaat die
+  // Maakte Paaltje Systems de klant zelf aan bij een adres zonder klant, dan gaat die
   // klant weer van het adres af. Naar de prullenbak (daar terug te halen) alleen
   // als hij echt van dit adres af ging en aan geen ander adres meer hangt:
   // hing iemand hem intussen ergens anders aan, dan blijft hij staan.

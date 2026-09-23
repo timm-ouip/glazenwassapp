@@ -2,8 +2,8 @@
  * Iets doen met een mail: gelezen markeren, weggooien, terugzetten, of een
  * mail versturen.
  *
- * Alles hier gebeurt eerst op de mailserver en pas daarna in Wooshy. De server
- * is de baas: als het daar niet lukt, laten we in Wooshy ook niets veranderen,
+ * Alles hier gebeurt eerst op de mailserver en pas daarna in Paaltje Systems. De server
+ * is de baas: als het daar niet lukt, laten we in Paaltje Systems ook niets veranderen,
  * anders zie je op je telefoon iets anders dan hier.
  *
  * Alleen de eigenaar, net als het lezen.
@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
 
   // Versturen vraagt een eigen recht. Wat de planning verandert (doorvoeren,
   // stoppen) komt in het rapport van de eigenaar, en blijft daarom bij de
-  // eigenaar. Een klant koppelen, of terugdraaien wat Wooshy bij een klant
+  // eigenaar. Een klant koppelen, of terugdraaien wat Paaltje Systems bij een klant
   // invulde, mag ook wie klanten bewerkt.
   // Een map maken verandert de echte mailbox (ook op de telefoon): dat is meer dan lezen.
   if (
@@ -327,7 +327,7 @@ async function zetGelezen(
   if (!gelukt) return antwoord({ fout: VERANDERD }, 409);
 
   const { error } = await db.from("berichten").update({ gelezen }).eq("id", plek.id);
-  // Op de server is het gelukt; de volgende ophaalronde trekt Wooshy gelijk.
+  // Op de server is het gelukt; de volgende ophaalronde trekt Paaltje Systems gelijk.
   if (error) console.error("gelezen bijwerken:", error.message);
   return antwoord({ ok: true });
 }
@@ -397,7 +397,7 @@ async function maakMap(db: Db, box: Box, wachtwoord: string, ruweNaam: string): 
 }
 
 /**
- * Klaar met een mail (of toch niet). Alleen in Wooshy: op de mailserver
+ * Klaar met een mail (of toch niet). Alleen in Paaltje Systems: op de mailserver
  * bestaat "afgehandeld" niet.
  */
 async function handelAf(db: Db, box: Box, id: string, klaar: boolean): Promise<Response> {
@@ -703,7 +703,7 @@ async function bulk(db: Db, box: Box, wachtwoord: string, verzoek: Verzoek): Pro
   let gelukt = 0;
   const mislukt: string[] = [];
   // Eén verbinding voor alle mails: vijftig keer inloggen duurt te lang en de
-  // provider remt het af. Afhandelen gebeurt alleen in Wooshy.
+  // provider remt het af. Afhandelen gebeurt alleen in Paaltje Systems.
   const verbinding = verzoek.doe === "afhandelen" ? undefined : maakImap(box, wachtwoord);
   if (verbinding) await verbinding.connect();
   try {

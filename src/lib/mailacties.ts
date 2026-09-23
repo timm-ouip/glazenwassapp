@@ -95,7 +95,7 @@ export function koppelKlant(berichtId: string, klantId: string): Promise<{ ok: t
 }
 
 /**
- * Alles terugdraaien wat Wooshy met de klantgegevens uit deze mail deed:
+ * Alles terugdraaien wat Paaltje Systems met de klantgegevens uit deze mail deed:
  * ingevulde velden weer leeg, een zelf gekoppeld mailadres eraf. `bleven` zijn
  * velden die intussen door iemand gewijzigd waren; die blijven staan.
  */

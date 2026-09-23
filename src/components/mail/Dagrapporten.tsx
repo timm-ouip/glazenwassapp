@@ -1,5 +1,5 @@
 /**
- * De dagrapporten teruglezen: wat Wooshy elke ochtend mailde.
+ * De dagrapporten teruglezen: wat Paaltje Systems elke ochtend mailde.
  */
 import { useQuery } from "@tanstack/react-query";
 import {

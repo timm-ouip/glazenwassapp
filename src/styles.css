@@ -149,80 +149,17 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/*
+ * De bodem onder de twee thema's. Fel (hieronder) en Zakelijk vullen elke
+ * kleur zelf in; hier staat alleen wat ze samen delen. Zonder een van beide
+ * klassen op de pagina is er dus geen thema — src/lib/thema.ts zet altijd
+ * .fel of .zak neer.
+ */
 :root {
   /* Ruimer dan de gebruikelijke 8px: alles in deze app is een afgerond,
-     zwevend paneel. Knoppen en invulvakken volgen deze maat vanzelf. */
+     zwevend paneel. Knoppen en invulvakken volgen deze maat vanzelf.
+     Zakelijk zet hem verderop strakker. */
   --radius: 0.75rem;
-  /*
-   * Crème. De ondergrond is warm papier, de kaarten liggen er wit op, en de
-   * zijbalk is een tint dieper — zo zweeft het werk boven de pagina in plaats
-   * van dat er lijnen omheen staan. Alle neutralen delen dezelfde warme
-   * kleurhoek (rond 78); alleen de lichtheid verschuift. Eén hue, meer niet.
-   */
-  --background: oklch(0.971 0.008 78);
-  --surface: oklch(0.944 0.012 78);
-  --foreground: oklch(0.245 0.008 70);
-  --card: oklch(1 0.002 80);
-  /* Dieper dan de kaart zelf: de kopstrook van een straatkaart moet je
-     zien liggen. In het donker is deze kleur juist lichter dan de kaart. */
-  --card-header: oklch(0.944 0.012 78);
-  --card-foreground: oklch(0.245 0.008 70);
-  --popover: oklch(1 0.002 80);
-  --popover-foreground: oklch(0.245 0.008 70);
-  /* Donkere knoppen zijn warm zwart, geen marineblauw: op crème valt een
-     blauwzweem op als vuil. */
-  --primary: oklch(0.255 0.012 70);
-  --primary-foreground: oklch(0.985 0.005 80);
-  /* --brand is de VULLING (licht); --brand-foreground de tekst daarop (donker).
-     Voor blauwe tekst op een witte ondergrond is --brand-ink bedoeld. */
-  /* De kleuren komen uit dezelfde palet als de voorbeelden die Timmie
-     uitkoos: per kleur een lichte vulling met de donkerste tint als tekst.
-     Frisser en lichter dan het oude zeeblauw, uit dezelfde pastelfamilie als
-     de kaarten: een vulling om tekst op te zetten, niet een vlak dat schreeuwt. */
-  --brand: #B5D4F4;
-  --brand-foreground: #0C447C;
-  --brand-ink: #185FA5;
-  /* Betekeniskleuren, los van het merk: amber voor even maanden en het
-     aantal straten, groen voor bedragen. */
-  --tint-amber: #FAEEDA;
-  --tint-amber-ink: #633806;
-  --tint-groen: #EAF3DE;
-  --tint-groen-ink: #27500A;
-  /* Paars: al ingepland op een andere dag. Bewust geen blauw, want dat is
-     het merk, en geen amber, want dat is al gewassen. */
-  --tint-paars: #EEEDFE;
-  --tint-paars-ink: #3C3489;
-  /* Rood: deze maand overgeslagen, dus hij staat niet op de printlijst. */
-  --tint-rood: #FCEBEB;
-  --tint-rood-ink: #791F1F;
-  /* Blauw: alleen om zelf een markering mee te maken. Lichter dan het merk,
-     zodat een gekleurde regel geen knop lijkt. */
-  --tint-blauw: #E6F1FB;
-  --tint-blauw-ink: #0C447C;
-  /* En deze vier ook: kleuren om zelf een betekenis aan te geven. De tinten
-     liggen ver genoeg uit elkaar op de kleurencirkel om ze náást elkaar in
-     één lijst nog uit elkaar te houden — dat is waar het hier om gaat. */
-  --tint-oranje: #FAECE7;
-  --tint-oranje-ink: #712B13;
-  --tint-roze: #FBEAF0;
-  --tint-roze-ink: #72243E;
-  --tint-turkoois: #E1F5EE;
-  --tint-turkoois-ink: #085041;
-  --tint-limoen: #F0F6E4;
-  --tint-limoen-ink: #3B6D11;
-  /* Middentinten voor een icoon of een dun balkje los op de pagina, zonder
-     vlak eronder: lichter dan -ink, zodat ze nog van elkaar te onderscheiden zijn. */
-  --tint-blauw-mid: #185FA5;
-  --tint-groen-mid: #3B6D11;
-  --tint-rood-mid: #A32D2D;
-  --tint-paars-mid: #534AB7;
-  --tint-oranje-mid: #993C1D;
-  --tint-roze-mid: #993556;
-  --tint-turkoois-mid: #0F6E56;
-  /* Boter: hoort bij de extra opdrachten. Warmer dan amber en verder van de
-     betekeniskleuren af, zodat het opvalt zonder te waarschuwen. */
-  --tint-geel: #FBF3D0;
-  --tint-geel-ink: #6B4E07;
   /* Salie: de knop waarmee je een adres afrondt. Eén kleur voor alle thema's,
      net als de vier gekozen kleuren verderop — donker genoeg voor het papier en
      licht genoeg voor het zwart, dus hij hoeft niet om te draaien. De tekst
@@ -244,210 +181,37 @@
      met lichte tekst, dus zet er text-tint-grafiet-ink bij. */
   --tint-grafiet: #2E2E2E;
   --tint-grafiet-ink: #F3EEE5;
-  --secondary: oklch(0.955 0.007 78);
-  --secondary-foreground: oklch(0.3 0.008 70);
-  --muted: oklch(0.957 0.007 78);
-  --muted-foreground: oklch(0.545 0.012 72);
-  --accent: #E6F1FB;
-  --accent-foreground: #0C447C;
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.902 0.008 78);
-  --input: oklch(0.902 0.008 78);
-  --ring: #85B7EB;
-  /* Zonder randje om de vakken doet de schaduw het werk: iets dieper dan een
-     haarlijn, zodat een wit paneel los komt te liggen van het crème papier. */
-  --shadow-card: 0 1px 2px oklch(0.35 0.02 70 / 7%), 0 6px 18px oklch(0.35 0.02 70 / 9%);
-  /* Het duimpje van een schuifbalk: dezelfde warme grijstint als de randen,
-     zodat hij bij het papier hoort in plaats van er een systeemstreep op. */
-  --schuifduim: oklch(0.4 0.02 70 / 18%);
-  --schuifduim-aan: oklch(0.4 0.02 70 / 34%);
-  /* Een tegel die je optilt als je eroverheen gaat. In het donker doet een
-     diepere schaduw niets, dus daar wordt de rand om de kaart wat sterker. */
-  --shadow-tegel: 0 3px 8px oklch(0.4 0.02 70 / 8%), 0 14px 30px oklch(0.4 0.02 70 / 12%);
+  /* De grafiekkleuren van shadcn. Fel laat ze zo; Zakelijk kiest eigen. */
   --chart-1: oklch(0.58 0.11 245);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-
-  --sidebar: oklch(0.944 0.012 78);
-  --sidebar-foreground: oklch(0.245 0.008 70);
-  --sidebar-primary: #B5D4F4;
-  --sidebar-primary-foreground: #0C447C;
-  --sidebar-accent: #E6F1FB;
-  --sidebar-accent-foreground: #0C447C;
-  --sidebar-border: oklch(0.902 0.008 78);
-  --sidebar-ring: #85B7EB;
-
-  /* Hoe zacht een wijkkleur is als vlak. De code kent alleen de kleurhoek en
-     bouwt daar `oklch(var(--wijk-l) var(--wijk-c) <hoek>)` mee; of dat licht
-     of donker uitpakt hoort bij het thema, niet bij de code. */
-  --wijk-l: 0.94;
-  --wijk-c: 0.045;
-  /* En de donkere kant ervan: het bedrag op een dagtegel is dezelfde kleur
-     als het vlak, maar dan diep genoeg om te lezen. */
-  --wijk-ink-l: 0.43;
-  --wijk-ink-c: 0.115;
-
-  /* De cijferkaarten boven aan een pagina. In crème gewoon de tinten; het
-     thema Fel geeft ze eigen kleuren (zie .fel). */
-  --kaart-blauw: var(--tint-blauw);
-  --kaart-blauw-ink: var(--tint-blauw-ink);
-  --kaart-amber: var(--tint-amber);
-  --kaart-amber-ink: var(--tint-amber-ink);
-  --kaart-groen: var(--tint-groen);
-  --kaart-groen-ink: var(--tint-groen-ink);
-  --kaart-paars: var(--tint-paars);
-  --kaart-paars-ink: var(--tint-paars-ink);
-  --kaart-roze: var(--tint-roze);
-  --kaart-roze-ink: var(--tint-roze-ink);
-
-  /* De vakken op Home (src/routes/home.tsx). In crème de zachte tinten en
-     witte kaarten; Fel geeft ze de felle kleuren van het ontwerp. */
-  --tegel-oranje: var(--tint-oranje);
-  --tegel-oranje-ink: var(--tint-oranje-ink);
-  --tegel-creme: var(--card);
-  --tegel-creme-ink: var(--card-foreground);
-  --tegel-geel: var(--tint-amber);
-  --tegel-geel-ink: var(--tint-amber-ink);
-  --tegel-aqua: var(--tint-blauw);
-  --tegel-aqua-ink: var(--tint-blauw-ink);
-  --tegel-perzik: var(--tint-roze);
-  --tegel-perzik-ink: var(--tint-roze-ink);
-  --tegel-groen: var(--tint-groen);
-  --tegel-groen-ink: var(--tint-groen-ink);
-  --tegel-donker: var(--card);
-  --tegel-donker-ink: var(--card-foreground);
-  /* De vier kleuren die Timmie koos. Ze zijn steviger dan de pastels, dus ze
-     zijn bedoeld voor een enkel vlak — een tegel of een grafieklijn — en niet
-     om er een hele pagina mee te vullen. De inkt erbij is de tekstkleur die
-     er leesbaar op is: op goud, paars en ijsblauw donker, op petrol licht.
-     Paars is een middentint: daar haalt witte tekst de norm net niet, dus
-     staat er bijna zwarte tekst op, net als op een fel vlak. */
-  --tegel-goud: #EEC170;
-  --tegel-goud-ink: #3A2A08;
-  --tegel-paars: #7F7CAF;
-  --tegel-paars-ink: #0B0A14;
-  --tegel-petrol: #1A5E63;
-  --tegel-petrol-ink: #E8F3F2;
-  --tegel-ijsblauw: #CDE6F5;
-  --tegel-ijsblauw-ink: #10344C;
-  /* Het staafjesdiagram op Home: de maanden rustig, de huidige in kleur.
-     "Klein" is het minidiagram op het groene vak op de telefoon. */
-  --grafiek-rustig: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
-  --grafiek-accent: var(--tint-oranje-mid);
-  --grafiek-klein-rustig: color-mix(in oklab, var(--tint-groen-ink) 35%, transparent);
-  --grafiek-klein-accent: var(--tint-groen-ink);
-  /* Twee reeksen naast elkaar op het dashboard: contant en overmaken. */
-  --serie-contant: #c98f00;
-  --serie-overmaken: var(--tint-blauw-mid);
 }
 
+/* In het donker houdt alleen de grafiek eigen kleuren aan; de rest van het
+   donkere thema staat bij .fel.dark en .zak.dark. */
 .dark {
-  --background: oklch(0.165 0.006 75);
-  --surface: oklch(0.205 0.008 75);
-  --foreground: oklch(0.955 0.004 80);
-  --card: oklch(0.235 0.008 75);
-  --card-header: oklch(0.275 0.009 75);
-  --card-foreground: oklch(0.955 0.004 80);
-  --popover: oklch(0.255 0.009 75);
-  --popover-foreground: oklch(0.955 0.004 80);
-  --primary: oklch(0.94 0.006 80);
-  --primary-foreground: oklch(0.22 0.008 70);
-  --brand: #185FA5;
-  --brand-ink: #85B7EB;
-  --tint-amber: #633806;
-  --tint-amber-ink: #FAC775;
-  --tint-groen: #27500A;
-  --tint-groen-ink: #C0DD97;
-  --tint-paars: #3C3489;
-  --tint-paars-ink: #CECBF6;
-  /* De vier gekozen kleuren, omgedraaid voor het donker: het vlak diep, de
-     tekst erop licht. Anders zou een tegel van 270 pixels als een lamp op een
-     donkere pagina staan. */
-  --tegel-goud: #563D0C;
-  --tegel-goud-ink: #F0CE94;
-  --tegel-paars: #3B3960;
-  --tegel-paars-ink: #C6C4E4;
-  --tegel-petrol: #17555A;
-  --tegel-petrol-ink: #CFE7E5;
-  --tegel-ijsblauw: #123C57;
-  --tegel-ijsblauw-ink: #BBDCF2;
-  --tint-rood: #791F1F;
-  --tint-rood-ink: #F7C1C1;
-  --tint-blauw: #0C447C;
-  --tint-blauw-ink: #B5D4F4;
-  --tint-oranje: #712B13;
-  --tint-oranje-ink: #F5C4B3;
-  --tint-roze: #72243E;
-  --tint-roze-ink: #F4C0D1;
-  --tint-turkoois: #085041;
-  --tint-turkoois-ink: #9FE1CB;
-  --tint-limoen: #2C4A0E;
-  --tint-limoen-ink: #C0DD97;
-  --tint-blauw-mid: #85B7EB;
-  --tint-groen-mid: #97C459;
-  --tint-rood-mid: #F09595;
-  --tint-paars-mid: #AFA9EC;
-  --tint-oranje-mid: #F0997B;
-  --tint-roze-mid: #ED93B1;
-  --tint-turkoois-mid: #5DCAA5;
-  --tint-geel: #4A3A06;
-  --tint-geel-ink: #FAC775;
-  --brand-foreground: #E6F1FB;
-  --secondary: oklch(0.265 0.008 75);
-  --secondary-foreground: oklch(0.955 0.004 80);
-  --muted: oklch(0.265 0.008 75);
-  --muted-foreground: oklch(0.72 0.01 75);
-  --accent: #0C447C;
-  --accent-foreground: #B5D4F4;
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: #378ADD;
-  /* Schaduw doet in het donker niets; een dun randje licht wel. */
-  --shadow-card: 0 0 0 1px oklch(1 0 0 / 10%);
-  --shadow-tegel: 0 0 0 1px oklch(1 0 0 / 18%), 0 12px 26px oklch(0 0 0 / 45%);
-  --schuifduim: oklch(1 0 0 / 16%);
-  --schuifduim-aan: oklch(1 0 0 / 30%);
-
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  /* Dezelfde kleur als het canvas, alleen een tikje lichter: een blauwe
-     zijbalk maakt er een eigen wereld van naast de pagina. */
-  --sidebar: oklch(0.205 0.008 75);
-  --sidebar-foreground: oklch(0.955 0.004 80);
-  --sidebar-primary: #185FA5;
-  --sidebar-primary-foreground: #E6F1FB;
-  --sidebar-accent: #0C447C;
-  --sidebar-accent-foreground: #B5D4F4;
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: #378ADD;
-  --serie-contant: #fac775;
-  --wijk-l: 0.305;
-  --wijk-c: 0.048;
-  --wijk-ink-l: 0.87;
-  --wijk-ink-c: 0.085;
 }
 
 /*
- * Fel. Een apart thema naast crème, in een lichte (.fel) en een zwarte
- * versie (.fel.dark): felle, lichte kleurvlakken met bijna zwarte tekst, grote
- * cijfers en oranje als actiekleur. De vlakken zijn in beide versies precies
- * dezelfde kleur; alleen de ondergrond en de tekst die er los op staat
- * verschillen. Beide zijn te kiezen in Instellingen
- * (src/lib/thema.ts).
+ * Fel. Het thema waar de app standaard in staat, in een lichte (.fel) en een
+ * zwarte versie (.fel.dark): felle, lichte kleurvlakken met bijna zwarte
+ * tekst, grote cijfers en oranje als actiekleur. De vlakken zijn in beide
+ * versies precies dezelfde kleur; alleen de ondergrond en de tekst die er los
+ * op staat verschillen. Te kiezen in Instellingen (src/lib/thema.ts), waar
+ * "Systeem" hem met je apparaat mee laat wisselen.
  *
  * Tekst in een tintkleur (text-tint-*-ink) kan op twee plekken staan: op de
- * ondergrond, of op zijn eigen vlak. In crème is dat één kleur, maar op zwart
- * moet de tekst licht zijn en op een fel vlak juist donker. Daarom heet de
- * kleur op de ondergrond hier --grond-*, en zet de regel verderop de inkt
- * binnen elk fel vlak op donker.
+ * ondergrond, of op zijn eigen vlak. Op de ondergrond is dat één kleur, maar
+ * op zwart moet de tekst licht zijn en op een fel vlak juist donker. Daarom
+ * heet de kleur op de ondergrond hier --grond-*, en zet de regel verderop de
+ * inkt binnen elk fel vlak op donker.
  */
 .fel {
   --background: #f4f0e8;
@@ -542,7 +306,7 @@
   --wijk-ink-l: 0.4;
   --wijk-ink-c: 0.12;
 
-  /* Cijferkaarten: oranje, crème (hier wit), donkergroen, aqua en perzik. */
+  /* Cijferkaarten: oranje, wit, donkergroen, aqua en perzik. */
   --kaart-blauw: #ff5b1f;
   --kaart-blauw-ink: #140600;
   --kaart-amber: #ffffff;
@@ -763,7 +527,7 @@
 }
 
 /* Een half doorzichtig vlak (bg-tint-paars/60) wordt op zwart modderig en
-   houdt lichte tekst. Daarin geldt de rustige donkere tint van crème donker. */
+   houdt lichte tekst. Daarin geldt een rustige donkere tint. */
 :where(.fel.dark) :where([class*="bg-tint-amber/"]) {
   --tint-amber: #633806;
 }
@@ -796,9 +560,9 @@
 }
 
 /*
- * Zakelijk. Het derde thema, naast crème en Fel, in een lichte (.zak) en een
- * donkere versie (.zak.dark). Waar crème warm papier is en Fel kleurvlakken,
- * is Zakelijk een kantoorprogramma: een koelgrijze ondergrond, witte kaarten
+ * Zakelijk. Het tweede thema, naast Fel, in een lichte (.zak) en een donkere
+ * versie (.zak.dark). Waar Fel kleurvlakken is, is Zakelijk een
+ * kantoorprogramma: een koelgrijze ondergrond, witte kaarten
  * met een dun randje in plaats van een schaduw, bijna zwarte knoppen en
  * muntgroen als enige accent — dat zit alleen op de regel waar je staat.
  *
@@ -811,7 +575,7 @@
  * maten" — niet hier, want die horen niet bij de kleuren.
  */
 .zak {
-  /* Strakker dan crème: 10px in plaats van 12px. */
+  /* Strakker dan Fel: 10px in plaats van 12px. */
   --radius: 0.625rem;
 
   /* De neutralen. Eén koele grijstint (hoek rond 250 in hex-termen), van de
@@ -842,12 +606,12 @@
      Tab op staat is hij donker genoeg om op wit te zien. */
   --ring: #0f9d63;
 
-  /* Het merk blijft blauw, maar koeler dan in crème. */
+  /* Het merk blijft blauw, maar koeler dan in Fel. */
   --brand: #dbeafe;
   --brand-foreground: #1e3a8a;
   --brand-ink: #1d4ed8;
 
-  /* Betekeniskleuren: dezelfde betekenis als in crème, alleen koeler gemengd.
+  /* Betekeniskleuren: dezelfde betekenis als in Fel, alleen koeler gemengd.
      De inkt is de donkere kant van dezelfde kleur, de -mid zit ertussenin en
      is voor een icoon of een balkje zonder vlak eronder. */
   --tint-amber: #fef0cd;
@@ -897,7 +661,7 @@
   --sidebar-border: #e9ebef;
   --sidebar-ring: #0f9d63;
 
-  /* Wijkkleuren: nog lichter dan in crème, want ze liggen hier op wit en niet
+  /* Wijkkleuren: nog lichter dan in Fel, want ze liggen hier op wit en niet
      op papier. De inkt erbij is diep genoeg om een bedrag op te lezen. */
   --wijk-l: 0.952;
   --wijk-c: 0.038;
@@ -1248,7 +1012,7 @@
     --secondary-foreground: #000;
   }
 
-  /* Fel drukt af als crème: zachte vlakken in plaats van felle, anders gaat
+  /* Fel drukt zacht af: zachte vlakken in plaats van felle, anders gaat
      er een halve inktpatroon op aan een printlijst. Zakelijk donker doet
      hetzelfde: die vlakken zijn bijna zwart. */
   .fel,

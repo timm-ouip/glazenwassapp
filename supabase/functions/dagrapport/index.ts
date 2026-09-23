@@ -197,7 +197,7 @@ async function mail(db: Db, bedrijf: Bedrijf, datum: string, tekst: string): Pro
   if (aan.length === 0) return "Geen eigenaar met een mailadres.";
 
   const [jaar, maand, dag] = datum.split("-");
-  const onderwerp = `Wooshy dagrapport ${Number(dag)}-${Number(maand)}-${jaar}`;
+  const onderwerp = `Paaltje Systems dagrapport ${Number(dag)}-${Number(maand)}-${jaar}`;
 
   const { data: box, error: boxFout } = await db
     .from("mailboxen")
@@ -219,7 +219,7 @@ async function mail(db: Db, bedrijf: Bedrijf, datum: string, tekst: string): Pro
   try {
     const wachtwoord = await ontsleutel(geheim.versleuteld, geheim.iv);
     const opgemaakt = await maakOp({
-      van: { naam: "Paaltje (Wooshy)", adres: box.adres },
+      van: { naam: "Paaltje", adres: box.adres },
       aan,
       onderwerp,
       tekst,
@@ -257,13 +257,13 @@ async function viaBrevo(
   if (!sleutel || !afzenderEmail) {
     return "De mailbox werkt niet en er is geen andere manier ingesteld om het rapport te mailen.";
   }
-  // Het Brevo-account is van heel Wooshy: alleen versturen vanaf het domein
+  // Het Brevo-account is van heel Paaltje Systems: alleen versturen vanaf het domein
   // van een mailbox die dit bedrijf ooit met het echte wachtwoord koppelde.
   const domein = domeinVan(mailboxAdres);
   if (!domein || domeinVan(afzenderEmail) !== domein) {
-    return "De mailbox werkt niet, en de afzender staat niet op het domein van die mailbox; het rapport staat wel in Wooshy.";
+    return "De mailbox werkt niet, en de afzender staat niet op het domein van die mailbox; het rapport staat wel in Paaltje Systems.";
   }
-  const afzender = { naam: String(instellingen?.mail_afzender_naam || instellingen?.name || "Wooshy"), email: afzenderEmail };
+  const afzender = { naam: String(instellingen?.mail_afzender_naam || instellingen?.name || "Paaltje Systems"), email: afzenderEmail };
   for (const ontvanger of aan) {
     const uit = await stuurMail(sleutel, afzender, { naar: { email: ontvanger.email, naam: "" }, onderwerp, tekst });
     if (!uit.ok) return `Via Brevo mailen lukte niet: ${uit.fout}`;

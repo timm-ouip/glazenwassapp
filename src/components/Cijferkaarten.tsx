@@ -13,7 +13,7 @@ import type { TablerIcon as LucideIcon } from "@tabler/icons-react";
  *
  * In het thema Fel is het een felle tegel met het label bovenaan en een groot
  * getal onderin, zonder icoon. De kleuren komen dan uit --kaart-* in
- * styles.css: oranje, crème, donkergroen, aqua en perzik.
+ * styles.css: oranje, wit, donkergroen, aqua en perzik.
  *
  * In Zakelijk is elke kaart wit met een randje en zit de kleur alleen nog in
  * het icoonvakje — zo blijft de rij rustig en zie je toch waar je naar kijkt.

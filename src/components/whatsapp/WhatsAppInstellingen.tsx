@@ -1,5 +1,5 @@
 /**
- * Het WhatsApp-nummer van het bedrijf koppelen aan Wooshy.
+ * Het WhatsApp-nummer van het bedrijf koppelen aan Paaltje Systems.
  *
  * Het echte nummer, dat ook in de WhatsApp Business-app op je telefoon
  * blijft, koppel je via Kapso: een knop opent Kapso, daar log je in bij Meta
@@ -155,8 +155,8 @@ export function WhatsAppInstellingen({
       titel: "WhatsApp ontkoppelen?",
       tekst:
         k?.aanbieder === "kapso"
-          ? "Wooshy ontvangt dan geen nieuwe berichten meer. De berichten die al binnen zijn blijven staan. Je nummer blijft bij Kapso staan; daar haal je het weg als je wilt."
-          : "Wooshy ontvangt dan geen nieuwe berichten meer en vergeet het token. De berichten die al binnen zijn blijven staan.",
+          ? "Paaltje Systems ontvangt dan geen nieuwe berichten meer. De berichten die al binnen zijn blijven staan. Je nummer blijft bij Kapso staan; daar haal je het weg als je wilt."
+          : "Paaltje Systems ontvangt dan geen nieuwe berichten meer en vergeet het token. De berichten die al binnen zijn blijven staan.",
       bevestigLabel: "Ontkoppelen",
       gevaarlijk: true,
     });
@@ -265,7 +265,7 @@ export function WhatsAppInstellingen({
         <div className="space-y-3">
           <p className="text-[13px] text-muted-foreground">
             Koppel het nummer van je WhatsApp Business-app. Het blijft gewoon werken op je telefoon;
-            Wooshy leest mee en je kunt vanuit hier antwoorden. Na het koppelen kun je
+            Paaltje Systems leest mee en je kunt vanuit hier antwoorden. Na het koppelen kun je
             uitzendlijsten in de app niet meer versturen.
           </p>
           <div className="flex flex-wrap gap-2">
@@ -301,9 +301,9 @@ export function WhatsAppInstellingen({
       {isEigenaar && formulierOpen && (!gekoppeld || k?.aanbieder !== "kapso") && (
         <form onSubmit={(e) => void koppel(e)} className="space-y-3">
           <p className="text-[12.5px] text-muted-foreground">
-            Voor het testnummer van Meta. Je vindt deze gegevens in de Meta-app van Wooshy onder
-            WhatsApp → API-instellingen. Zet daar bij Webhook dit adres neer, met het controlewoord
-            dat ik je gaf, en vink <em>messages</em> aan:
+            Voor het testnummer van Meta. Je vindt deze gegevens in de Meta-app van Paaltje Systems
+            onder WhatsApp → API-instellingen. Zet daar bij Webhook dit adres neer, met het
+            controlewoord dat ik je gaf, en vink <em>messages</em> aan:
           </p>
           <code className="block break-all rounded-[10px] bg-muted px-2.5 py-1.5 text-[12px]">
             {WEBHOOK_URL}
@@ -412,8 +412,8 @@ function AntwoordTijdenFormulier() {
         <p className="text-[13.5px] font-medium">Paaltje op WhatsApp</p>
         <p className="text-[12.5px] text-muted-foreground">
           Mag Paaltje een bericht zelf beantwoorden (in te stellen per categorie bij Paaltje:
-          categorieën), dan wacht hij eerst. Antwoord je intussen zelf, in de app of in Wooshy, dan
-          stuurt hij niets.
+          categorieën), dan wacht hij eerst. Antwoord je intussen zelf, in de app of in Paaltje
+          Systems, dan stuurt hij niets.
         </p>
       </div>
       <div className="flex flex-wrap items-end gap-3">

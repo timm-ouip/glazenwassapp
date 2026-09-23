@@ -294,7 +294,7 @@ export function ToestemmingBestaandeKlanten() {
 }
 
 /**
- * Een los bericht via een goedgekeurd sjabloon. Wooshy vult naam, adres en de
+ * Een los bericht via een goedgekeurd sjabloon. Paaltje Systems vult naam, adres en de
  * volgende wasdag zelf in; aanpassen mag.
  */
 export function SjabloonBericht({
@@ -345,7 +345,9 @@ export function SjabloonBericht({
     setBezig(true);
     try {
       const uit = await verstuurSjabloon(telefoon, gekozen.id, waarden);
-      toast.success(uit.bewaard ? "Verstuurd." : "Verstuurd, maar Wooshy kon het niet bewaren.");
+      toast.success(
+        uit.bewaard ? "Verstuurd." : "Verstuurd, maar Paaltje Systems kon het niet bewaren.",
+      );
       setSjabloonId("");
       onVerstuurd();
     } catch (err) {

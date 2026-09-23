@@ -1,7 +1,7 @@
 /**
- * De mailbox van het bedrijf koppelen aan Wooshy.
+ * De mailbox van het bedrijf koppelen aan Paaltje Systems.
  *
- * Eén keer adres en wachtwoord invullen; daarna haalt Wooshy elke twee minuten
+ * Eén keer adres en wachtwoord invullen; daarna haalt Paaltje Systems elke twee minuten
  * nieuwe mail op, en de eerste keer een jaar terug. Hier zie je of dat loopt
  * en hoe ver het is. De mail zelf lees je straks op de mailpagina.
  */
@@ -94,7 +94,7 @@ export function MailboxInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
       if (uit.smtpFout) {
         toast.warning(`Gekoppeld: mail ophalen werkt. Versturen gaf nog een fout: ${uit.smtpFout}`);
       } else {
-        toast.success("Gekoppeld. Wooshy haalt je mail nu op.");
+        toast.success("Gekoppeld. Paaltje Systems haalt je mail nu op.");
       }
       ververs();
     } catch (err) {
@@ -108,7 +108,7 @@ export function MailboxInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
     setBezig("ophalen");
     try {
       const uit = await nuOphalen();
-      if ("bezig" in uit && uit.bezig) toast.info("Wooshy is al aan het ophalen.");
+      if ("bezig" in uit && uit.bezig) toast.info("Paaltje Systems is al aan het ophalen.");
       else toast.success(uit.nieuw === 0 ? "Geen nieuwe mail." : `${uit.nieuw} mails opgehaald.`);
       ververs();
     } catch (err) {
@@ -123,7 +123,7 @@ export function MailboxInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
     const ja = await bevestig({
       titel: "Mailbox ontkoppelen?",
       tekst:
-        "Wooshy haalt dan geen nieuwe mail meer op en vergeet het wachtwoord. De mail die al binnen is blijft staan. In je gewone mailprogramma verandert niets.",
+        "Paaltje Systems haalt dan geen nieuwe mail meer op en vergeet het wachtwoord. De mail die al binnen is blijft staan. In je gewone mailprogramma verandert niets.",
       bevestigLabel: "Ontkoppelen",
       gevaarlijk: true,
     });
@@ -146,7 +146,7 @@ export function MailboxInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
 
   const box = mailbox.data;
   const toonFormulier = !gekoppeld || formulierOpen;
-  const inWooshy = Object.values(opgehaald.data ?? {}).reduce((a, b) => a + b, 0);
+  const inDeApp = Object.values(opgehaald.data ?? {}).reduce((a, b) => a + b, 0);
 
   return (
     <div className="space-y-4">
@@ -176,8 +176,8 @@ export function MailboxInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
           )}
 
           <p className="text-[12.5px] text-muted-foreground">
-            Laatst opgehaald: {geleden(box.laatste_sync)}. Wooshy kijkt elke 2 minuten.
-            {inWooshy > 0 && ` ${inWooshy} mails staan al in Wooshy.`}
+            Laatst opgehaald: {geleden(box.laatste_sync)}. Paaltje Systems kijkt elke 2 minuten.
+            {inDeApp > 0 && ` ${inDeApp} mails staan al in Paaltje Systems.`}
           </p>
 
           {(mappen.data ?? []).length > 0 && (
@@ -186,7 +186,7 @@ export function MailboxInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
                 <li key={m.id} className="flex items-center justify-between gap-3 px-3 py-2">
                   <span>{mapNaam(m)}</span>
                   <span className="text-right text-[12.5px] tabular-nums text-muted-foreground">
-                    {opgehaald.data?.[m.id] ?? 0} in Wooshy
+                    {opgehaald.data?.[m.id] ?? 0} in Paaltje Systems
                     {m.ongelezen > 0 && ` · ${m.ongelezen} ongelezen`}
                   </span>
                 </li>
@@ -195,8 +195,8 @@ export function MailboxInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
           )}
 
           <p className="text-[12px] text-muted-foreground">
-            De eerste keer haalt Wooshy de mail van de afgelopen 12 maanden op, in stapjes van zo'n
-            60 per ronde. Nieuwe mail gaat altijd voor.
+            De eerste keer haalt Paaltje Systems de mail van de afgelopen 12 maanden op, in stapjes
+            van zo'n 60 per ronde. Nieuwe mail gaat altijd voor.
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -246,7 +246,8 @@ export function MailboxInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
           {!gekoppeld && (
             <p className="text-[12.5px] text-muted-foreground">
               Vul het mailadres in waar klanten je op mailen, met het wachtwoord van die mailbox
-              (hetzelfde als op je telefoon). Wooshy test het meteen en bewaart het versleuteld.
+              (hetzelfde als op je telefoon). Paaltje Systems test het meteen en bewaart het
+              versleuteld.
               {box?.status === "uit" &&
                 " Koppel je hetzelfde adres opnieuw, dan blijft de mail die al binnen was gewoon staan."}
             </p>
@@ -268,7 +269,7 @@ export function MailboxInstellingen({ isEigenaar }: { isEigenaar: boolean }) {
               <p className="flex items-start gap-1.5 rounded-[10px] bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-900">
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                 Dit is een ander adres dan {box.adres}. De mail van dat adres verdwijnt dan uit
-                Wooshy (in je gewone mailprogramma blijft alles staan).
+                Paaltje Systems (in je gewone mailprogramma blijft alles staan).
               </p>
             )}
           </div>

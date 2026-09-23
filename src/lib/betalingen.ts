@@ -19,20 +19,13 @@ export const BETAALMETHODEN: { waarde: Betaalmethode; label: string }[] = [
 
 /**
  * De weergaven van de Betalingen-pagina, zoals ze in het webadres staan.
- * Ze staan hier en niet in de route, omdat het menu (de zijbalk en de balk
- * onderin) ze als sublijstje toont: dat menu staat op elke pagina, ook als
- * Betalingen zelf nog niet geladen is.
+ * Geen ervan staat in het menu: je opent ze allemaal vanaf het overzicht,
+ * waar ze als vak staan — de pof-lijst, het lopen, de wijkkaarten en het
+ * venster om een wijk vrij te geven.
  */
 export const TABBLADEN = ["vanavond", "lopen", "pof", "kaart"] as const;
 
 export type BetalingenTab = (typeof TABBLADEN)[number];
-
-/**
- * Wat er in het menu staat. De rest open je vanaf het overzicht: de pof-lijst,
- * het vrijgeven van een wijk en de wijkkaarten staan daar als vak. De
- * beginstand vul je op de wijkkaart in, en dat doe je maar één keer.
- */
-export const MENU_TABBLADEN = ["vanavond", "lopen"] as const;
 
 export const TABNAAM: Record<BetalingenTab, string> = {
   vanavond: "Overzicht",
@@ -143,7 +136,7 @@ export async function zetWijkBetaalmethode(wijk: string, methode: Betaalmethode)
   if ((data ?? []).length === 0) throw new Error("Alleen de eigenaar kan dit veranderen.");
 }
 
-/** Tot en met `peildatum` zit alles in de beginstand; daarna telt Wooshy. */
+/** Tot en met `peildatum` zit alles in de beginstand; daarna telt Paaltje Systems. */
 export async function startWijk(wijk: string, peildatum: string) {
   const { error } = await supabase.rpc("geld_wijk_starten", { wijk, peildatum });
   if (error) throw error;

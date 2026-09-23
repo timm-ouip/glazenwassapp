@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({ meta: [{ title: "Inloggen — Wooshy" }] }),
+  head: () => ({ meta: [{ title: "Inloggen — Paaltje Systems" }] }),
   component: LoginPagina,
 });
 

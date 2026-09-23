@@ -1,5 +1,5 @@
 /**
- * De handleiding van Wooshy, zoals Paaltje hem leest.
+ * De handleiding van Paaltje Systems, zoals Paaltje hem leest.
  *
  * Dit is het enige wat Paaltje over de app zélf weet: welke schermen er zijn,
  * waar de knoppen zitten en wat de dingen betekenen die je niet kunt raden.
@@ -54,7 +54,7 @@ export const WAAROVER: Record<Onderwerp, string> = {
 
 const UITLEG: Record<Onderwerp, string> = {
   algemeen: `
-Wooshy is de app van een glazenwassersbedrijf. Links staat het menu (op de
+Paaltje Systems is de app van een glazenwassersbedrijf. Links staat het menu (op de
 telefoon onderin een balk):
 
 - Wijken — de straten en adressen van een wijk, en waar je werk inplant.

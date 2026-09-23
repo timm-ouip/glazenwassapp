@@ -2,7 +2,7 @@
  * Rechts naast een WhatsApp-gesprek: wie het is. Dezelfde groene tegel als
  * naast een mail, gevonden via het telefoonnummer.
  *
- * Erboven, net als bij mail, wat Wooshy zelf deed met de gegevens uit de
+ * Erboven, net als bij mail, wat Paaltje Systems zelf deed met de gegevens uit de
  * appjes (klant herkend, lege vakjes ingevuld): geel, met Klopt en Ongedaan
  * maken. Wat niet in een leeg vak paste staat in "Anders in het appje".
  */
@@ -12,7 +12,7 @@ import { IconUser as UserRound } from "@tabler/icons-react";
 import {
   AndersVakje,
   KlantBlok,
-  WooshyVakje,
+  AutomatischVakje,
   type VakjesActies,
 } from "@/components/mail/KlantKaart";
 import { useRecht } from "@/lib/rechten";
@@ -70,7 +70,7 @@ export function KlantTegel({ telefoon, klantId }: { telefoon: string; klantId: s
   const lijst = klanten.data ?? [];
   const appjes = gegevens.data ?? [];
   const vakjes = appjes.map((b) => (
-    <WooshyVakje
+    <AutomatischVakje
       key={b.id}
       b={b}
       klanten={lijst}
@@ -90,9 +90,9 @@ export function KlantTegel({ telefoon, klantId }: { telefoon: string; klantId: s
           </p>
           <p className="mt-1 break-words text-[12px] leading-snug text-muted-foreground">
             {toonNummer(telefoon)} hoort nog bij geen klant.
-            {/* Alleen Nederlandse nummers koppelt Wooshy aan een klant. */}
+            {/* Alleen Nederlandse nummers koppelt Paaltje Systems aan een klant. */}
             {telefoonSleutel(telefoon) &&
-              " Zet het nummer bij een klant, dan herkent Wooshy het vanzelf."}
+              " Zet het nummer bij een klant, dan herkent Paaltje Systems het vanzelf."}
           </p>
         </div>
       </div>

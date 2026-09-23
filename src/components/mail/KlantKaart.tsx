@@ -1,7 +1,7 @@
 /**
  * Rechts naast een binnengekomen mail: wie het is.
  *
- * Bovenaan, in een opvallend geel vakje, wat Wooshy zelf deed met de gegevens
+ * Bovenaan, in een opvallend geel vakje, wat Paaltje Systems zelf deed met de gegevens
  * uit de mail: een klant herkend aan telefoon of adres, lege vakjes ingevuld.
  * Met één knop is dat allemaal terug te draaien. Daaronder de klant zelf, en
  * wat in de mail anders is dan bij de klant (daar kies jij).
@@ -98,7 +98,7 @@ export function KlantKaart({ b, kanSchrijven }: { b: Bericht; kanSchrijven: bool
   const lijst = klanten.data ?? [];
   const kg = b.klantgegevens;
   const wooshy = (
-    <WooshyVakje b={b} klanten={lijst} uit={!magBewerken || !kanSchrijven} onKlaar={ververs} />
+    <AutomatischVakje b={b} klanten={lijst} uit={!magBewerken || !kanSchrijven} onKlaar={ververs} />
   );
 
   if (lijst.length === 0) {
@@ -279,8 +279,8 @@ const MAIL_ACTIES: VakjesActies = {
   soort: "mail",
 };
 
-/** Wat Wooshy zelf deed, geel zodat het opvalt, met Ongedaan maken. */
-export function WooshyVakje({
+/** Wat Paaltje Systems zelf deed, geel zodat het opvalt, met Ongedaan maken. */
+export function AutomatischVakje({
   b,
   klanten,
   uit,
@@ -309,7 +309,7 @@ export function WooshyVakje({
           <Undo2 className="size-3.5" /> Teruggedraaid
         </p>
         <p className="mt-0.5 leading-snug">
-          Wooshy doet dit bij {hier} niet opnieuw.
+          Paaltje Systems doet dit bij {hier} niet opnieuw.
           {bleven.length > 0 &&
             ` Bleef staan omdat het intussen aangepast was: ${bleven.map((v) => VELD_NAAM[v] ?? v).join(", ")}.`}
         </p>
@@ -357,7 +357,7 @@ export function WooshyVakje({
   return (
     <div className="rounded-[14px] border border-tint-amber-ink/25 bg-tint-amber p-3 text-tint-amber-ink shadow-card">
       <p className="flex items-center gap-1.5 text-[13px] font-semibold">
-        <Sparkles className="size-3.5" /> Wooshy heeft dit bijgewerkt
+        <Sparkles className="size-3.5" /> Paaltje Systems heeft dit bijgewerkt
       </p>
       {kg.herkend && (
         <p className="mt-1 break-words text-[12.5px] leading-snug">
@@ -366,7 +366,7 @@ export function WooshyVakje({
               {kg.gevonden?.straat
                 ? `${kg.gevonden.straat} ${kg.gevonden.huisnummer}`.trim()
                 : `Het adres uit ${hier}`}{" "}
-              stond er nog zonder klant; Wooshy maakte <strong>{naam}</strong> aan
+              stond er nog zonder klant; Paaltje Systems maakte <strong>{naam}</strong> aan
             </>
           ) : (
             <>

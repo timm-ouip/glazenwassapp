@@ -44,7 +44,7 @@ import {
   type WaMedia,
 } from "../_gedeeld/whatsapp.ts";
 
-/** Meer berichten per minuut vanuit Wooshy niet: een knop die blijft hangen. */
+/** Meer berichten per minuut vanuit Paaltje Systems niet: een knop die blijft hangen. */
 const MAX_PER_MINUUT = 20;
 const MAX_TEKST = 4096;
 
@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
           return antwoord({ fout: "Je mag geen berichten versturen." }, 403);
         }
         return await sjabloonNaarKlant(db, m, verzoek, verzoek.actie === "sjabloon_versturen");
-      // Wat Wooshy met klantgegevens uit een appje deed: bevestigen of
+      // Wat Paaltje Systems met klantgegevens uit een appje deed: bevestigen of
       // terugdraaien. Net als bij mail: wie berichten leest én klanten bewerkt.
       case "klant_bevestigen":
       case "klantgegevens_terugdraaien": {
@@ -300,7 +300,7 @@ async function kapsoCustomer(db: Db, m: Medewerker, sleutel: string): Promise<st
   if (bekend?.customer_id) return String(bekend.customer_id);
 
   const { data: bedrijf } = await db.from("companies").select("name").eq("id", m.company_id).maybeSingle();
-  const naam = String(bedrijf?.name ?? "").trim().slice(0, 100) || "Wooshy-bedrijf";
+  const naam = String(bedrijf?.name ?? "").trim().slice(0, 100) || "Paaltje Systems-bedrijf";
   const extern = `wooshy-${m.company_id}`;
   let customerId = "";
   const nieuw = await kapsoPlatform<{ data?: { id?: string } }>("customers", sleutel, {
@@ -626,7 +626,7 @@ async function verstuur(db: Db, m: Medewerker, telefoon: string, invoer: string)
 
   // Eerst Paaltjes ingeplande antwoord tegenhouden, dan pas zelf versturen:
   // anders kunnen ze tegelijk weggaan.
-  await annuleerGeplandeAntwoorden(db, m.company_id, nummer, "Er is vanuit Wooshy geantwoord.");
+  await annuleerGeplandeAntwoorden(db, m.company_id, nummer, "Er is vanuit Paaltje Systems geantwoord.");
   const uit = await verstuurTekst(koppeling.toegang, koppeling.phone_number_id, nummer, tekst);
   if (!uit.ok) {
     console.error("whatsapp versturen:", uit.status, uit.fout);

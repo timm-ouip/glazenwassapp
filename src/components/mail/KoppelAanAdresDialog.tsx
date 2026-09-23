@@ -1,5 +1,5 @@
 /**
- * "Koppelen aan adres" naast een mail van iemand die Wooshy niet herkende.
+ * "Koppelen aan adres" naast een mail van iemand die Paaltje Systems niet herkende.
  *
  * Zoek een adres (straat + huisnummer) of een klant (naam) en kies. Hoort er al
  * een klant bij het adres, dan komt de mail bij die klant. Staat het adres er

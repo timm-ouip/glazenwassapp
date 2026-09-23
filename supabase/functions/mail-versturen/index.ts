@@ -1120,7 +1120,7 @@ async function controleer(
       uit["afzenderBekend"] = eigen && !!gevonden;
       uit["afzenderActief"] = eigen && gevonden?.active === true;
       // Alleen adressen op het domein van de eigen mailbox: het Brevo-account
-      // is van heel Wooshy, en de afzenders van andere bedrijven gaan niemand
+      // is van heel Paaltje Systems, en de afzenders van andere bedrijven gaan niemand
       // anders iets aan.
       const eigenDomein = domeinVan(mailboxAdres);
       uit["bekendeAfzenders"] = eigenDomein
@@ -1164,7 +1164,7 @@ function afzenderPastBij(afzender: string, mailboxAdres: string): boolean {
 /**
  * Mag dit bedrijf vanaf dit adres versturen? Leeg als het mag, anders de reden.
  *
- * Het Brevo-account is van heel Wooshy. Zonder deze controle kan een bedrijf
+ * Het Brevo-account is van heel Paaltje Systems. Zonder deze controle kan een bedrijf
  * elk adres invullen dat Brevo kent, ook dat van een ander bedrijf, en dan
  * zien zijn klanten die naam. Een mailbox koppelen lukt alleen met het echte
  * wachtwoord, dus het domein daarvan is het bewijs dat het adres van jou is.
@@ -1181,10 +1181,10 @@ async function afzenderFout(db: any, companyId: string, brevo: string, afzender:
     .maybeSingle();
   if (error) return "Je mailbox kon even niet opgezocht worden. Probeer het zo nog eens.";
   if (!box) {
-    return "Koppel eerst je eigen mailbox bij Instellingen → mail. Pas dan kan Wooshy zien dat het afzenderadres echt van jou is.";
+    return "Koppel eerst je eigen mailbox bij Instellingen → mail. Pas dan kan Paaltje Systems zien dat het afzenderadres echt van jou is.";
   }
   if (box.status !== "actief") {
-    return "Je mailbox moet opnieuw gekoppeld worden (Instellingen → mail). Tot dan kan Wooshy niet zien dat het afzenderadres van jou is.";
+    return "Je mailbox moet opnieuw gekoppeld worden (Instellingen → mail). Tot dan kan Paaltje Systems niet zien dat het afzenderadres van jou is.";
   }
   const mailboxAdres = String(box.adres ?? "");
   if (!afzenderPastBij(adres, mailboxAdres)) {

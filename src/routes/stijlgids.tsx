@@ -47,7 +47,7 @@ import {
 export const Route = createFileRoute("/stijlgids")({
   head: () => ({
     meta: [
-      { title: "Stijlgids — Wooshy" },
+      { title: "Stijlgids — Paaltje Systems" },
       // Een hulppagina, geen pagina voor klanten: hij hoeft niet in Google.
       { name: "robots", content: "noindex, nofollow" },
     ],
