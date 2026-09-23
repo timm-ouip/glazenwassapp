@@ -2,14 +2,28 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Woordmerk } from "@/components/Merk";
+import { Merkvlak } from "@/components/Merk";
+import { MERKPLATEN, WOORDMERK_DONKER, WOORDMERK_LICHT } from "@/lib/merk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({ meta: [{ title: "Inloggen — Paaltje Systems" }] }),
+  head: () => ({
+    meta: [{ title: "Inloggen — Paaltje Systems" }],
+    // De merkplaat wordt pas in de browser gekozen, dus zonder dit begint hij
+    // pas te laden als de pagina al staat — en dan kijk je even naar een
+    // effen kleurvlak zonder naam. Zo staan alle drie de platen en allebei de
+    // woordmerken er al (samen zo'n zeventig kilobyte), en is de plaat er
+    // meteen. Dit hangt aan deze pagina, niet aan de hele app: wie ingelogd
+    // is komt hier nooit.
+    links: [
+      ...MERKPLATEN.map((p) => ({ rel: "preload", as: "image", href: p.plaat })),
+      { rel: "preload", as: "image", href: WOORDMERK_DONKER },
+      { rel: "preload", as: "image", href: WOORDMERK_LICHT },
+    ],
+  }),
   component: LoginPagina,
 });
 
@@ -60,10 +74,9 @@ function LoginPagina() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-sm shadow-card">
+    <Merkvlak>
+      <Card className="shadow-tegel">
         <CardHeader className="items-center text-center">
-          <Woordmerk className="mb-3 h-9" />
           <CardTitle>Inloggen</CardTitle>
           <CardDescription>Log in met je medewerkersaccount</CardDescription>
         </CardHeader>
@@ -99,7 +112,7 @@ function LoginPagina() {
             </div>
             <Button
               type="submit"
-              className="w-full bg-brand text-brand-foreground hover:bg-brand/90"
+              className="w-full bg-foreground text-background hover:bg-foreground/90"
               disabled={bezig}
             >
               {bezig ? "Bezig…" : "Inloggen"}
@@ -107,12 +120,12 @@ function LoginPagina() {
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Nog geen bedrijfsaccount?{" "}
-            <Link to="/signup" className="font-medium text-brand-ink hover:underline">
+            <Link to="/signup" className="font-semibold underline-offset-2 hover:underline">
               Bedrijf aanmaken
             </Link>
           </p>
         </CardContent>
       </Card>
-    </div>
+    </Merkvlak>
   );
 }

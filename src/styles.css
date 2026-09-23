@@ -526,6 +526,69 @@
   --tint-turkoois-mid: var(--grond-turkoois);
 }
 
+/*
+ * De lichte vakken van Home en het dashboard (bg-tegel-*) blijven in Fel
+ * donker gewoon licht. Een middentint of een rustig vlak daarbinnen — een
+ * staafje in een grafiek, het spoor achter een balk — moet dus de donkere
+ * kant zijn, net als op papier. Alleen die kleuren: de rest van het vak
+ * (de inkt, de rand) staat al goed via --tegel-*-ink. De drie diepe vakken
+ * (donker, groen, petrol) hebben lichte tekst en horen hier niet bij.
+ */
+:where(.fel)
+  :where(
+    .bg-tegel-oranje,
+    .bg-tegel-creme,
+    .bg-tegel-geel,
+    .bg-tegel-aqua,
+    .bg-tegel-perzik,
+    .bg-tegel-goud,
+    .bg-tegel-paars,
+    .bg-tegel-ijsblauw
+  ) {
+  --muted: rgb(20 20 19 / 8%);
+  --muted-foreground: rgb(20 20 19 / 78%);
+  --tint-blauw-mid: #0b5c5e;
+  --tint-groen-mid: #27500a;
+  --tint-rood-mid: #791f1f;
+  --tint-paars-mid: #3c3489;
+  --tint-oranje-mid: #712b13;
+  --tint-roze-mid: #72243e;
+  --tint-turkoois-mid: #085041;
+}
+
+/*
+ * Het inlogscherm ligt op de merkplaat: een kleurvlak met strepen dat in elk
+ * thema hetzelfde is, ook 's nachts — het is het eerste wat iemand van de app
+ * ziet en dat hoort overal gelijk te zijn. Alles wat erop ligt is daarom
+ * licht, net als binnen een fel vlak: de kaart is wit, de tekst bijna zwart.
+ */
+.merkvlak {
+  --background: #ffffff;
+  --foreground: #141413;
+  --card: #ffffff;
+  --card-foreground: #141413;
+  --card-header: #f1ece3;
+  --popover: #ffffff;
+  --popover-foreground: #141413;
+  --muted: rgb(20 20 19 / 8%);
+  --muted-foreground: #5c5954;
+  --secondary: rgb(20 20 19 / 8%);
+  --secondary-foreground: #141413;
+  --accent: rgb(20 20 19 / 8%);
+  --accent-foreground: #141413;
+  --primary: #ff5b1f;
+  --primary-foreground: #140600;
+  --destructive: #c8321f;
+  --destructive-foreground: #ffffff;
+  --border: rgb(20 20 19 / 14%);
+  --input: rgb(20 20 19 / 18%);
+  --ring: #141413;
+  /* Ook de schaduw: in het donker is dat een wit haarlijntje met een zwarte
+     gloed, en dat zou op een witte kaart op een lichte plaat een vlek zijn. */
+  --shadow-card: 0 1px 2px rgb(20 20 19 / 6%), 0 6px 18px rgb(20 20 19 / 8%);
+  --shadow-tegel: 0 3px 8px rgb(20 20 19 / 8%), 0 14px 30px rgb(20 20 19 / 10%);
+}
+
 /* Een half doorzichtig vlak (bg-tint-paars/60) wordt op zwart modderig en
    houdt lichte tekst. Daarin geldt een rustige donkere tint. */
 :where(.fel.dark) :where([class*="bg-tint-amber/"]) {

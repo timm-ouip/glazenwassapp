@@ -414,7 +414,8 @@ function Dashboard() {
           <div className="grid gap-3 md:grid-cols-12 md:gap-4">
             <Paneel
               titel="Omzet per maand"
-              className="md:col-span-7"
+              kleur="ijsblauw"
+              className="md:col-span-7 fel:[--grafiek-rustig:var(--tint-blauw-mid)]"
               extra={
                 cijfers && hoogsteMaand >= 0 ? (
                   <PaneelExtra>
@@ -435,7 +436,7 @@ function Dashboard() {
               )}
             </Paneel>
 
-            <Paneel titel="Omzet per wijk" className="md:col-span-5">
+            <Paneel titel="Omzet per wijk" kleur="goud" className="md:col-span-5">
               {cijfers && adresInfo && (
                 <Balken
                   rijen={[...adresInfo.wijken]
@@ -448,6 +449,7 @@ function Dashboard() {
                       tip: `${w.naam}: ${euro(w.bedrag)}`,
                       deel: w.bedrag / Math.max(1, alles[0]?.bedrag ?? 1),
                     }))}
+                  kleur="bg-tint-blauw-mid fel:bg-tint-paars-mid"
                   beschrijving={`Omzet per wijk: ${adresInfo.wijken
                     .map((w) => `${w.name} ${euro(cijfers.perWijk.get(w.id) ?? 0)}`)
                     .join(", ")}`}
@@ -457,6 +459,7 @@ function Dashboard() {
 
             <Paneel
               titel="Gewassen adressen per maand"
+              kleur="aqua"
               className="md:col-span-5"
               extra={
                 cijfers ? (
@@ -466,6 +469,7 @@ function Dashboard() {
             >
               {cijfers && (
                 <Lijn
+                  kleur="fel:text-tint-paars-mid"
                   punten={punten(cijfers.maandAdressen, (n) => `${n} adressen`)}
                   beschrijving={`Gewassen adressen per maand: ${cijfers.maandAdressen
                     .map((a, i) => `${MAANDEN[i]?.[0]} ${a}`)
@@ -516,6 +520,7 @@ function Dashboard() {
 
             <Paneel
               titel="Klachten"
+              kleur="creme"
               className="md:col-span-3"
               extra={
                 cijfers ? <PaneelExtra>{cijfers.klachtenTotaal} totaal</PaneelExtra> : undefined
@@ -538,7 +543,8 @@ function Dashboard() {
 
             <Paneel
               titel="Omzet per werkdag"
-              className="md:col-span-6"
+              kleur="perzik"
+              className="md:col-span-6 fel:[--grafiek-rustig:var(--tint-blauw-mid)]"
               extra={
                 cijfers && cijfers.werkdagen.some((d) => d > 0) ? (
                   <PaneelExtra>
@@ -580,6 +586,7 @@ function Dashboard() {
 
             <Paneel
               titel="Erbij en eraf"
+              kleur="ijsblauw"
               className="md:col-span-6"
               extra={
                 <Legenda

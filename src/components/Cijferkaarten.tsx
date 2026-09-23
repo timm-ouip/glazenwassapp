@@ -1,5 +1,8 @@
 import type { TablerIcon as LucideIcon } from "@tabler/icons-react";
 
+import { Bedrag } from "@/components/Bedrag";
+import { pasIn } from "@/lib/bedrag";
+
 /**
  * De rij cijfers boven aan een pagina.
  *
@@ -64,7 +67,9 @@ export function Cijferkaarten({ cijfers }: { cijfers: Cijfer[] }) {
         return (
           <div
             key={c.label}
-            className={`min-w-0 rounded-[14px] px-2.5 py-2 sm:rounded-[18px] sm:px-4 sm:py-3.5 zak:border zak:border-border fel:flex fel:min-h-[112px] fel:flex-col fel:rounded-[22px] fel:px-3.5 fel:py-3 fel:sm:min-h-[132px] fel:sm:rounded-[24px] fel:sm:px-5 fel:sm:py-4 ${kleur.vlak}`}
+            // @container: het bedrag erin kijkt naar de breedte van deze kaart
+            // en niet naar die van het scherm — zie Bedrag.tsx.
+            className={`@container min-w-0 rounded-[14px] px-2.5 py-2 sm:rounded-[18px] sm:px-4 sm:py-3.5 zak:border zak:border-border fel:flex fel:min-h-[112px] fel:flex-col fel:rounded-[22px] fel:px-3.5 fel:py-3 fel:sm:min-h-[132px] fel:sm:rounded-[24px] fel:sm:px-5 fel:sm:py-4 ${kleur.vlak}`}
           >
             <div
               className={`mb-2.5 hidden size-8 items-center sm:flex justify-center rounded-[10px] fel:sm:hidden ${kleur.chip}`}
@@ -75,7 +80,11 @@ export function Cijferkaarten({ cijfers }: { cijfers: Cijfer[] }) {
               {c.label}
             </p>
             <p className="truncate font-display text-[17px] font-semibold sm:text-[24px] leading-tight tracking-[-0.02em] tabular-nums fel:mt-auto fel:pt-2 fel:text-[30px] fel:leading-none fel:tracking-[-0.045em] fel:sm:text-[52px]">
-              {c.waarde}
+              {/* De maat komt van de kaart, niet van het scherm: anders valt
+                  een groot bedrag er juist op een smalle kaart uit. */}
+              <span style={{ fontSize: pasIn(c.waarde) }}>
+                <Bedrag tekst={c.waarde} />
+              </span>
             </p>
             {c.onder && (
               <p className="mt-0.5 hidden truncate text-[11px] opacity-70 sm:block fel:mt-1.5 fel:block fel:opacity-80 fel:sm:text-[13px]">

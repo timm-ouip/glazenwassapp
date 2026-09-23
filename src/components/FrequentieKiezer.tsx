@@ -31,16 +31,24 @@ interface Props {
   alleenLezen?: boolean;
 }
 
-/** Even en oneven houden hun eigen kleur: zo blijft de lijst eruitzien zoals
- *  hij eruitzag, en vallen de andere ritmes juist op. */
+/**
+ * Alleen de twee helften krijgen kleur: even is geel, oneven aqua. Zo zie je
+ * aan een straat meteen welke helft er deze maand aan de beurt is, zonder dat
+ * de lijst een kleurenkaart wordt. Elke maand blijft daarom rustig — dat zijn
+ * er de meeste — en alles vanaf om de 3 houdt paars.
+ *
+ * Het randje om een gekleurd fiche is stevig genoeg om zichtbaar te blijven
+ * als de regel eronder diezelfde kleur heeft: een adres dat je zelf blauw
+ * kleurt, zou het aqua fiche anders opslokken.
+ */
 function kleur(c: Pick<Customer, "interval_maanden" | "ritme">): string {
   if (c.interval_maanden <= 1) return "bg-accent text-accent-foreground";
   if (c.interval_maanden === 2) {
     return c.ritme % 2 === 0
-      ? "bg-tint-amber text-tint-amber-ink ring-1 ring-inset ring-tint-amber-ink/25"
-      : "bg-muted text-muted-foreground";
+      ? "bg-tint-amber text-tint-amber-ink ring-1 ring-inset ring-tint-amber-ink/45"
+      : "bg-tint-blauw text-tint-blauw-ink ring-1 ring-inset ring-tint-blauw-ink/45";
   }
-  return "bg-tint-paars text-tint-paars-ink ring-1 ring-inset ring-tint-paars-ink/25";
+  return "bg-tint-paars text-tint-paars-ink ring-1 ring-inset ring-tint-paars-ink/45";
 }
 
 /**

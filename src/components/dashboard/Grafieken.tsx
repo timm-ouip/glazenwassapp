@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { TEGEL_KLEUR, TEGEL_VAK } from "@/components/Tegel";
+import { TEGEL_KLEUR, TEGEL_VAK, type TegelKleur } from "@/components/Tegel";
 import { cn } from "@/lib/utils";
 
 /**
@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
  * elkaar. Allemaal dezelfde afspraken:
  *
  * - één reeks heeft geen legenda; de titel zegt al wat je ziet.
- * - de maand van nu is de enige met kleur, de rest is rustig grijs.
+ * - elk vak heeft één kleur voor de reeks en oranje voor de maand van nu; de
+ *   pagina zet die kleuren met --grafiek-rustig en --grafiek-accent.
  * - onder de muis staat het bedrag of het aantal (title), en een schermlezer
  *   krijgt de hele reeks als één zin voorgelezen.
  * - de lijn onderaan is de nullijn; er staan geen hulplijnen te veel.
@@ -24,23 +25,38 @@ export interface Punt {
   accent?: boolean;
 }
 
-/** De witte (of donkere) kaart waar een grafiek in ligt. */
+/**
+ * Het vak waar een grafiek in ligt. Het heeft dezelfde kleuren als de vakken
+ * op Home: in Fel een kleurvlak, in Zakelijk een witte kaart met een randje.
+ * De kleur van de staven zet de pagina er zelf bij, met --grafiek-rustig en
+ * --grafiek-accent in de className.
+ */
 export function Paneel({
   titel,
   extra,
+  kleur = "donker",
   className,
   children,
 }: {
   titel: string;
   /** Rechtsboven: een totaal, een uitschieter of een legenda. */
   extra?: ReactNode;
+  /** Welk kleurvlak dit vak is; standaard het donkere. */
+  kleur?: TegelKleur;
   className?: string;
   children: ReactNode;
 }) {
   return (
     <section
       aria-label={titel}
-      className={cn(TEGEL_VAK, TEGEL_KLEUR.donker, "gap-3 p-4 md:rounded-[26px] md:p-5", className)}
+      className={cn(
+        TEGEL_VAK,
+        TEGEL_KLEUR[kleur],
+        // De schaduw hoort bij het vak en niet bij de kleur: anders zweven op
+        // dezelfde pagina twee panelen wel en de rest niet.
+        "shadow-card gap-3 p-4 md:rounded-[26px] md:p-5",
+        className,
+      )}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h2 className="text-[13.5px] font-semibold md:text-[14px]">{titel}</h2>
@@ -149,9 +165,12 @@ export function Staven({
 export function Balken({
   rijen,
   beschrijving,
+  kleur = "bg-tint-blauw-mid",
 }: {
   rijen: { naam: string; waarde: string; deel: number; tip: string }[];
   beschrijving: string;
+  /** De kleur van de balken. */
+  kleur?: string;
 }) {
   return (
     <div role="img" aria-label={beschrijving} className="flex flex-col justify-center gap-3">
@@ -165,7 +184,7 @@ export function Balken({
           </span>
           <span className="block h-2.5 rounded-full bg-muted">
             <span
-              className="block h-2.5 rounded-full bg-tint-blauw-mid"
+              className={cn("block h-2.5 rounded-full", kleur)}
               style={{ width: `${Math.max(2, r.deel * 100)}%` }}
             />
           </span>
@@ -180,10 +199,13 @@ export function Lijn({
   punten,
   beschrijving,
   hoogte = "h-[120px] md:h-[140px]",
+  kleur,
 }: {
   punten: Punt[];
   beschrijving: string;
   hoogte?: string;
+  /** De kleur van de lijn, als tekstklasse; zonder is het de inkt van het vak. */
+  kleur?: string;
 }) {
   const stap = 100 / Math.max(1, punten.length);
   const lijn = punten
@@ -191,7 +213,7 @@ export function Lijn({
     .join(" ");
   return (
     <div className="min-w-0">
-      <div className={cn("relative", hoogte)}>
+      <div className={cn("relative", hoogte, kleur)}>
         <span
           aria-hidden="true"
           className="absolute inset-x-0 bottom-0 border-t border-current opacity-25"
@@ -222,7 +244,7 @@ export function Lijn({
             >
               <span
                 className={cn(
-                  "block size-2 rounded-full ring-2 ring-tegel-donker",
+                  "block size-2 rounded-full ring-2 ring-[color:var(--vak)]",
                   p.accent ? "bg-grafiek-accent" : "bg-current",
                 )}
               />

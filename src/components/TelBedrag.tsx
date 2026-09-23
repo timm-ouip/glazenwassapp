@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { Bedrag } from "@/components/Bedrag";
 import { formatPrice } from "@/lib/klanten";
 import { LAATSTE_STANDEN } from "@/lib/tellers";
 
@@ -126,7 +127,7 @@ export function TelBedrag({ bedrag, onthoud }: { bedrag: number | undefined; ont
   const { getoond, tellend, erbij, setErbij } = useTeller(bedrag, onthoud, true);
   return (
     <span className="relative inline-block">
-      {tellend ? metCenten.format(getoond) : formatPrice(getoond)}
+      <Bedrag tekst={tellend ? metCenten.format(getoond) : formatPrice(getoond)} />
       {erbij && (
         <span
           key={erbij.sleutel}

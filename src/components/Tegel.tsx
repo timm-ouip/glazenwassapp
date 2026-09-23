@@ -8,22 +8,31 @@ import { IconArrowUpRight as NaarRechtsBoven } from "@tabler/icons-react";
  * De kleuren komen uit --tegel-* in styles.css: in het thema Fel de felle
  * kleuren van het ontwerp. In Zakelijk zijn alle vakken wit met een randje; de kleur van het vak zit daar
  * nog in één vierkantje naast het label (--tegel-*-accent, zie TegelKop).
+ *
+ * Elke kleur zet ook --vak: de kleur van het vlak zelf. Dat heeft iets nodig
+ * dat op het vak ligt en zichzelf ervan los moet knippen, zoals het randje om
+ * een bolletje in de lijngrafiek van het dashboard.
  */
 export const TEGEL_KLEUR = {
-  oranje: "bg-tegel-oranje text-tegel-oranje-ink [--tegel-accent:var(--tegel-oranje-accent)]",
+  oranje:
+    "bg-tegel-oranje text-tegel-oranje-ink [--tegel-accent:var(--tegel-oranje-accent)] [--vak:var(--tegel-oranje)]",
   creme:
-    "bg-tegel-creme text-tegel-creme-ink [--tegel-accent:var(--tegel-creme-accent)] shadow-card",
-  geel: "bg-tegel-geel text-tegel-geel-ink [--tegel-accent:var(--tegel-geel-accent)]",
-  aqua: "bg-tegel-aqua text-tegel-aqua-ink [--tegel-accent:var(--tegel-aqua-accent)]",
-  perzik: "bg-tegel-perzik text-tegel-perzik-ink [--tegel-accent:var(--tegel-perzik-accent)]",
-  groen: "bg-tegel-groen text-tegel-groen-ink [--tegel-accent:var(--tegel-groen-accent)]",
+    "bg-tegel-creme text-tegel-creme-ink [--tegel-accent:var(--tegel-creme-accent)] [--vak:var(--tegel-creme)] shadow-card",
+  geel: "bg-tegel-geel text-tegel-geel-ink [--tegel-accent:var(--tegel-geel-accent)] [--vak:var(--tegel-geel)]",
+  aqua: "bg-tegel-aqua text-tegel-aqua-ink [--tegel-accent:var(--tegel-aqua-accent)] [--vak:var(--tegel-aqua)]",
+  perzik:
+    "bg-tegel-perzik text-tegel-perzik-ink [--tegel-accent:var(--tegel-perzik-accent)] [--vak:var(--tegel-perzik)]",
+  groen:
+    "bg-tegel-groen text-tegel-groen-ink [--tegel-accent:var(--tegel-groen-accent)] [--vak:var(--tegel-groen)]",
   donker:
-    "bg-tegel-donker text-tegel-donker-ink [--tegel-accent:var(--tegel-donker-accent)] shadow-card",
-  goud: "bg-tegel-goud text-tegel-goud-ink [--tegel-accent:var(--tegel-goud-accent)]",
-  paars: "bg-tegel-paars text-tegel-paars-ink [--tegel-accent:var(--tegel-paars-accent)]",
-  petrol: "bg-tegel-petrol text-tegel-petrol-ink [--tegel-accent:var(--tegel-petrol-accent)]",
+    "bg-tegel-donker text-tegel-donker-ink [--tegel-accent:var(--tegel-donker-accent)] [--vak:var(--tegel-donker)] shadow-card",
+  goud: "bg-tegel-goud text-tegel-goud-ink [--tegel-accent:var(--tegel-goud-accent)] [--vak:var(--tegel-goud)]",
+  paars:
+    "bg-tegel-paars text-tegel-paars-ink [--tegel-accent:var(--tegel-paars-accent)] [--vak:var(--tegel-paars)]",
+  petrol:
+    "bg-tegel-petrol text-tegel-petrol-ink [--tegel-accent:var(--tegel-petrol-accent)] [--vak:var(--tegel-petrol)]",
   ijsblauw:
-    "bg-tegel-ijsblauw text-tegel-ijsblauw-ink [--tegel-accent:var(--tegel-ijsblauw-accent)]",
+    "bg-tegel-ijsblauw text-tegel-ijsblauw-ink [--tegel-accent:var(--tegel-ijsblauw-accent)] [--vak:var(--tegel-ijsblauw)]",
 } as const;
 
 export type TegelKleur = keyof typeof TEGEL_KLEUR;
