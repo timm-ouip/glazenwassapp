@@ -357,7 +357,7 @@
   --tegel-geel-vorm: #ffc7b0;
   --tegel-aqua-vorm: #f2b705;
   --tegel-perzik-vorm: #f2b705;
-  --tegel-groen-vorm: #146b4a;
+  --tegel-groen-vorm: #10573c;
   --tegel-donker-vorm: #302c26;
   --tegel-goud-vorm: #ffe3b6;
   --tegel-paars-vorm: #a9d7d8;
@@ -648,17 +648,15 @@
 
 /*
  * De uitgeknipte vormen op de vakken (Vorm.tsx). Ze liggen achter de tekst:
- * het vak krijgt een eigen stapel (isolation) en de vorm een negatieve laag,
- * waardoor hij boven de kleur van het vak valt maar onder alles wat erin
- * staat. Zonder --vorm-kleur is hij doorzichtig en zie je niets.
+ * het vak zet zelf een eigen stapel neer (`isolate` in TEGEL_VAK) en de vorm
+ * krijgt hier een negatieve laag, waardoor hij boven de kleur van het vak valt
+ * maar onder alles wat erin staat. Zonder --vorm-kleur is hij doorzichtig en
+ * zie je niets.
  *
  * Ze horen bij Fel. In Zakelijk zijn de vakken wit met een randje en past er
  * geen vorm bij, en wie ze in Instellingen uitzet krijgt `geen-vormen` op de
  * pagina (src/lib/thema.ts).
  */
-:where(:has(> .vak-vorm)) {
-  isolation: isolate;
-}
 .vak-vorm {
   position: absolute;
   z-index: -1;

@@ -19,7 +19,7 @@ import {
 } from "@tabler/icons-react";
 
 import { Cijferkaarten } from "@/components/Cijferkaarten";
-import { Vorm } from "@/components/Vorm";
+import { Vorm, type VormNaam } from "@/components/Vorm";
 import {
   TEGEL_GEWOON,
   TEGEL_KLEUR,
@@ -44,6 +44,18 @@ import {
   type Thema,
   type ThemaFamilie,
 } from "@/lib/thema";
+
+/** Alle vormen op een rij, elk op een ander vak: naam, vakkleur en waar hij hangt. */
+const VORMEN_RIJ: [VormNaam, keyof typeof TEGEL_KLEUR, string][] = [
+  ["vlek", "oranje", "-bottom-6 -right-5 size-[80px]"],
+  ["blad", "aqua", "-left-4 -top-5 size-[80px]"],
+  ["palmblad", "paars", "-bottom-4 -right-5 size-[72px]"],
+  ["golven", "geel", "inset-x-0 bottom-0 h-[42px]"],
+  ["slinger", "groen", "-right-3 -top-4 h-[80px] w-[58px]"],
+  ["bloem", "petrol", "-right-5 -top-5 size-[70px]"],
+  ["schelpen", "perzik", "-bottom-3 -right-3 h-[52px] w-[68px]"],
+  ["wig", "donker", "inset-x-0 bottom-0 h-[46px]"],
+];
 
 export const Route = createFileRoute("/stijlgids")({
   head: () => ({
@@ -153,6 +165,23 @@ function Stijlgids() {
               <TegelGetal>56/86</TegelGetal>
               <TegelOnder>afgemeld</TegelOnder>
             </div>
+          </div>
+
+          <p className="mt-5 text-[13px] text-muted-foreground">
+            Alle acht vormen bij elkaar. Ze zijn uit te zetten in Instellingen → Weergave; in
+            Zakelijk staan ze er sowieso niet.
+          </p>
+          <div className="mt-2 grid grid-cols-4 gap-2 md:grid-cols-8">
+            {VORMEN_RIJ.map(([naam, kleur, plek]) => (
+              <div key={naam}>
+                <div
+                  className={`${TEGEL_VAK} ${TEGEL_KLEUR[kleur]} relative h-[84px] overflow-hidden rounded-[18px]`}
+                >
+                  <Vorm naam={naam} plek={plek} />
+                </div>
+                <span className="mt-1 block text-[11.5px] text-muted-foreground">{naam}</span>
+              </div>
+            ))}
           </div>
         </Blok>
 

@@ -37,7 +37,13 @@ export const TEGEL_KLEUR = {
 } as const;
 
 /** De vorm van elk vak. Een vak dat ergens heen gaat, krijgt ook de hover. */
-export const TEGEL_VAK = "flex min-w-0 flex-col rounded-[24px] zak:border zak:border-border";
+/* `isolate` geeft elk vak een eigen stapel. Dat is wat een uitgeknipte vorm
+   (Vorm.tsx) nodig heeft om boven de kleur van het vak maar onder de tekst te
+   liggen; zonder die stapel zakt hij achter het vlak en zie je hem alleen als
+   je er met de muis overheen gaat. Het staat hier en niet in styles.css, zodat
+   het ook klopt op een browser die :has() nog niet kent. */
+export const TEGEL_VAK =
+  "isolate flex min-w-0 flex-col rounded-[24px] zak:border zak:border-border";
 
 /**
  * Wat een vak doet als je het kunt aanklikken: hij tilt op als je eroverheen
