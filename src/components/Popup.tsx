@@ -53,7 +53,15 @@ export function PopupKader({
  * dieper, de tekst de donkere kant ervan. Zo hoort een straat-schermpje bij
  * de tegel "Straten", en een dag bij het groen van de omzet.
  */
-export type PopupKleur = "blauw" | "amber" | "groen" | "paars" | "roze" | "geel" | "rood";
+export type PopupKleur =
+  | "blauw"
+  | "amber"
+  | "groen"
+  | "paars"
+  | "roze"
+  | "geel"
+  | "rood"
+  | "oranje";
 
 const KOPKLEUREN: Record<PopupKleur, { band: string; tegel: string }> = {
   blauw: { band: "bg-accent text-accent-foreground", tegel: "bg-accent-foreground/15" },
@@ -63,6 +71,7 @@ const KOPKLEUREN: Record<PopupKleur, { band: string; tegel: string }> = {
   roze: { band: "bg-tint-roze text-tint-roze-ink", tegel: "bg-tint-roze-ink/15" },
   geel: { band: "bg-tint-geel text-tint-geel-ink", tegel: "bg-tint-geel-ink/15" },
   rood: { band: "bg-tint-rood text-tint-rood-ink", tegel: "bg-tint-rood-ink/15" },
+  oranje: { band: "bg-tint-oranje text-tint-oranje-ink", tegel: "bg-tint-oranje-ink/15" },
 };
 
 export function PopupKop({

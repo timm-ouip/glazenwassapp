@@ -546,7 +546,7 @@ function Tegel({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
       onClick={onKies}
       className={`flex min-h-11 w-full items-center justify-between gap-1.5 rounded-[11px] px-2 py-1.5 text-left transition-colors ${
         betaald
-          ? "bg-tint-groen text-tint-groen-ink"
+          ? "bg-tint-salie text-tint-salie-ink"
           : mislukt || rood
             ? "bg-tint-rood text-tint-rood-ink"
             : stil
@@ -652,7 +652,7 @@ function Status({ a }: { a: GeldloopAdres }) {
   if (v.soort === "betaald") {
     return (
       <span className="flex flex-col items-end">
-        <span className="flex items-center gap-1 rounded-full bg-tint-groen px-2 py-0.5 text-[12px] font-medium text-tint-groen-ink">
+        <span className="flex items-center gap-1 rounded-full bg-tint-salie px-2 py-0.5 text-[12px] font-medium text-tint-salie-ink">
           <Check className="size-3.5" /> {formatPrice(v.bedrag)}
         </span>
         <span className="mt-0.5 text-[11px] text-muted-foreground">{door}</span>

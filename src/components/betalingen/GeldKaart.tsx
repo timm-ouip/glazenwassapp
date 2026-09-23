@@ -798,7 +798,7 @@ export function GeldKaart({
                                 vak.soort === "betaald"
                                   ? vak.korting
                                     ? "bg-tint-paars text-tint-paars-ink"
-                                    : "bg-tint-groen text-tint-groen-ink"
+                                    : "bg-tint-salie text-tint-salie-ink"
                                   : vak.soort === "open"
                                     ? vak.nogOpen
                                       ? "bg-tint-rood text-tint-rood-ink"

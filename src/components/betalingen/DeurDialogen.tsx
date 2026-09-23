@@ -441,7 +441,7 @@ export function KlachtDialoog({
     <Dialog open={open} onOpenChange={(o) => !o && onSluit()}>
       <PopupKader className="sm:max-w-sm">
         <PopupKop
-          kleur="rood"
+          kleur="oranje"
           icoon={<AlertTriangle className="size-[22px]" />}
           titel="Klacht"
           subtitel={`Nr ${adres.house_number}${adres.addition}${adres.naam ? ` · ${adres.naam}` : ""}`}

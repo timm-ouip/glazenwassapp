@@ -194,7 +194,7 @@ export function BetaalPaneel({
           {a.note && ` · ${a.note}`}
         </p>
         {a.klachten.length > 0 && (
-          <div className="mt-3 space-y-1 rounded-[14px] bg-tint-rood px-3 py-2 text-[13px] text-tint-rood-ink">
+          <div className="mt-3 space-y-1 rounded-[14px] bg-tint-oranje px-3 py-2 text-[13px] text-tint-oranje-ink">
             {a.klachten.map((k, i) => (
               <p key={i} className="flex gap-2">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {k}
