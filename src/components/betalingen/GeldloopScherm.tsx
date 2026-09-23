@@ -536,8 +536,13 @@ function Kolom({
 
 /** Eén adres als tegeltje: het nummer en wat er nog moet gebeuren. */
 function Tegel({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
-  const betaald = a.vanavond?.soort === "betaald";
-  const mislukt = a.vanavond && !betaald;
+  // Deel betaald boekt dezelfde soort tik als helemaal betaald. Salie mag dus
+  // pas als er echt niets meer open staat; anders leest een adres waar nog
+  // € 15 van moet komen als afgerond en slaat de volgende loper hem over.
+  const getikt = a.vanavond?.soort === "betaald";
+  const volledig = getikt && !heeftIetsOpen(a);
+  const deels = getikt && !volledig;
+  const mislukt = a.vanavond && !getikt;
   const rood = a.open_wassen >= ROOD_VANAF && heeftIetsOpen(a);
   const stil = !heeftIetsOpen(a) && !a.vanavond;
   return (
@@ -545,13 +550,15 @@ function Tegel({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
       type="button"
       onClick={onKies}
       className={`flex min-h-11 w-full items-center justify-between gap-1.5 rounded-[11px] px-2 py-1.5 text-left transition-colors ${
-        betaald
+        volledig
           ? "bg-tint-salie text-tint-salie-ink"
-          : mislukt || rood
-            ? "bg-tint-rood text-tint-rood-ink"
-            : stil
-              ? "text-muted-foreground"
-              : "bg-surface"
+          : deels
+            ? "bg-tint-groen text-tint-groen-ink"
+            : mislukt || rood
+              ? "bg-tint-rood text-tint-rood-ink"
+              : stil
+                ? "text-muted-foreground"
+                : "bg-surface"
       }`}
     >
       <span className="font-display text-[15px] font-semibold tabular-nums">
@@ -560,7 +567,7 @@ function Tegel({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
       </span>
       {a.klachten.length > 0 && <span className="size-1.5 rounded-full bg-tint-rood-ink" />}
       <span className="truncate text-[12.5px] font-semibold tabular-nums">
-        {betaald ? (
+        {volledig ? (
           <Check className="size-4" />
         ) : mislukt ? (
           <X className="size-4" />
@@ -650,10 +657,23 @@ function Status({ a }: { a: GeldloopAdres }) {
   const v = a.vanavond!;
   const door = v.door_naam.split(" ")[0] ?? "";
   if (v.soort === "betaald") {
+    // Ook hier: kwam er maar een deel binnen, dan groen met wat er nog open
+    // staat erboven. Salie en het vinkje zijn voor een leeg adres.
+    const rest = heeftIetsOpen(a);
     return (
       <span className="flex flex-col items-end">
-        <span className="flex items-center gap-1 rounded-full bg-tint-salie px-2 py-0.5 text-[12px] font-medium text-tint-salie-ink">
-          <Check className="size-3.5" /> {formatPrice(v.bedrag)}
+        {rest && (
+          <span className="font-display text-[15px] font-semibold tabular-nums">
+            {formatPrice(a.open)}
+          </span>
+        )}
+        <span
+          className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium ${
+            rest ? "bg-tint-groen text-tint-groen-ink" : "bg-tint-salie text-tint-salie-ink"
+          }`}
+        >
+          {!rest && <Check className="size-3.5" />}
+          {formatPrice(v.bedrag)}
         </span>
         <span className="mt-0.5 text-[11px] text-muted-foreground">{door}</span>
       </span>

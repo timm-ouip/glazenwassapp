@@ -401,7 +401,7 @@ export function BedragDialoog({
   );
 }
 
-/** Een klacht aan de deur: komt in het dossier van de klant, rood. */
+/** Een klacht aan de deur: komt in het dossier van de klant, oranje. */
 export function KlachtDialoog({
   open,
   adres,
