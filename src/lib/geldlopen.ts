@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
-import { maandKort, type GeldDeel } from "@/lib/betalingen";
+import { dagKort, maandKort, type GeldDeel } from "@/lib/betalingen";
 
 export interface Vrijgave {
   id: string;
@@ -48,6 +48,13 @@ export interface GeldloopAdres {
   ritme: number;
   methode: "contant" | "overmaken";
   gestopt: boolean;
+  /**
+   * Er staat deze maand nog een wasbeurt open die niet gedaan is (of die als
+   * niet gewassen is teruggemeld). Dan is dit adres nog niet aan de beurt.
+   */
+  wacht_op_wasbeurt: boolean;
+  /** Wie deze straat vanavond loopt; leeg is: iedereen die meeloopt. */
+  straat_lopers: { id: string; naam: string }[];
   open: number;
   open_wassen: number;
   delen: GeldDeel[];
@@ -76,7 +83,19 @@ export interface GeldloopAdres {
 export interface GeldloopLijst {
   vrijgave: { id: string; datum: string; begin_op: string; eind_op: string; ingetrokken: boolean };
   adressen: GeldloopAdres[];
-  opgehaald: { mij: number; mij_aantal: number; totaal: number };
+  opgehaald: {
+    mij: number;
+    mij_aantal: number;
+    totaal: number;
+    /** Adressen van mij waar nog iets open staat en nog niets is ingetikt. */
+    mijn_open: number;
+    /** Adressen van mij waar vanavond iets is ingetikt, wat dan ook. */
+    mijn_gedaan: number;
+    mijn_straten_open: number;
+    samen_open: number;
+    samen_gedaan: number;
+    samen_straten_open: number;
+  };
 }
 
 function lijst<T>(data: unknown): T[] {
@@ -171,9 +190,17 @@ export async function fetchGeldloopLijst(vrijgave: string): Promise<GeldloopLijs
       mij: Number(x.opgehaald?.mij ?? 0),
       mij_aantal: Number(x.opgehaald?.mij_aantal ?? 0),
       totaal: Number(x.opgehaald?.totaal ?? 0),
+      mijn_open: Number(x.opgehaald?.mijn_open ?? 0),
+      mijn_gedaan: Number(x.opgehaald?.mijn_gedaan ?? 0),
+      mijn_straten_open: Number(x.opgehaald?.mijn_straten_open ?? 0),
+      samen_open: Number(x.opgehaald?.samen_open ?? 0),
+      samen_gedaan: Number(x.opgehaald?.samen_gedaan ?? 0),
+      samen_straten_open: Number(x.opgehaald?.samen_straten_open ?? 0),
     },
     adressen: lijst<GeldloopAdres>(x.adressen).map((a) => ({
       ...a,
+      wacht_op_wasbeurt: a.wacht_op_wasbeurt ?? false,
+      straat_lopers: a.straat_lopers ?? [],
       open: Number(a.open ?? 0),
       open_wassen: Number(a.open_wassen ?? 0),
       delen: (a.delen ?? []).map((d) => ({
@@ -243,6 +270,83 @@ export async function haalVasteKortingWeg(korting: string) {
   if (error) throw error;
 }
 
+// ---------------------------------------------------------------------
+// Straten verdelen
+// ---------------------------------------------------------------------
+
+/**
+ * Wie loopt welke straat vanavond. Een lege lijst zet de straat terug op "van
+ * iedereen". Zowel de eigenaar als de lopers zelf mogen dit, zolang de avond
+ * loopt: loopt de een achter, dan neemt de ander een straat over.
+ */
+export async function verdeelStraat(vrijgave: string, straat: string, lopers: string[]) {
+  const { error } = await supabase.rpc("geldloop_straat_verdelen", { vrijgave, straat, lopers });
+  if (error) throw error;
+}
+
+/** De straten eerlijk over de lopers van deze avond verdelen, op aantal adressen. */
+export async function verdeelEerlijk(
+  vrijgave: string,
+): Promise<{ straten: number; lopers: number }> {
+  const { data, error } = await supabase.rpc("geldloop_straten_eerlijk", { vrijgave });
+  if (error) throw error;
+  const x = (data ?? {}) as { straten?: number; lopers?: number };
+  return { straten: Number(x.straten ?? 0), lopers: Number(x.lopers ?? 0) };
+}
+
+/** Wie welke straat loopt in deze vrijgave: straat-id → lopers. */
+export async function fetchStraatVerdeling(vrijgave: string): Promise<Map<string, string[]>> {
+  const { data, error } = await supabase
+    .from("geldloop_straat_lopers")
+    .select("street_id,employee_id")
+    .eq("vrijgave_id", vrijgave);
+  if (error) throw error;
+  const uit = new Map<string, string[]>();
+  for (const r of (data ?? []) as { street_id: string; employee_id: string }[]) {
+    uit.set(r.street_id, [...(uit.get(r.street_id) ?? []), r.employee_id]);
+  }
+  return uit;
+}
+
+export interface StraatWijziging {
+  id: string;
+  straat: string;
+  voor_naam: string;
+  na_naam: string;
+  door: string | null;
+  door_naam: string;
+  op: string;
+  teruggedraaid_op: string | null;
+  teruggedraaid_naam: string | null;
+}
+
+export async function fetchStraatWijzigingen(datum: string): Promise<StraatWijziging[]> {
+  const { data, error } = await supabase.rpc("geldloop_straat_wijzigingen_van", { datum });
+  if (error) throw error;
+  return lijst<StraatWijziging>(data);
+}
+
+export async function draaiStraatWijzigingTerug(wijziging: string) {
+  const { error } = await supabase.rpc("geldloop_straat_wijziging_terugdraaien", { wijziging });
+  if (error) throw error;
+}
+
+/** "Kerkstraat naar Sanne", "Kerkstraat weer van iedereen". */
+export function straatWijzigingTekst(w: StraatWijziging): string {
+  if (!w.na_naam) return `${w.straat} weer van iedereen`;
+  return `${w.straat} naar ${w.na_naam}`;
+}
+
+/** De eerste letters van een naam, voor het strookje met straten: "SJ". */
+export function initialen(naam: string): string {
+  return naam
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((d) => d[0]!.toUpperCase())
+    .join("");
+}
+
 export async function klachtAanDeDeur(adres: string, omschrijving: string) {
   const { error } = await supabase.rpc("geldloop_klacht", { adres, omschrijving });
   if (error) throw error;
@@ -300,19 +404,13 @@ export function heeftIetsOpen(a: GeldloopAdres): boolean {
 }
 
 /**
- * Staat er pof open maar is er in de maand van de avond niet gewassen? Dan
- * rekent de klant vaak niet op je en loop je het misschien pas bij de
- * volgende wasbeurt na. Geeft dan "sep niet gewassen", anders null.
- *
- * Betalingen dekken altijd de oudste posten eerst. Staat er dus niets van deze
- * maand open (geen wasbeurt, geen klus) maar wel iets ouders, dan is er deze
- * maand ook niets gedaan dat al betaald is.
+ * Is dit adres vanavond aan de beurt om op te halen? Je haalt geld op nadat
+ * er gewassen is, dus een adres waar deze maand nog een beurt op de planning
+ * staat sla je over — ook als er van eerder nog pof staat. Staat een hele
+ * straat nog te wachten, dan valt die straat vanzelf uit de lijst.
  */
-export function nietGewassen(a: GeldloopAdres, datum: string): string | null {
-  if (a.methode !== "contant" || a.gestopt || !heeftIetsOpen(a)) return null;
-  const maand = datum.slice(0, 7);
-  if (a.delen.some((d) => d.soort !== "beginstand" && d.datum.slice(0, 7) === maand)) return null;
-  return `${maandKort(`${maand}-01`)} niet gewassen`;
+export function aanDeBeurt(a: GeldloopAdres): boolean {
+  return !a.wacht_op_wasbeurt;
 }
 
 // ---------------------------------------------------------------------
@@ -376,7 +474,7 @@ export async function geldloopStoppen(adres: string, reden: "verhuisd" | "gestop
 export interface GeldloopWijziging {
   id: string;
   customer_id: string;
-  soort: "adres" | "prijs" | "klant" | "klant_nieuw" | "stoppen";
+  soort: "adres" | "prijs" | "klant" | "klant_nieuw" | "stoppen" | "niet_gewassen";
   voor: Record<string, unknown>;
   na: Record<string, unknown>;
   adres: string;
@@ -397,6 +495,40 @@ export async function fetchGeldloopWijzigingen(filter: {
   });
   if (error) throw error;
   return (Array.isArray(data) ? data : []) as unknown as GeldloopWijziging[];
+}
+
+/**
+ * Aan de deur blijkt dat er niet gewassen is. De beurt blijft op de dag
+ * staan, maar gemarkeerd: rood, zonder bedrag, en hij telt niet meer als
+ * gewassen — zo kun je hem opnieuw inplannen én zie je terug dat het misging.
+ * De eigenaar ziet het in het overzicht staan en kan het in één klik
+ * terugzetten.
+ */
+export async function geldloopNietGewassen(adres: string, dag: string) {
+  const { error } = await supabase.rpc("geldloop_niet_gewassen", { adres_id: adres, dag });
+  if (error) throw error;
+}
+
+/** Een adres dat een geldloper als "niet gewassen" terugmeldde. */
+export interface Vergeten {
+  id: string;
+  customer_id: string;
+  adres: string;
+  /** De dag waarop hij gewassen had moeten zijn. */
+  datum: string;
+  door_naam: string;
+  op: string;
+}
+
+/**
+ * Wat er in een periode teruggemeld is als niet gewassen. Uit dezelfde lijst
+ * met wijzigingen van geldlopers, dus wat de eigenaar terugdraaide telt niet
+ * meer mee.
+ */
+export async function fetchVergeten(vanaf: string, tot: string): Promise<Vergeten[]> {
+  const { data, error } = await supabase.rpc("geldloop_vergeten", { vanaf, tot });
+  if (error) throw error;
+  return lijst<Vergeten>(data);
 }
 
 export async function draaiGeldloopWijzigingTerug(id: string) {
@@ -430,5 +562,7 @@ export function wijzigingTekst(w: GeldloopWijziging): string {
       return `nieuwe klant ${String(n["naam"] ?? "")}`;
     case "stoppen":
       return n["reden"] === "verhuisd" ? "laten stoppen (verhuisd)" : "laten stoppen";
+    case "niet_gewassen":
+      return `niet gewassen: de beurt van ${dagKort(String(v["datum"] ?? ""))} telt niet mee`;
   }
 }

@@ -1309,10 +1309,34 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      geldloop_straat_lopers: {
+        Row: {
+          vrijgave_id: string;
+          street_id: string;
+          employee_id: string;
+          company_id: string;
+        };
+        Insert: {
+          vrijgave_id: string;
+          street_id: string;
+          employee_id: string;
+          company_id?: string;
+        };
+        Update: {
+          vrijgave_id?: string;
+          street_id?: string;
+          employee_id?: string;
+          company_id?: string;
+        };
+        Relationships: [];
+      };
       wasdag_regels: {
         Row: {
           gedaan_op: string | null;
           gedaan_door: string | null;
+          niet_gewassen_op: string | null;
+          niet_gewassen_door: string | null;
+          niet_gewassen_naam: string | null;
           ploeg_nr: number | null;
           volgorde: number | null;
           rest: boolean;
@@ -1327,6 +1351,9 @@ export type Database = {
         Insert: {
           gedaan_op?: string | null;
           gedaan_door?: string | null;
+          niet_gewassen_op?: string | null;
+          niet_gewassen_door?: string | null;
+          niet_gewassen_naam?: string | null;
           ploeg_nr?: number | null;
           volgorde?: number | null;
           rest?: boolean;
@@ -1341,6 +1368,9 @@ export type Database = {
         Update: {
           gedaan_op?: string | null;
           gedaan_door?: string | null;
+          niet_gewassen_op?: string | null;
+          niet_gewassen_door?: string | null;
+          niet_gewassen_naam?: string | null;
           ploeg_nr?: number | null;
           volgorde?: number | null;
           rest?: boolean;
@@ -2288,6 +2318,14 @@ export type Database = {
         Args: { adres_id: string; wijzigingen: Json };
         Returns: Json;
       };
+      geldloop_vergeten: {
+        Args: { vanaf: string; tot: string };
+        Returns: Json;
+      };
+      geldloop_niet_gewassen: {
+        Args: { adres_id: string; dag: string };
+        Returns: undefined;
+      };
       geldloop_stoppen: {
         Args: { adres_id: string; reden: string; planning_weg: boolean };
         Returns: Json;
@@ -2315,6 +2353,22 @@ export type Database = {
       geld_adres: {
         Args: { adres: string };
         Returns: Json;
+      };
+      geldloop_straat_verdelen: {
+        Args: { vrijgave: string; straat: string; lopers: string[] };
+        Returns: Json;
+      };
+      geldloop_straten_eerlijk: {
+        Args: { vrijgave: string };
+        Returns: Json;
+      };
+      geldloop_straat_wijzigingen_van: {
+        Args: { datum: string };
+        Returns: Json;
+      };
+      geldloop_straat_wijziging_terugdraaien: {
+        Args: { wijziging: string };
+        Returns: undefined;
       };
       geldloop_vrijgeven: {
         Args: { datum: string; wijken: string[]; lopers: string[]; eind?: string | null };

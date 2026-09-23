@@ -39,7 +39,7 @@ export function PofLijst({
   const totaal = open.reduce((t, r) => t + r.open, 0);
 
   return (
-    <div className="space-y-3 pb-4 pt-1">
+    <div className="space-y-3 pb-4">
       <div className="flex flex-wrap items-center gap-1.5">
         {onTerug && (
           <button

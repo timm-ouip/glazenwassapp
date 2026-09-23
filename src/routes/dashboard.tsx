@@ -329,7 +329,7 @@ function Dashboard() {
           rechten nodig; vraag de eigenaar om ze aan te zetten.
         </p>
       ) : (
-        <div className="flex flex-col gap-3 pb-4 pt-3 md:gap-4">
+        <div className="flex flex-col gap-3 pb-4 md:gap-4">
           {(fout || laadt) && (
             <p role="status" className="text-[13px] text-muted-foreground">
               {fout

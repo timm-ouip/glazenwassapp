@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { frequentieKort, rekening, type GeldDeel } from "@/lib/betalingen";
+import { frequentieKaart, frequentieZin, rekening, type GeldDeel } from "@/lib/betalingen";
 import { metWachtende, pasToeOpAdres, type Wachtend } from "@/lib/geldloop-wachtrij";
-import { nietGewassen, type GeldloopAdres, type GeldloopLijst } from "@/lib/geldlopen";
+import { aanDeBeurt, type GeldloopAdres, type GeldloopLijst } from "@/lib/geldlopen";
 
 const wassen = (datum: string, bedrag: number, rest = bedrag, omschrijving = ""): GeldDeel => ({
   soort: "wassen",
@@ -17,7 +17,7 @@ describe("rekening", () => {
   test("gewone wasbeurten met dezelfde prijs op één regel", () => {
     const r = rekening([wassen("2026-07-10", 15), wassen("2026-09-12", 15)]);
     expect(r).toHaveLength(1);
-    expect(r[0]!.label).toContain("2× wassen");
+    expect(r[0]!.label).toContain("2× wasbeurt");
     expect(r[0]!.wanneer).toBe("jul, sep");
     expect(r[0]!.bedrag).toBe(30);
   });
@@ -42,15 +42,15 @@ describe("rekening", () => {
         omschrijving: "2026-07,2026-08",
       },
     ]);
-    expect(r.map((x) => x.label)).toEqual(["Van de kaart", "Wassen", "Klus: Dakgoot"]);
+    expect(r.map((x) => x.label)).toEqual(["2× wasbeurt", "Wasbeurt", "Klus: Dakgoot"]);
     expect(r[0]!.wanneer).toBe("jul, aug");
   });
 
   test("een deels betaalde wasbeurt staat apart als rest", () => {
     const r = rekening([wassen("2026-08-10", 15, 5), wassen("2026-09-10", 15)]);
     expect(r.map((x) => [x.label, x.bedrag])).toEqual([
-      ["Wassen", 15],
-      ["Wassen, rest", 5],
+      ["Wasbeurt", 15],
+      ["Wasbeurt, rest", 5],
     ]);
   });
 });
@@ -75,6 +75,8 @@ const adres = (extra: Partial<GeldloopAdres> = {}): GeldloopAdres => ({
   ritme: 1,
   methode: "contant",
   gestopt: false,
+  wacht_op_wasbeurt: false,
+  straat_lopers: [],
   open: 45,
   open_wassen: 3,
   delen: [wassen("2026-07-10", 15), wassen("2026-08-10", 15), wassen("2026-09-10", 15)],
@@ -128,7 +130,17 @@ describe("wachtrij: een tik in de lijst", () => {
     const lijst: GeldloopLijst = {
       vrijgave: { id: "v1", datum: "2026-09-21", begin_op: "", eind_op: "", ingetrokken: false },
       adressen: [adres()],
-      opgehaald: { mij: 0, mij_aantal: 0, totaal: 0 },
+      opgehaald: {
+        mij: 0,
+        mij_aantal: 0,
+        totaal: 0,
+        mijn_open: 0,
+        mijn_gedaan: 0,
+        mijn_straten_open: 0,
+        samen_open: 0,
+        samen_gedaan: 0,
+        samen_straten_open: 0,
+      },
     };
     const uit = metWachtende(lijst, [
       tik({ bedrag: 45 }),
@@ -140,40 +152,22 @@ describe("wachtrij: een tik in de lijst", () => {
 });
 
 describe("frequentie", () => {
-  test("om de maand zegt of het de even of de oneven maanden zijn", () => {
-    expect(frequentieKort({ interval_maanden: 2, ritme: 2 })).toBe("om de maand, even");
-    expect(frequentieKort({ interval_maanden: 2, ritme: 1 })).toBe("om de maand, oneven");
-    expect(frequentieKort({ interval_maanden: 1, ritme: 1 })).toBe("elke maand");
+  test("in een halve zin: welke maanden er gewassen wordt", () => {
+    expect(frequentieZin({ interval_maanden: 2, ritme: 2 })).toBe("even maanden");
+    expect(frequentieZin({ interval_maanden: 2, ritme: 1 })).toBe("oneven maanden");
+    expect(frequentieZin({ interval_maanden: 1, ritme: 1 })).toBe("elke maand");
+  });
+  test("in de smalle kolom op de kaart: zonder het woord maanden", () => {
+    expect(frequentieKaart({ interval_maanden: 2, ritme: 2 })).toBe("even");
+    expect(frequentieKaart({ interval_maanden: 2, ritme: 1 })).toBe("oneven");
+    expect(frequentieKaart({ interval_maanden: 1, ritme: 1 })).toBe("elke maand");
+    expect(frequentieKaart({ interval_maanden: 12, ritme: 1 })).toBe("1× per jaar");
   });
 });
 
-describe("pof maar deze maand niet gewassen", () => {
-  // Dit jaar, want maandKort zet er bij een ander jaar "'26" achter.
-  const jaar = new Date().getFullYear();
-  const avond = `${jaar}-09-21`;
-  const aug = adres({ open: 15, open_wassen: 1, delen: [wassen(`${jaar}-08-10`, 15)] });
-
-  test("alleen pof van eerder: sep niet gewassen", () => {
-    expect(nietGewassen(aug, avond)).toBe("sep niet gewassen");
-    expect(nietGewassen({ ...aug, interval_maanden: 2, ritme: 2 }, avond)).toBe(
-      "sep niet gewassen",
-    );
-  });
-  test("deze maand gewassen: niets", () => {
-    const a = { ...aug, delen: [...aug.delen, wassen(`${jaar}-09-10`, 15)] };
-    expect(nietGewassen(a, avond)).toBeNull();
-  });
-  test("wasbeurt al betaald maar de klus van deze maand nog open: niets", () => {
-    const klus: GeldDeel = {
-      ...wassen(`${jaar}-09-10`, 25),
-      soort: "klus",
-      omschrijving: "dakgoot",
-    };
-    expect(nietGewassen({ ...aug, open: 25, delen: [klus] }, avond)).toBeNull();
-  });
-  test("niets open, maakt over of gestopt: niets", () => {
-    expect(nietGewassen({ ...aug, open: 0 }, avond)).toBeNull();
-    expect(nietGewassen({ ...aug, methode: "overmaken" }, avond)).toBeNull();
-    expect(nietGewassen({ ...aug, gestopt: true }, avond)).toBeNull();
+describe("aan de beurt", () => {
+  test("wacht er deze maand nog een wasbeurt, dan bel je hier niet aan", () => {
+    expect(aanDeBeurt(adres())).toBe(true);
+    expect(aanDeBeurt(adres({ wacht_op_wasbeurt: true }))).toBe(false);
   });
 });

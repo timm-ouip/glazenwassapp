@@ -1,13 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { IconCash as Cash } from "@tabler/icons-react";
+import { IconCash as Cash, IconChevronLeft as ChevronLeft } from "@tabler/icons-react";
 
 import { AppLayout } from "@/components/AppLayout";
 import { Avondoverzicht } from "@/components/betalingen/Avondoverzicht";
 import { GeldKaart } from "@/components/betalingen/GeldKaart";
 import { PofLijst } from "@/components/betalingen/PofLijst";
 import { GeldloopScherm } from "@/components/betalingen/GeldloopScherm";
+import { LoperStart } from "@/components/betalingen/LoperStart";
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { TABBLADEN, TABNAAM, type BetalingenTab as Tab } from "@/lib/betalingen";
 import { fetchMijnGeldloop, type Vrijgave } from "@/lib/geldlopen";
@@ -87,6 +88,7 @@ function Betalingen() {
         <Avondoverzicht
           onPof={() => naarTab("pof")}
           onLopen={() => naarTab("lopen")}
+          onKaarten={() => naarTab("kaart")}
           vrijgeefVenster={vrijgeefVenster}
           onVrijgeefVenster={setVrijgeefVenster}
         />
@@ -111,6 +113,9 @@ function Lopen({
     refetchInterval: 60_000,
   });
   const [gekozen, setGekozen] = useState<string | null>(null);
+  // Je komt binnen op je eigen cijfers en gaat van daaruit de straat in; de
+  // knop linksboven brengt je er weer terug.
+  const [begonnen, setBegonnen] = useState(false);
   const lijst = avonden.data ?? [];
   const nu = Date.now();
   // Wat nu loopt, niet wat pas later begint.
@@ -132,29 +137,54 @@ function Lopen({
     );
   }
 
+  // Loop je meer dan één wijk vanavond, dan kies je hier welke.
+  const avondKeuze =
+    lopend.length > 1 ? (
+      <div className="flex flex-wrap gap-1.5">
+        {lopend.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            onClick={() => setGekozen(v.id)}
+            className={`min-h-10 rounded-full border px-3.5 text-[13px] font-medium ${
+              v.id === vrijgave.id
+                ? "border-transparent bg-foreground text-background"
+                : "border-border bg-card text-muted-foreground"
+            }`}
+          >
+            {v.wijken.map((w) => w.naam).join(", ")}
+          </button>
+        ))}
+      </div>
+    ) : undefined;
+
+  if (!begonnen) {
+    return (
+      <LoperStart
+        vrijgave={vrijgave}
+        titel={titel}
+        onBeginnen={() => setBegonnen(true)}
+        bovenaan={avondKeuze}
+      />
+    );
+  }
+
   return (
     <GeldloopScherm
       vrijgave={vrijgave}
       titel={titel}
       bovenaan={
-        lopend.length > 1 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {lopend.map((v) => (
-              <button
-                key={v.id}
-                type="button"
-                onClick={() => setGekozen(v.id)}
-                className={`min-h-10 rounded-full border px-3.5 text-[13px] font-medium ${
-                  v.id === vrijgave.id
-                    ? "border-transparent bg-foreground text-background"
-                    : "border-border bg-card text-muted-foreground"
-                }`}
-              >
-                {v.wijken.map((w) => w.naam).join(", ")}
-              </button>
-            ))}
-          </div>
-        ) : undefined
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setBegonnen(false)}
+            className="flex min-h-10 items-center gap-1.5 rounded-full bg-card px-3.5 text-[13px] font-medium shadow-card"
+          >
+            <ChevronLeft className="size-4" />
+            Overzicht
+          </button>
+          {avondKeuze}
+        </div>
       }
     />
   );

@@ -13,13 +13,15 @@ import {
 import { AppLayout } from "@/components/AppLayout";
 import { BetaalPaneel } from "@/components/betalingen/BetaalPaneel";
 import { GeldKaart } from "@/components/betalingen/GeldKaart";
+import { StraatVerdelen } from "@/components/betalingen/StraatVerdelen";
 import { TelBedrag } from "@/components/TelBedrag";
-import { frequentieKort, maandKort } from "@/lib/betalingen";
+import { frequentieZin, maandKort } from "@/lib/betalingen";
 import {
   fetchGeldloopLijst,
   heeftIetsOpen,
+  initialen,
   looprichting,
-  nietGewassen,
+  aanDeBeurt,
   useGeldloopLive,
   type GeldloopAdres,
   type GeldloopLijst,
@@ -45,6 +47,12 @@ interface Straat {
   naam: string;
   wijk: string;
   adressen: GeldloopAdres[];
+  /** Wie hem vanavond loopt; leeg is: iedereen die meeloopt. */
+  lopers: { id: string; naam: string }[];
+  /** Loop ik hem zelf, of is hij van niemand? */
+  vanMij: boolean;
+  /** Staat er nog iets te doen in deze straat? */
+  nogTeDoen: boolean;
 }
 
 /** "jul, sep" en " + klus": waar het open bedrag vandaan komt. */
@@ -53,10 +61,7 @@ export function maandenVan(a: GeldloopAdres): string {
     .filter((d) => d.soort === "wassen")
     .map((d) => maandKort(d.datum))
     .filter((m, i, lijst) => lijst.indexOf(m) === i);
-  const extra = [
-    ...(a.delen.some((d) => d.soort === "beginstand") ? ["kaart"] : []),
-    ...(a.delen.some((d) => d.soort === "klus") ? ["klus"] : []),
-  ];
+  const extra = a.delen.some((d) => d.soort === "klus") ? ["klus"] : [];
   return [...(maanden.length ? [maanden.join(", ")] : []), ...extra].join(" + ");
 }
 
@@ -84,6 +89,7 @@ export function GeldloopScherm({
   });
   useGeldloopLive(vrijgave.id);
   const { employee } = useAuth();
+  const isEigenaar = employee?.rol === "eigenaar";
   const magBedragen = useRecht("prijzen_zien");
   const wachtrij = useWachtrij(employee?.id);
 
@@ -119,6 +125,10 @@ export function GeldloopScherm({
   const [weergave, setWeergave] = useState<"lijst" | "kanten" | "kaart">("lijst");
   const [kaartStraat, setKaartStraat] = useState<string | null>(null);
   const [uitgeklapt, setUitgeklapt] = useState<Set<string>>(new Set());
+  // Welke straat je aan het verdelen bent, en of de straten van een ander
+  // die al klaar zijn erbij staan.
+  const [verdeelStraatId, setVerdeelStraatId] = useState<string | null>(null);
+  const [andereErbij, setAndereErbij] = useState(false);
   const [nu, setNu] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNu(Date.now()), 30_000);
@@ -129,6 +139,9 @@ export function GeldloopScherm({
   const straten = useMemo<Straat[]>(() => {
     const perStraat = new Map<string, GeldloopAdres[]>();
     for (const a of data?.adressen ?? []) {
+      // Nog niet gewassen deze maand: dan ben je hier nog niet aan de beurt.
+      // Is de hele straat zo, dan valt die straat vanzelf weg.
+      if (!aanDeBeurt(a)) continue;
       perStraat.set(a.straat_id, [...(perStraat.get(a.straat_id) ?? []), a]);
     }
     return [...perStraat.values()]
@@ -138,18 +151,39 @@ export function GeldloopScherm({
           x[0]!.straat_sort - y[0]!.straat_sort ||
           x[0]!.straat.localeCompare(y[0]!.straat),
       )
-      .map((adressen) => ({
-        id: adressen[0]!.straat_id,
-        naam: adressen[0]!.straat,
-        wijk: adressen[0]!.wijk,
-        adressen: looprichting(adressen),
-      }));
-  }, [data]);
+      .map((adressen) => {
+        const lopers = adressen[0]!.straat_lopers;
+        return {
+          id: adressen[0]!.straat_id,
+          naam: adressen[0]!.straat,
+          wijk: adressen[0]!.wijk,
+          adressen: looprichting(adressen),
+          lopers,
+          // Een straat die van niemand is, is van iedereen — dus ook van mij.
+          vanMij: lopers.length === 0 || lopers.some((l) => l.id === employee?.id),
+          nogTeDoen: adressen.some((a) => heeftIetsOpen(a) && !a.vanavond),
+        };
+      });
+  }, [data, employee?.id]);
+
+  /**
+   * De volgorde waarin je de avond leest: eerst jouw straten, dan de straten
+   * van een ander waar nog iets te doen is (met wie hem eigenlijk loopt
+   * erbij), en pas achteraan wat al klaar is. Zo zie je in één blik waar het
+   * blijft hangen zonder dat de lijst lang wordt.
+   */
+  const eigenStraten = useMemo(() => straten.filter((s) => s.vanMij), [straten]);
+  const straatVanAnder = useMemo(() => straten.filter((s) => !s.vanMij && s.nogTeDoen), [straten]);
+  const straatKlaar = useMemo(() => straten.filter((s) => !s.vanMij && !s.nogTeDoen), [straten]);
+  const teTonen = useMemo(
+    () => [...eigenStraten, ...straatVanAnder, ...(andereErbij ? straatKlaar : [])],
+    [eigenStraten, straatVanAnder, straatKlaar, andereErbij],
+  );
 
   // De adressen op volgorde van de lijst: met de pijltjes in het venster op
   // de computer loop je daar doorheen. Je slaat over waar je toch niet aanbelt
   // (niets open, niets ingetikt), net als de lijst zelf doet.
-  const volgorde = useMemo(() => straten.flatMap((s) => s.adressen), [straten]);
+  const volgorde = useMemo(() => teTonen.flatMap((s) => s.adressen), [teTonen]);
   // De kaart kijkt of zijn stratenlijst veranderde; dit scherm hertekent elke
   // tik, dus zonder dit zou hij zich telkens opnieuw opbouwen.
   const kaartStraten = useMemo(
@@ -172,7 +206,10 @@ export function GeldloopScherm({
   const zoekTerm = (zoeken ?? "").trim().toLowerCase();
   const wijken = new Set(straten.map((s) => s.wijk));
   const adres = (data?.adressen ?? []).find((a) => a.id === gekozen) ?? null;
-  const openTotaal = (data?.adressen ?? [])
+  // Alleen wat er in de lijst staat: adressen die nog op hun wasbeurt wachten
+  // zijn eruit gefilterd, en dan hoort hun bedrag hier ook niet bij te staan.
+  const openTotaal = straten
+    .flatMap((s) => s.adressen)
     .filter((a) => a.methode === "contant" || a.open > 0)
     .reduce((t, a) => t + Math.max(0, a.open), 0);
 
@@ -186,9 +223,16 @@ export function GeldloopScherm({
     document.getElementById(`straat-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  const onderbalk = (
+  /**
+   * De balk onderin. Op de telefoon staat het strookje met straten daar (bij
+   * je duim), op de computer zet de kaart hem zelf bovenaan — dan hoeft hij
+   * hier niet nog een keer.
+   */
+  const maakOnderbalk = (metStraten: boolean) => (
     <Onderbalk
-      straten={straten}
+      straten={metStraten ? teTonen : []}
+      eigenaar={isEigenaar}
+      mijnId={employee?.id}
       vrijgaveId={vrijgave.id}
       opgehaald={data?.opgehaald}
       wachtend={wachtrij.wachtend.length}
@@ -203,7 +247,7 @@ export function GeldloopScherm({
   // ander blokje is — dat hoeft alleen als je de schakelaar echt omzet.
   const schakelaar = useMemo(
     () => (
-      <div className="flex items-center gap-0.5 rounded-full border border-border bg-card p-1 shadow-card">
+      <div className="flex items-center gap-0.5 rounded-full bg-card p-1 shadow-card">
         {(
           [
             ["lijst", "Lijst"],
@@ -220,7 +264,7 @@ export function GeldloopScherm({
             onClick={() => setWeergave(w)}
             className={`min-h-8 shrink-0 rounded-full px-3 text-[12.5px] font-medium transition-colors ${
               weergave === w
-                ? "bg-foreground text-background"
+                ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-surface hover:text-foreground"
             }`}
           >
@@ -233,7 +277,7 @@ export function GeldloopScherm({
   );
 
   return (
-    <AppLayout titel={titel} onderbalk={onderbalk} acties={schakelaar}>
+    <AppLayout titel={titel} onderbalk={maakOnderbalk(true)} acties={schakelaar}>
       {/* De kaart is een brede tabel; de looplijst leest juist prettiger smal. */}
       <div className={`mx-auto space-y-3 pb-6 ${weergave === "kaart" ? "max-w-5xl" : "max-w-2xl"}`}>
         {bovenaan}
@@ -298,7 +342,7 @@ export function GeldloopScherm({
         ) : null}
 
         {weergave !== "kaart" &&
-          straten.map((s) => {
+          teTonen.map((s) => {
             const passend = zoekTerm
               ? s.adressen.filter(
                   (a) =>
@@ -317,25 +361,44 @@ export function GeldloopScherm({
               <section
                 key={s.id}
                 id={`straat-${s.id}`}
-                className="scroll-mt-24 rounded-[18px] border border-border bg-card p-1.5 shadow-card"
+                className="scroll-mt-24 rounded-[24px] bg-card p-1.5 shadow-card"
               >
-                <h2 className="flex items-baseline justify-between px-2.5 pb-1 pt-1.5">
-                  <span className="font-display text-[15px] font-semibold">{s.naam}</span>
-                  {wijken.size > 1 && (
-                    <span className="text-[11.5px] text-muted-foreground">{s.wijk}</span>
-                  )}
+                <h2 className="flex items-center justify-between gap-2 px-2.5 pb-1 pt-1.5">
+                  <span className="min-w-0 truncate font-display text-[15px] font-semibold">
+                    {s.naam}
+                    {wijken.size > 1 && (
+                      <span className="ml-1.5 text-[11.5px] font-normal text-muted-foreground">
+                        {s.wijk}
+                      </span>
+                    )}
+                  </span>
+                  {/* Van wie is deze straat? Een straat van een ander zegt
+                      het met een naam; die van jou hoeft dat niet te roepen. */}
+                  <button
+                    type="button"
+                    className={`min-h-8 shrink-0 rounded-full px-2.5 text-[11.5px] font-medium ${
+                      s.vanMij
+                        ? "text-muted-foreground hover:bg-surface"
+                        : "bg-tint-amber text-tint-amber-ink"
+                    }`}
+                    title={`Wie loopt de ${s.naam}?`}
+                    onClick={() => setVerdeelStraatId(s.id)}
+                  >
+                    {s.lopers.length === 0
+                      ? "van iedereen"
+                      : s.vanMij
+                        ? s.lopers.length === 1
+                          ? "van jou"
+                          : `jij + ${s.lopers.length - 1}`
+                        : `van ${s.lopers.map((l) => l.naam.split(" ")[0]).join(", ")}`}
+                  </button>
                 </h2>
                 {weergave === "kanten" ? (
                   <BeideKanten adressen={passend} onKies={setGekozen} />
                 ) : (
                   <div className="divide-y divide-border/60">
                     {zichtbaar.map((a) => (
-                      <AdresRij
-                        key={a.id}
-                        a={a}
-                        datum={vrijgave.datum}
-                        onKies={() => setGekozen(a.id)}
-                      />
+                      <AdresRij key={a.id} a={a} onKies={() => setGekozen(a.id)} />
                     ))}
                     {rust.length > 0 && (
                       <button
@@ -358,12 +421,7 @@ export function GeldloopScherm({
                     )}
                     {open &&
                       rust.map((a) => (
-                        <AdresRij
-                          key={a.id}
-                          a={a}
-                          datum={vrijgave.datum}
-                          onKies={() => setGekozen(a.id)}
-                        />
+                        <AdresRij key={a.id} a={a} onKies={() => setGekozen(a.id)} />
                       ))}
                   </div>
                 )}
@@ -371,10 +429,34 @@ export function GeldloopScherm({
             );
           })}
 
+        {weergave !== "kaart" && straatKlaar.length > 0 && !zoekTerm && (
+          <button
+            type="button"
+            onClick={() => setAndereErbij((was) => !was)}
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-[16px] bg-card text-[13px] font-medium text-muted-foreground shadow-card"
+          >
+            <ChevronDown
+              className={`size-4 transition-transform ${andereErbij ? "rotate-180" : ""}`}
+            />
+            {andereErbij ? "Andere straten verbergen" : `Andere straten (${straatKlaar.length})`}
+          </button>
+        )}
+
         {/* Op de telefoon zit de balk boven de tabs (AppLayout zet hem daar);
             op een groter scherm plakt hij onderaan de lijst. */}
-        <div className="sticky bottom-4 z-30 hidden md:block">{onderbalk}</div>
+        <div className="sticky bottom-4 z-30 hidden md:block">
+          {maakOnderbalk(weergave !== "kaart")}
+        </div>
       </div>
+
+      <StraatVerdelen
+        open={verdeelStraatId !== null}
+        vrijgave={vrijgave}
+        straat={straten.find((s) => s.id === verdeelStraatId) ?? null}
+        huidige={straten.find((s) => s.id === verdeelStraatId)?.lopers ?? []}
+        onSluit={() => setVerdeelStraatId(null)}
+        onVeranderd={() => void qc.invalidateQueries({ queryKey: ["geldloop-lijst", vrijgave.id] })}
+      />
 
       <BetaalPaneel
         adres={adres}
@@ -492,18 +574,8 @@ function Tegel({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
   );
 }
 
-function AdresRij({
-  a,
-  datum,
-  onKies,
-}: {
-  a: GeldloopAdres;
-  /** De dag van de avond, voor "sep niet aan de beurt". */
-  datum: string;
-  onKies: () => void;
-}) {
+function AdresRij({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
   const rood = a.open_wassen >= ROOD_VANAF && heeftIetsOpen(a);
-  const nietDezeMaand = nietGewassen(a, datum);
   const betaald = a.vanavond?.soort === "betaald";
   const overmaken = a.methode === "overmaken";
   const nummer = `${a.house_number}${a.addition}`;
@@ -544,11 +616,6 @@ function AdresRij({
               gestopt
             </span>
           )}
-          {nietDezeMaand && !a.vanavond && (
-            <span className="shrink-0 rounded-full bg-tint-geel px-1.5 text-[10.5px] text-tint-geel-ink">
-              {nietDezeMaand}
-            </span>
-          )}
         </span>
         <span
           className={`block truncate text-[12px] ${rood ? "text-tint-rood-ink/80" : "text-muted-foreground"}`}
@@ -557,7 +624,7 @@ function AdresRij({
             ? heeftIetsOpen(a)
               ? "maakt over · nog contant open"
               : "maakt over"
-            : [frequentieKort(a), maandenVan(a), rood ? `${a.open_wassen}× open` : ""]
+            : [frequentieZin(a), maandenVan(a), rood ? `${a.open_wassen}× open` : ""]
                 .filter(Boolean)
                 .join(" · ")}
         </span>
@@ -609,6 +676,8 @@ function Status({ a }: { a: GeldloopAdres }) {
 /** Onderin, bij je duim: de straten, wat je opgehaald hebt, en zoeken. */
 function Onderbalk({
   straten,
+  eigenaar,
+  mijnId,
   vrijgaveId,
   opgehaald,
   wachtend,
@@ -618,6 +687,9 @@ function Onderbalk({
   onStraat,
 }: {
   straten: Straat[];
+  /** Alleen de eigenaar ziet wat het team samen ophaalde. */
+  eigenaar: boolean;
+  mijnId: string | undefined;
   /** Kies je een andere avond, dan begint de teller opnieuw. */
   vrijgaveId: string;
   opgehaald: { mij: number; mij_aantal: number; totaal: number } | undefined;
@@ -631,7 +703,7 @@ function Onderbalk({
   const inhoud = (
     <div className="space-y-2">
       {zoeken !== null ? (
-        <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 shadow-card">
+        <div className="flex items-center gap-2 rounded-full bg-card px-3 shadow-card">
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <input
             autoFocus
@@ -653,16 +725,35 @@ function Onderbalk({
       ) : (
         straten.length > 1 && (
           <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none]">
-            {straten.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => onStraat(s.id)}
-                className="h-9 shrink-0 rounded-full border border-border bg-card px-3.5 text-[13px] font-medium shadow-card"
-              >
-                {s.naam}
-              </button>
-            ))}
+            {straten.map((s) => {
+              // De initialen van wie hem loopt, zodat je op het strookje ziet
+              // welke straten van jou zijn zonder de namen uit te schrijven.
+              const merk = s.lopers
+                .filter((l) => l.id !== mijnId)
+                .map((l) => initialen(l.naam))
+                .join(" ");
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => onStraat(s.id)}
+                  className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium shadow-card ${
+                    s.vanMij ? "bg-card" : "bg-tint-amber text-tint-amber-ink"
+                  }`}
+                >
+                  {s.naam}
+                  {merk && (
+                    <span
+                      className={`rounded-full px-1.5 text-[10.5px] ${
+                        s.vanMij ? "bg-surface text-muted-foreground" : "bg-tint-amber-ink/15"
+                      }`}
+                    >
+                      {merk}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )
       )}
@@ -676,7 +767,7 @@ function Onderbalk({
             </span>
           </p>
         </div>
-        {opgehaald && opgehaald.totaal > opgehaald.mij && (
+        {eigenaar && opgehaald && opgehaald.totaal > opgehaald.mij && (
           <div className="text-right">
             <p className="text-[11.5px] text-muted-foreground">Samen</p>
             <p className="text-[13px] font-medium tabular-nums">{formatPrice(opgehaald.totaal)}</p>

@@ -28,17 +28,17 @@ export const TABBLADEN = ["vanavond", "lopen", "pof", "kaart"] as const;
 export type BetalingenTab = (typeof TABBLADEN)[number];
 
 /**
- * Wat er in het menu staat. Pof is geen tabblad meer: dat is een lijst die je
- * vanaf het overzicht opent, net als het vrijgeven van een wijk. De beginstand
- * ook niet: die vul je op de kaart in, en dat doe je maar één keer.
+ * Wat er in het menu staat. De rest open je vanaf het overzicht: de pof-lijst,
+ * het vrijgeven van een wijk en de wijkkaarten staan daar als vak. De
+ * beginstand vul je op de wijkkaart in, en dat doe je maar één keer.
  */
-export const MENU_TABBLADEN = ["vanavond", "lopen", "kaart"] as const;
+export const MENU_TABBLADEN = ["vanavond", "lopen"] as const;
 
 export const TABNAAM: Record<BetalingenTab, string> = {
   vanavond: "Overzicht",
   lopen: "Lopen",
   pof: "Pof",
-  kaart: "Kaart",
+  kaart: "Wijkkaarten",
 };
 
 export function betaalmethodeLabel(m: Betaalmethode): string {
@@ -173,12 +173,28 @@ export async function zetWijkKlaar(wijk: string, klaar: boolean) {
 // Laten zien
 // ---------------------------------------------------------------------
 
-/** "om de maand", "1× per 3 maanden": zoals het op de kaart staat. */
-export function frequentieKort(c: Pick<Customer, "interval_maanden" | "ritme">): string {
+/**
+ * Hoe vaak er gewassen wordt, in een halve zin: "elke maand", "even maanden".
+ * Even of oneven is hoe het op de papieren kaart stond — het % in de maanden
+ * dat er niet gewassen werd.
+ */
+export function frequentieZin(c: Pick<Customer, "interval_maanden" | "ritme">): string {
   const n = c.interval_maanden || 1;
   if (n <= 1) return "elke maand";
-  // Even of oneven, zoals het % op de papieren kaart in de goede maanden stond.
-  if (n === 2) return `om de maand, ${c.ritme % 2 === 0 ? "even" : "oneven"}`;
+  if (n === 2) return `${c.ritme % 2 === 0 ? "even" : "oneven"} maanden`;
+  if (n === 12) return "1× per jaar";
+  return `1× per ${n} maanden`;
+}
+
+/**
+ * Nog korter, voor de kolom op de kaart: daar staat het woord "Frequentie"
+ * al boven, dus "om de maand," kan eraf. Blijft over: elke maand, even of
+ * oneven — precies zoals het op de papieren kaart stond.
+ */
+export function frequentieKaart(c: Pick<Customer, "interval_maanden" | "ritme">): string {
+  const n = c.interval_maanden || 1;
+  if (n <= 1) return "elke maand";
+  if (n === 2) return c.ritme % 2 === 0 ? "even" : "oneven";
   if (n === 12) return "1× per jaar";
   return `1× per ${n} maanden`;
 }
@@ -231,19 +247,18 @@ export interface RekeningRegel {
  */
 export function rekening(delen: GeldDeel[]): RekeningRegel[] {
   const regels: RekeningRegel[] = [];
+  const vanDeKaart: RekeningRegel[] = [];
   const groepen = new Map<number, string[]>();
   for (const d of delen) {
     if (d.soort === "beginstand") {
       const deels = d.rest < d.bedrag - 0.005;
-      // Uit de kaartweergave komen de maanden mee ("2026-07,2026-08").
-      const maanden = d.omschrijving
-        .split(",")
-        .filter((m) => /^\d{4}-\d{2}$/.test(m))
-        .map((m) => maandKort(`${m}-01`));
-      regels.push({
-        label: deels ? "Van de kaart, rest" : "Van de kaart",
-        wanneer: maanden.length > 0 ? maanden.join(", ") : `stand ${dagKort(d.datum)}`,
-        uitleg: d.aantal > 1 && maanden.length === 0 ? `${d.aantal} wasbeurten` : undefined,
+      const maanden = maandenVanDeKaart(d);
+      vanDeKaart.push({
+        label: deels ? "Wasbeurt, rest" : d.aantal > 1 ? `${d.aantal}× wasbeurt` : "Wasbeurt",
+        // De maanden waar de pof voor staat, niet de dag waarop de kaart is
+        // overgenomen: "sep" bij een stand van september is anders zo gelezen
+        // als de wasbeurt van september zelf.
+        wanneer: maanden.length > 0 ? maanden.join(", ") : `van vóór ${dagKort(d.datum)}`,
         bedrag: d.rest,
       });
     } else if (d.soort === "klus") {
@@ -254,7 +269,7 @@ export function rekening(delen: GeldDeel[]): RekeningRegel[] {
       });
     } else if (d.omschrijving || d.rest < d.bedrag - 0.005) {
       regels.push({
-        label: d.rest < d.bedrag - 0.005 ? "Wassen, rest" : "Wassen",
+        label: d.rest < d.bedrag - 0.005 ? "Wasbeurt, rest" : "Wasbeurt",
         wanneer: maandKort(d.datum),
         uitleg: d.omschrijving ? `incl. ${d.omschrijving}` : undefined,
         bedrag: d.rest,
@@ -267,15 +282,26 @@ export function rekening(delen: GeldDeel[]): RekeningRegel[] {
   const gewoon: RekeningRegel[] = [...groepen.entries()].map(([centen, datums]) => {
     const prijs = centen / 100;
     return {
-      label: datums.length === 1 ? "Wassen" : `${datums.length}× wassen à ${formatPrice(prijs)}`,
+      label:
+        datums.length === 1 ? "Wasbeurt" : `${datums.length}× wasbeurt à ${formatPrice(prijs)}`,
       wanneer: datums.map((d) => maandKort(d)).join(", "),
       bedrag: prijs * datums.length,
     };
   });
   // De beginstand bovenaan, dan de wasbeurten, dan de rest in volgorde.
-  const begin = regels.filter((r) => r.label.startsWith("Van de kaart"));
-  const overig = regels.filter((r) => !r.label.startsWith("Van de kaart"));
-  return [...begin, ...gewoon, ...overig];
+  return [...vanDeKaart, ...gewoon, ...regels];
+}
+
+/**
+ * De maanden waar een overgenomen kaartstand voor staat ("jul, aug"). Ze
+ * komen als "2026-07,2026-08" mee uit de kaartweergave; staat er niets, dan
+ * weten we alleen dat het van vóór de peildatum is.
+ */
+export function maandenVanDeKaart(d: GeldDeel): string[] {
+  return d.omschrijving
+    .split(",")
+    .filter((m) => /^\d{4}-\d{2}$/.test(m))
+    .map((m) => maandKort(`${m}-01`));
 }
 
 /** "2× € 28 = € 56" in één regel, voor een smalle rij. */

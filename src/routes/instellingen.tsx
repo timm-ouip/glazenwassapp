@@ -169,7 +169,7 @@ function Instellingen() {
         }
         className="flex flex-col gap-5 sm:flex-row sm:gap-6"
       >
-        <TabsList className="h-auto w-full shrink-0 justify-start gap-0.5 overflow-x-auto bg-transparent p-0 sm:w-44 sm:flex-col sm:overflow-visible">
+        <TabsList className="h-auto w-full shrink-0 justify-start gap-0.5 overflow-x-auto bg-transparent p-0 fel:rounded-none fel:bg-transparent fel:p-0 sm:w-44 sm:flex-col sm:overflow-visible">
           {TABBLADEN.filter((t) => tabMag[t] ?? true).map((t) => (
             <TabsTrigger
               key={t}
@@ -1003,8 +1003,7 @@ function TeamledenKaart({ isEigenaar }: { isEigenaar: boolean }) {
   async function haalWeg(id: string, naam: string) {
     const ja = await bevestig({
       titel: `${naam} uit het team halen?`,
-      tekst:
-        "Hij verdwijnt uit de teamkeuze. Teams van dagen die geweest zijn blijven kloppen.",
+      tekst: "Hij verdwijnt uit de teamkeuze. Teams van dagen die geweest zijn blijven kloppen.",
       gevaarlijk: true,
     });
     if (!ja) return;

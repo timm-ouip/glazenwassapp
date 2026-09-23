@@ -131,6 +131,7 @@ import { useStabiel } from "@/hooks/use-stabiel";
 import { nieuweKlus, verwijderKlus } from "@/lib/klussen";
 import {
   fetchWasdag,
+  fetchNietGewassen,
   fetchWasdagen,
   haalUitWasdag,
   maakWasdagLeeg,
@@ -649,6 +650,21 @@ function Index() {
     enabled: selecteren,
   });
   const nu = vandaag();
+  // Los van de maandplanning, want dit moet ook buiten de selecteermodus te
+  // zien zijn: het zijn er hooguit een handvol per maand.
+  const nietGewassenQuery = useQuery({
+    queryKey: ["niet-gewassen", maand.vanaf, maand.tot],
+    queryFn: () => fetchNietGewassen(maand.vanaf, maand.tot),
+    staleTime: 60_000,
+  });
+  const nietGewassen = useMemo(() => {
+    const uit = new Map<string, string>();
+    for (const r of nietGewassenQuery.data ?? []) {
+      const was = uit.get(r.customer_id);
+      if (!was || r.datum > was) uit.set(r.customer_id, r.datum);
+    }
+    return uit;
+  }, [nietGewassenQuery.data]);
   // Twee losse verzamelingen, want ze betekenen iets anders: wat achter je
   // ligt is gedaan, wat voor je ligt staat al ergens anders ingepland.
   // Per adres ook de dag, zodat de regel kan zeggen wánneer: bij gewassen de
@@ -658,7 +674,12 @@ function Index() {
     const gepland = new Map<string, string>();
     for (const r of maandQuery.data ?? []) {
       if (r.datum === bewerktDag || !r.customer_id) continue;
-      if (r.datum <= nu) {
+      // Aan de deur teruggemeld: de dag staat er nog, maar er is niets
+      // gedaan. Die telt dus niet als gewassen en ook niet als ingepland —
+      // het adres moet juist nog een beurt krijgen.
+      if (r.niet_gewassen) {
+        continue;
+      } else if (r.datum <= nu) {
         const was = gewassen.get(r.customer_id);
         if (!was || r.datum > was) gewassen.set(r.customer_id, r.datum);
       } else {
@@ -985,11 +1006,15 @@ function Index() {
         ]);
         qc.invalidateQueries({ queryKey: ["wasdag"] });
         qc.invalidateQueries({ queryKey: ["wasdagen"] });
+        qc.invalidateQueries({ queryKey: ["niet-gewassen"] });
       },
     });
 
     qc.invalidateQueries({ queryKey: ["wasdag"] });
     qc.invalidateQueries({ queryKey: ["wasdagen"] });
+    // Een adres dat weer op een dag staat, is ingehaald: het rode labeltje
+    // "nog wassen" hoort er dan meteen af te gaan.
+    qc.invalidateQueries({ queryKey: ["niet-gewassen"] });
     // Je bewerkt vanaf nu díe dag: vink je daarna nog iets uit, dan gaat het
     // er ook af in plaats van dat er niets gebeurt.
     setBewerktDag(datum);
@@ -2358,6 +2383,7 @@ function Index() {
       opDeDag={keuze}
       eerderGewassen={eerderGewassen}
       elderGepland={elderGepland}
+      nietGewassen={nietGewassen}
       onStraatOpDag={opStraatOpDag}
       onKlantOpDag={opKlantOpDag}
       onVerfStart={opVerfStart}
@@ -2708,6 +2734,7 @@ function Index() {
                   opDeDag={keuze}
                   eerderGewassen={eerderGewassen}
                   elderGepland={elderGepland}
+                  nietGewassen={nietGewassen}
                   onKlap={opKlapGroep}
                   onGroepOpDag={opGroepOpDag}
                   onEdit={opEditGroep}
@@ -2773,6 +2800,7 @@ function Index() {
                     { stip: "bg-tint-amber ring-tint-amber-ink/30", tekst: "op de dag" },
                     { stip: "bg-tint-groen ring-tint-groen-ink/30", tekst: "gewassen" },
                     { stip: "bg-tint-paars ring-tint-paars-ink/30", tekst: "gepland" },
+                    { stip: "bg-tint-rood ring-tint-rood-ink/30", tekst: "niet gewassen" },
                   ].map((l) => (
                     <span key={l.tekst} className="flex items-center gap-1.5">
                       <span
@@ -2952,6 +2980,8 @@ interface SectieProps {
   opDeDag: Set<string>;
   eerderGewassen: Map<string, string>;
   elderGepland: Map<string, string>;
+  /** Deze maand aan de deur teruggemeld als niet gewassen: de dag. */
+  nietGewassen: Map<string, string>;
   onKlap: (groepId: string) => void;
   onGroepOpDag: (groepId: string, aan: boolean) => void;
   onEdit: (groep: StraatGroep) => void;
@@ -3206,6 +3236,8 @@ interface BlokProps {
   eerderGewassen: Map<string, string>;
   /** Adressen die deze maand al op een latere dag ingepland staan, met de dag. */
   elderGepland: Map<string, string>;
+  /** Deze maand aan de deur teruggemeld als niet gewassen: de dag. */
+  nietGewassen: Map<string, string>;
   onStraatOpDag: (streetId: string, aan: boolean) => void;
   onKlantOpDag: (c: Customer, aan: boolean) => void;
   /** Begint een sleepselectie; `aan` is de kant die de hele streek opgaat. */
@@ -3668,6 +3700,7 @@ const StraatKolom = memo(function StraatKolom({
             opDeDag={p.opDeDag.has(c.id)}
             eerderGewassen={p.eerderGewassen.get(c.id)}
             elderGepland={p.elderGepland.get(c.id)}
+            nietGewassen={p.nietGewassen.get(c.id)}
             dagKlaar={p.dagKlaar}
             onOpDag={p.onKlantOpDag}
             onVerfStart={p.onVerfStart}
@@ -3711,6 +3744,8 @@ interface RijProps {
   eerderGewassen: string | undefined;
   /** Deze maand al op een latere dag ingepland: de dag. */
   elderGepland: string | undefined;
+  /** Deze maand aan de deur teruggemeld als niet gewassen: de dag. */
+  nietGewassen: string | undefined;
   dagKlaar: boolean;
   onOpDag: (c: Customer, aan: boolean) => void;
   onVerfStart: (aan: boolean, x: number, y: number) => void;
@@ -3913,6 +3948,8 @@ type InhoudProps = Pick<
    *  ingepland". Leeg bij de meeste regels, dus die hertekenen niet. */
   gewassenOp?: string | undefined;
   geplandOp?: string | undefined;
+  /** De dag waarop een geldloper terugmeldde dat er niet gewassen is. */
+  overgeslagenOp?: string | undefined;
 };
 
 const KlantRijInhoud = memo(function KlantRijInhoud({
@@ -3930,6 +3967,7 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
   onDossier,
   gewassenOp,
   geplandOp,
+  overgeslagenOp,
 }: InhoudProps) {
   return (
     <>
@@ -3979,16 +4017,23 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
           overslaan-tegels staan. Vaste breedte, ook leeg, zodat prijs en
           frequentie in de pas blijven. */}
       <span className="hidden w-12 shrink-0 justify-end in-data-[selecteren]:flex">
-        {(gewassenOp || geplandOp) && (
+        {(gewassenOp || geplandOp || overgeslagenOp) && (
           <span
+            title={
+              overgeslagenOp
+                ? "Aan de deur teruggemeld: hier is deze maand niet gewassen"
+                : undefined
+            }
             className={`whitespace-nowrap rounded-full px-1.5 text-[10.5px] tabular-nums ${
-              gewassenOp
-                ? "bg-tint-groen-ink/15 text-tint-groen-ink"
-                : "bg-tint-paars-ink/15 text-tint-paars-ink"
+              overgeslagenOp
+                ? "bg-tint-rood-ink/15 text-tint-rood-ink"
+                : gewassenOp
+                  ? "bg-tint-groen-ink/15 text-tint-groen-ink"
+                  : "bg-tint-paars-ink/15 text-tint-paars-ink"
             }`}
           >
-            {gewassenOp ? "✓ " : ""}
-            {kortDag((gewassenOp ?? geplandOp)!)}
+            {overgeslagenOp ? "✗ " : gewassenOp ? "✓ " : ""}
+            {kortDag((overgeslagenOp ?? gewassenOp ?? geplandOp)!)}
           </span>
         )}
       </span>
@@ -3996,6 +4041,17 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
           getekend te worden als je de modus aan- of uitzet. */}
       <span className="contents in-data-[selecteren]:hidden">
         <>
+          {/* Aan de deur teruggemeld: hier is deze maand niet gewassen, dus
+              dit adres moet nog een beurt. Verdwijnt vanzelf zodra hij weer
+              ergens op een dag staat. */}
+          {overgeslagenOp && (
+            <span
+              title={`Op ${toonKorteDag(overgeslagenOp)} teruggemeld: hier is niet gewassen. Dit adres moet nog een beurt.`}
+              className="shrink-0 whitespace-nowrap rounded-full bg-tint-rood px-1.5 py-[2px] text-[10px] font-semibold text-tint-rood-ink ring-1 ring-inset ring-tint-rood-ink/25"
+            >
+              nog wassen
+            </span>
+          )}
           <Overgeslagen customer={c} />
           <WassenVanaf
             customer={c}
@@ -4114,27 +4170,32 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
   const kleur = regelKleur(c, p.ronde, p.markeringen);
   const dagKleur = p.opDeDag
     ? "in-data-[selecteren]:bg-tint-amber"
-    : p.eerderGewassen
-      ? "in-data-[selecteren]:bg-tint-groen"
-      : p.elderGepland
-        ? "in-data-[selecteren]:bg-tint-paars"
-        : "in-data-[selecteren]:bg-transparent";
+    : p.nietGewassen
+      ? "in-data-[selecteren]:bg-tint-rood"
+      : p.eerderGewassen
+        ? "in-data-[selecteren]:bg-tint-groen"
+        : p.elderGepland
+          ? "in-data-[selecteren]:bg-tint-paars"
+          : "in-data-[selecteren]:bg-transparent";
   // Onder de muis in de modus: de dagkleur blijft staan (anders zie je niet
   // of hij aangevinkt is), en een regel zonder dagkleur wordt grijs — ook als
   // hij buiten de modus een printlijstkleur heeft. Met ! zodat hij wint van
   // de gewone hover hieronder.
   const dagHover = p.opDeDag
     ? "in-data-[selecteren]:hover:bg-tint-amber!"
-    : p.eerderGewassen
-      ? "in-data-[selecteren]:hover:bg-tint-groen!"
-      : p.elderGepland
-        ? "in-data-[selecteren]:hover:bg-tint-paars!"
-        : "in-data-[selecteren]:hover:bg-muted/70!";
+    : p.nietGewassen
+      ? "in-data-[selecteren]:hover:bg-tint-rood!"
+      : p.eerderGewassen
+        ? "in-data-[selecteren]:hover:bg-tint-groen!"
+        : p.elderGepland
+          ? "in-data-[selecteren]:hover:bg-tint-paars!"
+          : "in-data-[selecteren]:hover:bg-muted/70!";
   const achtergrond = `${kleur ? tintAchtergrond[kleur] : ""} ${dagKleur} ${dagHover}`;
   // Wánneer, niet alleen dát. Staat hij op de dag die je nu maakt, dan
   // zegt de amber kleur al genoeg.
-  const gewassenOp = p.opDeDag ? undefined : p.eerderGewassen;
-  const geplandOp = p.opDeDag || gewassenOp ? undefined : p.elderGepland;
+  const overgeslagenOp = p.opDeDag ? undefined : p.nietGewassen;
+  const gewassenOp = p.opDeDag || overgeslagenOp ? undefined : p.eerderGewassen;
+  const geplandOp = p.opDeDag || overgeslagenOp || gewassenOp ? undefined : p.elderGepland;
 
   // De rechtermuisknop hangt om de hele regel: kleur, overslaan en het
   // dossier zitten daarin, want in de regel zelf is er geen plek voor.
@@ -4164,11 +4225,13 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
         <SelecteerVakje
           customer={c}
           uitleg={
-            gewassenOp
-              ? `Deze maand al gewassen op ${toonKorteDag(gewassenOp)}`
-              : geplandOp
-                ? `Al ingepland op ${toonKorteDag(geplandOp)}`
-                : undefined
+            overgeslagenOp
+              ? `Op ${toonKorteDag(overgeslagenOp)} niet gewassen; staat nog open`
+              : gewassenOp
+                ? `Deze maand al gewassen op ${toonKorteDag(gewassenOp)}`
+                : geplandOp
+                  ? `Al ingepland op ${toonKorteDag(geplandOp)}`
+                  : undefined
           }
           opDeDag={p.opDeDag}
           dagKlaar={p.dagKlaar}
@@ -4191,6 +4254,7 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
           onDossier={p.onDossier}
           gewassenOp={gewassenOp}
           geplandOp={geplandOp}
+          overgeslagenOp={overgeslagenOp}
         />
       </KlantRijSleep>
     </KlantMenu>

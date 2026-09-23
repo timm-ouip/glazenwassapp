@@ -5,7 +5,7 @@ import { IconAlertTriangle as AlertTriangle } from "@tabler/icons-react";
 
 import { VrijgeefVenster } from "@/components/betalingen/Vrijgeven";
 
-import { TelBedrag } from "@/components/TelBedrag";
+import { TelBedrag, TelGetal } from "@/components/TelBedrag";
 import {
   TEGEL_GEWOON,
   TEGEL_KLEUR,
@@ -20,15 +20,22 @@ import { useAuth } from "@/lib/auth";
 import {
   boek,
   draaiGeldloopWijzigingTerug,
+  draaiStraatWijzigingTerug,
   fetchGeldloopWijzigingen,
+  fetchStraatWijzigingen,
   nieuweTik,
+  straatWijzigingTekst,
   wijzigingTekst,
 } from "@/lib/geldlopen";
-import { fetchDistricts, formatPrice } from "@/lib/klanten";
+import { fetchDistricts, fetchStreets, formatPrice } from "@/lib/klanten";
 import { zetKlachtStatus } from "@/lib/klachten";
 import { fetchAvond, fetchPof, perLoper, soortLabel, type Gebeurtenis } from "@/lib/overzichten";
 import { cn } from "@/lib/utils";
 import { toonDatum, vandaag } from "@/lib/wasdag";
+
+/** De vorm van de twee brede vakken bovenaan, zoals de vakken op Home. */
+const GROOT_VAK =
+  "col-span-2 h-[156px] rounded-[28px] px-5 py-4 md:h-[240px] md:px-[26px] md:py-[22px]";
 
 function tijd(iso: string): string {
   return new Date(iso).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
@@ -47,11 +54,13 @@ function tijd(iso: string): string {
 export function Avondoverzicht({
   onPof,
   onLopen,
+  onKaarten,
   vrijgeefVenster,
   onVrijgeefVenster,
 }: {
   onPof: () => void;
   onLopen: () => void;
+  onKaarten: () => void;
   /** Open het vrijgeefvenster, bijvoorbeeld vanuit het loopscherm. */
   vrijgeefVenster?: boolean;
   onVrijgeefVenster?: (open: boolean) => void;
@@ -71,6 +80,12 @@ export function Avondoverzicht({
   const avond = useQuery({
     queryKey: ["geld-avond", datum],
     queryFn: () => fetchAvond(datum),
+    refetchInterval: datum === vandaag() ? 30_000 : false,
+  });
+  // Wie er straten omgooide vanavond.
+  const straatWijzigingen = useQuery({
+    queryKey: ["geld-avond", datum, "straten"],
+    queryFn: () => fetchStraatWijzigingen(datum),
     refetchInterval: datum === vandaag() ? 30_000 : false,
   });
   // Wat geldlopers in dossiers veranderden.
@@ -94,6 +109,7 @@ export function Avondoverzicht({
     refetchInterval: datum === vandaag() ? 30_000 : false,
   });
   const districts = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
+  const streets = useQuery({ queryKey: ["streets"], queryFn: fetchStreets, staleTime: 5 * 60_000 });
   const openPosten = (pofQuery.data ?? []).filter((r) => r.open > 0.005);
   // Een ingetrokken vrijgave telt niet mee: daar loopt niemand, dus dat is pof.
   // De avond kent alleen de namen van de wijken, dus die zoeken we hier op.
@@ -106,6 +122,27 @@ export function Avondoverzicht({
   const eerder = openPosten.filter((r) => !idsVanavond.has(r.wijk_id));
   const som = (lijst: typeof openPosten) => lijst.reduce((t, r) => t + r.open, 0);
   const lopendeVrijgaven = (a?.vrijgaven ?? []).filter((v) => !v.ingetrokken_op);
+  // Hoe ver is de avond? Aangebeld is aangebeld: wie niet thuis was of geen
+  // geld had telt net zo goed als gelopen — je hoeft er niet nog eens heen.
+  // Alleen tikken van een vrijgave van deze avond tellen mee, zodat werk in
+  // een andere wijk de balk niet scheeftrekt.
+  const avondIds = new Set(lopendeVrijgaven.map((v) => v.id));
+  const gelopenIds = new Set(
+    geldig
+      .filter(
+        (g) =>
+          g.vrijgave_id !== null &&
+          avondIds.has(g.vrijgave_id) &&
+          (g.soort === "betaald" || g.soort === "niet_thuis" || g.soort === "geen_geld"),
+      )
+      .map((g) => g.customer_id),
+  );
+  const gelopen = gelopenIds.size;
+  // Wat er nog open staat in de wijken van vanavond en waar nog niemand
+  // geweest is. Wie betaald heeft staat niet meer in de poflijst.
+  const nogTeGaan = vanavond.filter((r) => !gelopenIds.has(r.id)).length;
+  const samenAdressen = gelopen + nogTeGaan;
+  const procentGelopen = samenAdressen > 0 ? Math.round((gelopen / samenAdressen) * 100) : 0;
   const eindTijd = lopendeVrijgaven[0] ? tijd(lopendeVrijgaven[0].eind_op) : "";
   const lopersVanavond = [...new Set(lopendeVrijgaven.flatMap((v) => v.lopers.map((l) => l.naam)))];
   // Wat de eigenaar moet zien: korting, mogelijk dubbel, laat binnengekomen,
@@ -114,6 +151,18 @@ export function Avondoverzicht({
     (g) => g.soort === "korting" || g.botsing_met || g.ongedaan || g.later_binnen,
   );
 
+  async function draaiStraatTerug(id: string) {
+    try {
+      await draaiStraatWijzigingTerug(id);
+      toast.success("Teruggezet");
+      void qc.invalidateQueries({ queryKey: ["geld-avond", datum, "straten"] });
+      void qc.invalidateQueries({ queryKey: ["straat-verdeling"] });
+      void qc.invalidateQueries({ queryKey: ["geldloop-lijst"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
   async function draaiWijzigingTerug(id: string) {
     try {
       await draaiGeldloopWijzigingTerug(id);
@@ -121,6 +170,12 @@ export function Avondoverzicht({
       void qc.invalidateQueries({ queryKey: ["geld-avond", datum] });
       void qc.invalidateQueries({ queryKey: ["customers"] });
       void qc.invalidateQueries({ queryKey: ["klanten"] });
+      // Een teruggezette wasbeurt staat weer in de planning en telt weer mee
+      // in wat er open staat.
+      void qc.invalidateQueries({ queryKey: ["vergeten"] });
+      void qc.invalidateQueries({ queryKey: ["wasdag"] });
+      void qc.invalidateQueries({ queryKey: ["wasdagen"] });
+      void qc.invalidateQueries({ queryKey: ["geld-pof"] });
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -150,7 +205,7 @@ export function Avondoverzicht({
   }
 
   return (
-    <div className="space-y-3 pb-4 pt-1">
+    <div className="space-y-3 pb-4">
       <div className="flex flex-wrap items-center gap-3">
         <Input
           type="date"
@@ -177,30 +232,57 @@ export function Avondoverzicht({
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-5 md:gap-3">
-        <div className={cn(TEGEL_VAK, TEGEL_KLEUR.groen, TEGEL_GEWOON, "md:h-[150px]")}>
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
+        {/* De twee vakken die er het meest toe doen zijn breed, in de vorm
+            van Home: het bedrag groot, en eronder hoe ver de avond is. */}
+        <div className={cn(TEGEL_VAK, TEGEL_KLEUR.groen, GROOT_VAK)}>
           <TegelKop label="Opgehaald" pijl={false} />
-          <TegelGetal klein knippen={false}>
+          <span className="mt-2.5 whitespace-nowrap font-display text-[44px] font-semibold leading-none tracking-[-0.05em] tabular-nums md:mt-[18px] md:text-[72px]">
             {avond.data ? <TelBedrag key={datum} bedrag={opgehaald} /> : streep}
-          </TegelGetal>
-          <TegelOnder>{geldig.filter((g) => g.soort === "betaald").length} keer betaald</TegelOnder>
+          </span>
+          <div className="mt-auto flex flex-col gap-[7px] md:gap-2.5">
+            <span className="truncate text-[13px] opacity-80 md:text-[14.5px]">
+              {geldig.filter((g) => g.soort === "betaald").length} keer betaald
+              {samenAdressen > 0 &&
+                ` · ${gelopen} van de ${samenAdressen} adressen gelopen (${procentGelopen}%)`}
+            </span>
+            {samenAdressen > 0 && (
+              <span
+                role="img"
+                aria-label={`${procentGelopen} procent van de adressen gelopen`}
+                className="block h-1.5 overflow-hidden rounded-full bg-current/20 md:h-2"
+              >
+                <span
+                  className="block h-full rounded-full bg-current"
+                  style={{ width: `${procentGelopen}%` }}
+                />
+              </span>
+            )}
+          </div>
         </div>
-        <div className={cn(TEGEL_VAK, TEGEL_KLEUR.oranje, TEGEL_GEWOON, "md:h-[150px]")}>
+        <div className={cn(TEGEL_VAK, TEGEL_KLEUR.oranje, GROOT_VAK)}>
           <TegelKop label="Nog op te halen" pijl={false} />
-          <TegelGetal klein knippen={false}>
+          <span className="mt-2.5 whitespace-nowrap font-display text-[44px] font-semibold leading-none tracking-[-0.05em] tabular-nums md:mt-[18px] md:text-[72px]">
             {pofQuery.data && districts.data ? (
               <TelBedrag key={datum} bedrag={som(vanavond)} />
             ) : (
               streep
             )}
-          </TegelGetal>
-          <TegelOnder>
-            {idsVanavond.size === 0
-              ? "geen wijk vrijgegeven"
-              : `${vanavond.length} ${vanavond.length === 1 ? "adres" : "adressen"} · ${wijkenVanavond
-                  .map((d) => d.name)
-                  .join(", ")}${datum === vandaag() ? "" : " (stand van nu)"}`}
-          </TegelOnder>
+          </span>
+          <div className="mt-auto flex flex-col gap-[7px] md:gap-2.5">
+            <span className="truncate text-[13px] opacity-80 md:text-[14.5px]">
+              {idsVanavond.size === 0
+                ? "geen wijk vrijgegeven"
+                : `${vanavond.length} ${vanavond.length === 1 ? "adres" : "adressen"} · ${wijkenVanavond
+                    .map((d) => d.name)
+                    .join(", ")}${datum === vandaag() ? "" : " (stand van nu)"}`}
+            </span>
+            {nogTeGaan > 0 && (
+              <span className="truncate text-[13px] opacity-80 md:text-[14.5px]">
+                bij {nogTeGaan} {nogTeGaan === 1 ? "adres is" : "adressen is"} nog niemand geweest
+              </span>
+            )}
+          </div>
         </div>
         <button
           type="button"
@@ -236,6 +318,29 @@ export function Avondoverzicht({
           magVrijgeven={isEigenaar}
           onOpen={() => zetVrijgeven(true)}
         />
+        <button
+          type="button"
+          onClick={onKaarten}
+          className={cn(
+            TEGEL_VAK,
+            TEGEL_KLIKBAAR,
+            TEGEL_KLEUR.perzik,
+            TEGEL_GEWOON,
+            "text-left md:h-[150px]",
+          )}
+        >
+          <TegelKop label="Wijkkaarten" />
+          <TegelGetal klein>
+            {districts.data ? <TelGetal waarde={districts.data.length} /> : "—"}
+          </TegelGetal>
+          <TegelOnder>
+            {/* Alleen de straten die je op de kaart kunt kiezen: straten van een
+                weggelegde wijk staan er niet tussen. */}
+            {streets.data && districts.data
+              ? `${streets.data.filter((s) => districts.data.some((d) => d.id === s.district_id)).length} straten op de kaart`
+              : "\u00a0"}
+          </TegelOnder>
+        </button>
         <div className={cn(TEGEL_VAK, TEGEL_KLEUR.paars, TEGEL_GEWOON, "md:h-[150px]")}>
           <TegelKop label="Korting" pijl={false} />
           <TegelGetal klein knippen={false}>
@@ -275,6 +380,7 @@ export function Avondoverzicht({
           {opvallend.length === 0 &&
           (a?.klachten ?? []).length === 0 &&
           (a?.vaste_kortingen ?? []).length === 0 &&
+          (straatWijzigingen.data ?? []).length === 0 &&
           (wijzigingen.data ?? []).length === 0 ? (
             <p className="text-[13px] text-muted-foreground">Niets bijzonders.</p>
           ) : (
@@ -313,6 +419,35 @@ export function Avondoverzicht({
                       type="button"
                       className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline"
                       onClick={() => void draaiTerug(g)}
+                    >
+                      Ongedaan
+                    </button>
+                  )}
+                </div>
+              ))}
+              {(straatWijzigingen.data ?? []).map((w) => (
+                <div key={w.id} className="flex items-start gap-3 py-2">
+                  <span className="w-11 shrink-0 tabular-nums text-muted-foreground">
+                    {tijd(w.op)}
+                  </span>
+                  <span
+                    className={`min-w-0 flex-1 ${w.teruggedraaid_op ? "line-through opacity-60" : ""}`}
+                  >
+                    <b className="font-medium">{w.door_naam}</b> · {straatWijzigingTekst(w)}
+                    {w.voor_naam && (
+                      <span className="text-muted-foreground"> (was {w.voor_naam})</span>
+                    )}
+                    {w.teruggedraaid_op && (
+                      <span className="block text-[12px] no-underline">
+                        teruggezet door {w.teruggedraaid_naam}
+                      </span>
+                    )}
+                  </span>
+                  {!w.teruggedraaid_op && isEigenaar && (
+                    <button
+                      type="button"
+                      className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline"
+                      onClick={() => void draaiStraatTerug(w.id)}
                     >
                       Ongedaan
                     </button>
