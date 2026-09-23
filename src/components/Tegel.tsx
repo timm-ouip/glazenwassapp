@@ -27,8 +27,14 @@ export type TegelKleur = keyof typeof TEGEL_KLEUR;
 /** De vorm van elk vak. Een vak dat ergens heen gaat, krijgt ook de hover. */
 export const TEGEL_VAK = "flex min-w-0 flex-col rounded-[24px]";
 
+/**
+ * Wat een vak doet als je het kunt aanklikken: hij tilt op als je eroverheen
+ * gaat, en er loopt een golf weg vanaf de plek waar je hem indrukt (die zet
+ * src/lib/golf.ts neer, aan de klasse `tegel-golf`). Een vak dat alleen een
+ * getal laat zien krijgt dit niet: dat zou beloven dat er iets gebeurt.
+ */
 export const TEGEL_KLIKBAAR =
-  "outline-none transition-[filter] hover:brightness-[1.04] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+  "tegel-golf relative overflow-hidden outline-none transition-[translate,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-tegel active:translate-y-0 active:duration-75 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 /** Een gewoon vak in het rooster: klein op de telefoon, hoog op de computer. */
 export const TEGEL_GEWOON =
@@ -44,12 +50,21 @@ export function TegelKop({ label, pijl = true }: { label: string; pijl?: boolean
   );
 }
 
-export function TegelGetal({ children, klein }: { children: ReactNode; klein?: boolean }) {
+export function TegelGetal({
+  children,
+  klein,
+  knippen = true,
+}: {
+  children: ReactNode;
+  klein?: boolean;
+  /** Uit voor een bedrag met iets wat erboven zweeft: afknippen verbergt dat. */
+  knippen?: boolean;
+}) {
   return (
     <span
-      className={`mt-auto truncate font-display font-semibold leading-none tracking-[-0.045em] tabular-nums ${
-        klein ? "text-[30px] md:text-[40px]" : "text-[38px] md:text-[56px]"
-      }`}
+      className={`mt-auto font-display font-semibold leading-none tracking-[-0.045em] tabular-nums ${
+        knippen ? "truncate" : "whitespace-nowrap"
+      } ${klein ? "text-[30px] md:text-[40px]" : "text-[38px] md:text-[56px]"}`}
     >
       {children}
     </span>

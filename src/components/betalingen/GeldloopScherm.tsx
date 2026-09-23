@@ -12,6 +12,7 @@ import {
 
 import { AppLayout } from "@/components/AppLayout";
 import { BetaalPaneel } from "@/components/betalingen/BetaalPaneel";
+import { TelBedrag } from "@/components/TelBedrag";
 import { frequentieKort, maandKort } from "@/lib/betalingen";
 import {
   fetchGeldloopLijst,
@@ -168,6 +169,7 @@ export function GeldloopScherm({
   const onderbalk = (
     <Onderbalk
       straten={straten}
+      vrijgaveId={vrijgave.id}
       opgehaald={data?.opgehaald}
       wachtend={wachtrij.wachtend.length}
       online={wachtrij.online}
@@ -571,6 +573,7 @@ function Status({ a }: { a: GeldloopAdres }) {
 /** Onderin, bij je duim: de straten, wat je opgehaald hebt, en zoeken. */
 function Onderbalk({
   straten,
+  vrijgaveId,
   opgehaald,
   wachtend,
   online,
@@ -579,6 +582,8 @@ function Onderbalk({
   onStraat,
 }: {
   straten: Straat[];
+  /** Kies je een andere avond, dan begint de teller opnieuw. */
+  vrijgaveId: string;
   opgehaald: { mij: number; mij_aantal: number; totaal: number } | undefined;
   /** Hoeveel tikken er nog op de telefoon staan. */
   wachtend: number;
@@ -629,7 +634,7 @@ function Onderbalk({
         <div className="min-w-0 flex-1">
           <p className="text-[11.5px] text-muted-foreground">Jij opgehaald</p>
           <p className="font-display text-[17px] font-semibold tabular-nums">
-            {formatPrice(opgehaald?.mij ?? 0)}
+            <TelBedrag key={vrijgaveId} bedrag={opgehaald?.mij} />
             <span className="ml-1.5 text-[12.5px] font-normal text-muted-foreground">
               · {opgehaald?.mij_aantal ?? 0} {opgehaald?.mij_aantal === 1 ? "adres" : "adressen"}
             </span>

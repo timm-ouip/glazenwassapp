@@ -11,6 +11,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useVerbergBijScrollen } from "@/hooks/use-verberg-bij-scrollen";
 import { useAuth } from "@/lib/auth";
 import { heeftRecht, rechtenVoorPad } from "@/lib/rechten";
+// Zet de golf onder je vinger aan; hij luistert zelf mee op de hele pagina.
+import "@/lib/golf";
 
 /** De koptekst van een pagina. Ook bruikbaar buiten AppLayout, zodat een
  *  klikbare titel — de wijkkiezer — er precies zo uitziet. */

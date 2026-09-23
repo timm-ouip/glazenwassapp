@@ -17,6 +17,7 @@ import {
 import {
   TEGEL_GEWOON,
   TEGEL_KLEUR,
+  TEGEL_KLIKBAAR,
   TEGEL_VAK,
   TegelGetal,
   TegelKop,
@@ -359,7 +360,13 @@ function Dashboard() {
             <Link
               to="/betalingen"
               search={{ tab: "pof" }}
-              className={cn(TEGEL_VAK, TEGEL_KLEUR.geel, TEGEL_GEWOON, "md:h-[150px]")}
+              className={cn(
+                TEGEL_VAK,
+                TEGEL_KLIKBAAR,
+                TEGEL_KLEUR.geel,
+                TEGEL_GEWOON,
+                "md:h-[150px]",
+              )}
             >
               <TegelKop label="Nog open" />
               <TegelGetal klein>{pof ? euro(pof.bedrag) : leeg}</TegelGetal>

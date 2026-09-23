@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconAlertTriangle as AlertTriangle } from "@tabler/icons-react";
 
+import { TelBedrag } from "@/components/TelBedrag";
 import {
   TEGEL_GEWOON,
   TEGEL_KLEUR,
@@ -148,12 +149,19 @@ export function Avondoverzicht({ onPof }: { onPof: () => void }) {
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
         <div className={cn(TEGEL_VAK, TEGEL_KLEUR.groen, TEGEL_GEWOON, "md:h-[150px]")}>
           <TegelKop label="Opgehaald" pijl={false} />
-          <TegelGetal klein>{formatPrice(opgehaald)}</TegelGetal>
+          <TegelGetal klein knippen={false}>
+            <TelBedrag key={datum} bedrag={avond.data ? opgehaald : undefined} />
+          </TegelGetal>
           <TegelOnder>{geldig.filter((g) => g.soort === "betaald").length} keer betaald</TegelOnder>
         </div>
         <div className={cn(TEGEL_VAK, TEGEL_KLEUR.oranje, TEGEL_GEWOON, "md:h-[150px]")}>
           <TegelKop label="Nog op te halen" pijl={false} />
-          <TegelGetal klein>{formatPrice(som(vanavond))}</TegelGetal>
+          <TegelGetal klein knippen={false}>
+            <TelBedrag
+              key={datum}
+              bedrag={pofQuery.data && districts.data ? som(vanavond) : undefined}
+            />
+          </TegelGetal>
           <TegelOnder>
             {idsVanavond.size === 0
               ? "geen wijk vrijgegeven"

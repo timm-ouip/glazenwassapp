@@ -103,6 +103,7 @@
   --color-serie-contant: var(--serie-contant);
   --color-serie-overmaken: var(--serie-overmaken);
   --shadow-card: var(--shadow-card);
+  --shadow-tegel: var(--shadow-tegel);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -225,6 +226,9 @@
   --input: oklch(0.902 0.008 78);
   --ring: #85B7EB;
   --shadow-card: 0 1px 2px oklch(0.4 0.02 70 / 5%), 0 4px 12px oklch(0.4 0.02 70 / 5%);
+  /* Een tegel die je optilt als je eroverheen gaat. In het donker doet een
+     diepere schaduw niets, dus daar wordt de rand om de kaart wat sterker. */
+  --shadow-tegel: 0 3px 8px oklch(0.4 0.02 70 / 8%), 0 14px 30px oklch(0.4 0.02 70 / 12%);
   --chart-1: oklch(0.58 0.11 245);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -369,6 +373,7 @@
   --ring: #378ADD;
   /* Schaduw doet in het donker niets; een dun randje licht wel. */
   --shadow-card: 0 0 0 1px oklch(1 0 0 / 10%);
+  --shadow-tegel: 0 0 0 1px oklch(1 0 0 / 18%), 0 12px 26px oklch(0 0 0 / 45%);
 
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
@@ -431,6 +436,7 @@
   --input: #e2dcd0;
   --ring: #ff5b1f;
   --shadow-card: 0 1px 2px rgb(20 20 19 / 4%), 0 4px 12px rgb(20 20 19 / 4%);
+  --shadow-tegel: 0 3px 8px rgb(20 20 19 / 8%), 0 14px 30px rgb(20 20 19 / 10%);
 
   /* De vlakken. */
   --tint-amber: #f2b705;
@@ -565,6 +571,7 @@
   --input: rgb(255 255 255 / 14%);
   /* Schaduw doet op zwart niets; een haarlijntje wel. */
   --shadow-card: 0 0 0 1px rgb(255 255 255 / 6%);
+  --shadow-tegel: 0 0 0 1px rgb(255 255 255 / 12%), 0 12px 26px rgb(0 0 0 / 50%);
 
   --grond-vlak: #000000;
   --grond-kaart: #111111;
@@ -870,5 +877,60 @@
   select,
   [contenteditable="true"] {
     font-size: 16px !important;
+  }
+}
+
+/* De golf onder je vinger: tik je op een tegel, dan loopt er een lichte kring
+   weg vanaf de plek waar je hem raakte. De kring zelf zet src/lib/golf.ts
+   neer; hier staat alleen hoe hij eruitziet. Hij neemt de tekstkleur van de
+   tegel over, dus hij klopt op elke kleur en in elk thema. */
+.tegel-golf > .golfje {
+  position: absolute;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.22;
+  transform: scale(0);
+  pointer-events: none;
+  animation: golfje 620ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+
+@keyframes golfje {
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* Het bedrag dat erbij kwam, zwevend boven een teller die oploopt. */
+.erbij {
+  opacity: 0;
+  animation: erbij 1100ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+
+@keyframes erbij {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  18% {
+    opacity: 0.95;
+    transform: translateY(0);
+  }
+  70% {
+    opacity: 0.95;
+    transform: translateY(-14px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+}
+
+/* Wie in zijn instellingen heeft gezet dat beweging hem misselijk maakt,
+   krijgt de getallen en de tegels gewoon stil. */
+@media (prefers-reduced-motion: reduce) {
+  .tegel-golf > .golfje,
+  .erbij {
+    display: none;
   }
 }
