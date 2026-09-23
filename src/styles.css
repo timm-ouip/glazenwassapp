@@ -1065,19 +1065,19 @@
  * vierkantjes 8. Alles wat een pil hoort te zijn (knoppen, chips, statuspillen)
  * staat als `zak:rounded-full` bij het onderdeel zelf.
  */
-.zak :where(.rounded-\[28px\], .rounded-\[26px\], .rounded-\[24px\], .rounded-\[22px\]):not([class*="zak:rounded"]) {
+.zak :where(.rounded-\[28px\], .rounded-\[26px\], .rounded-\[24px\], .rounded-\[22px\]):not([class*="zak:rounded"]):not([class*="rounded-none"]) {
   border-radius: 16px;
 }
 
-.zak :where(.rounded-\[20px\], .rounded-\[18px\], .rounded-\[16px\]):not([class*="zak:rounded"]) {
+.zak :where(.rounded-\[20px\], .rounded-\[18px\], .rounded-\[16px\]):not([class*="zak:rounded"]):not([class*="rounded-none"]) {
   border-radius: 14px;
 }
 
-.zak :where(.rounded-\[14px\], .rounded-\[12px\], .rounded-\[11px\]):not([class*="zak:rounded"]) {
+.zak :where(.rounded-\[14px\], .rounded-\[12px\], .rounded-\[11px\]):not([class*="zak:rounded"]):not([class*="rounded-none"]) {
   border-radius: 10px;
 }
 
-.zak :where(.rounded-\[10px\], .rounded-\[9px\], .rounded-\[8px\]):not([class*="zak:rounded"]) {
+.zak :where(.rounded-\[10px\], .rounded-\[9px\], .rounded-\[8px\]):not([class*="zak:rounded"]):not([class*="rounded-none"]) {
   border-radius: 8px;
 }
 
@@ -1088,25 +1088,47 @@
  * schaduw. Kaarten die al een eigen rand hebben, slaan we over: anders staat
  * er een dubbele lijn omheen.
  */
-.zak :where(.shadow-card):not(.border):not([class*="border-"]) {
+.zak :where(.shadow-card):not(.border):not([class*="border-"]):not([class*="shadow-none"]) {
   box-shadow:
     0 0 0 1px var(--border),
     0 1px 2px rgb(16 24 40 / 4%);
 }
 
-.zak.dark :where(.shadow-card):not(.border):not([class*="border-"]) {
+.zak.dark :where(.shadow-card):not(.border):not([class*="border-"]):not([class*="shadow-none"]) {
   box-shadow:
     0 0 0 1px var(--border),
     0 1px 2px rgb(0 0 0 / 40%);
 }
 
+/* Sommige onderdelen zijn op de telefoon kleiner afgerond dan op de computer.
+   Die maten staan in hun eigen mediaregel en moeten dus apart omgerekend. */
+@media (min-width: 640px) {
+  .zak :where(.sm\:rounded-\[24px\], .sm\:rounded-\[22px\]):not([class*="zak:rounded"]) {
+    border-radius: 16px;
+  }
+
+  .zak :where(.sm\:rounded-\[18px\]):not([class*="zak:rounded"]) {
+    border-radius: 14px;
+  }
+}
+
+@media (min-width: 768px) {
+  .zak :where(.md\:rounded-\[26px\], .md\:rounded-\[24px\]):not([class*="zak:rounded"]) {
+    border-radius: 16px;
+  }
+
+  .zak :where(.md\:rounded-\[9px\]):not([class*="zak:rounded"]) {
+    border-radius: 8px;
+  }
+}
+
 /* En de maten die uit Tailwind zelf komen, zodat een kaart met rounded-xl er
    niet naast ligt. */
-.zak :where(.rounded-3xl, .rounded-2xl):not([class*="zak:rounded"]) {
+.zak :where(.rounded-3xl, .rounded-2xl):not([class*="zak:rounded"]):not([class*="rounded-none"]) {
   border-radius: 16px;
 }
 
-.zak :where(.rounded-xl):not([class*="zak:rounded"]) {
+.zak :where(.rounded-xl):not([class*="zak:rounded"]):not([class*="rounded-none"]) {
   border-radius: 12px;
 }
 

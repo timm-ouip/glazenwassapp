@@ -45,7 +45,13 @@ import {
 } from "@/lib/thema";
 
 export const Route = createFileRoute("/stijlgids")({
-  head: () => ({ meta: [{ title: "Stijlgids — Wooshy" }] }),
+  head: () => ({
+    meta: [
+      { title: "Stijlgids — Wooshy" },
+      // Een hulppagina, geen pagina voor klanten: hij hoeft niet in Google.
+      { name: "robots", content: "noindex, nofollow" },
+    ],
+  }),
   component: Stijlgids,
 });
 
