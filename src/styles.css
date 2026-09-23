@@ -799,7 +799,9 @@
   --secondary: #f1f3f6;
   --secondary-foreground: #101828;
   --muted: #f1f3f6;
-  --muted-foreground: #667085;
+  /* Een tikje donkerder dan het grijs uit de tekening: op de grijze ondergrond
+     haalde dat net de leesnorm niet voor kleine letters. */
+  --muted-foreground: #5e6777;
   --accent: #f1f3f6;
   --accent-foreground: #101828;
   --destructive: #b42318;
@@ -1178,7 +1180,9 @@
      printlijst gebruikt wordt. */
   .dark,
   .fel,
-  .fel.dark {
+  .fel.dark,
+  .zak,
+  .zak.dark {
     --background: #fff;
     --foreground: #000;
     --card: #fff;
@@ -1192,9 +1196,11 @@
   }
 
   /* Fel drukt af als crème: zachte vlakken in plaats van felle, anders gaat
-     er een halve inktpatroon op aan een printlijst. */
+     er een halve inktpatroon op aan een printlijst. Zakelijk donker doet
+     hetzelfde: die vlakken zijn bijna zwart. */
   .fel,
-  .fel.dark {
+  .fel.dark,
+  .zak.dark {
     --tint-amber: #faeeda;
     --tint-geel: #fbf3d0;
     --tint-groen: #eaf3de;
@@ -1221,6 +1227,28 @@
     --wijk-c: 0.045;
     --wijk-ink-l: 0.43;
     --wijk-ink-c: 0.115;
+  }
+
+  /* En de letters die op zo'n vlak staan: in Zakelijk donker zijn die licht,
+     en licht op wit papier is niets. */
+  .zak.dark {
+    --tint-amber-ink: #633806;
+    --tint-geel-ink: #6b4e07;
+    --tint-groen-ink: #27500a;
+    --tint-blauw-ink: #0c447c;
+    --tint-turkoois-ink: #085041;
+    --tint-limoen-ink: #3b6d11;
+    --tint-paars-ink: #3c3489;
+    --tint-rood-ink: #791f1f;
+    --tint-oranje-ink: #712b13;
+    --tint-roze-ink: #72243e;
+    --tint-blauw-mid: #185fa5;
+    --tint-groen-mid: #3b6d11;
+    --tint-rood-mid: #a32d2d;
+    --tint-paars-mid: #534ab7;
+    --tint-oranje-mid: #993c1d;
+    --tint-roze-mid: #993556;
+    --tint-turkoois-mid: #0f6e56;
   }
 }
 
