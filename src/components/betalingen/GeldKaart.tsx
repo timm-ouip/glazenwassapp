@@ -150,6 +150,23 @@ function vakVoor(
 }
 
 /**
+ * De kolom die blijft staan als je de kaart opzij schuift: het huisnummer met
+ * de prijs eronder. Op een telefoon past een jaar van twaalf maanden er niet
+ * naast, dus je scrolt altijd — en dan wil je blijven zien over wie een vakje
+ * gaat en wat hij betaalt. Het lijntje rechts maakt de scheiding zichtbaar
+ * zodra er iets onderdoor schuift.
+ */
+const VASTE_KOLOM = "sticky left-0 z-[2] w-20 border-r border-border/70";
+
+/**
+ * De frequentie met de naam eronder. Op een telefoon krijgt hij een vaste
+ * breedte: de maandkolommen zijn smal, en zonder rem zou deze kolom alle
+ * overgebleven ruimte opslokken — dat was het witte gat tussen de frequentie
+ * en de prijs. Vanaf een tablet is er ruimte zat en mag hij weer meegroeien.
+ */
+const FREQUENTIE_KOLOM = "w-[7.5rem] max-w-[7.5rem] sm:w-auto sm:max-w-[10rem]";
+
+/**
  * De kaartweergave: per straat een jaar, zoals de papieren kaart. Tik een
  * vakje en je ziet wie wanneer wat intikte.
  *
@@ -702,14 +719,21 @@ export function GeldKaart({
             <table ref={tabel} className="w-full min-w-[640px] border-collapse text-[13px]">
               <thead>
                 <tr className="text-[11.5px] text-muted-foreground">
-                  <th className="px-3 py-2 text-left font-medium">Nr</th>
-                  <th className="px-2 py-2 text-left font-medium">Frequentie</th>
-                  <th className="px-2 py-2 text-right font-medium">€</th>
+                  {/* Het nummer met de prijs eronder, en die kolom blijft staan
+                      als je opzij scrolt: op een telefoon is dat het enige
+                      waaraan je ziet over wie een vakje gaat. */}
+                  <th className={cn(VASTE_KOLOM, "bg-card px-3 py-2 text-left font-medium")}>Nr</th>
+                  <th className={cn(FREQUENTIE_KOLOM, "px-2 py-2 text-left font-medium")}>
+                    Frequentie
+                  </th>
                   {MAANDEN.map((m, i) => (
                     <th
                       key={i}
                       className={cn(
-                        "w-8 py-2 text-center font-medium",
+                        // Een eigen minimumbreedte, anders houden deze kolommen
+                        // niets over: het knopje erin heeft geen eigen breedte,
+                        // en dan gaat alle ruimte naar de frequentiekolom.
+                        "min-w-[34px] py-2 text-center font-medium",
                         maanden[i] === nuMaand
                           ? // De maand waar we nu in zitten: geel, met een lijntje
                             // dat de hele kolom door loopt.
@@ -734,15 +758,28 @@ export function GeldKaart({
                       data-adres={c.id}
                       className={cn(
                         "border-t border-border/70",
-                        markeer === c.id && "bg-tint-blauw/70",
+                        markeer === c.id && "bg-tint-blauw",
                       )}
                     >
-                      <td className="whitespace-nowrap px-3 py-1.5 font-display font-semibold tabular-nums">
-                        {overmaken && <span className="mr-1 text-tint-blauw-ink">$</span>}
-                        {c.house_number}
-                        {c.addition}
+                      <td
+                        className={cn(
+                          VASTE_KOLOM,
+                          "whitespace-nowrap px-3 py-1.5 align-top",
+                          // Een bevroren vakje moet dekken, anders schuift de
+                          // rest eronder door; vandaar geen doorzichtige tint.
+                          markeer === c.id ? "bg-tint-blauw" : "bg-card",
+                        )}
+                      >
+                        <span className="block font-display font-semibold tabular-nums">
+                          {overmaken && <span className="mr-0.5 text-tint-blauw-ink">$</span>}
+                          {c.house_number}
+                          {c.addition}
+                        </span>
+                        <span className="block text-[11.5px] tabular-nums text-muted-foreground">
+                          {c.price > 0 ? formatPrice(c.price) : ""}
+                        </span>
                       </td>
-                      <td className="max-w-[10rem] truncate px-2 py-1.5">
+                      <td className={cn(FREQUENTIE_KOLOM, "truncate px-2 py-1.5 align-top")}>
                         {frequentieKaart(c)}
                         {c.inactief_op && <span className="text-muted-foreground"> · gestopt</span>}
                         {/* De naam eronder, klein, en alleen als hij er is. */}
@@ -751,9 +788,6 @@ export function GeldKaart({
                             {namen.get(c.klant_id)}
                           </span>
                         )}
-                      </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums">
-                        {c.price > 0 ? formatPrice(c.price) : ""}
                       </td>
                       {maanden.map((maand, k) => {
                         const vak = vakVoor(c, data, maand, peilMaand, concept[c.id]);
