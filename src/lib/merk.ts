@@ -13,14 +13,6 @@ export interface Merkplaat {
   plaat: string;
   woordmerk: string;
   grond: string;
-  /**
-   * Of de naam een zachte waas van de grondkleur nodig heeft om leesbaar te
-   * blijven. Op teal wel: daar zijn de letters crème en loopt er een
-   * lichtblauwe streep dwars door het midden waar ze op wegvallen. Op de twee
-   * lichte platen zijn de letters zwart en lezen ze overal, en dan zou de
-   * waas alleen een vlekje achterlaten.
-   */
-  waas: boolean;
 }
 
 export const MERKPLATEN: Merkplaat[] = [
@@ -29,21 +21,21 @@ export const MERKPLATEN: Merkplaat[] = [
     plaat: "/paaltje-plaat-aqua.png",
     woordmerk: "/paaltje-woordmerk.png",
     grond: "#b4dcdd",
-    waas: false,
   },
   {
     naam: "oranje",
     plaat: "/paaltje-plaat-oranje.png",
     woordmerk: "/paaltje-woordmerk.png",
     grond: "#ff6723",
-    waas: false,
   },
   {
     naam: "teal",
     plaat: "/paaltje-plaat-teal.png",
-    woordmerk: "/paaltje-woordmerk-licht.png",
+    // Zwarte letters, niet de crèmekleurige die bij deze plaat zaten: door
+    // het midden van de teal plaat loopt een lichtblauwe streep, en daar
+    // vielen crème letters op weg. Zwart leest op allebei.
+    woordmerk: "/paaltje-woordmerk.png",
     grond: "#0d686a",
-    waas: true,
   },
 ];
 

@@ -69,21 +69,10 @@ export function Merkvlak({ children }: { children: ReactNode }) {
           opacity: zichtbaar ? 1 : 0,
         }}
       />
-      {/* Alleen waar de plaat erom vraagt een zachte waas in zijn eigen
-          grondkleur achter de naam — zie `waas` in src/lib/merk.ts. */}
-      <div
-        className="relative flex items-center justify-center px-[72px] py-10 transition-opacity duration-700"
-        style={{
-          opacity: zichtbaar ? 1 : 0,
-          ...(plaat?.waas
-            ? {
-                backgroundImage: `radial-gradient(58% 150% at 50% 50%, ${plaat.grond} 24%, transparent 80%)`,
-              }
-            : {}),
-        }}
-      >
-        <Woordmerk {...(plaat ? { bron: plaat.woordmerk } : {})} className="h-14 md:h-20" />
-      </div>
+      <Woordmerk
+        {...(plaat ? { bron: plaat.woordmerk } : {})}
+        className={`relative h-14 transition-opacity duration-700 md:h-20 ${zichtbaar ? "opacity-100" : "opacity-0"}`}
+      />
       <div className="relative w-full max-w-sm">{children}</div>
     </div>
   );
