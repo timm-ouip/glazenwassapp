@@ -99,6 +99,7 @@ import { PaaltjeAfspraken, PaaltjeCategorieen } from "@/components/PaaltjeInstel
 import { SchrijfstijlInstellingen } from "@/components/SchrijfstijlInstellingen";
 import { FactuurVormgeving } from "@/components/facturen/FactuurVormgeving";
 import { MollieInstellingen } from "@/components/facturen/MollieInstellingen";
+import { Herinneringstrappen } from "@/components/facturen/Herinneringstrappen";
 import { AppLayout } from "@/components/AppLayout";
 import { WijkToevoegenKnop } from "@/components/WijkKiezer";
 import { useBevestig } from "@/components/Bevestig";
@@ -285,8 +286,9 @@ function Instellingen() {
               veranderen is voor de eigenaar, want het pad naar het briefpapier
               staat op het bedrijf en daar komt alleen hij bij. */}
           <TabsContent value="facturen" className="space-y-4">
-            <div className="max-w-3xl">
+            <div className="grid max-w-6xl items-start gap-4 lg:grid-cols-2">
               <MollieInstellingen mag={isEigenaar} />
+              <Herinneringstrappen mag={heeftRecht(employee, "facturen")} />
             </div>
             <FactuurVormgeving mag={isEigenaar} />
           </TabsContent>

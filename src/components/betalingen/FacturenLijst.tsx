@@ -21,6 +21,7 @@ import {
   factuurWeggooien,
   fetchFacturen,
   fetchFactuurregels,
+  fetchHerinneringenStraks,
   fetchLosseRegels,
   fetchVangnet,
   openBedrag,
@@ -67,6 +68,12 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
   const los = useQuery({ queryKey: ["factuurregels-los"], queryFn: fetchLosseRegels });
   // Adressen op overmaken waar nooit een factuur van komt; zie Vangnet.tsx.
   const vangnet = useQuery({ queryKey: ["facturen-vangnet"], queryFn: fetchVangnet });
+  // Wat er morgen vanzelf de deur uit gaat. Zie het gele vak hieronder.
+  const straks = useQuery({
+    queryKey: ["herinneringen-straks"],
+    queryFn: fetchHerinneringenStraks,
+  });
+  const [straksOpen, setStraksOpen] = useState(false);
 
   const alles = useMemo(() => facturen.data ?? [], [facturen.data]);
   const lijst = useMemo(() => alles.filter((f) => past(f, filter)), [alles, filter]);
@@ -79,6 +86,10 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
   function ververs() {
     void qc.invalidateQueries({ queryKey: ["facturen"] });
     void qc.invalidateQueries({ queryKey: ["factuurregels-los"] });
+    // Ook het gele vak: vink je een factuur af als betaald of laat je hem met
+    // rust, dan zou het anders blijven beloven dat er een herinnering naartoe
+    // gaat die niet meer komt.
+    void qc.invalidateQueries({ queryKey: ["herinneringen-straks"] });
   }
 
   const klaarzetten = useMutation({
@@ -137,6 +148,25 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
       if (!ja) return;
     }
     versturen.mutate(teVersturen);
+  }
+
+  /**
+   * De herinnering van morgen tegenhouden.
+   *
+   * Twee weken, dezelfde termijn als de knop "met rust laten" verderop in de
+   * lijst -- één dag overslaan heeft geen zin, want dan staat hij morgen
+   * gewoon weer in dit vakje. Terugdraaien kan bij de factuur zelf.
+   */
+  async function nietDoen(id: string) {
+    const tot = new Date();
+    tot.setDate(tot.getDate() + 14);
+    try {
+      await factuurMetRust(id, datumSleutel(tot));
+      ververs();
+      toast.success("Deze factuur blijft twee weken met rust.");
+    } catch (e) {
+      toast.error("Niet gelukt: " + (e as Error).message);
+    }
   }
 
   // Een eigen blad, want er hoort een printknop bij en dan mag de rest van de
@@ -203,6 +233,54 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
           >
             Allemaal kiezen
           </Button>
+        </section>
+      )}
+
+      {/* Wat er morgen vanzelf weggaat.
+
+          Een dag van tevoren, met een knop ernaast: een herinnering die je
+          pas ziet als hij al bij je klant ligt, is geen automaat maar een
+          verrassing. En soms weet jij iets wat de app niet weet -- die klant
+          belde gisteren, of je hebt hem net in de kroeg gesproken. */}
+      {(straks.data?.length ?? 0) > 0 && (
+        <section className="space-y-2 rounded-[20px] bg-tint-amber px-4 py-3 text-[13px] text-tint-amber-ink">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="min-w-0 flex-1">
+              Bij de eerstvolgende ronde gaat er vanzelf een herinnering naar{" "}
+              {straks.data?.length === 1 ? "1 factuur" : `${straks.data?.length} facturen`}. Die is
+              elke ochtend.
+            </span>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="rounded-full"
+              onClick={() => setStraksOpen((o) => !o)}
+            >
+              {straksOpen ? "Verbergen" : "Bekijken"}
+            </Button>
+          </div>
+          {straksOpen && (
+            <ul className="space-y-1.5 border-t border-current/15 pt-2">
+              {(straks.data ?? []).map((h) => (
+                <li key={h.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="font-medium tabular-nums">{h.nummer}</span>
+                  <span className="min-w-0 flex-1 truncate">{h.klant}</span>
+                  <span className="tabular-nums">{formatPrice(h.bedrag)}</span>
+                  <span className="text-[12px] opacity-80">
+                    {h.trap === 1 ? "1e" : `${h.trap}e`} herinnering
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="rounded-full"
+                    onClick={() => void nietDoen(h.id)}
+                  >
+                    Niet doen
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 

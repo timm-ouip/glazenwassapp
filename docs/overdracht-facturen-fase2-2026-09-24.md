@@ -323,6 +323,88 @@ kunt, dus doe het bewust en met de testsleutel.
 - **Automatische incasso** blijft uitdrukkelijk buiten beeld, zoals in het plan
   staat.
 
+## Fase 4 is af: herinneringen die vanzelf gaan
+
+Bijgewerkt op 24-09-2026, aan het eind van de avond.
+
+### Wat het doet
+
+Staat een factuur over de vervaldatum, dan gaat er vanzelf een mail achteraan,
+in trappen die je zelf instelt. Standaard twee: na 7 dagen vriendelijk, na 21
+dagen steviger. Je kunt er trappen bij zetten, ze uitzetten, en de teksten
+helemaal herschrijven ({{naam}}, {{nummer}}, {{bedrag}}, {{vervaldatum}} en
+{{dagen}} worden ingevuld). Onder elke herinnering komt vanzelf de IBAN, en de
+Mollie-knop als die gekoppeld is.
+
+### Vooraf, niet achteraf
+
+Een dag voordat er iets weggaat staat het **geel in de facturenlijst**: "morgen
+gaat er vanzelf een herinnering naar N facturen", met _Bekijken_ en per factuur
+_Niet doen_. Dat laatste zet de factuur twee weken met rust -- dezelfde termijn
+als de knop die al bij elke factuur zat, want één dag overslaan heeft geen zin:
+dan staat hij morgen gewoon weer in het vakje.
+
+Dit is het punt van de hele opzet. Een herinnering die je pas ziet als hij al
+bij je klant ligt is geen automaat maar een verrassing, en soms weet jij iets
+wat de app niet weet -- die klant belde gisteren.
+
+**Het gele vakje en de ronde gebruiken dezelfde databasefunctie**
+(`factuur_herinneringen_klaar`), alleen met een andere datum. Zouden dat twee
+lijstjes zijn, dan kondig je vroeg of laat iets aan wat niet gebeurt -- of erger,
+gaat er iets weg dat je niet hebt zien aankomen.
+
+### Wanneer, en wat er niet meegaat
+
+`cron.schedule('factuur-herinneringen', '30 6 * * *', …)` roept elke ochtend de
+edge function `factuur-herinneringen` aan (06:30 UTC, dus half negen in de
+zomer). Overgeslagen worden: creditnota's, concepten, betaalde en gecrediteerde
+facturen, weggegooide facturen, alles met `met_rust_tot` in de toekomst, en
+facturen zonder e-mailadres in de bevroren klantgegevens.
+
+De trap gaat omhoog **vóór** het versturen en wordt teruggedraaid als de mail
+mislukt. Andersom klinkt veiliger maar is het niet: ging de mail wél weg en dat
+ene laatste stapje niet, dan stond de factuur nog op de oude trap en ging
+dezelfde herinnering de volgende ochtend weer weg -- en de ochtend daarna weer.
+Eén herinnering missen is vervelend; er elke dag een sturen is erger.
+
+De grens van 200 per ronde telt **per bedrijf**. Zou er één grens over alles
+heen liggen, dan kan één bedrijf met een stapel oude facturen -- en helemaal
+een bedrijf waar niets weg kán, bijvoorbeeld zonder afzenderadres -- elke
+ochtend alle plekken vullen en de rest eeuwig laten wachten.
+
+De ronde zoekt niet "de volgende trap" maar **de eerstvolgende die aanstaat**.
+Zet je de eerste herinnering uit, dan schuift alles door naar de tweede in
+plaats van stil te vallen.
+
+### Waar het staat
+
+| onderdeel                 | waar                                                            |
+| ------------------------- | --------------------------------------------------------------- |
+| De trappen en de selectie | migratie `…121000`                                              |
+| De dagelijkse ronde       | migratie `…122000`, `supabase/functions/factuur-herinneringen/` |
+| De knoppen                | `src/components/facturen/Herinneringstrappen.tsx`               |
+| Het gele vak              | `src/components/betalingen/FacturenLijst.tsx`                   |
+
+### Wat er bewezen is, en wat niet
+
+**Wel gelopen.** De twee standaardtrappen staan er voor De Ramensopperij, het
+scherm laat ze zien, een trap aanpassen en terugzetten werkt, en
+`facturen_herinneringen_straks()` geeft netjes een lege lijst. De planner
+weigert een verzoek zonder of met een verkeerde `x-cron-sleutel` (401).
+
+**Let op bij de eerste ochtend.** Alle bestaande facturen staan op trap 0, dus
+alles wat al over de eerste trap heen is krijgt bij de eerste ronde meteen een
+herinnering. Nu is dat niets (er zijn geen facturen), maar kijk als er straks
+wel facturen zijn eerst even wat er in het gele vak staat voordat je de nacht
+erover laat gaan.
+
+**Niet gelopen.** Het gele vak met echte inhoud, en een herinnering die echt
+weggaat. Daar is een verstuurde factuur met een nummer en een verlopen
+vervaldatum voor nodig, en dat betekent een echt factuurnummer trekken -- zie
+de waarschuwing hieronder. Doe dat pas als er toch een eerste echte factuur
+uitgaat. Kijk de eerste ochtend mee met
+`select * from cron.job_run_details where jobname = 'factuur-herinneringen'`.
+
 ## Vallen waar anderen al in gelopen zijn
 
 - **Draai deno nooit vanuit de hoofdmap met `--node-modules-dir=auto`.** Dat

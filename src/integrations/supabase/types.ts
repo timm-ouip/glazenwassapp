@@ -1375,6 +1375,47 @@ export type Database = {
           },
         ];
       };
+      factuur_herinneringen: {
+        Row: {
+          aan: boolean;
+          company_id: string;
+          created_at: string;
+          id: string;
+          na_dagen: number;
+          onderwerp: string;
+          tekst: string;
+          volgnummer: number;
+        };
+        Insert: {
+          aan?: boolean;
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          na_dagen: number;
+          onderwerp: string;
+          tekst: string;
+          volgnummer: number;
+        };
+        Update: {
+          aan?: boolean;
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          na_dagen?: number;
+          onderwerp?: string;
+          tekst?: string;
+          volgnummer?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "factuur_herinneringen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       factuur_tellers: {
         Row: {
           company_id: string;
@@ -3824,6 +3865,7 @@ export type Database = {
         Args: { bedrijf: string; nummer: string };
         Returns: string;
       };
+      facturen_herinneringen_straks: { Args: never; Returns: Json };
       facturen_klaarzetten: { Args: { nu_ook?: boolean | null }; Returns: number };
       facturen_klaarzetten_voor: {
         Args: { bedrijf: string; nu_ook: boolean };
@@ -3862,6 +3904,26 @@ export type Database = {
       factuur_excl: {
         Args: { bedrag: number; inclusief: boolean; procent: number };
         Returns: number;
+      };
+      factuur_herinnering_trap: {
+        Args: { factuur: string; trap: number };
+        Returns: undefined;
+      };
+      factuur_herinneringen_klaar: {
+        Args: { bedrijf?: string | null; op: string };
+        Returns: {
+          company_id: string;
+          dagen_open: number;
+          factuur_id: string;
+          klant: string;
+          mail: string;
+          nummer: string;
+          onderwerp: string;
+          open_bedrag: number;
+          tekst: string;
+          trap: number;
+          vervaldatum: string;
+        }[];
       };
       factuur_mailadres: {
         Args: { k: Database["public"]["Tables"]["klanten"]["Row"] };
@@ -4168,6 +4230,7 @@ export type Database = {
         }[];
       };
       sessies_intrekken: { Args: { gebruiker: string }; Returns: undefined };
+      standaard_herinneringen: { Args: { bedrijf: string }; Returns: undefined };
       standaard_sjablonen: { Args: { bedrijf: string }; Returns: undefined };
       stoppen_terugdraaien: {
         Args: { uitkomst: Json; voor_bedrijf?: string | null };

@@ -78,3 +78,8 @@ verify_jwt = true
 # melding wordt nooit geloofd, er wordt altijd bij Mollie nagevraagd.
 [functions.mollie-webhook]
 verify_jwt = false
+
+# De dagelijkse ronde herinneringen; door pg_cron, zonder gebruiker. Zelfde
+# slot als mail-ophalen (x-cron-sleutel).
+[functions.factuur-herinneringen]
+verify_jwt = false

@@ -581,3 +581,91 @@ export async function voorbeeldFactuur(v: FactuurVorm): Promise<Blob> {
   for (let i = 0; i < ruw.length; i += 1) bytes[i] = ruw.charCodeAt(i);
   return new Blob([bytes], { type: "application/pdf" });
 }
+
+// -------------------------------------------------------------- herinneringen
+
+/**
+ * De trappen: na hoeveel dagen er een herinnering gaat, en wat erin staat.
+ *
+ * `volgnummer` is de trap zelf (1 is de eerste herinnering) en staat ook in
+ * `facturen.herinnering_trap`; zo weet de dagelijkse ronde waar hij gebleven
+ * was. In de teksten mag {{naam}}, {{nummer}}, {{bedrag}}, {{vervaldatum}} en
+ * {{dagen}}.
+ */
+export interface Herinneringstrap {
+  id: string;
+  volgnummer: number;
+  na_dagen: number;
+  onderwerp: string;
+  tekst: string;
+  aan: boolean;
+}
+
+export const HERINNERING_VELDEN = ["naam", "nummer", "bedrag", "vervaldatum", "dagen"];
+
+export async function fetchHerinneringstrappen(): Promise<Herinneringstrap[]> {
+  const { data, error } = await supabase
+    .from("factuur_herinneringen")
+    .select("id,volgnummer,na_dagen,onderwerp,tekst,aan")
+    .order("volgnummer");
+  if (error) throw error;
+  return (data ?? []) as Herinneringstrap[];
+}
+
+export async function bewaarHerinneringstrap(trap: Herinneringstrap) {
+  // Hier tegenhouden en niet pas in de database: die geeft een rauwe Engelse
+  // melding over een "check constraint", en een lege tekst zou gewoon
+  // opgeslagen worden -- met een mail zonder onderwerp als gevolg.
+  const onderwerp = trap.onderwerp.trim();
+  const tekst = trap.tekst.trim();
+  if (!onderwerp) throw new Error("Een herinnering zonder onderwerp kan niet.");
+  if (!tekst) throw new Error("Een herinnering zonder tekst kan niet.");
+  const dagen = Math.min(Math.max(Math.round(trap.na_dagen) || 0, 0), 365);
+  const { error } = await supabase
+    .from("factuur_herinneringen")
+    .update({ na_dagen: dagen, onderwerp, tekst, aan: trap.aan })
+    .eq("id", trap.id);
+  if (error) throw error;
+}
+
+export async function nieuweHerinneringstrap(bestaand: Herinneringstrap[]) {
+  const volgnummer = Math.max(0, ...bestaand.map((t) => t.volgnummer)) + 1;
+  const laatste = bestaand[bestaand.length - 1];
+  const { error } = await supabase.from("factuur_herinneringen").insert({
+    volgnummer,
+    na_dagen: (laatste?.na_dagen ?? 0) + 14,
+    onderwerp: `Herinnering: factuur {{nummer}}`,
+    tekst: "Beste {{naam}},\n\nFactuur {{nummer}} van {{bedrag}} staat nog open.\n\n",
+    aan: true,
+  });
+  if (error) throw error;
+}
+
+export async function verwijderHerinneringstrap(id: string) {
+  const { error } = await supabase.from("factuur_herinneringen").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Eén factuur waar morgen een herinnering naartoe gaat. */
+export interface HerinneringStraks {
+  id: string;
+  nummer: string;
+  klant: string;
+  mail: string;
+  bedrag: number;
+  vervaldatum: string;
+  trap: number;
+}
+
+/**
+ * Wat er morgen weggaat.
+ *
+ * Dezelfde databasefunctie die de dagelijkse ronde gebruikt, alleen met de
+ * datum van morgen. Zou de app het zelf narekenen, dan zou het gele vakje
+ * vroeg of laat iets anders beloven dan er gebeurt.
+ */
+export async function fetchHerinneringenStraks(): Promise<HerinneringStraks[]> {
+  const { data, error } = await supabase.rpc("facturen_herinneringen_straks");
+  if (error) throw error;
+  return (data ?? []) as unknown as HerinneringStraks[];
+}
