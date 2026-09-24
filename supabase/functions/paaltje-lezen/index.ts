@@ -60,7 +60,8 @@ const MAX_POGINGEN = 3;
 const WA_RUST_MS = 45_000;
 const WA_PER_RONDE = 8;
 const WA_GESPREK = 12;
-const TIJDELIJK = /\b(429|500|502|503|504|529)\b|overloaded|rate.?limit|timeout|timed out|network|fetch failed|ECONN/i;
+const TIJDELIJK =
+  /\b(429|500|502|503|504|529)\b|overloaded|rate.?limit|timeout|timed out|network|fetch failed|ECONN/i;
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -75,7 +76,9 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const werk = leesRonde(db).catch((e) => console.error("paaltje-lezen:", e instanceof Error ? e.message : e));
+  const werk = leesRonde(db).catch((e) =>
+    console.error("paaltje-lezen:", e instanceof Error ? e.message : e),
+  );
   if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(werk);
   else await werk;
   return antwoord({ ok: true });
@@ -129,7 +132,10 @@ async function leesRonde(db: Db) {
     if (paaltje_pogingen >= MAX_POGINGEN) {
       await db
         .from("berichten")
-        .update({ paaltje_status: "fout", ai_fout: "Paaltje kreeg deze mail na drie pogingen niet gelezen." })
+        .update({
+          paaltje_status: "fout",
+          ai_fout: "Paaltje kreeg deze mail na drie pogingen niet gelezen.",
+        })
         .eq("id", id)
         .eq("paaltje_status", "wacht");
       continue;
@@ -227,7 +233,16 @@ async function leesWhatsAppRonde(
   if (error) throw new Error(`Wachtende WhatsApp: ${error.message}`);
 
   // Per gesprek, nieuwste gesprek eerst.
-  const gesprekken = new Map<string, { id: string; company_id: string; wa_telefoon: string; ontvangen_op: string; paaltje_pogingen: number }[]>();
+  const gesprekken = new Map<
+    string,
+    {
+      id: string;
+      company_id: string;
+      wa_telefoon: string;
+      ontvangen_op: string;
+      paaltje_pogingen: number;
+    }[]
+  >();
   for (const r of wachtend ?? []) {
     const sleutel = `${r.company_id}|${r.wa_telefoon}`;
     gesprekken.set(sleutel, [...(gesprekken.get(sleutel) ?? []), r]);
@@ -244,7 +259,10 @@ async function leesWhatsAppRonde(
     if (Math.max(...rijen.map((r) => r.paaltje_pogingen)) >= MAX_POGINGEN) {
       await db
         .from("berichten")
-        .update({ paaltje_status: "fout", ai_fout: "Paaltje kreeg dit bericht na drie pogingen niet gelezen." })
+        .update({
+          paaltje_status: "fout",
+          ai_fout: "Paaltje kreeg dit bericht na drie pogingen niet gelezen.",
+        })
         .in("id", ids)
         .eq("paaltje_status", "wacht");
       continue;
@@ -264,7 +282,9 @@ async function leesWhatsAppRonde(
       console.error(`whatsapp ${nieuwste.wa_telefoon} pakken:`, pakFout.message);
       continue;
     }
-    const berichten = ((gepakt ?? []) as Gepakt[]).sort((a, b) => a.ontvangen_op.localeCompare(b.ontvangen_op));
+    const berichten = ((gepakt ?? []) as Gepakt[]).sort((a, b) =>
+      a.ontvangen_op.localeCompare(b.ontvangen_op),
+    );
     if (berichten.length === 0) continue;
     const laatste = berichten[berichten.length - 1];
     const eerdere = berichten.slice(0, -1).map((b) => b.id);
@@ -285,10 +305,15 @@ async function leesWhatsAppRonde(
       const mail: Gepakt = {
         ...laatste,
         kanaal: "whatsapp",
-        tekst: berichten.map((b) => b.tekst).filter(Boolean).join("\n"),
+        tekst: berichten
+          .map((b) => b.tekst)
+          .filter(Boolean)
+          .join("\n"),
         van_naam: [...berichten].reverse().find((b) => b.van_naam)?.van_naam ?? "",
         klant_id: [...berichten].reverse().find((b) => b.klant_id)?.klant_id ?? null,
-        gesprek: ((ervoor ?? []) as { richting: "in" | "uit"; tekst: string; ontvangen_op: string }[]).reverse(),
+        gesprek: (
+          (ervoor ?? []) as { richting: "in" | "uit"; tekst: string; ontvangen_op: string }[]
+        ).reverse(),
       };
       if (!prijzenPerBedrijf.has(mail.company_id)) {
         prijzenPerBedrijf.set(mail.company_id, await richtprijzen(db, mail.company_id));
@@ -304,13 +329,18 @@ async function leesWhatsAppRonde(
           .eq("id", laatste.id)
           .single();
         if (standFout) throw new Error(`Stand lezen: ${standFout.message}`);
-        const status = stand?.paaltje_status === "bezig" ? "wacht" : (stand?.paaltje_status ?? "wacht");
+        const status =
+          stand?.paaltje_status === "bezig" ? "wacht" : (stand?.paaltje_status ?? "wacht");
         const { error: volgFout } = await db
           .from("berichten")
           .update({
             paaltje_status: status,
             ...(status === "klaar"
-              ? { is_klantmail: stand?.is_klantmail ?? null, samenvatting: "Samen gelezen met het bericht erna.", paaltje_pogingen: 0 }
+              ? {
+                  is_klantmail: stand?.is_klantmail ?? null,
+                  samenvatting: "Samen gelezen met het bericht erna.",
+                  paaltje_pogingen: 0,
+                }
               : {}),
           })
           .in("id", eerdere)
@@ -373,7 +403,10 @@ async function leesEen(
       .select("categorie_id")
       .eq("bericht_id", mail.id);
     if (mensFout) throw new Error(`Categorieën lezen: ${mensFout.message}`);
-    indeling = (vanMens ?? []).map((r: { categorie_id: string }) => ({ id: r.categorie_id, zekerheid: 1 }));
+    indeling = (vanMens ?? []).map((r: { categorie_id: string }) => ({
+      id: r.categorie_id,
+      zekerheid: 1,
+    }));
   }
 
   // Koos jij categorieën, dan is het voor jou klantmail, ook als Paaltje nu
@@ -388,13 +421,11 @@ async function leesEen(
   const eerderKg = leesKlantgegevens(mail.klantgegevens);
   let gokUitAdres: string | null = null;
   if (isKlantmail && uit.aanmelding && !mail.klant_id && !uit.klant_bekend) {
-    const { herkend: opTelefoonOfAdres, gok, leegAdres } = await herken(
-      db,
-      mail.company_id,
-      uit.aanmelding,
-      mail.van_naam,
-      eerderKg.afgewezen ?? [],
-    );
+    const {
+      herkend: opTelefoonOfAdres,
+      gok,
+      leegAdres,
+    } = await herken(db, mail.company_id, uit.aanmelding, mail.van_naam, eerderKg.afgewezen ?? []);
     let herkend: {
       klant_id: string;
       via: "telefoon" | "adres";
@@ -405,23 +436,38 @@ async function leesEen(
     // geïmporteerd): dan maakt Paaltje Systems de klant zelf aan. Een lege plek vullen
     // mag, net als op de aanmeldpagina; het gele vakje heeft Ongedaan maken.
     if (!herkend && leegAdres && (await magKlantAanmaken(db, mail.company_id, leegAdres))) {
-      const nieuw = await maakKlantBijAdres(db, mail.company_id, leegAdres, uit.aanmelding, mail.van_naam);
-      if (nieuw) herkend = { klant_id: nieuw, via: "adres", aangemaakt: true, customer_id: leegAdres };
+      const nieuw = await maakKlantBijAdres(
+        db,
+        mail.company_id,
+        leegAdres,
+        uit.aanmelding,
+        mail.van_naam,
+      );
+      if (nieuw)
+        herkend = { klant_id: nieuw, via: "adres", aangemaakt: true, customer_id: leegAdres };
     }
     if (herkend) {
       const email = mail.van_email.trim().toLowerCase();
       const nummer = mail.kanaal === "whatsapp" ? telefoonAlsSleutel(mail.wa_telefoon ?? "") : "";
       try {
         if (nummer) {
-          const { error: koppelFout } = await db
-            .from("klant_telefoons")
-            .insert({ company_id: mail.company_id, klant_id: herkend.klant_id, telefoon: nummer, bron: "paaltje" });
-          if (koppelFout && koppelFout.code !== "23505") throw new Error(`Nummer koppelen: ${koppelFout.message}`);
+          const { error: koppelFout } = await db.from("klant_telefoons").insert({
+            company_id: mail.company_id,
+            klant_id: herkend.klant_id,
+            telefoon: nummer,
+            bron: "paaltje",
+          });
+          if (koppelFout && koppelFout.code !== "23505")
+            throw new Error(`Nummer koppelen: ${koppelFout.message}`);
         } else if (email) {
-          const { error: koppelFout } = await db
-            .from("klant_emails")
-            .insert({ company_id: mail.company_id, klant_id: herkend.klant_id, email, bron: "paaltje" });
-          if (koppelFout && koppelFout.code !== "23505") throw new Error(`Mailadres koppelen: ${koppelFout.message}`);
+          const { error: koppelFout } = await db.from("klant_emails").insert({
+            company_id: mail.company_id,
+            klant_id: herkend.klant_id,
+            email,
+            bron: "paaltje",
+          });
+          if (koppelFout && koppelFout.code !== "23505")
+            throw new Error(`Mailadres koppelen: ${koppelFout.message}`);
         }
         const opnieuw: KlantGegevens = {
           ...eerderKg,
@@ -529,7 +575,8 @@ async function leesEen(
         // dezelfde klant ingevuld werd, blijft in de lijst staan.
         const eerder = eerderKg.toegevoegd?.klant_id === klantId ? eerderKg.toegevoegd.velden : {};
         const velden = { ...eerder, ...r.toegevoegd };
-        if (Object.keys(velden).length > 0) klantgegevens.toegevoegd = { klant_id: klantId, velden };
+        if (Object.keys(velden).length > 0)
+          klantgegevens.toegevoegd = { klant_id: klantId, velden };
         else delete klantgegevens.toegevoegd;
         if (Object.keys(r.anders).length > 0) klantgegevens.anders = r.anders;
       } catch (e) {
@@ -598,7 +645,9 @@ async function leesEen(
         concept,
         wilGeenWhatsApp: uit.wil_geen_whatsapp,
         klantAfgemeld: await klantAfgemeld(db, mail.company_id, mail.klant_id ?? uit.klant_id),
-        overslaanGevraagd: indeling.some((c) => categorieen.find((x) => x.id === c.id)?.sleutel === "overslaan"),
+        overslaanGevraagd: indeling.some(
+          (c) => categorieen.find((x) => x.id === c.id)?.sleutel === "overslaan",
+        ),
         overslaanDoorgevoerd: acties.voorstel.overslaan?.doorgevoerd === true,
       }),
     );
@@ -615,7 +664,14 @@ async function leesEen(
   const klantVanKlacht = mail.klant_id ?? uit.klant_id;
   if (isKlantmail && klantVanKlacht && indeling.some((c) => c.id === klachtCategorie)) {
     try {
-      await klachtUitMail(db, mail, klantVanKlacht, uit.klacht, uit.aanmelding, mail.kanaal === "whatsapp" ? "app" : "mail");
+      await klachtUitMail(
+        db,
+        mail,
+        klantVanKlacht,
+        uit.klacht,
+        uit.aanmelding,
+        mail.kanaal === "whatsapp" ? "app" : "mail",
+      );
     } catch (e) {
       console.error(`klacht ${mail.id}:`, e instanceof Error ? e.message : e);
     }
@@ -650,7 +706,11 @@ async function leesEen(
     if (reden) {
       console.error(`bevestiging ${mail.id} niet verstuurd:`, reden);
       try {
-        const { data: nu } = await db.from("berichten").select("voorstel").eq("id", mail.id).maybeSingle();
+        const { data: nu } = await db
+          .from("berichten")
+          .select("voorstel")
+          .eq("id", mail.id)
+          .maybeSingle();
         await db
           .from("berichten")
           .update({ voorstel: { ...(nu?.voorstel ?? {}), bevestiging_fout: reden.slice(0, 300) } })
@@ -663,7 +723,12 @@ async function leesEen(
 }
 
 /** Hoort dit nummer echt bij deze klant (op de klant zelf, of door een mens gekoppeld)? */
-async function nummerZeker(db: Db, companyId: string, waTelefoon: string, klantId: string): Promise<boolean> {
+async function nummerZeker(
+  db: Db,
+  companyId: string,
+  waTelefoon: string,
+  klantId: string,
+): Promise<boolean> {
   const nummer = telefoonAlsSleutel(waTelefoon);
   if (!nummer) return false;
   const { data, error } = await db
@@ -698,24 +763,27 @@ interface AntwoordKeuze {
  * nummer, Paaltje heel zeker is, en bij overslaan het overslaan ook echt
  * doorgevoerd is. Het versturen zelf doet de planner, na de wachttijd.
  */
-async function planWhatsAppAntwoord(db: Db, mail: Gepakt, k: AntwoordKeuze): Promise<Record<string, unknown>> {
+async function planWhatsAppAntwoord(
+  db: Db,
+  mail: Gepakt,
+  k: AntwoordKeuze,
+): Promise<Record<string, unknown>> {
   // Al verstuurd of net bezig: niet opnieuw.
   if (mail.wa_antwoord_status === "verstuurd" || mail.wa_antwoord_status === "bezig") return {};
 
   const gekozen = k.indeling
     .map((c) => k.categorieen.find((x) => x.id === c.id))
     .filter((c): c is Categorie => !!c);
-  const reden =
-    mail.beantwoord_op
-      ? "Er is al geantwoord."
-      : !k.isKlantmail || gekozen.length === 0
-        ? "Geen klantbericht."
-        : !gekozen.every((c) => c.zelf_antwoorden_whatsapp)
-          ? "Voor deze soort bericht antwoordt Paaltje niet zelf."
-          : !k.klantId || !k.klantZeker
-            ? "Het nummer hoort niet zeker bij een klant."
-            : k.klantAfgemeld
-              ? "Deze klant heeft WhatsApp uitgezet."
+  const reden = mail.beantwoord_op
+    ? "Er is al geantwoord."
+    : !k.isKlantmail || gekozen.length === 0
+      ? "Geen klantbericht."
+      : !gekozen.every((c) => c.zelf_antwoorden_whatsapp)
+        ? "Voor deze soort bericht antwoordt Paaltje niet zelf."
+        : !k.klantId || !k.klantZeker
+          ? "Het nummer hoort niet zeker bij een klant."
+          : k.klantAfgemeld
+            ? "Deze klant heeft WhatsApp uitgezet."
             : k.wilGeenWhatsApp
               ? "De klant wil geen WhatsApp meer."
               : k.zekerheid < ZEKER_AUTOMATISCH
@@ -739,8 +807,14 @@ async function planWhatsAppAntwoord(db: Db, mail: Gepakt, k: AntwoordKeuze): Pro
     .single();
   if (error) throw new Error(`Antwoordtijden: ${error.message}`);
   const wacht = Number(bedrijf?.wa_wachttijd_min ?? 10);
-  const vanaf = new Date(Math.max(Date.now(), new Date(mail.ontvangen_op).getTime() + wacht * 60_000));
-  const op = binnenAntwoordtijd(vanaf, String(bedrijf?.wa_antwoord_van ?? "07:00"), String(bedrijf?.wa_antwoord_tot ?? "21:00"));
+  const vanaf = new Date(
+    Math.max(Date.now(), new Date(mail.ontvangen_op).getTime() + wacht * 60_000),
+  );
+  const op = binnenAntwoordtijd(
+    vanaf,
+    String(bedrijf?.wa_antwoord_van ?? "07:00"),
+    String(bedrijf?.wa_antwoord_tot ?? "21:00"),
+  );
   return { wa_antwoord_status: "gepland", wa_antwoord_op: op.toISOString(), wa_antwoord_reden: "" };
 }
 

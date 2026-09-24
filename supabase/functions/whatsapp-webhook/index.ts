@@ -70,7 +70,10 @@ Deno.serve(async (req) => {
     return tekst("Handtekening klopt niet", 401);
   }
 
-  let json: { object?: string; entry?: { id?: string; changes?: { field?: string; value?: Record<string, unknown> }[] }[] };
+  let json: {
+    object?: string;
+    entry?: { id?: string; changes?: { field?: string; value?: Record<string, unknown> }[] }[];
+  };
   try {
     json = JSON.parse(body);
   } catch {
@@ -88,8 +91,12 @@ Deno.serve(async (req) => {
           await sjabloonBijwerken(db, String(entry.id ?? ""), field, change.value ?? {});
         } else {
           const value = change.value ?? {};
-          const phoneNumberId = String((value.metadata as Record<string, unknown> | undefined)?.phone_number_id ?? "");
-          await verwerk(db, phoneNumberId, "meta", (k) => leesWijziging(field, value, k.company_id, k.weergavenummer));
+          const phoneNumberId = String(
+            (value.metadata as Record<string, unknown> | undefined)?.phone_number_id ?? "",
+          );
+          await verwerk(db, phoneNumberId, "meta", (k) =>
+            leesWijziging(field, value, k.company_id, k.weergavenummer),
+          );
         }
       }
     }
@@ -102,9 +109,13 @@ Deno.serve(async (req) => {
 });
 
 function beheerder(): Db {
-  return createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "", {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  return createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    {
+      auth: { persistSession: false, autoRefreshToken: false },
+    },
+  );
 }
 
 /** Wat Kapso stuurt: één gebeurtenis, of een bundel als bufferen aan staat. */
@@ -170,7 +181,8 @@ async function verwerk(
   // Paaltje leest wat een klant stuurt, vanaf het koppelen (niet de oude chats).
   const vanaf = new Date(koppeling.paaltje_vanaf).getTime();
   for (const r of inhoud.rijen) {
-    if (r.bron === "klant" && new Date(r.ontvangen_op).getTime() >= vanaf) r.paaltje_status = "wacht";
+    if (r.bron === "klant" && new Date(r.ontvangen_op).getTime() >= vanaf)
+      r.paaltje_status = "wacht";
   }
 
   if (inhoud.rijen.length > 0) {
@@ -195,8 +207,11 @@ async function verwerk(
       const werk = (async () => {
         const toegang = await toegangVan(db, koppeling.id, ontsleutel);
         if (!toegang) return;
-        for (const r of metMedia) await haalMediaBinnen(db, toegang, koppeling.company_id, r.id, r.media);
-      })().catch((e) => console.error("whatsapp-webhook media:", e instanceof Error ? e.message : e));
+        for (const r of metMedia)
+          await haalMediaBinnen(db, toegang, koppeling.company_id, r.id, r.media);
+      })().catch((e) =>
+        console.error("whatsapp-webhook media:", e instanceof Error ? e.message : e),
+      );
       if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(werk);
       else await werk;
     }
@@ -211,13 +226,22 @@ async function verwerk(
     // rijen die nu echt nieuw zijn: Kapso kan hetzelfde appje nog eens sturen
     // bij "afgeleverd" of "gelezen", en dat is geen nieuw antwoord.
     const zelfGeantwoord = new Map<string, string>();
-    for (const r of (nieuw ?? []) as { bron: string; wa_telefoon: string; ontvangen_op: string }[]) {
+    for (const r of (nieuw ?? []) as {
+      bron: string;
+      wa_telefoon: string;
+      ontvangen_op: string;
+    }[]) {
       if (r.bron !== "app") continue;
       const eerder = zelfGeantwoord.get(r.wa_telefoon);
       if (!eerder || r.ontvangen_op > eerder) zelfGeantwoord.set(r.wa_telefoon, r.ontvangen_op);
     }
     for (const [nummer, op] of zelfGeantwoord) {
-      await annuleerGeplandeAntwoorden(db, koppeling.company_id, nummer, "Je antwoordde zelf op je telefoon.");
+      await annuleerGeplandeAntwoorden(
+        db,
+        koppeling.company_id,
+        nummer,
+        "Je antwoordde zelf op je telefoon.",
+      );
       const { error: beantwoordFout } = await db
         .from("berichten")
         .update({ beantwoord_op: op })
@@ -277,12 +301,7 @@ const BEZORG_RANG: Record<string, number> = {
 };
 
 /** Het appje bij de verstuurde aankondiging, als het er een was. */
-async function bezorgstatusBijwerken(
-  db: Db,
-  companyId: string,
-  waId: string,
-  waStatus: string,
-) {
+async function bezorgstatusBijwerken(db: Db, companyId: string, waId: string, waStatus: string) {
   const status = WA_BEZORGSTATUS[waStatus];
   if (!status) return;
   // Deze functie draait met de service-sleutel, dus langs de vaste regels
@@ -307,7 +326,12 @@ async function bezorgstatusBijwerken(
 }
 
 /** Meta keurde een sjabloon goed of af, of gaf het een andere categorie. */
-async function sjabloonBijwerken(db: Db, wabaId: string, field: string, value: Record<string, unknown>) {
+async function sjabloonBijwerken(
+  db: Db,
+  wabaId: string,
+  field: string,
+  value: Record<string, unknown>,
+) {
   const metaId = String(value.message_template_id ?? "");
   if (!wabaId || !metaId) return;
   // Het account kan bij meer koppelingen horen (een oude die uit staat): alleen
@@ -318,7 +342,9 @@ async function sjabloonBijwerken(db: Db, wabaId: string, field: string, value: R
     .eq("waba_id", wabaId)
     .neq("status", "uit");
   if (koppelFout) throw new Error(`Koppeling bij sjabloon: ${koppelFout.message}`);
-  const bedrijven = [...new Set((koppelingen ?? []).map((k: { company_id: string }) => k.company_id))];
+  const bedrijven = [
+    ...new Set((koppelingen ?? []).map((k: { company_id: string }) => k.company_id)),
+  ];
   if (bedrijven.length === 0) return;
   const bijwerken: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (field === "message_template_status_update") {

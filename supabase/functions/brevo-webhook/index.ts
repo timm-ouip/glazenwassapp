@@ -85,7 +85,9 @@ Deno.serve(async (req) => {
       headers: { "Content-Type": "application/json" },
     });
   }
-  const db = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
+  const db = createClient(url, service, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
   let lading: unknown;
   try {

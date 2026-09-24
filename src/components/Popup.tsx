@@ -61,14 +61,7 @@ export function PopupKader({
  * dus het weet niet welke kleur eronder ligt.
  */
 export type PopupKleur =
-  | "blauw"
-  | "amber"
-  | "groen"
-  | "paars"
-  | "roze"
-  | "geel"
-  | "rood"
-  | "kastanje";
+  "blauw" | "amber" | "groen" | "paars" | "roze" | "geel" | "rood" | "kastanje";
 
 const KOPKLEUREN: Record<PopupKleur, { band: string; tegel: string; sub?: string }> = {
   blauw: { band: "bg-accent text-accent-foreground", tegel: "bg-accent-foreground/15" },
@@ -125,7 +118,12 @@ export function PopupKop({
               {titel}
             </DialogTitle>
             {subtitel && (
-              <div className={cn("mt-0.5 truncate text-[13px]", kleuren.sub ?? "text-muted-foreground")}>
+              <div
+                className={cn(
+                  "mt-0.5 truncate text-[13px]",
+                  kleuren.sub ?? "text-muted-foreground",
+                )}
+              >
                 {subtitel}
               </div>
             )}

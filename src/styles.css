@@ -164,23 +164,23 @@
      net als de vier gekozen kleuren verderop — donker genoeg voor het papier en
      licht genoeg voor het zwart, dus hij hoeft niet om te draaien. De tekst
      erop is bijna zwart: wit haalt op dit groen de leesnorm niet. */
-  --tint-salie: #7EA16B;
-  --tint-salie-ink: #0F2408;
+  --tint-salie: #7ea16b;
+  --tint-salie-ink: #0f2408;
   /* Kastanje: een klacht. De diepe kant van rood, zodat hij niet samenvalt met
      het zalmrood van "er kwam geen geld". Net als salie één waarde voor alle
      thema's, maar dan een diep vlak met lichte tekst — dus niet in de lijst met
      felle vlakken verderop, en wie hem gebruikt zet er text-tint-kastanje-ink
      bij. */
-  --tint-kastanje: #551B14;
-  --tint-kastanje-ink: #F3EEE5;
+  --tint-kastanje: #551b14;
+  --tint-kastanje-ink: #f3eee5;
   /* Grafiet: de knop waarmee de wasbeurt eraf gaat. Net als salie en
      kastanje één waarde voor alle thema's. Hij is expres een tikje lichter
      dan de kaart in het donker, zodat hij vanzelf naar voren komt en geen
      randje nodig heeft; op papier leest hij als een zwarte knop. Ook deze
      staat niet in de lijst met felle vlakken verderop: het is een diep vlak
      met lichte tekst, dus zet er text-tint-grafiet-ink bij. */
-  --tint-grafiet: #2E2E2E;
-  --tint-grafiet-ink: #F3EEE5;
+  --tint-grafiet: #2e2e2e;
+  --tint-grafiet-ink: #f3eee5;
   /* De grafiekkleuren van shadcn. Fel laat ze zo; Zakelijk kiest eigen. */
   --chart-1: oklch(0.58 0.11 245);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -339,14 +339,14 @@
      er leesbaar op is: op goud, paars en ijsblauw donker, op petrol licht.
      Paars is een middentint: daar haalt witte tekst de norm net niet, dus
      staat er bijna zwarte tekst op, net als op een fel vlak. */
-  --tegel-goud: #EEC170;
-  --tegel-goud-ink: #3A2A08;
-  --tegel-paars: #7F7CAF;
-  --tegel-paars-ink: #0B0A14;
-  --tegel-petrol: #1A5E63;
-  --tegel-petrol-ink: #E8F3F2;
-  --tegel-ijsblauw: #CDE6F5;
-  --tegel-ijsblauw-ink: #10344C;
+  --tegel-goud: #eec170;
+  --tegel-goud-ink: #3a2a08;
+  --tegel-paars: #7f7caf;
+  --tegel-paars-ink: #0b0a14;
+  --tegel-petrol: #1a5e63;
+  --tegel-petrol-ink: #e8f3f2;
+  --tegel-ijsblauw: #cde6f5;
+  --tegel-ijsblauw-ink: #10344c;
   /* De uitgeknipte vorm die achter de tekst van een vak ligt (Vorm.tsx). Per
      vak een tweede kleur uit ditzelfde palet, altijd aan dezelfde kant als de
      inkt: op een vak met bijna zwarte tekst een lichte vorm, op een diep vak
@@ -968,19 +968,31 @@
  * vierkantjes 8. Alles wat een pil hoort te zijn (knoppen, chips, statuspillen)
  * staat als `zak:rounded-full` bij het onderdeel zelf.
  */
-.zak :where(.rounded-\[28px\], .rounded-\[26px\], .rounded-\[24px\], .rounded-\[22px\]):not([class*="zak:rounded"]):not([class*="rounded-none"]) {
+.zak
+  :where(.rounded-\[28px\], .rounded-\[26px\], .rounded-\[24px\], .rounded-\[22px\]):not(
+    [class*="zak:rounded"]
+  ):not([class*="rounded-none"]) {
   border-radius: 16px;
 }
 
-.zak :where(.rounded-\[20px\], .rounded-\[18px\], .rounded-\[16px\]):not([class*="zak:rounded"]):not([class*="rounded-none"]) {
+.zak
+  :where(.rounded-\[20px\], .rounded-\[18px\], .rounded-\[16px\]):not([class*="zak:rounded"]):not(
+    [class*="rounded-none"]
+  ) {
   border-radius: 14px;
 }
 
-.zak :where(.rounded-\[14px\], .rounded-\[12px\], .rounded-\[11px\]):not([class*="zak:rounded"]):not([class*="rounded-none"]) {
+.zak
+  :where(.rounded-\[14px\], .rounded-\[12px\], .rounded-\[11px\]):not([class*="zak:rounded"]):not(
+    [class*="rounded-none"]
+  ) {
   border-radius: 10px;
 }
 
-.zak :where(.rounded-\[10px\], .rounded-\[9px\], .rounded-\[8px\]):not([class*="zak:rounded"]):not([class*="rounded-none"]) {
+.zak
+  :where(.rounded-\[10px\], .rounded-\[9px\], .rounded-\[8px\]):not([class*="zak:rounded"]):not(
+    [class*="rounded-none"]
+  ) {
   border-radius: 8px;
 }
 

@@ -66,7 +66,8 @@ export interface Regel {
   na?: unknown;
 }
 
-export type Status = "open" | "te_keuren" | "doorgevoerd" | "afgewezen" | "geannuleerd" | "teruggedraaid";
+export type Status =
+  "open" | "te_keuren" | "doorgevoerd" | "afgewezen" | "geannuleerd" | "teruggedraaid";
 
 export interface Voorstel {
   id: string;
@@ -124,7 +125,20 @@ export const INTERVALLEN = [1, 2, 3, 4, 6, 12];
 export const MAX_REGELS = 200;
 const MAX_TREFFERS = 10;
 const MAX_STRAAT = 200;
-const MAANDNAMEN = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+const MAANDNAMEN = [
+  "jan",
+  "feb",
+  "mrt",
+  "apr",
+  "mei",
+  "jun",
+  "jul",
+  "aug",
+  "sep",
+  "okt",
+  "nov",
+  "dec",
+];
 
 export function isUuid(tekst: unknown): tekst is string {
   return typeof tekst === "string" && UUID.test(tekst);
@@ -147,7 +161,11 @@ function eenVan<T>(v: T | T[] | null | undefined): T | null {
   return v ?? null;
 }
 
-function adresTekst(c: { house_number: number; addition: string | null; streets: unknown }): string {
+function adresTekst(c: {
+  house_number: number;
+  addition: string | null;
+  streets: unknown;
+}): string {
   const s = eenVan(c.streets as { name?: string; volledige_naam?: string } | null);
   const straat = s ? s.volledige_naam || s.name || "" : "";
   return `${straat} ${c.house_number}${c.addition ?? ""}`.trim();
@@ -157,7 +175,9 @@ function adresTekst(c: { house_number: number; addition: string | null; streets:
 function frequentieTekst(interval: number, ritme: number): string {
   const basis = frequentieVan(interval, ritme);
   if (!interval || interval <= 2) return basis;
-  const maanden = MAANDNAMEN.filter((_, i) => ((((i + 1 - ritme) % interval) + interval) % interval) === 0);
+  const maanden = MAANDNAMEN.filter(
+    (_, i) => (((i + 1 - ritme) % interval) + interval) % interval === 0,
+  );
   return `${basis} (${maanden.join(", ")})`;
 }
 
@@ -171,7 +191,8 @@ function zelfde(a: unknown, b: unknown): boolean {
 
 /** Zelfde regel als `heeftRecht`, maar alles in één keer. */
 export async function rechtenVan(db: Db, m: Medewerker): Promise<Rechten> {
-  if (m.rol === "eigenaar") return { bekijken: true, bewerken: true, prijzen: true, planning: true };
+  if (m.rol === "eigenaar")
+    return { bekijken: true, bewerken: true, prijzen: true, planning: true };
   const { data, error } = await db
     .from("employees")
     .select("rol_id,rollen(rechten)")
@@ -216,10 +237,12 @@ export async function snelkeuzesVan(db: Db, companyId: string): Promise<Snelkeuz
     .order("sort_order")
     .order("label");
   if (error) throw new Error(`Snelkeuzes: ${error.message}`);
-  return (data ?? []).map((r: { label: string; omschrijving?: string }) => ({
-    label: String(r.label ?? "").trim(),
-    omschrijving: String(r.omschrijving ?? "").trim(),
-  })).filter((s: Snelkeuze) => s.label);
+  return (data ?? [])
+    .map((r: { label: string; omschrijving?: string }) => ({
+      label: String(r.label ?? "").trim(),
+      omschrijving: String(r.omschrijving ?? "").trim(),
+    }))
+    .filter((s: Snelkeuze) => s.label);
 }
 
 // ---------------------------------------------------------------------
@@ -236,7 +259,14 @@ function adresSelect(r: Rechten): string {
   return r.prijzen ? `${ADRES_VELDEN},adres_prijzen(prijs)` : ADRES_VELDEN;
 }
 
-function klantVan(c: AdresRij): { id: string; naam: string; email: string; email2: string; telefoon: string; telefoon2: string } | null {
+function klantVan(c: AdresRij): {
+  id: string;
+  naam: string;
+  email: string;
+  email2: string;
+  telefoon: string;
+  telefoon2: string;
+} | null {
   const k = eenVan(c.klanten);
   // Een klant in de prullenbak telt niet: dan heeft het adres geen klant.
   if (!k || k.deleted_at) return null;
@@ -258,10 +288,15 @@ function inactiefVan(c: AdresRij): string | null {
 function maandwerkTekst(werk: unknown): string[] {
   if (!Array.isArray(werk)) return [];
   return werk.flatMap((w) => {
-    const maanden = Array.isArray(w?.maanden) ? w.maanden.map((m: string) => MAANDNAMEN[Number(m) - 1] ?? m) : [];
+    const maanden = Array.isArray(w?.maanden)
+      ? w.maanden.map((m: string) => MAANDNAMEN[Number(m) - 1] ?? m)
+      : [];
     if (maanden.length === 0) return [];
     // Met een jaar is het eenmalig: alleen in die maand van dat jaar.
-    const wanneer = typeof w?.jaar === "number" ? `${maanden.join(", ")} ${w.jaar} (eenmalig)` : maanden.join(", ");
+    const wanneer =
+      typeof w?.jaar === "number"
+        ? `${maanden.join(", ")} ${w.jaar} (eenmalig)`
+        : maanden.join(", ");
     return [`${wanneer}: ${String(w?.notitie ?? "")}`];
   });
 }
@@ -327,7 +362,10 @@ async function zoekStraten(db: Db, companyId: string, deel: string) {
   );
   if (opNaam.error) throw new Error(`Straten zoeken: ${opNaam.error.message}`);
   if (opVolledig.error) throw new Error(`Straten zoeken: ${opVolledig.error.message}`);
-  const perId = new Map<string, { id: string; name: string; volledige_naam: string; wijk: string }>();
+  const perId = new Map<
+    string,
+    { id: string; name: string; volledige_naam: string; wijk: string }
+  >();
   for (const s of [...(opNaam.data ?? []), ...(opVolledig.data ?? [])]) {
     const w = eenVan(s.districts) as { name?: string; plaats?: string } | null;
     perId.set(s.id, {
@@ -341,41 +379,63 @@ async function zoekStraten(db: Db, companyId: string, deel: string) {
 }
 
 /** "Westmade 47a" → straat "Westmade", nummer 47, toevoeging "a". */
-export function splitsZoekterm(term: string): { straat: string; nummer: number | null; toevoeging: string } {
+export function splitsZoekterm(term: string): {
+  straat: string;
+  nummer: number | null;
+  toevoeging: string;
+} {
   const m = term.trim().match(/^(.*?)[\s,]*(\d{1,5})\s*[-/]?\s*([a-z0-9]{0,4})\s*$/i);
   if (!m || !m[1].trim()) return { straat: term.trim(), nummer: null, toevoeging: "" };
   return { straat: m[1].trim(), nummer: Number(m[2]), toevoeging: m[3].toLowerCase() };
 }
 
-const toevoegingSchoon = (t: string | null) => String(t ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const toevoegingSchoon = (t: string | null) =>
+  String(t ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 
 export async function zoekAdres(db: Db, companyId: string, r: Rechten, zoekterm: string) {
   const { straat, nummer, toevoeging } = splitsZoekterm(knip(String(zoekterm ?? ""), 120));
   if (straat.length < 2) return { fout: "Geef minstens een deel van de straatnaam." };
   const straten = await zoekStraten(db, companyId, straat);
-  if (straten.length === 0) return { treffers: [], melding: `Geen straat gevonden die lijkt op "${straat}".` };
+  if (straten.length === 0)
+    return { treffers: [], melding: `Geen straat gevonden die lijkt op "${straat}".` };
 
   let vraag = db
     .from("customers")
     .select(adresSelect(r))
     .eq("company_id", companyId)
     .is("deleted_at", null)
-    .in("street_id", straten.map((s) => s.id));
+    .in(
+      "street_id",
+      straten.map((s) => s.id),
+    );
   if (nummer !== null) vraag = vraag.eq("house_number", nummer);
-  const { data, error } = await vraag.order("house_number").order("addition").limit(nummer !== null ? 50 : MAX_TREFFERS + 1);
+  const { data, error } = await vraag
+    .order("house_number")
+    .order("addition")
+    .limit(nummer !== null ? 50 : MAX_TREFFERS + 1);
   if (error) throw new Error(`Adressen zoeken: ${error.message}`);
   let rijen: AdresRij[] = data ?? [];
   let melding = "";
   if (nummer !== null && toevoeging) {
     const precies = rijen.filter((c) => toevoegingSchoon(c.addition) === toevoeging);
     if (precies.length > 0) rijen = precies;
-    else if (rijen.length > 0) melding = `Geen adres met toevoeging "${toevoeging}"; dit zijn de adressen met nummer ${nummer}.`;
+    else if (rijen.length > 0)
+      melding = `Geen adres met toevoeging "${toevoeging}"; dit zijn de adressen met nummer ${nummer}.`;
   }
   const meer = rijen.length > MAX_TREFFERS;
-  if (meer) melding = `Meer dan ${MAX_TREFFERS} treffers: vraag om een huisnummer of een preciezere straat.`;
+  if (meer)
+    melding = `Meer dan ${MAX_TREFFERS} treffers: vraag om een huisnummer of een preciezere straat.`;
   return {
     treffers: rijen.slice(0, MAX_TREFFERS).map((c) => adresKort(c, r)),
-    ...(rijen.length === 0 ? { straten_gevonden: straten.slice(0, 10).map((s) => `${s.volledige_naam || s.name} — ${s.wijk}`) } : {}),
+    ...(rijen.length === 0
+      ? {
+          straten_gevonden: straten
+            .slice(0, 10)
+            .map((s) => `${s.volledige_naam || s.name} — ${s.wijk}`),
+        }
+      : {}),
     ...(melding ? { melding } : {}),
   };
 }
@@ -396,7 +456,10 @@ export async function zoekKlant(db: Db, companyId: string, r: Rechten, zoekterm:
         .limit(MAX_TREFFERS + 1),
     ),
   );
-  const perId = new Map<string, { id: string; naam: string; email: string; email2: string; telefoon: string; telefoon2: string }>();
+  const perId = new Map<
+    string,
+    { id: string; naam: string; email: string; email2: string; telefoon: string; telefoon2: string }
+  >();
   for (const u of uitkomsten) {
     if (u.error) throw new Error(`Klanten zoeken: ${u.error.message}`);
     for (const k of u.data ?? []) perId.set(k.id, k);
@@ -411,7 +474,10 @@ export async function zoekKlant(db: Db, companyId: string, r: Rechten, zoekterm:
     .select(adresSelect(r))
     .eq("company_id", companyId)
     .is("deleted_at", null)
-    .in("klant_id", gekozen.map((k) => k.id))
+    .in(
+      "klant_id",
+      gekozen.map((k) => k.id),
+    )
     .limit(200);
   if (error) throw new Error(`Adressen van klanten: ${error.message}`);
   return {
@@ -447,7 +513,13 @@ export async function adresDetails(db: Db, companyId: string, r: Rechten, custom
   return adresVolledig(data, r);
 }
 
-export async function straatAdressen(db: Db, companyId: string, r: Rechten, straat: string, straatId?: string) {
+export async function straatAdressen(
+  db: Db,
+  companyId: string,
+  r: Rechten,
+  straat: string,
+  straatId?: string,
+) {
   let straatIds: string[];
   let naam = "";
   if (isUuid(straatId)) {
@@ -469,12 +541,20 @@ export async function straatAdressen(db: Db, companyId: string, r: Rechten, stra
     const straten = await zoekStraten(db, companyId, deel);
     if (straten.length === 0) return { fout: `Geen straat gevonden die lijkt op "${deel}".` };
     const laag = deel.toLowerCase();
-    const precies = straten.filter((s) => s.name.toLowerCase() === laag || s.volledige_naam.toLowerCase() === laag);
+    const precies = straten.filter(
+      (s) => s.name.toLowerCase() === laag || s.volledige_naam.toLowerCase() === laag,
+    );
     const keuze = precies.length > 0 ? precies : straten;
     if (keuze.length > 1) {
       return {
-        melding: "Meerdere straten gevonden. Vraag welke bedoeld wordt en roep dit opnieuw aan met straat_id.",
-        straten: keuze.slice(0, 20).map((s) => ({ straat_id: s.id, naam: s.volledige_naam || s.name, afkorting: s.name, wijk: s.wijk })),
+        melding:
+          "Meerdere straten gevonden. Vraag welke bedoeld wordt en roep dit opnieuw aan met straat_id.",
+        straten: keuze.slice(0, 20).map((s) => ({
+          straat_id: s.id,
+          naam: s.volledige_naam || s.name,
+          afkorting: s.name,
+          wijk: s.wijk,
+        })),
       };
     }
     straatIds = [keuze[0].id];
@@ -508,7 +588,9 @@ export async function straatAdressen(db: Db, companyId: string, r: Rechten, stra
         ...("prijs" in k ? { prijs: k.prijs } : {}),
       };
     }),
-    ...(rijen.length > MAX_STRAAT ? { melding: `Meer dan ${MAX_STRAAT} adressen; alleen de eerste ${MAX_STRAAT}.` } : {}),
+    ...(rijen.length > MAX_STRAAT
+      ? { melding: `Meer dan ${MAX_STRAAT} adressen; alleen de eerste ${MAX_STRAAT}.` }
+      : {}),
   };
 }
 
@@ -522,7 +604,13 @@ interface Stand {
   klant_id: string | null;
   adres: string;
   klant: string;
-  klantRij: { naam: string; email: string; email2: string; telefoon: string; telefoon2: string } | null;
+  klantRij: {
+    naam: string;
+    email: string;
+    email2: string;
+    telefoon: string;
+    telefoon2: string;
+  } | null;
   note: string;
   maandwerk: unknown;
   interval_maanden: number;
@@ -536,7 +624,11 @@ interface Stand {
 }
 
 /** De huidige stand van deze adressen (alleen van dit bedrijf, niet weggelegd). */
-export async function standVan(db: Db, companyId: string, ids: string[]): Promise<Map<string, Stand>> {
+export async function standVan(
+  db: Db,
+  companyId: string,
+  ids: string[],
+): Promise<Map<string, Stand>> {
   const uit = new Map<string, Stand>();
   const uniek = [...new Set(ids.filter(isUuid))];
   for (let i = 0; i < uniek.length; i += 100) {
@@ -626,7 +718,8 @@ export function controleerNieuw(
       // 63", "1,5,9 SH b/b"). We laten de tekst dus staan zoals hij komt, en
       // halen er alleen regeleindes uit; anders zou een notitie stilletjes
       // anders geschreven terugkomen.
-      if (typeof nieuw !== "string") return { ok: false, fout: `${bij}: de notitie moet tekst zijn.` };
+      if (typeof nieuw !== "string")
+        return { ok: false, fout: `${bij}: de notitie moet tekst zijn.` };
       const tekst = nieuw.replace(/[\r\n\t]+/g, " ").trim();
       if (tekst.length > 500) return { ok: false, fout: `${bij}: de notitie is te lang.` };
       return { ok: true, waarde: tekst };
@@ -640,8 +733,10 @@ export function controleerNieuw(
         const schoon = nieuw.replace(/[€\s]/g, "").replace(",", ".");
         if (schoon) getal = Number(schoon);
       }
-      if (!Number.isFinite(getal)) return { ok: false, fout: `${bij}: vul een prijs in (een getal; 0 mag ook).` };
-      if (getal < 0 || getal > 10000) return { ok: false, fout: `${bij}: de prijs moet tussen 0 en 10000 liggen.` };
+      if (!Number.isFinite(getal))
+        return { ok: false, fout: `${bij}: vul een prijs in (een getal; 0 mag ook).` };
+      if (getal < 0 || getal > 10000)
+        return { ok: false, fout: `${bij}: de prijs moet tussen 0 en 10000 liggen.` };
       return { ok: true, waarde: Math.round(getal * 100) / 100 };
     }
     case "frequentie": {
@@ -662,7 +757,8 @@ export function controleerNieuw(
       }
       const nu = maandVan(new Date());
       const maanden = [...new Set(nieuw.map((m) => String(m).trim()))].sort();
-      if (maanden.length > 24) return { ok: false, fout: `${bij}: hooguit 24 maanden tegelijk overslaan.` };
+      if (maanden.length > 24)
+        return { ok: false, fout: `${bij}: hooguit 24 maanden tegelijk overslaan.` };
       const fout = maanden.find((m) => !MAAND.test(m));
       if (fout) return { ok: false, fout: `${bij}: "${fout}" is geen maand als 'jjjj-mm'.` };
       const verleden = maanden.find((m) => m < nu);
@@ -670,12 +766,14 @@ export function controleerNieuw(
       return { ok: true, waarde: maanden };
     }
     case "wassen_vanaf": {
-      if (typeof nieuw !== "string") return { ok: false, fout: `${bij}: wassen vanaf moet een maand zijn als 'jjjj-mm'.` };
+      if (typeof nieuw !== "string")
+        return { ok: false, fout: `${bij}: wassen vanaf moet een maand zijn als 'jjjj-mm'.` };
       // Leeg mag: dan telt hij gewoon mee vanaf zijn aanmaakmaand (zoals
       // `eersteMaand` in de app een lege startmaand leest).
       const maand = nieuw.trim();
       if (!maand) return { ok: true, waarde: "" };
-      if (!MAAND.test(maand)) return { ok: false, fout: `${bij}: "${maand}" is geen maand als 'jjjj-mm'.` };
+      if (!MAAND.test(maand))
+        return { ok: false, fout: `${bij}: "${maand}" is geen maand als 'jjjj-mm'.` };
       const nu = maandVan(new Date());
       if (maand < nu) return { ok: false, fout: `${bij}: ${maand} is al voorbij.` };
       const grens = `${Number(nu.slice(0, 4)) + 5}-${nu.slice(5)}`;
@@ -685,8 +783,13 @@ export function controleerNieuw(
     default: {
       const kolom = klantKolom(veld);
       if (!kolom) return { ok: false, fout: `Onbekend veld "${veld}".` };
-      if (!s.klant_id) return { ok: false, fout: `${bij}: dit adres heeft geen klant, dus geen klantgegevens om aan te passen.` };
-      if (typeof nieuw !== "string") return { ok: false, fout: `${bij}: ${kolom} moet tekst zijn.` };
+      if (!s.klant_id)
+        return {
+          ok: false,
+          fout: `${bij}: dit adres heeft geen klant, dus geen klantgegevens om aan te passen.`,
+        };
+      if (typeof nieuw !== "string")
+        return { ok: false, fout: `${bij}: ${kolom} moet tekst zijn.` };
       let waarde = nieuw.replace(/[\r\n\t]+/g, " ").trim();
       if (kolom === "naam") {
         if (!waarde) return { ok: false, fout: `${bij}: de naam mag niet leeg zijn.` };
@@ -734,28 +837,43 @@ export async function maakVoorstel(
 ): Promise<{ ok: true; voorstel: Voorstel; overgeslagen: string[] } | { ok: false; fout: string }> {
   const lijst = Array.isArray(invoer.regels) ? (invoer.regels as RegelInvoer[]) : [];
   if (lijst.length === 0) return { ok: false, fout: "Geen regels: zet er minstens één in." };
-  if (lijst.length > MAX_REGELS) return { ok: false, fout: `Hooguit ${MAX_REGELS} regels in één voorstel.` };
+  if (lijst.length > MAX_REGELS)
+    return { ok: false, fout: `Hooguit ${MAX_REGELS} regels in één voorstel.` };
   const samenvatting = knip(String(invoer.samenvatting ?? "").trim(), 500);
   if (!samenvatting) return { ok: false, fout: "Geef een korte samenvatting." };
 
   for (const g of lijst) {
-    if (!isUuid(g?.customer_id)) return { ok: false, fout: `"${String(g?.customer_id)}" is geen bestaand customer_id. Zoek het adres eerst op.` };
-    if (!VELDEN.includes(g.veld as Veld)) return { ok: false, fout: `Onbekend veld "${String(g.veld)}".` };
+    if (!isUuid(g?.customer_id))
+      return {
+        ok: false,
+        fout: `"${String(g?.customer_id)}" is geen bestaand customer_id. Zoek het adres eerst op.`,
+      };
+    if (!VELDEN.includes(g.veld as Veld))
+      return { ok: false, fout: `Onbekend veld "${String(g.veld)}".` };
   }
-  const stand = await standVan(db, m.company_id, lijst.map((g) => g.customer_id as string));
+  const stand = await standVan(
+    db,
+    m.company_id,
+    lijst.map((g) => g.customer_id as string),
+  );
 
   const regels: Regel[] = [];
   const overgeslagen: string[] = [];
   const gezien = new Set<string>();
   for (const g of lijst) {
     const s = stand.get(g.customer_id as string);
-    if (!s) return { ok: false, fout: `Adres ${g.customer_id} bestaat niet (meer). Zoek het opnieuw op.` };
+    if (!s)
+      return {
+        ok: false,
+        fout: `Adres ${g.customer_id} bestaat niet (meer). Zoek het opnieuw op.`,
+      };
     const veld = g.veld as Veld;
     const c = controleerNieuw(veld, g.nieuw, s);
     if (!c.ok) return { ok: false, fout: c.fout };
     // Twee keer hetzelfde vak in één voorstel: dan weet niemand welke telt.
     const sleutel = klantKolom(veld) ? `klant:${s.klant_id}:${veld}` : `${s.id}:${veld}`;
-    if (gezien.has(sleutel)) return { ok: false, fout: `${s.adres}: ${veld} staat twee keer in het voorstel.` };
+    if (gezien.has(sleutel))
+      return { ok: false, fout: `${s.adres}: ${veld} staat twee keer in het voorstel.` };
     gezien.add(sleutel);
 
     const oud = huidigeWaarde(s, veld);
@@ -863,7 +981,8 @@ export async function pasRegelsToe(
   for (const w of invoer as Partial<Regel>[]) {
     if (!w || typeof w !== "object") throw new ChatFout("De regels kloppen niet.", 400);
     const id = String(w.id ?? "");
-    if (!perId.has(id)) throw new ChatFout("Er staat een regel in die niet bij dit voorstel hoort.", 400);
+    if (!perId.has(id))
+      throw new ChatFout("Er staat een regel in die niet bij dit voorstel hoort.", 400);
     if (wijzigingen.has(id)) throw new ChatFout("Een regel staat er twee keer in.", 400);
     wijzigingen.set(id, { nieuw: w.nieuw, aan: w.aan !== false, heeftNieuw: "nieuw" in w });
   }
@@ -873,7 +992,11 @@ export async function pasRegelsToe(
   });
   let stand = new Map<string, Stand>();
   if (teControleren.length > 0) {
-    stand = await standVan(db, companyId, teControleren.map((g) => g.customer_id));
+    stand = await standVan(
+      db,
+      companyId,
+      teControleren.map((g) => g.customer_id),
+    );
   }
   let aangepast = false;
   const regels = origineel.map((g) => {
@@ -899,14 +1022,19 @@ export async function pasRegelsToe(
  * Wat er sinds het voorstel veranderd is. Een regel met een verborgen oude
  * prijs heeft niets om mee te vergelijken en telt niet.
  */
-export function verouderdeRegels(regels: Regel[], standVan: (g: Regel) => Stand | undefined, r: Rechten) {
+export function verouderdeRegels(
+  regels: Regel[],
+  standVan: (g: Regel) => Stand | undefined,
+  r: Rechten,
+) {
   const uit: { regel_id: string; nu: unknown }[] = [];
   for (const g of regels) {
     if (!g.aan || g.oud_verborgen) continue;
     const s = standVan(g);
     if (!s) continue;
     const nu = huidigeWaarde(s, g.veld);
-    if (!zelfde(nu, g.oud)) uit.push({ regel_id: g.id, nu: g.veld === "prijs" && !r.prijzen ? null : nu });
+    if (!zelfde(nu, g.oud))
+      uit.push({ regel_id: g.id, nu: g.veld === "prijs" && !r.prijzen ? null : nu });
   }
   return uit;
 }
@@ -925,7 +1053,8 @@ async function schrijfRegel(db: Db, companyId: string, g: Regel, s: Stand): Prom
         .eq("company_id", companyId)
         .eq("id", s.id)
         .select("id");
-      if (error || !data?.length) throw new Error(`Notitie ${s.adres}: ${error?.message ?? "adres weg"}`);
+      if (error || !data?.length)
+        throw new Error(`Notitie ${s.adres}: ${error?.message ?? "adres weg"}`);
       return { ...g, voor: s.note };
     }
     case "frequentie": {
@@ -936,13 +1065,17 @@ async function schrijfRegel(db: Db, companyId: string, g: Regel, s: Stand): Prom
         .eq("company_id", companyId)
         .eq("id", s.id)
         .select("id");
-      if (error || !data?.length) throw new Error(`Frequentie ${s.adres}: ${error?.message ?? "adres weg"}`);
+      if (error || !data?.length)
+        throw new Error(`Frequentie ${s.adres}: ${error?.message ?? "adres weg"}`);
       return { ...g, voor: { interval_maanden: s.interval_maanden, ritme: s.ritme } };
     }
     case "prijs": {
       const { error } = await db
         .from("adres_prijzen")
-        .upsert({ customer_id: s.id, company_id: companyId, prijs: g.nieuw }, { onConflict: "customer_id,company_id" });
+        .upsert(
+          { customer_id: s.id, company_id: companyId, prijs: g.nieuw },
+          { onConflict: "customer_id,company_id" },
+        );
       if (error) throw new Error(`Prijs ${s.adres}: ${error.message}`);
       return { ...g, voor: s.prijs };
     }
@@ -955,7 +1088,8 @@ async function schrijfRegel(db: Db, companyId: string, g: Regel, s: Stand): Prom
         .eq("company_id", companyId)
         .eq("id", s.id)
         .select("id");
-      if (error || !data?.length) throw new Error(`Overslaan ${s.adres}: ${error?.message ?? "adres weg"}`);
+      if (error || !data?.length)
+        throw new Error(`Overslaan ${s.adres}: ${error?.message ?? "adres weg"}`);
       return { ...g, voor, na };
     }
     case "wassen_vanaf": {
@@ -968,7 +1102,8 @@ async function schrijfRegel(db: Db, companyId: string, g: Regel, s: Stand): Prom
         .eq("company_id", companyId)
         .eq("id", s.id)
         .maybeSingle();
-      if (leesFout || !huidig) throw new Error(`Wassen vanaf ${s.adres}: ${leesFout?.message ?? "adres weg"}`);
+      if (leesFout || !huidig)
+        throw new Error(`Wassen vanaf ${s.adres}: ${leesFout?.message ?? "adres weg"}`);
       const voor = {
         overslaan: (huidig.overslaan ?? []) as string[],
         start_maand: (huidig.start_maand ?? "") as string,
@@ -1004,7 +1139,8 @@ async function schrijfRegel(db: Db, companyId: string, g: Regel, s: Stand): Prom
         .eq("company_id", companyId)
         .eq("id", s.id)
         .select("id");
-      if (error || !data?.length) throw new Error(`Wassen vanaf ${s.adres}: ${error?.message ?? "adres weg"}`);
+      if (error || !data?.length)
+        throw new Error(`Wassen vanaf ${s.adres}: ${error?.message ?? "adres weg"}`);
       // `nieuw` is wat er echt kwam te staan; `voor` en `na` hebben allebei de
       // startmaand én de overslaan-lijst, zodat Ongedaan maken ze samen terugzet.
       return { ...g, nieuw: na.start_maand, voor, na };
@@ -1019,7 +1155,8 @@ async function schrijfRegel(db: Db, companyId: string, g: Regel, s: Stand): Prom
         .eq("id", g.klant_id)
         .is("deleted_at", null)
         .maybeSingle();
-      if (leesFout || !huidig) throw new Error(`Klant van ${s.adres}: ${leesFout?.message ?? "klant weg"}`);
+      if (leesFout || !huidig)
+        throw new Error(`Klant van ${s.adres}: ${leesFout?.message ?? "klant weg"}`);
       const { data, error } = await db
         .from("klanten")
         .update({ [kolom]: g.nieuw })
@@ -1027,7 +1164,8 @@ async function schrijfRegel(db: Db, companyId: string, g: Regel, s: Stand): Prom
         .eq("id", g.klant_id)
         .is("deleted_at", null)
         .select("id");
-      if (error || !data?.length) throw new Error(`Klant van ${s.adres}: ${error?.message ?? "klant weg"}`);
+      if (error || !data?.length)
+        throw new Error(`Klant van ${s.adres}: ${error?.message ?? "klant weg"}`);
       return { ...g, voor: huidig[kolom] ?? "" };
     }
   }
@@ -1037,9 +1175,23 @@ async function schrijfRegel(db: Db, companyId: string, g: Regel, s: Stand): Prom
  * De klant-velden lezen van de klant uit de regel, niet van de klant die nu
  * aan het adres hangt: het voorstel ging over die klant.
  */
-async function standMetRegelKlanten(db: Db, companyId: string, regels: Regel[]): Promise<Map<string, Stand>> {
-  const stand = await standVan(db, companyId, regels.map((g) => g.customer_id));
-  const klantIds = [...new Set(regels.filter((g) => klantKolom(g.veld) && isUuid(g.klant_id)).map((g) => g.klant_id as string))];
+async function standMetRegelKlanten(
+  db: Db,
+  companyId: string,
+  regels: Regel[],
+): Promise<Map<string, Stand>> {
+  const stand = await standVan(
+    db,
+    companyId,
+    regels.map((g) => g.customer_id),
+  );
+  const klantIds = [
+    ...new Set(
+      regels
+        .filter((g) => klantKolom(g.veld) && isUuid(g.klant_id))
+        .map((g) => g.klant_id as string),
+    ),
+  ];
   if (klantIds.length === 0) return stand;
   const { data, error } = await db
     .from("klanten")
@@ -1049,7 +1201,9 @@ async function standMetRegelKlanten(db: Db, companyId: string, regels: Regel[]):
     .in("id", klantIds);
   if (error) throw new Error(`Klanten ophalen: ${error.message}`);
   type KlantRij = NonNullable<Stand["klantRij"]> & { id: string };
-  const perKlant = new Map<string, KlantRij>((data ?? []).map((k: KlantRij): [string, KlantRij] => [k.id, k]));
+  const perKlant = new Map<string, KlantRij>(
+    (data ?? []).map((k: KlantRij): [string, KlantRij] => [k.id, k]),
+  );
   // Per regel een eigen stand als de klant van het adres intussen een ander is.
   const uit = new Map<string, Stand>();
   for (const [id, s] of stand) uit.set(id, s);
@@ -1079,17 +1233,27 @@ async function zetTerug(db: Db, companyId: string, g: Regel): Promise<boolean> {
     let uit: { error: { message: string } | null };
     switch (g.veld) {
       case "notitie":
-        uit = await db.from("customers").update({ note: g.voor }).eq("company_id", companyId).eq("id", g.customer_id);
+        uit = await db
+          .from("customers")
+          .update({ note: g.voor })
+          .eq("company_id", companyId)
+          .eq("id", g.customer_id);
         break;
       case "frequentie":
       case "overslaan":
-        uit = await db.from("customers").update(g.voor).eq("company_id", companyId).eq("id", g.customer_id);
+        uit = await db
+          .from("customers")
+          .update(g.voor)
+          .eq("company_id", companyId)
+          .eq("id", g.customer_id);
         break;
       case "wassen_vanaf":
         // `voor` heeft de startmaand en de overslaan-lijst samen.
         uit = await db
           .from("customers")
-          .update(typeof g.voor === "string" ? { start_maand: g.voor } : (g.voor ?? { start_maand: "" }))
+          .update(
+            typeof g.voor === "string" ? { start_maand: g.voor } : (g.voor ?? { start_maand: "" }),
+          )
           .eq("company_id", companyId)
           .eq("id", g.customer_id);
         break;
@@ -1103,7 +1267,11 @@ async function zetTerug(db: Db, companyId: string, g: Regel): Promise<boolean> {
       default: {
         const kolom = klantKolom(g.veld);
         if (!kolom || !g.klant_id) return false;
-        uit = await db.from("klanten").update({ [kolom]: g.voor }).eq("company_id", companyId).eq("id", g.klant_id);
+        uit = await db
+          .from("klanten")
+          .update({ [kolom]: g.voor })
+          .eq("company_id", companyId)
+          .eq("id", g.klant_id);
       }
     }
     if (uit.error) {
@@ -1135,11 +1303,19 @@ export async function doorvoeren(
     throw new ChatFout("Dit voorstel is al afgehandeld.", 409);
   }
 
-  const { regels, aangepast } = await pasRegelsToe(db, m.company_id, v.gevraagd ?? [], verzoek.regels);
+  const { regels, aangepast } = await pasRegelsToe(
+    db,
+    m.company_id,
+    v.gevraagd ?? [],
+    verzoek.regels,
+  );
   const aan = regels.filter((g) => g.aan);
   if (aan.length === 0) throw new ChatFout("Zet minstens één regel aan.", 400);
-  const legePrijs = aan.find((g) => g.veld === "prijs" && (typeof g.nieuw !== "number" || !Number.isFinite(g.nieuw)));
-  if (legePrijs) throw new ChatFout(`${legePrijs.adres}: vul een prijs in (een getal; 0 mag ook).`, 400);
+  const legePrijs = aan.find(
+    (g) => g.veld === "prijs" && (typeof g.nieuw !== "number" || !Number.isFinite(g.nieuw)),
+  );
+  if (legePrijs)
+    throw new ChatFout(`${legePrijs.adres}: vul een prijs in (een getal; 0 mag ook).`, 400);
   // Een keurder moet álle regels mogen keuren, ook die hij uitvinkt: anders
   // keurt iemand zonder prijsrecht de rest van een prijsaanvraag half goed.
   if (!magRegels(r, v.status === "te_keuren" ? (v.gevraagd ?? []) : aan)) {
@@ -1252,7 +1428,8 @@ export async function aanvragen(
   verzoek: { voorstel_id?: unknown; regels?: unknown },
 ): Promise<Voorstel> {
   const v = await haalVoorstel(db, m.company_id, verzoek.voorstel_id);
-  if (v.aangevraagd_door !== m.id) throw new ChatFout("Alleen wie dit vroeg kan het als aanvraag versturen.", 403);
+  if (v.aangevraagd_door !== m.id)
+    throw new ChatFout("Alleen wie dit vroeg kan het als aanvraag versturen.", 403);
   if (v.status !== "open") throw new ChatFout("Dit voorstel is al afgehandeld.", 409);
   const { regels } = await pasRegelsToe(db, m.company_id, v.gevraagd ?? [], verzoek.regels);
   if (!regels.some((g) => g.aan)) throw new ChatFout("Zet minstens één regel aan.", 400);
@@ -1276,7 +1453,8 @@ export async function afwijzen(
 ): Promise<Voorstel> {
   const v = await haalVoorstel(db, m.company_id, verzoek.voorstel_id);
   if (v.status !== "te_keuren") throw new ChatFout("Dit voorstel is al afgehandeld.", 409);
-  if (!magRegels(r, v.gevraagd ?? [])) throw new ChatFout("Je hebt niet de rechten om dit te keuren.", 403);
+  if (!magRegels(r, v.gevraagd ?? []))
+    throw new ChatFout("Je hebt niet de rechten om dit te keuren.", 403);
   const { data, error } = await db
     .from("paaltje_voorstellen")
     .update({
@@ -1301,11 +1479,17 @@ export async function annuleren(
   verzoek: { voorstel_id?: unknown },
 ): Promise<Voorstel> {
   const v = await haalVoorstel(db, m.company_id, verzoek.voorstel_id);
-  if (v.aangevraagd_door !== m.id) throw new ChatFout("Alleen wie dit vroeg kan het annuleren.", 403);
-  if (v.status !== "open" && v.status !== "te_keuren") throw new ChatFout("Dit voorstel is al afgehandeld.", 409);
+  if (v.aangevraagd_door !== m.id)
+    throw new ChatFout("Alleen wie dit vroeg kan het annuleren.", 403);
+  if (v.status !== "open" && v.status !== "te_keuren")
+    throw new ChatFout("Dit voorstel is al afgehandeld.", 409);
   const { data, error } = await db
     .from("paaltje_voorstellen")
-    .update({ status: "geannuleerd", afgehandeld_door: m.id, afgehandeld_op: new Date().toISOString() })
+    .update({
+      status: "geannuleerd",
+      afgehandeld_door: m.id,
+      afgehandeld_op: new Date().toISOString(),
+    })
     .eq("company_id", m.company_id)
     .eq("id", v.id)
     .in("status", ["open", "te_keuren"])
@@ -1331,16 +1515,25 @@ export async function terugdraaien(
   verzoek: { voorstel_id?: unknown },
 ): Promise<{ voorstel: Voorstel; overgeslagen: { regel_id: string; reden: string }[] }> {
   const v = await haalVoorstel(db, m.company_id, verzoek.voorstel_id);
-  if (v.status !== "doorgevoerd") throw new ChatFout("Dit voorstel is niet (meer) doorgevoerd.", 409);
+  if (v.status !== "doorgevoerd")
+    throw new ChatFout("Dit voorstel is niet (meer) doorgevoerd.", 409);
   const regels = v.doorgevoerd ?? [];
   if (regels.length === 0) {
-    throw new ChatFout("Bij dit voorstel staat niet wat er doorgevoerd is, dus het kan niet automatisch terug.", 409);
+    throw new ChatFout(
+      "Bij dit voorstel staat niet wat er doorgevoerd is, dus het kan niet automatisch terug.",
+      409,
+    );
   }
-  if (!magRegels(r, regels)) throw new ChatFout("Je hebt niet de rechten om dit terug te draaien.", 403);
+  if (!magRegels(r, regels))
+    throw new ChatFout("Je hebt niet de rechten om dit terug te draaien.", 403);
 
   const { data: gepakt, error: pakFout } = await db
     .from("paaltje_voorstellen")
-    .update({ status: "teruggedraaid", teruggedraaid_door: m.id, teruggedraaid_op: new Date().toISOString() })
+    .update({
+      status: "teruggedraaid",
+      teruggedraaid_door: m.id,
+      teruggedraaid_op: new Date().toISOString(),
+    })
     .eq("company_id", m.company_id)
     .eq("id", v.id)
     .eq("status", "doorgevoerd")
@@ -1391,13 +1584,14 @@ export async function terugdraaien(
           // net zo terug als `zetTerug` dat doet, zonder de overslaan-lijst.
           const oudeVorm = typeof g.voor === "string";
           const voor = (oudeVorm ? { overslaan: null, start_maand: g.voor as string } : g.voor) as
-            | { overslaan: string[] | null; start_maand: string }
-            | undefined;
+            { overslaan: string[] | null; start_maand: string } | undefined;
           const na = (oudeVorm ? { overslaan: null, start_maand: String(g.nieuw ?? "") } : g.na) as
-            | { overslaan: string[] | null; start_maand: string }
-            | undefined;
+            { overslaan: string[] | null; start_maand: string } | undefined;
           if (!voor || !na) {
-            overgeslagen.push({ regel_id: g.id, reden: "Hier staat niet genoeg bij om terug te draaien." });
+            overgeslagen.push({
+              regel_id: g.id,
+              reden: "Hier staat niet genoeg bij om terug te draaien.",
+            });
             continue;
           }
           // Allebei terug, en alleen als er nog precies staat wat wij
@@ -1434,7 +1628,10 @@ export async function terugdraaien(
           const voor = g.voor as { overslaan: string[]; start_maand: string };
           const na = g.na as { overslaan: string[]; start_maand: string } | undefined;
           if (!voor || !na) {
-            overgeslagen.push({ regel_id: g.id, reden: "Hier staat niet genoeg bij om terug te draaien." });
+            overgeslagen.push({
+              regel_id: g.id,
+              reden: "Hier staat niet genoeg bij om terug te draaien.",
+            });
             continue;
           }
           const { data: c, error: leesFout } = await db
@@ -1448,7 +1645,10 @@ export async function terugdraaien(
             overgeslagen.push({ regel_id: g.id, reden: "Het adres bestaat niet meer." });
             continue;
           }
-          const nu = { overslaan: [...(c.overslaan ?? [])].sort(), start_maand: c.start_maand ?? "" };
+          const nu = {
+            overslaan: [...(c.overslaan ?? [])].sort(),
+            start_maand: c.start_maand ?? "",
+          };
           const terug = overslaanTerug(nu, voor, na);
           if (zelfde(terug, nu)) {
             overgeslagen.push({ regel_id: g.id, reden: VERANDERD });
@@ -1547,10 +1747,15 @@ export async function leesVoorstellen(
     rijen = ((data ?? []) as Voorstel[]).filter((v) => magRegels(r, v.gevraagd ?? []));
   } else {
     if (!Array.isArray(verzoek.ids)) throw new ChatFout("Geef ids of te_keuren mee.", 400);
-    if (verzoek.ids.length > MAX_LEZEN) throw new ChatFout(`Hooguit ${MAX_LEZEN} voorstellen tegelijk.`, 400);
+    if (verzoek.ids.length > MAX_LEZEN)
+      throw new ChatFout(`Hooguit ${MAX_LEZEN} voorstellen tegelijk.`, 400);
     const ids = [...new Set(verzoek.ids.filter(isUuid))];
     if (ids.length === 0) return { voorstellen: [], namen: {} };
-    let vraag = db.from("paaltje_voorstellen").select("*").eq("company_id", m.company_id).in("id", ids);
+    let vraag = db
+      .from("paaltje_voorstellen")
+      .select("*")
+      .eq("company_id", m.company_id)
+      .in("id", ids);
     // Wie klanten niet bewerkt, ziet alleen zijn eigen voorstellen.
     if (!r.bewerken) vraag = vraag.eq("aangevraagd_door", m.id);
     const { data, error } = await vraag.order("created_at", { ascending: false });
@@ -1560,7 +1765,9 @@ export async function leesVoorstellen(
 
   const mensen = [
     ...new Set(
-      rijen.flatMap((v) => [v.aangevraagd_door, v.afgehandeld_door, v.teruggedraaid_door]).filter(isUuid),
+      rijen
+        .flatMap((v) => [v.aangevraagd_door, v.afgehandeld_door, v.teruggedraaid_door])
+        .filter(isUuid),
     ),
   ];
   const namen: Record<string, string> = {};
@@ -1577,7 +1784,11 @@ export async function leesVoorstellen(
 }
 
 /** Hoeveel er te keuren is, voor de teller op de knop. Zo licht mogelijk: alleen tellen. */
-export async function teKeurenAantal(db: Db, m: Medewerker, r: Rechten): Promise<{ aantal: number }> {
+export async function teKeurenAantal(
+  db: Db,
+  m: Medewerker,
+  r: Rechten,
+): Promise<{ aantal: number }> {
   if (!r.bewerken) return { aantal: 0 };
   const { count, error } = await teKeurenVraag(db, m, r, "id", { count: "exact", head: true });
   if (error) throw new Error(`Te keuren tellen: ${error.message}`);
@@ -1716,7 +1927,11 @@ const LEES_UITLEG = {
   input_schema: {
     type: "object",
     properties: {
-      onderwerp: { type: "string", enum: [...ONDERWERPEN], description: "Eén onderwerp uit de lijst." },
+      onderwerp: {
+        type: "string",
+        enum: [...ONDERWERPEN],
+        description: "Eén onderwerp uit de lijst.",
+      },
     },
     required: ["onderwerp"],
   },
@@ -1732,13 +1947,19 @@ export function gereedschap(r: Rechten) {
         "Zoek adressen op straat (afkorting of volledige naam) en huisnummer, bijvoorbeeld 'Westmade 47a'. Geeft hooguit 10 treffers, ook inactieve adressen met hun status.",
       input_schema: {
         type: "object",
-        properties: { zoekterm: { type: "string", description: "Straat met eventueel huisnummer en toevoeging." } },
+        properties: {
+          zoekterm: {
+            type: "string",
+            description: "Straat met eventueel huisnummer en toevoeging.",
+          },
+        },
         required: ["zoekterm"],
       },
     },
     {
       name: "zoek_klant",
-      description: "Zoek klanten op naam, telefoonnummer of mailadres. Hooguit 10, met hun adressen.",
+      description:
+        "Zoek klanten op naam, telefoonnummer of mailadres. Hooguit 10, met hun adressen.",
       input_schema: {
         type: "object",
         properties: { zoekterm: { type: "string" } },
@@ -1773,9 +1994,9 @@ export function gereedschap(r: Rechten) {
       description: [
         "Zet een wijziging klaar als voorstel. Er verandert nog niets: de medewerker bevestigt met een knop.",
         "Eén regel per adres per veld; hooguit 200 regels. Velden en de vorm van `nieuw`:",
-        "- notitie: de volledige nieuwe notitie als tekst, bv. \"VH, D\" (snelkeuzes waar het kan, anders gewone tekst).",
+        '- notitie: de volledige nieuwe notitie als tekst, bv. "VH, D" (snelkeuzes waar het kan, anders gewone tekst).',
         "- prijs: getal in euro's.",
-        "- frequentie: { \"interval_maanden\": 1|2|3|4|6|12, \"ritme\": 1-12 } — wélke maanden.",
+        '- frequentie: { "interval_maanden": 1|2|3|4|6|12, "ritme": 1-12 } — wélke maanden.',
         "- wassen_vanaf: maand 'jjjj-mm' waarin hij begint, of \"\" om het leeg te maken — wannéér hij begint.",
         "  Hoort er altijd bij als iemand iets 'vanaf <maand>' vraagt, naast de frequentie-regel.",
         "- overslaan: lijst maanden 'jjjj-mm' die erbij komen (een keertje niet).",
@@ -1810,12 +2031,17 @@ export function gereedschap(r: Rechten) {
 export function voorstelVerslag(v: Voorstel, overgeslagen: string[]): string {
   const toon = (w: unknown) =>
     w && typeof w === "object" && !Array.isArray(w)
-      ? frequentieTekst(Number((w as { interval_maanden: number }).interval_maanden), Number((w as { ritme: number }).ritme))
+      ? frequentieTekst(
+          Number((w as { interval_maanden: number }).interval_maanden),
+          Number((w as { ritme: number }).ritme),
+        )
       : JSON.stringify(w);
-  const regels = v.gevraagd.slice(0, 30).map(
-    (g) =>
-      `- ${g.adres}${g.klant ? ` (${g.klant})` : ""}, ${g.veld}: ${g.oud_verborgen ? "" : `${toon(g.oud)} → `}${toon(g.nieuw)}${g.let_op ? ` [let op: ${g.let_op}]` : ""}`,
-  );
+  const regels = v.gevraagd
+    .slice(0, 30)
+    .map(
+      (g) =>
+        `- ${g.adres}${g.klant ? ` (${g.klant})` : ""}, ${g.veld}: ${g.oud_verborgen ? "" : `${toon(g.oud)} → `}${toon(g.nieuw)}${g.let_op ? ` [let op: ${g.let_op}]` : ""}`,
+    );
   return [
     `Voorstel klaargezet met ${v.gevraagd.length} ${v.gevraagd.length === 1 ? "regel" : "regels"}. Er is nog NIETS veranderd;`,
     "de medewerker ziet een kaartje met een knop. Vertel kort wat erin staat.",

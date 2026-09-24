@@ -205,11 +205,16 @@ async function adressenVan(db: Db, companyId: string, klantIds: string[]) {
   if (error) throw new Error(`Adressen: ${error.message}`);
   // De eerstvolgende wasdag per adres, voor een vraag als "wanneer komen jullie?".
   // Vandaag in Nederlandse tijd: tussen middernacht en twee uur is het in UTC nog gisteren.
-  const vandaag = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Amsterdam" }).format(new Date());
+  const vandaag = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Amsterdam" }).format(
+    new Date(),
+  );
   const volgende = new Map<string, string>();
   // Een maand die het adres overslaat, telt niet als "volgende keer".
   const slaatOver = new Map<string, Set<string>>(
-    (data ?? []).map((c: { id: string; overslaan: string[] | null }) => [c.id, new Set(c.overslaan ?? [])]),
+    (data ?? []).map((c: { id: string; overslaan: string[] | null }) => [
+      c.id,
+      new Set(c.overslaan ?? []),
+    ]),
   );
   const adresIds = (data ?? []).map((c: { id: string }) => c.id);
   if (adresIds.length > 0) {
@@ -236,7 +241,8 @@ async function adressenVan(db: Db, companyId: string, klantIds: string[]) {
       omschrijving: `${straat} ${c.house_number}${c.addition ?? ""}`.trim(),
       // De prijs staat sinds stap D in adres_prijzen (de server mag die lezen).
       // Los object of lijstje met één rij: allebei goed.
-      prijs: Number((Array.isArray(c.adres_prijzen) ? c.adres_prijzen[0] : c.adres_prijzen)?.prijs) || 0,
+      prijs:
+        Number((Array.isArray(c.adres_prijzen) ? c.adres_prijzen[0] : c.adres_prijzen)?.prijs) || 0,
       frequentie: frequentieVan(c.interval_maanden, c.ritme),
       // Een stempel zonder (bekende) reden telt als gestopt: inactief is het hoe dan ook.
       inactief: c.inactief_op ? (c.inactief_reden === "verhuisd" ? "verhuisd" : "gestopt") : null,
@@ -330,13 +336,18 @@ async function zoekKlanten(
  * Wat een adres gemiddeld kost per wijk (mediaan), als richtprijs voor een
  * prijsvraag van iemand die nog geen klant is.
  */
-export async function richtprijzen(db: Db, companyId: string): Promise<{ wijk: string; prijs: number }[]> {
+export async function richtprijzen(
+  db: Db,
+  companyId: string,
+): Promise<{ wijk: string; prijs: number }[]> {
   const perWijk = new Map<string, number[]>();
   for (let vanaf = 0; ; vanaf += 1000) {
     // Vanuit de prijzen: die staan sinds stap D in hun eigen tabel.
     const { data, error } = await db
       .from("adres_prijzen")
-      .select("customer_id,prijs,customers!inner(deleted_at,streets!inner(deleted_at,districts!inner(name,deleted_at)))")
+      .select(
+        "customer_id,prijs,customers!inner(deleted_at,streets!inner(deleted_at,districts!inner(name,deleted_at)))",
+      )
       .eq("company_id", companyId)
       .gt("prijs", 0)
       .is("customers.deleted_at", null)
@@ -413,7 +424,10 @@ async function aankondigingsDatum(db: Db, companyId: string, email: string): Pro
     .select("created_at,mailingen(datum)")
     .eq("company_id", companyId)
     // ilike: het adres staat er zoals het bij de klant stond, soms met hoofdletters.
-    .ilike("email", email.replace(/[\\%_]/g, (t) => `\\${t}`))
+    .ilike(
+      "email",
+      email.replace(/[\\%_]/g, (t) => `\\${t}`),
+    )
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -464,7 +478,9 @@ export async function leesMail(
   if (!sleutel) return { ...leeg, ai_fout: "Geen ANTHROPIC_API_KEY ingesteld." };
 
   const vandaag = new Date().toISOString().slice(0, 10);
-  const stijl = String(stijlRij?.data?.mail_schrijfstijl ?? "").trim().slice(0, 1000);
+  const stijl = String(stijlRij?.data?.mail_schrijfstijl ?? "")
+    .trim()
+    .slice(0, 1000);
   const catNaam = new Map(categorieen.map((c) => [c.id, c.naam]));
 
   const systeem = [
@@ -481,7 +497,8 @@ export async function leesMail(
     "2. `categorieen`: kies uit deze lijst (gebruik het id), belangrijkste eerst.",
     "   Een mail mag in meer categorieën vallen, bijvoorbeeld een afzegging met een klacht.",
     ...categorieen.map(
-      (c) => `   - id ${c.id}: ${c.naam}${c.omschrijving ? ` — ${c.omschrijving}` : ""}${uitlegSleutel(c.sleutel)}`,
+      (c) =>
+        `   - id ${c.id}: ${c.naam}${c.omschrijving ? ` — ${c.omschrijving}` : ""}${uitlegSleutel(c.sleutel)}`,
     ),
     "",
     "3. `klant_id`: kies uit de lijst met klanten in het bericht, of laat leeg.",
@@ -550,7 +567,10 @@ export async function leesMail(
           "<eerder_in_dit_gesprek>",
           (mail.gesprek ?? []).length
             ? (mail.gesprek ?? [])
-                .map((g) => `${g.richting === "uit" ? "Wij" : "Klant"} (${g.ontvangen_op.slice(0, 16).replace("T", " ")}): ${knip(g.tekst, 500)}`)
+                .map(
+                  (g) =>
+                    `${g.richting === "uit" ? "Wij" : "Klant"} (${g.ontvangen_op.slice(0, 16).replace("T", " ")}): ${knip(g.tekst, 500)}`,
+                )
                 .join("\n")
             : "Niets.",
           "</eerder_in_dit_gesprek>",
@@ -582,7 +602,8 @@ export async function leesMail(
       system: systeem,
       messages: [{ role: "user", content: vraag }],
     });
-    if (res.stop_reason === "refusal") return { ...leeg, ai_fout: "Paaltje wilde deze mail niet lezen." };
+    if (res.stop_reason === "refusal")
+      return { ...leeg, ai_fout: "Paaltje wilde deze mail niet lezen." };
     if (!res.parsed_output) return { ...leeg, ai_fout: "Geen leesbaar antwoord." };
     lezing = res.parsed_output;
   } catch (e) {
@@ -604,7 +625,9 @@ export async function leesMail(
   const zekerheid = Math.min(1, Math.max(0, lezing.zekerheid));
   const zekerGenoeg = zekerheid >= ZEKER_GENOEG;
   const a = lezing.aanmelding;
-  const heeftAanmelding = [a.naam, a.straat, a.huisnummer, a.postcode, a.telefoon].some((v) => v.trim());
+  const heeftAanmelding = [a.naam, a.straat, a.huisnummer, a.postcode, a.telefoon].some((v) =>
+    v.trim(),
+  );
 
   return {
     ...leeg,
@@ -615,7 +638,8 @@ export async function leesMail(
     klant_id: bekendeIds.has(gekozen) ? gekozen : leeg.klant_id,
     klant_gok_id: !bekendeIds.size && kandidaatIds.has(gekozen) ? gekozen : null,
     maanden: maandenSchoon(lezing.maanden),
-    concept: lezing.is_klantmail && zekerGenoeg ? knip(lezing.concept.trim(), whatsapp ? 1500 : 5000) : "",
+    concept:
+      lezing.is_klantmail && zekerGenoeg ? knip(lezing.concept.trim(), whatsapp ? 1500 : 5000) : "",
     wil_geen_whatsapp: whatsapp && lezing.wil_geen_whatsapp === true,
     zekerheid,
     aanmelding: heeftAanmelding
@@ -680,13 +704,21 @@ function stijlRegels(
 ): string[] {
   const regels: string[] = [];
   if (stijl) {
-    regels.push("   Zo wil de glazenwasser dat zijn antwoorden klinken:", "<schrijfstijl>", stijl, "</schrijfstijl>");
+    regels.push(
+      "   Zo wil de glazenwasser dat zijn antwoorden klinken:",
+      "<schrijfstijl>",
+      stijl,
+      "</schrijfstijl>",
+    );
   }
   if (vast.length > 0) {
     regels.push(
       "   Vaste afspraken van de glazenwasser (houd je hieraan):",
       "<afspraken>",
-      ...vast.map((a) => `- ${a.categorie_id && catNaam.get(a.categorie_id) ? `[${catNaam.get(a.categorie_id)}] ` : ""}${a.tekst}`),
+      ...vast.map(
+        (a) =>
+          `- ${a.categorie_id && catNaam.get(a.categorie_id) ? `[${catNaam.get(a.categorie_id)}] ` : ""}${a.tekst}`,
+      ),
       "</afspraken>",
     );
   }
@@ -700,7 +732,9 @@ function stijlRegels(
   if (!stijl && eerdere.length === 0) {
     regels.push("   Kort en vriendelijk: je-vorm, twee tot vier zinnen, geen 'Geachte'.");
   }
-  regels.push("   Schrijfstijl, afspraken en voorbeelden gaan over het antwoord, niet over wat je verder doet.");
+  regels.push(
+    "   Schrijfstijl, afspraken en voorbeelden gaan over het antwoord, niet over wat je verder doet.",
+  );
   return regels;
 }
 
@@ -713,16 +747,23 @@ export function zonderOndertekening(tekst: string): string {
   const regels = tekst.replace(/\r\n/g, "\n").trimEnd().split("\n");
   // Opmaak (*vet*, _schuin_) en wat er na de groet staat eraf halen.
   const kaal = (r: string) => r.replace(/[*_~]/g, "").trim();
-  const groet = /^((met\s+)?(vriendelijke|hartelijke|zonnige|fijne|lieve)\s+groet(en)?|groet(en|jes)?|gr\.?|mvg|m\.v\.g\.?)(?![\p{L}])\s*[,.!]?\s*(.*)$/iu;
+  const groet =
+    /^((met\s+)?(vriendelijke|hartelijke|zonnige|fijne|lieve)\s+groet(en)?|groet(en|jes)?|gr\.?|mvg|m\.v\.g\.?)(?![\p{L}])\s*[,.!]?\s*(.*)$/iu;
   // Na "Groetjes" mag een naam of bedrijf staan ("Timm", "Glas & Co"), een
   // emoji of niets; geen zin ("aan je buurvrouw", "we komen dinsdag").
   const isNaam = (r: string) =>
-    r.length <= 40 && !/[?:\d]/.test(r) && (!/\p{L}/u.test(r) || /^\p{Lu}/u.test(r)) && r.split(/\s+/).length <= 5;
+    r.length <= 40 &&
+    !/[?:\d]/.test(r) &&
+    (!/\p{L}/u.test(r) || /^\p{Lu}/u.test(r)) &&
+    r.split(/\s+/).length <= 5;
   for (let i = regels.length - 1; i >= Math.max(0, regels.length - 3); i--) {
     const m = kaal(regels[i]).match(groet);
     if (!m || !isNaam((m[6] ?? "").trim())) continue;
     // Wat eronder staat mag alleen naam en bedrijf zijn, geen PS of afspraak.
-    const erna = regels.slice(i + 1).map(kaal).filter(Boolean);
+    const erna = regels
+      .slice(i + 1)
+      .map(kaal)
+      .filter(Boolean);
     if (erna.length > 2 || !erna.every(isNaam)) continue;
     const voor = regels.slice(0, i).join("\n").trimEnd();
     return voor || tekst.trim();

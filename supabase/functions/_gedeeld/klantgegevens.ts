@@ -54,7 +54,14 @@ export interface Gevonden {
   telefoon: string;
 }
 
-export const GEEN_GEGEVENS: Gevonden = { naam: "", straat: "", huisnummer: "", postcode: "", plaats: "", telefoon: "" };
+export const GEEN_GEGEVENS: Gevonden = {
+  naam: "",
+  straat: "",
+  huisnummer: "",
+  postcode: "",
+  plaats: "",
+  telefoon: "",
+};
 
 export interface Herkend {
   klant_id: string;
@@ -85,7 +92,9 @@ export interface KlantGegevens {
 }
 
 export function leesKlantgegevens(waarde: unknown): KlantGegevens {
-  return waarde && typeof waarde === "object" && !Array.isArray(waarde) ? (waarde as KlantGegevens) : {};
+  return waarde && typeof waarde === "object" && !Array.isArray(waarde)
+    ? (waarde as KlantGegevens)
+    : {};
 }
 
 const EMAIL = /^[A-Za-z0-9.!#$%&*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
@@ -99,11 +108,16 @@ export function telefoonSleutel(tekst: string | null | undefined): string {
 }
 
 function sleutel(tekst: string | null | undefined): string {
-  return String(tekst ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  return String(tekst ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
 function postcodeSleutel(tekst: string | null | undefined): string {
-  const p = String(tekst ?? "").replace(/\s+/g, "").toUpperCase();
+  const p = String(tekst ?? "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
   return /^\d{4}[A-Z]{2}$/.test(p) ? p : "";
 }
 
@@ -113,7 +127,19 @@ export function vergelijkbaar(waarde: string): string {
 }
 
 const GEEN_NAAMWOORD = new Set([
-  "van", "der", "den", "het", "de", "ter", "ten", "dhr", "mevr", "mevrouw", "meneer", "familie", "fam",
+  "van",
+  "der",
+  "den",
+  "het",
+  "de",
+  "ter",
+  "ten",
+  "dhr",
+  "mevr",
+  "mevrouw",
+  "meneer",
+  "familie",
+  "fam",
 ]);
 
 function naamWoorden(naam: string): Set<string> {
@@ -134,7 +160,9 @@ function naamKlopt(a: string, b: string): boolean {
 }
 
 function splitsNummer(tekst: string) {
-  const m = String(tekst ?? "").trim().match(/^(\d+)\s*[-/]?\s*(.*)$/);
+  const m = String(tekst ?? "")
+    .trim()
+    .match(/^(\d+)\s*[-/]?\s*(.*)$/);
   if (!m) return null;
   return { nummer: Number(m[1]), toevoeging: (m[2] ?? "").trim() };
 }
@@ -165,7 +193,9 @@ async function zoekAdres(db: Db, companyId: string, g: Gevonden): Promise<AdresR
       // Alleen adressen in een straat en wijk die er nog zijn: gooi je een wijk
       // weg (bijvoorbeeld na een dubbele import), dan blijven de adressen zelf
       // staan, en die tellen anders nog mee.
-      .select("id,house_number,addition,postcode,klant_id,inactief_op,streets!inner(deleted_at,districts!inner(deleted_at))")
+      .select(
+        "id,house_number,addition,postcode,klant_id,inactief_op,streets!inner(deleted_at,districts!inner(deleted_at))",
+      )
       .eq("company_id", companyId)
       .eq("house_number", nr.nummer)
       .is("deleted_at", null)
@@ -207,8 +237,15 @@ async function zoekAdres(db: Db, companyId: string, g: Gevonden): Promise<AdresR
       .ilike(kolom, patroon)
       .limit(20);
     if (straatFout) throw new Error(`Straten zoeken: ${straatFout.message}`);
-    for (const s of (straten ?? []) as { id: string; name: string; volledige_naam: string | null }[]) {
-      if ((sleutel(s.name) === naam || sleutel(s.volledige_naam) === naam) && !straatIds.includes(s.id)) {
+    for (const s of (straten ?? []) as {
+      id: string;
+      name: string;
+      volledige_naam: string | null;
+    }[]) {
+      if (
+        (sleutel(s.name) === naam || sleutel(s.volledige_naam) === naam) &&
+        !straatIds.includes(s.id)
+      ) {
         straatIds.push(s.id);
       }
     }
@@ -278,7 +315,9 @@ export async function herken(
       const ids = [
         ...new Set(
           ((data ?? []) as { id: string; telefoon: string; telefoon2: string }[])
-            .filter((k) => telefoonSleutel(k.telefoon) === tel || telefoonSleutel(k.telefoon2) === tel)
+            .filter(
+              (k) => telefoonSleutel(k.telefoon) === tel || telefoonSleutel(k.telefoon2) === tel,
+            )
             .map((k) => k.id),
         ),
       ];
@@ -307,10 +346,13 @@ export async function herken(
     }
   }
 
-  if (viaTelefoon && viaAdres && viaTelefoon !== viaAdres) return { herkend: null, gok: null, leegAdres: null };
+  if (viaTelefoon && viaAdres && viaTelefoon !== viaAdres)
+    return { herkend: null, gok: null, leegAdres: null };
   // Een kloppend telefoonnummer gaat voor een adres zonder klant: dan is het een bekende.
-  if (viaTelefoon) return { herkend: { klant_id: viaTelefoon, via: "telefoon" }, gok: null, leegAdres: null };
-  if (viaAdres) return { herkend: { klant_id: viaAdres, via: "adres" }, gok: null, leegAdres: null };
+  if (viaTelefoon)
+    return { herkend: { klant_id: viaTelefoon, via: "telefoon" }, gok: null, leegAdres: null };
+  if (viaAdres)
+    return { herkend: { klant_id: viaAdres, via: "adres" }, gok: null, leegAdres: null };
   return { herkend: null, gok, leegAdres };
 }
 
@@ -318,7 +360,12 @@ export async function herken(
  * Hoort dit mailadres echt bij de klant: op de klant zelf, of door een mens
  * gekoppeld? Een koppeling die Paaltje Systems zelf maakte (bron 'paaltje') telt niet.
  */
-export async function zekerGekoppeld(db: Db, companyId: string, email: string, klantId: string): Promise<boolean> {
+export async function zekerGekoppeld(
+  db: Db,
+  companyId: string,
+  email: string,
+  klantId: string,
+): Promise<boolean> {
   const adres = email.trim().toLowerCase();
   if (!adres) return false;
   const { data, error } = await db
@@ -382,7 +429,11 @@ export async function maakKlantBijAdres(
     .select("id");
   if (hangFout || !gezet?.length) {
     // De nieuwe klant mag niet los blijven slingeren.
-    const { error: wegFout } = await db.from("klanten").delete().eq("id", klant.id).eq("company_id", companyId);
+    const { error: wegFout } = await db
+      .from("klanten")
+      .delete()
+      .eq("id", klant.id)
+      .eq("company_id", companyId);
     if (wegFout) console.error(`losse klant ${klant.id} weghalen:`, wegFout.message);
     if (hangFout) throw new Error(`Klant aan adres hangen: ${hangFout.message}`);
     return null;
@@ -398,7 +449,11 @@ const MAX_AANGEMAAKT_PER_UUR = 5;
  * eerdere mail (van wie dan ook) al terugdraaide, en niet als hij dit uur al
  * een handvol klanten aanmaakte.
  */
-export async function magKlantAanmaken(db: Db, companyId: string, customerId: string): Promise<boolean> {
+export async function magKlantAanmaken(
+  db: Db,
+  companyId: string,
+  customerId: string,
+): Promise<boolean> {
   const { data: eerder, error } = await db
     .from("berichten")
     .select("id")
@@ -424,7 +479,12 @@ export async function magKlantAanmaken(db: Db, companyId: string, customerId: st
  * adres af (alleen als hij er nog aan hangt) en wissen. Hij bestond net, en er
  * hangt verder niets aan.
  */
-export async function draaiAanmakenTerug(db: Db, companyId: string, customerId: string, klantId: string) {
+export async function draaiAanmakenTerug(
+  db: Db,
+  companyId: string,
+  customerId: string,
+  klantId: string,
+) {
   const { error: losFout } = await db
     .from("customers")
     .update({ klant_id: null })
@@ -432,7 +492,11 @@ export async function draaiAanmakenTerug(db: Db, companyId: string, customerId: 
     .eq("company_id", companyId)
     .eq("klant_id", klantId);
   if (losFout) console.error(`klant ${klantId} van adres ${customerId} halen:`, losFout.message);
-  const { error: wegFout } = await db.from("klanten").delete().eq("id", klantId).eq("company_id", companyId);
+  const { error: wegFout } = await db
+    .from("klanten")
+    .delete()
+    .eq("id", klantId)
+    .eq("company_id", companyId);
   if (wegFout) console.error(`losse klant ${klantId} weghalen:`, wegFout.message);
 }
 
@@ -452,7 +516,10 @@ export async function vulAan(
   g: Gevonden,
   vanEmail: string,
   overslaan: string[],
-): Promise<{ toegevoegd: Partial<Record<Veld, string>>; anders: NonNullable<KlantGegevens["anders"]> }> {
+): Promise<{
+  toegevoegd: Partial<Record<Veld, string>>;
+  anders: NonNullable<KlantGegevens["anders"]>;
+}> {
   const nee = new Set(overslaan);
   const toegevoegd: Partial<Record<Veld, string>> = {};
   const anders: NonNullable<KlantGegevens["anders"]> = {};
@@ -487,13 +554,25 @@ export async function vulAan(
   // Telefoon: in het eerste lege vak, tenzij hij er al staat.
   const telefoon = knip(g.telefoon.trim(), 40);
   const tel = telefoonSleutel(telefoon);
-  if (tel && !nee.has(tel) && tel !== telefoonSleutel(k.telefoon) && tel !== telefoonSleutel(k.telefoon2)) {
-    if (!(await vul("telefoon", telefoon)) && !(await vul("telefoon2", telefoon))) anders.telefoon = telefoon;
+  if (
+    tel &&
+    !nee.has(tel) &&
+    tel !== telefoonSleutel(k.telefoon) &&
+    tel !== telefoonSleutel(k.telefoon2)
+  ) {
+    if (!(await vul("telefoon", telefoon)) && !(await vul("telefoon2", telefoon)))
+      anders.telefoon = telefoon;
   }
 
   // Mailadres van de afzender: net zo.
   const email = vanEmail.trim().toLowerCase();
-  if (EMAIL.test(email) && email.length <= 254 && !nee.has(email) && email !== sleutel(k.email) && email !== sleutel(k.email2)) {
+  if (
+    EMAIL.test(email) &&
+    email.length <= 254 &&
+    !nee.has(email) &&
+    email !== sleutel(k.email) &&
+    email !== sleutel(k.email2)
+  ) {
     if (!(await vul("email", email)) && !(await vul("email2", email))) anders.email = email;
   }
 
@@ -505,7 +584,9 @@ export async function vulAan(
   const straat = knip(g.straat.trim(), 120);
   const huisnummer = knip(g.huisnummer.trim(), 20);
   if (straat && huisnummer) {
-    const adresLeeg = (["straat", "huisnummer", "postcode", "plaats"] as Veld[]).every((v) => !String(k[v] ?? "").trim());
+    const adresLeeg = (["straat", "huisnummer", "postcode", "plaats"] as Veld[]).every(
+      (v) => !String(k[v] ?? "").trim(),
+    );
     if (adresLeeg) {
       if (!nee.has(sleutel(straat))) {
         await vul("straat", straat);
@@ -515,8 +596,14 @@ export async function vulAan(
         const plaats = knip(g.plaats.trim(), 80);
         if (plaats) await vul("plaats", plaats);
       }
-    } else if (sleutel(straat) !== sleutel(k.straat) || sleutel(huisnummer) !== sleutel(k.huisnummer)) {
-      anders.adres = [`${straat} ${huisnummer}`, [g.postcode.trim(), g.plaats.trim()].filter(Boolean).join(" ")]
+    } else if (
+      sleutel(straat) !== sleutel(k.straat) ||
+      sleutel(huisnummer) !== sleutel(k.huisnummer)
+    ) {
+      anders.adres = [
+        `${straat} ${huisnummer}`,
+        [g.postcode.trim(), g.plaats.trim()].filter(Boolean).join(" "),
+      ]
         .filter(Boolean)
         .join(", ");
     }

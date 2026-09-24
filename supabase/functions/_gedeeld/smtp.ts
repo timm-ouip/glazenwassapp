@@ -98,13 +98,19 @@ class Verbinding {
     if (!verwacht.includes(code)) {
       // De tekst van de server mag mee in de fout, maar nooit wat wíj stuurden:
       // daar zit bij AUTH het wachtwoord in.
-      throw new SmtpFout(`De mailserver weigerde (${code}): ${regels[regels.length - 1].slice(4, 200)}`, code);
+      throw new SmtpFout(
+        `De mailserver weigerde (${code}): ${regels[regels.length - 1].slice(4, 200)}`,
+        code,
+      );
     }
     return tekst;
   }
 
   async schrijf(tekst: string) {
-    await metKlok(this.schrijver.write(this.encoder.encode(tekst)), "De mailserver nam niets meer aan.");
+    await metKlok(
+      this.schrijver.write(this.encoder.encode(tekst)),
+      "De mailserver nam niets meer aan.",
+    );
   }
 
   async commando(regel: string, verwacht: number[]): Promise<string> {

@@ -28,13 +28,21 @@ export type Toegang =
 const MAX_TEKST = 20_000;
 
 /** Klopt `X-Hub-Signature-256` (Meta) bij deze body? Vergelijkt in vaste tijd. */
-export function handtekeningKlopt(body: string, kop: string | null, geheim: string): Promise<boolean> {
+export function handtekeningKlopt(
+  body: string,
+  kop: string | null,
+  geheim: string,
+): Promise<boolean> {
   if (!kop?.startsWith("sha256=")) return Promise.resolve(false);
   return hmacKlopt(body, kop.slice("sha256=".length), geheim);
 }
 
 /** Klopt `X-Webhook-Signature` (Kapso, kaal hex) bij deze body? */
-export function kapsoHandtekeningKlopt(body: string, kop: string | null, geheim: string): Promise<boolean> {
+export function kapsoHandtekeningKlopt(
+  body: string,
+  kop: string | null,
+  geheim: string,
+): Promise<boolean> {
   return hmacKlopt(body, kop ?? "", geheim);
 }
 
@@ -47,18 +55,23 @@ async function hmacKlopt(body: string, hex: string, geheim: string): Promise<boo
     false,
     ["sign"],
   );
-  const handtekening = new Uint8Array(await crypto.subtle.sign("HMAC", sleutel, new TextEncoder().encode(body)));
+  const handtekening = new Uint8Array(
+    await crypto.subtle.sign("HMAC", sleutel, new TextEncoder().encode(body)),
+  );
   const verwacht = [...handtekening].map((b) => b.toString(16).padStart(2, "0")).join("");
   const gekregen = hex.trim().toLowerCase();
   if (gekregen.length !== verwacht.length) return false;
   let verschil = 0;
-  for (let i = 0; i < verwacht.length; i++) verschil |= verwacht.charCodeAt(i) ^ gekregen.charCodeAt(i);
+  for (let i = 0; i < verwacht.length; i++)
+    verschil |= verwacht.charCodeAt(i) ^ gekregen.charCodeAt(i);
   return verschil === 0;
 }
 
 /** Alleen cijfers: "+31 6 1234 5678" → "31612345678". */
 export function waNummer(tekst: unknown): string {
-  return String(tekst ?? "").replace(/\D/g, "").slice(0, 20);
+  return String(tekst ?? "")
+    .replace(/\D/g, "")
+    .slice(0, 20);
 }
 
 function knip(tekst: string, max: number): string {
@@ -66,7 +79,9 @@ function knip(tekst: string, max: number): string {
 }
 
 function obj(waarde: unknown): Record<string, unknown> {
-  return waarde && typeof waarde === "object" && !Array.isArray(waarde) ? (waarde as Record<string, unknown>) : {};
+  return waarde && typeof waarde === "object" && !Array.isArray(waarde)
+    ? (waarde as Record<string, unknown>)
+    : {};
 }
 
 function lijst(waarde: unknown): unknown[] {
@@ -95,7 +110,11 @@ export interface WaMedia {
 }
 
 /** De tekst en eventuele media van één bericht zoals WhatsApp het stuurt. */
-export function leesInhoud(bericht: Record<string, unknown>): { type: string; tekst: string; media: WaMedia[] } {
+export function leesInhoud(bericht: Record<string, unknown>): {
+  type: string;
+  tekst: string;
+  media: WaMedia[];
+} {
   const type = knip(String(bericht.type ?? ""), 30);
   const deel = obj(bericht[type]);
   let tekst = "";
@@ -115,7 +134,10 @@ export function leesInhoud(bericht: Record<string, unknown>): { type: string; te
   }
 
   const media: WaMedia[] = [];
-  if (["image", "audio", "video", "document", "sticker"].includes(type) && typeof deel.id === "string") {
+  if (
+    ["image", "audio", "video", "document", "sticker"].includes(type) &&
+    typeof deel.id === "string"
+  ) {
     media.push({
       media_id: knip(deel.id, 100),
       mime: knip(String(deel.mime_type ?? ""), 100),
@@ -224,8 +246,14 @@ export function leesWijziging(
     }
     for (const s of lijst(value.statuses)) {
       const status = obj(s);
-      const fout = lijst(status.errors).map((e) => String(obj(e).title ?? obj(e).message ?? "")).join("; ");
-      uit.statussen.push({ wa_id: String(status.id ?? ""), status: String(status.status ?? ""), fout: knip(fout, 500) });
+      const fout = lijst(status.errors)
+        .map((e) => String(obj(e).title ?? obj(e).message ?? ""))
+        .join("; ");
+      uit.statussen.push({
+        wa_id: String(status.id ?? ""),
+        status: String(status.status ?? ""),
+        fout: knip(fout, 500),
+      });
     }
   }
 
@@ -268,7 +296,10 @@ export function leesWijziging(
  * - verstuurd vanuit Paaltje Systems zelf (herkomst cloud_api): die rij schreven we
  *   al bij het versturen, dus alleen de status.
  */
-export function leesKapsoGebeurtenis(item: Record<string, unknown>, companyId: string): Webhookinhoud {
+export function leesKapsoGebeurtenis(
+  item: Record<string, unknown>,
+  companyId: string,
+): Webhookinhoud {
   const bericht = obj(item.message);
   const kapso = obj(bericht.kapso);
   const gesprek = obj(item.conversation);
@@ -280,11 +311,13 @@ export function leesKapsoGebeurtenis(item: Record<string, unknown>, companyId: s
   };
   const richting = kapso.direction === "outbound" ? "uit" : "in";
   const herkomst = String(kapso.origin ?? "");
-  const ander = waNummer(richting === "in" ? bericht.from : bericht.to) || waNummer(gesprek.phone_number);
+  const ander =
+    waNummer(richting === "in" ? bericht.from : bericht.to) || waNummer(gesprek.phone_number);
   const naam = richting === "in" ? String(gesprek.contact_name ?? "") : "";
 
   let r: WaRij | null = null;
-  if (herkomst === "history_sync") r = rij(companyId, bericht, ander, richting, "geschiedenis", naam);
+  if (herkomst === "history_sync")
+    r = rij(companyId, bericht, ander, richting, "geschiedenis", naam);
   else if (richting === "in") r = rij(companyId, bericht, ander, "in", "klant", naam);
   else if (herkomst === "business_app") r = rij(companyId, bericht, ander, "uit", "app", "");
   if (r) uit.rijen.push(r);
@@ -292,8 +325,12 @@ export function leesKapsoGebeurtenis(item: Record<string, unknown>, companyId: s
   if (richting === "uit") {
     const waId = String(bericht.id ?? "");
     const status = String(kapso.status ?? "");
-    const meta = lijst(kapso.statuses).map(obj).find((x) => String(x.status ?? "") === status);
-    const fout = lijst(meta?.errors).map((e) => String(obj(e).title ?? obj(e).message ?? "")).join("; ");
+    const meta = lijst(kapso.statuses)
+      .map(obj)
+      .find((x) => String(x.status ?? "") === status);
+    const fout = lijst(meta?.errors)
+      .map((e) => String(obj(e).title ?? obj(e).message ?? ""))
+      .join("; ");
     if (waId && STATUS[status]) uit.statussen.push({ wa_id: waId, status, fout: knip(fout, 500) });
   }
   return uit;
@@ -307,11 +344,21 @@ export const STATUS: Record<string, { waarde: string; rang: number }> = {
   failed: { waarde: "mislukt", rang: 4 },
 };
 
-export const STATUS_RANG: Record<string, number> = { "": 0, verstuurd: 1, afgeleverd: 2, gelezen: 3, mislukt: 4 };
+export const STATUS_RANG: Record<string, number> = {
+  "": 0,
+  verstuurd: 1,
+  afgeleverd: 2,
+  gelezen: 3,
+  mislukt: 4,
+};
 
 type Uitkomst<T> = { ok: true; data: T } | { ok: false; status: number; fout: string };
 
-async function haal<T>(adres: string, koppen: Record<string, string>, init: RequestInit): Promise<Uitkomst<T>> {
+async function haal<T>(
+  adres: string,
+  koppen: Record<string, string>,
+  init: RequestInit,
+): Promise<Uitkomst<T>> {
   let res: Response;
   try {
     res = await fetch(adres, {
@@ -331,7 +378,11 @@ async function haal<T>(adres: string, koppen: Record<string, string>, init: Requ
       fout.error_user_msg ??
       fout.message ??
       (typeof j.error === "string" ? j.error : undefined) ??
-      (Array.isArray(j.errors) ? j.errors.map((e) => (typeof e === "string" ? e : String(obj(e).message ?? obj(e).detail ?? ""))).join("; ") : undefined) ??
+      (Array.isArray(j.errors)
+        ? j.errors
+            .map((e) => (typeof e === "string" ? e : String(obj(e).message ?? obj(e).detail ?? "")))
+            .join("; ")
+        : undefined) ??
       res.statusText;
     return { ok: false, status: res.status, fout: String(tekst).slice(0, 500) };
   }
@@ -339,7 +390,11 @@ async function haal<T>(adres: string, koppen: Record<string, string>, init: Requ
 }
 
 /** Een Graph API-aanroep voor een koppeling, via Meta of via Kapso. */
-export function graph<T>(pad: string, toegang: Toegang, init: RequestInit = {}): Promise<Uitkomst<T>> {
+export function graph<T>(
+  pad: string,
+  toegang: Toegang,
+  init: RequestInit = {},
+): Promise<Uitkomst<T>> {
   if (toegang.aanbieder === "kapso") {
     return haal<T>(`${KAPSO_GRAPH}/${pad}`, { "X-API-Key": toegang.sleutel }, init);
   }
@@ -347,7 +402,11 @@ export function graph<T>(pad: string, toegang: Toegang, init: RequestInit = {}):
 }
 
 /** Een aanroep van Kapso's eigen API (klanten, koppellinks, webhooks). */
-export function kapsoPlatform<T>(pad: string, sleutel: string, init: RequestInit = {}): Promise<Uitkomst<T>> {
+export function kapsoPlatform<T>(
+  pad: string,
+  sleutel: string,
+  init: RequestInit = {},
+): Promise<Uitkomst<T>> {
   return haal<T>(`${KAPSO_PLATFORM}/${pad}`, { "X-API-Key": sleutel }, init);
 }
 
@@ -370,7 +429,9 @@ export async function toegangVan(
   if (!koppeling) return null;
   if (koppeling.aanbieder === "kapso") {
     const sleutel = Deno.env.get("KAPSO_API_KEY") ?? "";
-    return sleutel ? { aanbieder: "kapso", sleutel, phoneNumberId: String(koppeling.phone_number_id) } : null;
+    return sleutel
+      ? { aanbieder: "kapso", sleutel, phoneNumberId: String(koppeling.phone_number_id) }
+      : null;
   }
   const { data, error: geheimFout } = await db
     .from("whatsapp_geheimen")
@@ -440,8 +501,15 @@ export async function haalMediaBinnen(
     // waar de toegang al in zit (4 minuten geldig). Meta's eigen link vraagt
     // een Meta-token, en dat hebben we dan niet.
     const kapso = toegang.aanbieder === "kapso";
-    const info = await graph<{ url?: string; download_url?: string; mime_type?: string; file_size?: number | string }>(
-      kapso ? `${m.media_id}?phone_number_id=${encodeURIComponent(toegang.phoneNumberId)}` : m.media_id,
+    const info = await graph<{
+      url?: string;
+      download_url?: string;
+      mime_type?: string;
+      file_size?: number | string;
+    }>(
+      kapso
+        ? `${m.media_id}?phone_number_id=${encodeURIComponent(toegang.phoneNumberId)}`
+        : m.media_id,
       toegang,
     );
     const link = info.ok ? (kapso ? info.data.download_url : info.data.url) : undefined;
@@ -485,7 +553,9 @@ export async function haalMediaBinnen(
       if (bytes.byteLength > MAX_MEDIA_BYTES) throw new Error("te groot");
       const { mime, ext } = veiligType(m.mime || String(info.data.mime_type ?? ""));
       const pad = `${companyId}/${berichtId}/${m.media_id}.${ext}`;
-      const { error } = await db.storage.from(MEDIA_BUCKET).upload(pad, bytes, { contentType: mime, upsert: true });
+      const { error } = await db.storage
+        .from(MEDIA_BUCKET)
+        .upload(pad, bytes, { contentType: mime, upsert: true });
       if (error) throw new Error(error.message);
       uit.push({ ...m, mime, pad });
       veranderd = true;
@@ -496,7 +566,11 @@ export async function haalMediaBinnen(
     }
   }
   if (veranderd) {
-    const { error } = await db.from("berichten").update({ media: uit }).eq("id", berichtId).eq("company_id", companyId);
+    const { error } = await db
+      .from("berichten")
+      .update({ media: uit })
+      .eq("id", berichtId)
+      .eq("company_id", companyId);
     if (error) console.error("media opslaan in bericht:", error.message);
   }
   return { media: uit, compleet };
@@ -572,7 +646,13 @@ export function binnenAntwoordtijd(moment: Date, van: string, tot: string): Date
   if (nu >= begin && nu < eind) return moment;
   const morgen = nu >= eind ? 1 : 0;
   const dag = new Date(Date.UTC(k.j, k.m - 1, k.d + morgen));
-  return vanNederlandseKlok(dag.getUTCFullYear(), dag.getUTCMonth() + 1, dag.getUTCDate(), Math.floor(begin / 60), begin % 60);
+  return vanNederlandseKlok(
+    dag.getUTCFullYear(),
+    dag.getUTCMonth() + 1,
+    dag.getUTCDate(),
+    Math.floor(begin / 60),
+    begin % 60,
+  );
 }
 
 export function binnenTijden(moment: Date, van: string, tot: string): boolean {
@@ -580,7 +660,12 @@ export function binnenTijden(moment: Date, van: string, tot: string): boolean {
 }
 
 /** Iemand antwoordde zelf: wat Paaltje voor dit nummer had ingepland, gaat niet meer. */
-export async function annuleerGeplandeAntwoorden(db: Db, companyId: string, nummer: string, reden: string) {
+export async function annuleerGeplandeAntwoorden(
+  db: Db,
+  companyId: string,
+  nummer: string,
+  reden: string,
+) {
   const { error } = await db
     .from("berichten")
     .update({ wa_antwoord_status: "geannuleerd", wa_antwoord_reden: reden })
@@ -618,13 +703,21 @@ export function sjabloonVoorMeta(
   if (!schoon) return { ok: false, fout: "De tekst is leeg." };
   if (schoon.length > 1024) return { ok: false, fout: "Hooguit 1024 tekens." };
   if (/\n{3,}/.test(schoon)) return { ok: false, fout: "Hooguit één lege regel achter elkaar." };
-  const onbekend = [...schoon.matchAll(/\{([^{}]*)\}/g)].map((m) => m[1]).filter((n) => !PLAATSHOUDERS.includes(n as Plaatshouder));
+  const onbekend = [...schoon.matchAll(/\{([^{}]*)\}/g)]
+    .map((m) => m[1])
+    .filter((n) => !PLAATSHOUDERS.includes(n as Plaatshouder));
   if (onbekend.length > 0) {
-    return { ok: false, fout: `Onbekende plaatshouder {${onbekend[0]}}. Gebruik {naam}, {datum} of {adres}.` };
+    return {
+      ok: false,
+      fout: `Onbekende plaatshouder {${onbekend[0]}}. Gebruik {naam}, {datum} of {adres}.`,
+    };
   }
   if (/\{\{|\}\}/.test(schoon)) return { ok: false, fout: "Gebruik enkele accolades: {naam}." };
   if (/^\{[a-z]+\}/.test(schoon) || /\{[a-z]+\}[.!?]?$/.test(schoon)) {
-    return { ok: false, fout: "Meta staat niet toe dat de tekst begint of eindigt met een plaatshouder." };
+    return {
+      ok: false,
+      fout: "Meta staat niet toe dat de tekst begint of eindigt met een plaatshouder.",
+    };
   }
   if (/\}\s*\{/.test(schoon)) return { ok: false, fout: "Zet tekst tussen twee plaatshouders." };
   const variabelen: Plaatshouder[] = [];
@@ -640,7 +733,10 @@ export function voorbeeldWaarden(variabelen: string[]): string[] {
 }
 
 /** De tekst zoals de klant hem krijgt. */
-export function vulSjabloonIn(tekst: string, waarden: Partial<Record<Plaatshouder, string>>): string {
+export function vulSjabloonIn(
+  tekst: string,
+  waarden: Partial<Record<Plaatshouder, string>>,
+): string {
   return tekst.replace(/\{(naam|datum|adres)\}/g, (_, n: Plaatshouder) => waarden[n] ?? "");
 }
 
@@ -664,8 +760,21 @@ export const SJABLOON_STATUS: Record<string, string> = {
  * gebeurt ook af en toe vanzelf (whatsapp-planner). Geeft het aantal
  * bijgewerkte sjablonen terug.
  */
-export async function ververSjablonen(db: Db, companyId: string, toegang: Toegang, wabaId: string): Promise<Uitkomst<number>> {
-  const uit = await graph<{ data?: { id?: string; name?: string; status?: string; category?: string; rejected_reason?: string }[] }>(
+export async function ververSjablonen(
+  db: Db,
+  companyId: string,
+  toegang: Toegang,
+  wabaId: string,
+): Promise<Uitkomst<number>> {
+  const uit = await graph<{
+    data?: {
+      id?: string;
+      name?: string;
+      status?: string;
+      category?: string;
+      rejected_reason?: string;
+    }[];
+  }>(
     `${wabaId}/message_templates?fields=id,name,status,category,rejected_reason&limit=200`,
     toegang,
   );
@@ -734,7 +843,20 @@ export async function verstuurSjabloon(
 }
 
 const DAGEN = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
-const MAANDNAMEN = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
+const MAANDNAMEN = [
+  "januari",
+  "februari",
+  "maart",
+  "april",
+  "mei",
+  "juni",
+  "juli",
+  "augustus",
+  "september",
+  "oktober",
+  "november",
+  "december",
+];
 
 /** "2026-09-22" → "dinsdag 22 september". */
 export function datumVoluit(datum: string): string {

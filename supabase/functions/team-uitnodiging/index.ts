@@ -84,7 +84,10 @@ Deno.serve(async (req) => {
     return antwoord({ fout: "Deze uitnodiging is niet gevonden." }, 404);
   }
   const meta = uitgenodigde.user.app_metadata ?? {};
-  if (meta["uitgenodigd_voor"] !== eigenaar.company_id || meta["uitnodiging_code"] !== (await hashVan(code))) {
+  if (
+    meta["uitgenodigd_voor"] !== eigenaar.company_id ||
+    meta["uitnodiging_code"] !== (await hashVan(code))
+  ) {
     return antwoord({ fout: "Deze uitnodiging hoort niet bij jouw bedrijf." }, 403);
   }
   const op = Date.parse(String(meta["uitgenodigd_op"] ?? ""));
@@ -95,7 +98,8 @@ Deno.serve(async (req) => {
     .select("name,mail_afzender_naam,mail_afzender_email")
     .eq("id", eigenaar.company_id)
     .single();
-  if (bedrijfFout || !bedrijf) return antwoord({ fout: "Het bedrijf kon niet opgezocht worden." }, 500);
+  if (bedrijfFout || !bedrijf)
+    return antwoord({ fout: "Het bedrijf kon niet opgezocht worden." }, 500);
 
   const naam = String(bedrijf.name ?? "").trim() || "je nieuwe werkgever";
   const mail = uitnodigingsmail({
@@ -107,10 +111,16 @@ Deno.serve(async (req) => {
   });
   const afzenderNaam = String(bedrijf.mail_afzender_naam ?? "").trim() || naam;
 
-  const uitslag = await verstuur(db, eigenaar.company_id, afzenderNaam, String(bedrijf.mail_afzender_email ?? ""), {
-    aan: uitgenodigde.user.email,
-    ...mail,
-  });
+  const uitslag = await verstuur(
+    db,
+    eigenaar.company_id,
+    afzenderNaam,
+    String(bedrijf.mail_afzender_email ?? ""),
+    {
+      aan: uitgenodigde.user.email,
+      ...mail,
+    },
+  );
   // Mislukt is een foutcode, anders ziet de app het als verstuurd.
   return antwoord(uitslag, "fout" in uitslag ? 502 : 200);
 });
@@ -137,7 +147,12 @@ async function hashVan(code: string): Promise<string> {
 
 function domeinVan(adres: string): string {
   const at = adres.lastIndexOf("@");
-  return at < 0 ? "" : adres.slice(at + 1).trim().toLowerCase();
+  return at < 0
+    ? ""
+    : adres
+        .slice(at + 1)
+        .trim()
+        .toLowerCase();
 }
 
 type Uitslag = { via: "mailbox" | "brevo"; van: string } | { via: "geen" } | { fout: string };
@@ -160,7 +175,8 @@ async function verstuur(
     .select("id,adres,smtp_host,smtp_poort,status")
     .eq("company_id", companyId)
     .maybeSingle();
-  if (boxFout) return { fout: "Je mailbox kon even niet opgezocht worden. Probeer het zo nog eens." };
+  if (boxFout)
+    return { fout: "Je mailbox kon even niet opgezocht worden. Probeer het zo nog eens." };
 
   if (box?.status === "actief") {
     const { data: geheim, error: geheimFout } = await db
@@ -168,7 +184,8 @@ async function verstuur(
       .select("versleuteld,iv")
       .eq("mailbox_id", box.id)
       .maybeSingle();
-    if (geheimFout || !geheim) return { fout: "Het wachtwoord van je mailbox kon niet gelezen worden." };
+    if (geheimFout || !geheim)
+      return { fout: "Het wachtwoord van je mailbox kon niet gelezen worden." };
     try {
       const wachtwoord = await ontsleutel(geheim.versleuteld, geheim.iv);
       const opgemaakt = await maakOp({
@@ -185,7 +202,9 @@ async function verstuur(
       );
       return { via: "mailbox", van: box.adres };
     } catch (e) {
-      return { fout: `Versturen vanaf ${box.adres} lukte niet: ${e instanceof Error ? e.message : String(e)}` };
+      return {
+        fout: `Versturen vanaf ${box.adres} lukte niet: ${e instanceof Error ? e.message : String(e)}`,
+      };
     }
   }
 
@@ -193,13 +212,19 @@ async function verstuur(
   const email = afzenderEmail.trim();
   const domein = domeinVan(String(box?.adres ?? ""));
   if (!sleutel || !email || !domein || domeinVan(email) !== domein) return { via: "geen" };
-  const uit = await stuurMail(sleutel, { naam: afzenderNaam, email }, {
-    naar: { email: mail.aan, naam: "" },
-    onderwerp: mail.onderwerp,
-    tekst: mail.tekst,
-    html: mail.html,
-  });
-  return uit.ok ? { via: "brevo", van: email } : { fout: `Versturen via Brevo lukte niet: ${uit.fout}` };
+  const uit = await stuurMail(
+    sleutel,
+    { naam: afzenderNaam, email },
+    {
+      naar: { email: mail.aan, naam: "" },
+      onderwerp: mail.onderwerp,
+      tekst: mail.tekst,
+      html: mail.html,
+    },
+  );
+  return uit.ok
+    ? { via: "brevo", van: email }
+    : { fout: `Versturen via Brevo lukte niet: ${uit.fout}` };
 }
 
 /**
@@ -248,7 +273,9 @@ function uitnodigingsmail(m: {
     `<a href="${veilig(m.link)}" style="display:inline-block;background:#185FA5;color:#ffffff;`,
     'text-decoration:none;font-weight:600;padding:12px 22px;border-radius:10px">Uitnodiging accepteren</a>',
     "</p>",
-    p(`De link werkt tot ${veilig(tot)}. Is hij verlopen, vraag ${veilig(opnieuw)} dan om een nieuwe.`),
+    p(
+      `De link werkt tot ${veilig(tot)}. Is hij verlopen, vraag ${veilig(opnieuw)} dan om een nieuwe.`,
+    ),
     p("Vragen? Antwoord gewoon op deze mail."),
     p(
       '<span style="color:#6b6f6a">Verwachtte je deze uitnodiging niet? Dan kun je de mail negeren; er gebeurt dan niets.</span>',

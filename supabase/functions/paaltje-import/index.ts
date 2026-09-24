@@ -82,7 +82,8 @@ Deno.serve(async (req) => {
   const url = Deno.env.get("SUPABASE_URL") ?? "";
   const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (!url || !anon || !service) return antwoord({ fout: "De server is niet goed ingesteld." }, 500);
+  if (!url || !anon || !service)
+    return antwoord({ fout: "De server is niet goed ingesteld." }, 500);
 
   const kop = req.headers.get("Authorization") ?? "";
   if (!kop.startsWith("Bearer ")) return antwoord({ fout: "Niet ingelogd." }, 401);
@@ -98,7 +99,9 @@ Deno.serve(async (req) => {
     .eq("id", gebruiker.user.id)
     .maybeSingle();
   if (!medewerker) return antwoord({ fout: "Geen bedrijf gevonden." }, 403);
-  const db = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
+  const db = createClient(url, service, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
   const m = medewerker as Medewerker;
 
   try {
@@ -115,7 +118,8 @@ Deno.serve(async (req) => {
     const cellen = leesCellen(verzoek.cellen);
     const straten = leesStraten(verzoek.straten);
     const plaats = knip(String(verzoek.plaats ?? "").trim(), 80);
-    if (cellen.length === 0 && straten.length === 0) return antwoord({ cellen: [], zelfde_straat: [], officieel: [] });
+    if (cellen.length === 0 && straten.length === 0)
+      return antwoord({ cellen: [], zelfde_straat: [], officieel: [] });
 
     const sleutel = (Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim();
     if (!sleutel) return antwoord({ fout: "Paaltje is nog niet ingesteld op de server." }, 500);
@@ -126,7 +130,8 @@ Deno.serve(async (req) => {
       .select("paaltje_daglimiet")
       .eq("id", m.company_id)
       .maybeSingle();
-    if (bedrijfFout || !bedrijf) throw new Error(`Bedrijf ophalen: ${bedrijfFout?.message ?? "niet gevonden"}`);
+    if (bedrijfFout || !bedrijf)
+      throw new Error(`Bedrijf ophalen: ${bedrijfFout?.message ?? "niet gevonden"}`);
     const limiet = Number(bedrijf?.paaltje_daglimiet ?? 200);
     const { data: stand, error: telFout } = await db.rpc("paaltje_verbruik_tellen", {
       bedrijf: m.company_id,
@@ -137,7 +142,10 @@ Deno.serve(async (req) => {
     if (telFout) throw new Error(`Verbruik tellen: ${telFout.message}`);
     if (Number(stand ?? 0) > limiet) {
       await telVerbruik(db, m.company_id, 0, 0, -1);
-      return antwoord({ fout: "Paaltje heeft vandaag genoeg gedaan, morgen weer.", limiet: true }, 429);
+      return antwoord(
+        { fout: "Paaltje heeft vandaag genoeg gedaan, morgen weer.", limiet: true },
+        429,
+      );
     }
 
     const client = new Anthropic({ apiKey: sleutel, timeout: 90_000, maxRetries: 1 });
@@ -157,7 +165,8 @@ Deno.serve(async (req) => {
     await telVerbruik(
       db,
       m.company_id,
-      (res.usage.input_tokens ?? 0) + (res.usage.cache_read_input_tokens ?? 0) +
+      (res.usage.input_tokens ?? 0) +
+        (res.usage.cache_read_input_tokens ?? 0) +
         (res.usage.cache_creation_input_tokens ?? 0),
       res.usage.output_tokens ?? 0,
       0,
@@ -220,12 +229,15 @@ function vraag(plaats: string, cellen: Cel[], straten: Straat[]): string {
       `${c.nummers_eronder} huisnummers eronder`,
       `nu: ${c.nu}`,
       c.straat_erboven ? `straat erboven: ${JSON.stringify(c.straat_erboven)}` : "",
-    ].filter(Boolean).join(" | ")
+    ]
+      .filter(Boolean)
+      .join(" | "),
   );
-  const straatRegels = straten.map((s) =>
-    `${JSON.stringify(s.naam)} | ${s.adressen} adressen (${s.huisnummers}) | register: ${
-      s.register.length ? s.register.map((r) => JSON.stringify(r)).join(", ") : "niets gevonden"
-    }`
+  const straatRegels = straten.map(
+    (s) =>
+      `${JSON.stringify(s.naam)} | ${s.adressen} adressen (${s.huisnummers}) | register: ${
+        s.register.length ? s.register.map((r) => JSON.stringify(r)).join(", ") : "niets gevonden"
+      }`,
   );
   return [
     `<plaats>${JSON.stringify(plaats || "onbekend")}</plaats>`,
@@ -245,17 +257,22 @@ function controleer(uit: z.infer<typeof Uitkomst>, cellen: Cel[], straten: Straa
   const kort = (t: string) => knip(t.replace(/\s+/g, " ").trim(), 200);
 
   const gezienCel = new Set<string>();
-  const celUit = uit.cellen.filter((c) => {
-    const cel = celVan.get(c.id);
-    if (!cel || cel.nu === c.wordt || gezienCel.has(c.id)) return false;
-    gezienCel.add(c.id);
-    return true;
-  }).map((c) => ({ ...c, reden: kort(c.reden) }));
+  const celUit = uit.cellen
+    .filter((c) => {
+      const cel = celVan.get(c.id);
+      if (!cel || cel.nu === c.wordt || gezienCel.has(c.id)) return false;
+      gezienCel.add(c.id);
+      return true;
+    })
+    .map((c) => ({ ...c, reden: kort(c.reden) }));
 
   const gebruikt = new Set<string>();
   const zelfde = uit.zelfde_straat.flatMap((g) => {
-    const namen = [...new Set(g.namen.map((n) => straatVan.get(sleutel(n))?.naam).filter((n): n is string => !!n))]
-      .filter((n) => !gebruikt.has(sleutel(n)));
+    const namen = [
+      ...new Set(
+        g.namen.map((n) => straatVan.get(sleutel(n))?.naam).filter((n): n is string => !!n),
+      ),
+    ].filter((n) => !gebruikt.has(sleutel(n)));
     const naam = straatVan.get(sleutel(g.naam))?.naam;
     if (!naam || namen.length < 2 || !namen.some((n) => sleutel(n) === sleutel(naam))) return [];
     for (const n of namen) gebruikt.add(sleutel(n));
@@ -285,18 +302,20 @@ function leesCellen(invoer: unknown): Cel[] {
     const id = String(o.id ?? "");
     const tekst = String(o.tekst ?? "").trim();
     if (!/^[\w-]{1,40}$/.test(id) || !tekst) return [];
-    return [{
-      id,
-      tabblad: knip(String(o.tabblad ?? ""), 60),
-      cel: knip(String(o.cel ?? ""), 10),
-      tekst: knip(tekst, 120),
-      grijs: o.grijs === true,
-      vulkleur: /^[0-9a-fA-F]{6,8}$/.test(String(o.vulkleur ?? "")) ? String(o.vulkleur) : "",
-      vet: o.vet === true,
-      nummers_eronder: Math.max(0, Math.min(999, Number(o.nummers_eronder) || 0)),
-      nu: o.nu === "straat" ? "straat" : "notitie",
-      straat_erboven: knip(String(o.straat_erboven ?? ""), 80),
-    }];
+    return [
+      {
+        id,
+        tabblad: knip(String(o.tabblad ?? ""), 60),
+        cel: knip(String(o.cel ?? ""), 10),
+        tekst: knip(tekst, 120),
+        grijs: o.grijs === true,
+        vulkleur: /^[0-9a-fA-F]{6,8}$/.test(String(o.vulkleur ?? "")) ? String(o.vulkleur) : "",
+        vet: o.vet === true,
+        nummers_eronder: Math.max(0, Math.min(999, Number(o.nummers_eronder) || 0)),
+        nu: o.nu === "straat" ? "straat" : "notitie",
+        straat_erboven: knip(String(o.straat_erboven ?? ""), 80),
+      },
+    ];
   });
 }
 
@@ -307,18 +326,29 @@ function leesStraten(invoer: unknown): Straat[] {
     const o = s as Record<string, unknown>;
     const naam = knip(String(o.naam ?? "").trim(), 80);
     if (!naam) return [];
-    return [{
-      naam,
-      adressen: Math.max(0, Math.min(9999, Number(o.adressen) || 0)),
-      huisnummers: knip(String(o.huisnummers ?? ""), 120),
-      register: Array.isArray(o.register)
-        ? o.register.slice(0, MAX_OPTIES).map((r) => knip(String(r).trim(), 80)).filter(Boolean)
-        : [],
-    }];
+    return [
+      {
+        naam,
+        adressen: Math.max(0, Math.min(9999, Number(o.adressen) || 0)),
+        huisnummers: knip(String(o.huisnummers ?? ""), 120),
+        register: Array.isArray(o.register)
+          ? o.register
+              .slice(0, MAX_OPTIES)
+              .map((r) => knip(String(r).trim(), 80))
+              .filter(Boolean)
+          : [],
+      },
+    ];
   });
 }
 
-async function telVerbruik(db: Db, companyId: string, invoer: number, uitvoer: number, bericht: number) {
+async function telVerbruik(
+  db: Db,
+  companyId: string,
+  invoer: number,
+  uitvoer: number,
+  bericht: number,
+) {
   const { error } = await db.rpc("paaltje_verbruik_tellen", {
     bedrijf: companyId,
     invoer,

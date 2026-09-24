@@ -130,7 +130,9 @@ async function beoordeel(
     db.from("bericht_categorieen").select("categorie_id").eq("bericht_id", mail.id),
   ]);
   const catIds: string[] = [
-    ...new Set<string>((koppelingen.data ?? []).map((k: { categorie_id: string }) => k.categorie_id)),
+    ...new Set<string>(
+      (koppelingen.data ?? []).map((k: { categorie_id: string }) => k.categorie_id),
+    ),
   ];
   const { data: cats } = catIds.length
     ? await db
@@ -202,7 +204,9 @@ async function beoordeel(
     status: "voorgesteld",
     bron_bericht_id: mail.id,
     categorie_id:
-      res.parsed_output.alleen_voor_deze_categorie && gecontroleerd.length === 1 ? gecontroleerd[0].id : null,
+      res.parsed_output.alleen_voor_deze_categorie && gecontroleerd.length === 1
+        ? gecontroleerd[0].id
+        : null,
   });
   if (error) throw new Error(`Voorstel bewaren: ${error.message}`);
   return true;

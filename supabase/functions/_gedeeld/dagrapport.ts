@@ -25,9 +25,15 @@ export interface RapportInhoud {
   };
   zelfGedaan: { soort: string; klant: string; adres: string; maanden: string[]; tijd: string }[];
   verstuurd: number;
-  wacht: { aantal: number; voorbeelden: { van: string; onderwerp: string; samenvatting: string }[] };
+  wacht: {
+    aantal: number;
+    voorbeelden: { van: string; onderwerp: string; samenvatting: string }[];
+  };
   /** Klachten: wat er in deze periode bijkwam, en hoeveel er nu nog openstaan. */
-  klachten: { nieuw: { klant: string; omschrijving: string; door_paaltje: boolean }[]; open: number };
+  klachten: {
+    nieuw: { klant: string; omschrijving: string; door_paaltje: boolean }[];
+    open: number;
+  };
   /** Nieuw in deze periode: dit bepaalt mee of er een rapport komt. */
   problemen: string[];
   /** Al langer zo (bijv. oude fouten): wel in het rapport, maar geen reden voor een rapport. */
@@ -61,7 +67,20 @@ const MAX_WIJZIGINGEN = 200;
 /** Een mail die net voor het begin van de periode binnenkwam maar pas daarna werd opgehaald, telt nog mee. */
 const MARGE_MS = 24 * 60 * 60 * 1000;
 
-const MAANDEN = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+const MAANDEN = [
+  "jan",
+  "feb",
+  "mrt",
+  "apr",
+  "mei",
+  "jun",
+  "jul",
+  "aug",
+  "sep",
+  "okt",
+  "nov",
+  "dec",
+];
 
 function toonMaand(sleutel: string): string {
   const [jaar, nr] = sleutel.split("-");
@@ -75,7 +94,10 @@ function toonMaand(sleutel: string): string {
  * eigen mailbox komt.
  */
 function eenRegel(tekst: string, max: number): string {
-  const schoon = String(tekst ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim();
+  const schoon = String(tekst ?? "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
   return schoon.length > max ? `${schoon.slice(0, max - 1)}…` : schoon;
 }
 
@@ -84,7 +106,12 @@ function check<T>(uit: { data: T; error: { message: string } | null }, wat: stri
   return uit.data;
 }
 
-export async function stelSamen(db: Db, companyId: string, vanaf: Date, tot: Date): Promise<RapportInhoud> {
+export async function stelSamen(
+  db: Db,
+  companyId: string,
+  vanaf: Date,
+  tot: Date,
+): Promise<RapportInhoud> {
   const van = vanaf.toISOString();
   const t = tot.toISOString();
   const problemen: string[] = [];
@@ -118,14 +145,19 @@ export async function stelSamen(db: Db, companyId: string, vanaf: Date, tot: Dat
     ) ?? []) as typeof rijen;
   }
   if (rijen.length >= MAX_MAILS) {
-    opmerkingen.push(`Er kwam meer dan ${MAX_MAILS} mail binnen; het rapport telt alleen de eerste ${MAX_MAILS}.`);
+    opmerkingen.push(
+      `Er kwam meer dan ${MAX_MAILS} mail binnen; het rapport telt alleen de eerste ${MAX_MAILS}.`,
+    );
   }
 
   const perCategorie = new Map<string, number>();
   const ids = rijen.map((r) => r.id);
   for (let i = 0; i < ids.length; i += 100) {
     const data = check(
-      await db.from("bericht_categorieen").select("mail_categorieen(naam)").in("bericht_id", ids.slice(i, i + 100)),
+      await db
+        .from("bericht_categorieen")
+        .select("mail_categorieen(naam)")
+        .in("bericht_id", ids.slice(i, i + 100)),
       "Categorieën",
     ) as { mail_categorieen: { naam: string } | null }[] | null;
     for (const r of data ?? []) {
@@ -147,9 +179,17 @@ export async function stelSamen(db: Db, companyId: string, vanaf: Date, tot: Dat
       .order("created_at", { ascending: true })
       .limit(MAX_WIJZIGINGEN),
     "Wijzigingen",
-  ) ?? []) as { soort: string; klant: string; adres: string; maanden: string[]; created_at: string }[];
+  ) ?? []) as {
+    soort: string;
+    klant: string;
+    adres: string;
+    maanden: string[];
+    created_at: string;
+  }[];
   if (wijzigingen.length >= MAX_WIJZIGINGEN) {
-    opmerkingen.push(`Paaltje deed meer dan ${MAX_WIJZIGINGEN} dingen zelf; het rapport noemt alleen de eerste ${MAX_WIJZIGINGEN}.`);
+    opmerkingen.push(
+      `Paaltje deed meer dan ${MAX_WIJZIGINGEN} dingen zelf; het rapport noemt alleen de eerste ${MAX_WIJZIGINGEN}.`,
+    );
   }
 
   // 3. Wat er beantwoord is.
@@ -164,7 +204,12 @@ export async function stelSamen(db: Db, companyId: string, vanaf: Date, tot: Dat
   // 4. Wat nu op je wacht: net als "Wacht op jou" in de app, alleen het postvak.
   const wachtFilter = 'concept.neq."",voorstel.neq.{}';
   let wachtAantal = 0;
-  let wachtRijen: { van_naam: string; van_email: string; onderwerp: string; samenvatting: string }[] = [];
+  let wachtRijen: {
+    van_naam: string;
+    van_email: string;
+    onderwerp: string;
+    samenvatting: string;
+  }[] = [];
   if (postvakken.length > 0) {
     const telling = await db
       .from("berichten")
@@ -216,10 +261,17 @@ export async function stelSamen(db: Db, companyId: string, vanaf: Date, tot: Dat
 
   // 6. Problemen: nieuw in de periode telt, wat al langer zo is staat erbij.
   const box = check(
-    await db.from("mailboxen").select("status,fout,laatste_sync").eq("company_id", companyId).maybeSingle(),
+    await db
+      .from("mailboxen")
+      .select("status,fout,laatste_sync")
+      .eq("company_id", companyId)
+      .maybeSingle(),
     "Mailbox",
   ) as { status: string; fout: string; laatste_sync: string | null } | null;
-  if (box?.status === "fout") problemen.push("Paaltje Systems kan niet meer inloggen bij je mailbox. Vul het wachtwoord opnieuw in.");
+  if (box?.status === "fout")
+    problemen.push(
+      "Paaltje Systems kan niet meer inloggen bij je mailbox. Vul het wachtwoord opnieuw in.",
+    );
   else if (box?.fout) problemen.push(`De mailbox gaf een storing: ${eenRegel(box.fout, 160)}`);
 
   const nieuweFouten = await db
@@ -239,8 +291,12 @@ export async function stelSamen(db: Db, companyId: string, vanaf: Date, tot: Dat
   if (alleFouten.error) throw new Error(`Paaltje-fouten: ${alleFouten.error.message}`);
   const nieuw = nieuweFouten.count ?? 0;
   const oud = (alleFouten.count ?? 0) - nieuw;
-  if (nieuw > 0) problemen.push(`Paaltje kon ${nieuw} ${nieuw === 1 ? "bericht" : "berichten"} niet lezen.`);
-  if (oud > 0) opmerkingen.push(`Er ${oud === 1 ? "staat" : "staan"} nog ${oud} ${oud === 1 ? "ouder bericht" : "oudere berichten"} die Paaltje niet kon lezen.`);
+  if (nieuw > 0)
+    problemen.push(`Paaltje kon ${nieuw} ${nieuw === 1 ? "bericht" : "berichten"} niet lezen.`);
+  if (oud > 0)
+    opmerkingen.push(
+      `Er ${oud === 1 ? "staat" : "staan"} nog ${oud} ${oud === 1 ? "ouder bericht" : "oudere berichten"} die Paaltje niet kon lezen.`,
+    );
 
   // 7. WhatsApp, als het gekoppeld is.
   const whatsapp = await whatsappDeel(db, companyId, van, t, problemen);
@@ -295,18 +351,28 @@ async function whatsappDeel(
   problemen: string[],
 ): Promise<RapportInhoud["whatsapp"] | null> {
   const koppeling = check(
-    await db.from("whatsapp_koppelingen").select("status,fout").eq("company_id", companyId).maybeSingle(),
+    await db
+      .from("whatsapp_koppelingen")
+      .select("status,fout")
+      .eq("company_id", companyId)
+      .maybeSingle(),
     "WhatsApp-koppeling",
   ) as { status: string; fout: string } | null;
   if (!koppeling || koppeling.status === "uit") return null;
   if (koppeling.status === "fout" || koppeling.fout) {
-    problemen.push(`WhatsApp gaf een storing: ${eenRegel(koppeling.fout || "de koppeling werkt niet", 160)}`);
+    problemen.push(
+      `WhatsApp gaf een storing: ${eenRegel(koppeling.fout || "de koppeling werkt niet", 160)}`,
+    );
   }
 
   // deno-lint-ignore no-explicit-any
   const tel = async (wat: string, bouw: (q: any) => any) => {
     const uit = await bouw(
-      db.from("berichten").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("kanaal", "whatsapp"),
+      db
+        .from("berichten")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId)
+        .eq("kanaal", "whatsapp"),
     );
     if (uit.error) throw new Error(`${wat}: ${uit.error.message}`);
     return uit.count ?? 0;
@@ -316,7 +382,12 @@ async function whatsappDeel(
     q.eq("richting", "in").eq("bron", "klant").gte("created_at", van).lt("created_at", t),
   );
   const vanKlanten = await tel("WhatsApp van klanten", (q) =>
-    q.eq("richting", "in").eq("bron", "klant").eq("is_klantmail", true).gte("created_at", van).lt("created_at", t),
+    q
+      .eq("richting", "in")
+      .eq("bron", "klant")
+      .eq("is_klantmail", true)
+      .gte("created_at", van)
+      .lt("created_at", t),
   );
   const paaltjeAntwoorden = await tel("Antwoorden van Paaltje", (q) =>
     q.eq("richting", "uit").eq("bron", "paaltje").gte("created_at", van).lt("created_at", t),
@@ -331,14 +402,17 @@ async function whatsappDeel(
     .eq("mailingen.test", false)
     .gte("created_at", van)
     .lt("created_at", t);
-  if (aankondigingUit.error) throw new Error(`Aankondigingen via WhatsApp: ${aankondigingUit.error.message}`);
+  if (aankondigingUit.error)
+    throw new Error(`Aankondigingen via WhatsApp: ${aankondigingUit.error.message}`);
   const aankondigingen = aankondigingUit.count ?? 0;
   // De planner zet wa_antwoord_op op het moment dat hij het antwoord oppakt.
   const mislukt = await tel("Mislukte antwoorden", (q) =>
     q.eq("wa_antwoord_status", "mislukt").gte("wa_antwoord_op", van).lt("wa_antwoord_op", t),
   );
   if (mislukt > 0) {
-    problemen.push(`${mislukt} ${mislukt === 1 ? "antwoord" : "antwoorden"} van Paaltje via WhatsApp ${mislukt === 1 ? "ging" : "gingen"} niet weg.`);
+    problemen.push(
+      `${mislukt} ${mislukt === 1 ? "antwoord" : "antwoorden"} van Paaltje via WhatsApp ${mislukt === 1 ? "ging" : "gingen"} niet weg.`,
+    );
   }
 
   // Wat op jou wacht: een klantbericht met iets klaar, niet beantwoord en
@@ -358,7 +432,11 @@ async function whatsappDeel(
   const wachtAantal = await tel("WhatsApp wacht op jou", wachtBasis);
   const wachtRijen = (check(
     await wachtBasis(
-      db.from("berichten").select("van_naam,wa_telefoon,samenvatting").eq("company_id", companyId).eq("kanaal", "whatsapp"),
+      db
+        .from("berichten")
+        .select("van_naam,wa_telefoon,samenvatting")
+        .eq("company_id", companyId)
+        .eq("kanaal", "whatsapp"),
     )
       .order("ontvangen_op", { ascending: false })
       .limit(5),
@@ -401,7 +479,12 @@ export function wijzigingZin(w: RapportInhoud["zelfGedaan"][number]): string {
 
 /** Het rapport als platte tekst, voor in de mail. */
 export function alsTekst(r: RapportInhoud, appUrl: string): string {
-  const regels: string[] = ["Goedemorgen,", "", "Dit is wat Paaltje Systems sinds het vorige rapport deed.", ""];
+  const regels: string[] = [
+    "Goedemorgen,",
+    "",
+    "Dit is wat Paaltje Systems sinds het vorige rapport deed.",
+    "",
+  ];
 
   if (r.problemen.length > 0) {
     regels.push("LET OP", ...r.problemen.map((p) => `- ${p}`), "");
@@ -411,12 +494,16 @@ export function alsTekst(r: RapportInhoud, appUrl: string): string {
     `Binnengekomen in je postvak: ${r.binnen.totaal} ${r.binnen.totaal === 1 ? "mail" : "mails"}` +
       (r.binnen.totaal
         ? ` (${r.binnen.klantmail} van klanten, ${r.binnen.overige} overige post` +
-          (r.binnen.nogNietGelezen ? `, ${r.binnen.nogNietGelezen} nog niet gelezen door Paaltje` : "") +
+          (r.binnen.nogNietGelezen
+            ? `, ${r.binnen.nogNietGelezen} nog niet gelezen door Paaltje`
+            : "") +
           ")"
         : ""),
   );
   if (r.binnen.perCategorie.length > 0) {
-    regels.push(`  ${r.binnen.perCategorie.map((c) => `${eenRegel(c.naam, 60)} ${c.aantal}`).join(" · ")}`);
+    regels.push(
+      `  ${r.binnen.perCategorie.map((c) => `${eenRegel(c.naam, 60)} ${c.aantal}`).join(" · ")}`,
+    );
   }
   regels.push("");
 
@@ -430,7 +517,9 @@ export function alsTekst(r: RapportInhoud, appUrl: string): string {
   if (klachten.nieuw.length > 0 || klachten.open > 0) {
     regels.push(
       `Klachten: ${klachten.nieuw.length} nieuw, ${klachten.open} nog open`,
-      ...klachten.nieuw.map((k) => `- ${k.klant}: ${k.omschrijving}${k.door_paaltje ? " (door Paaltje)" : ""}`),
+      ...klachten.nieuw.map(
+        (k) => `- ${k.klant}: ${k.omschrijving}${k.door_paaltje ? " (door Paaltje)" : ""}`,
+      ),
       "",
     );
   }
@@ -448,14 +537,17 @@ export function alsTekst(r: RapportInhoud, appUrl: string): string {
     );
     if (w.wacht.aantal > 0) {
       regels.push(`WhatsApp wacht op jou: ${w.wacht.aantal}`);
-      for (const v of w.wacht.voorbeelden) regels.push(`- ${v.van}${v.samenvatting ? `: ${v.samenvatting}` : ""}`);
+      for (const v of w.wacht.voorbeelden)
+        regels.push(`- ${v.van}${v.samenvatting ? `: ${v.samenvatting}` : ""}`);
     }
     regels.push("");
   }
 
   regels.push(`Mail die op jou wacht: ${r.wacht.aantal}`);
   for (const v of r.wacht.voorbeelden) {
-    regels.push(`- ${v.van} — ${v.onderwerp || "(geen onderwerp)"}${v.samenvatting ? `: ${v.samenvatting}` : ""}`);
+    regels.push(
+      `- ${v.van} — ${v.onderwerp || "(geen onderwerp)"}${v.samenvatting ? `: ${v.samenvatting}` : ""}`,
+    );
   }
   if (r.wacht.aantal > r.wacht.voorbeelden.length) {
     regels.push(`  en nog ${r.wacht.aantal - r.wacht.voorbeelden.length}`);

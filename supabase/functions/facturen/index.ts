@@ -90,7 +90,9 @@ Deno.serve(async (req) => {
   const afzenderEmail = String(bedrijf.mail_afzender_email ?? "").trim();
   if (!afzenderEmail) {
     return antwoord(
-      { fout: "Er staat nog geen afzender bij Instellingen → Mail. Zonder afzender kan er niets weg." },
+      {
+        fout: "Er staat nog geen afzender bij Instellingen → Mail. Zonder afzender kan er niets weg.",
+      },
       400,
     );
   }
