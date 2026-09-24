@@ -522,24 +522,40 @@ Deno.serve(async (req) => {
         );
       }
     }
-    const { data, error: mailingFout } = await beheerder
-      .from("mailingen")
-      .insert({
-        company_id: bedrijf.id,
-        datum,
-        onderwerp: vastOnderwerp,
-        tekst: vastTekst,
-        test,
-        kanaal,
-        sjabloon_id: sjabloon?.id ?? null,
-        verzonden_door: medewerker.id,
-      })
-      .select("id")
-      .single();
-    if (mailingFout || !data) {
+    // Vastleggen gaat door een functie met een slot op bedrijf + dag. De
+    // controle hierboven leest, en tussen lezen en vastleggen zit tijd: twee
+    // mensen die op hetzelfde moment op versturen drukken zagen allebei "nog
+    // niets" en de hele wijk kreeg alles twee keer. Wie tweede is krijgt nu
+    // niets terug en loopt op dezelfde melding vast als bij een dubbele klik.
+    const { data, error: mailingFout } = await beheerder.rpc("mailing_vastleggen", {
+      bedrijf: bedrijf.id,
+      dag: datum,
+      onderwerp_in: vastOnderwerp,
+      tekst_in: vastTekst,
+      is_test: test,
+      kanaal_in: kanaal,
+      sjabloon: sjabloon?.id ?? null,
+      door: medewerker.id,
+      soort_in: "aankondiging",
+      // Koos je net bewust "toch nog een keer", dan is een slot van vijftien
+      // seconden alleen maar in de weg: dan moet je twee of drie keer
+      // bevestigen tot het om is. Twee seconden vangt de dubbele klik nog wel.
+      binnen_seconden: verzoek.toch === true ? 2 : 15,
+    });
+    if (mailingFout) {
       return antwoord({ fout: "Kon de verzending niet vastleggen." }, 500);
     }
-    mailing = data;
+    if (!data) {
+      return antwoord(
+        {
+          fout: "Iemand anders is deze dag net aan het versturen. Kijk zo even of het gelukt is.",
+          al_verstuurd: true,
+        },
+        409,
+      );
+    }
+    // De functie geeft alleen het id terug, geen rij.
+    mailing = { id: String(data) };
   }
 
   const tijdvakken = leesTijdvakken(verzoek.tijdvakken);
@@ -910,24 +926,34 @@ async function wijzigingsbericht(
   // De dag die in het logboek komt: de nieuwe dag als die voor iedereen
   // dezelfde is, anders leeg — dan gaat het over meer dagen tegelijk.
   const nieuweDagen = [...new Set([...nieuweDatum.values()])];
-  const { data: mailingRij, error: mailingFout } = await db
-    .from("mailingen")
-    .insert({
-      company_id: bedrijf.id,
-      datum: nieuweDagen.length === 1 ? nieuweDagen[0] : null,
-      onderwerp,
-      tekst,
-      test: false,
-      kanaal: sjabloon ? "voorkeur" : "mail",
-      soort,
-      sjabloon_id: sjabloon?.id ?? null,
-      verzonden_door: medewerker.id,
-    })
-    .select("id")
-    .single();
-  if (mailingFout || !mailingRij) {
+  // Langs hetzelfde slot als de aankondiging: ook "de planning is veranderd"
+  // hoort niet twee keer bij dezelfde klant aan te komen als er twee mensen
+  // tegelijk op de knop drukken.
+  const { data: mailingId, error: mailingFout } = await db.rpc("mailing_vastleggen", {
+    bedrijf: bedrijf.id,
+    dag: nieuweDagen.length === 1 ? (nieuweDagen[0] ?? null) : null,
+    onderwerp_in: onderwerp,
+    tekst_in: tekst,
+    is_test: false,
+    kanaal_in: sjabloon ? "voorkeur" : "mail",
+    sjabloon: sjabloon?.id ?? null,
+    door: medewerker.id,
+    soort_in: soort,
+    binnen_seconden: 15,
+  });
+  if (mailingFout) {
     return antwoord({ fout: "Kon de verzending niet vastleggen." }, 500);
   }
+  if (!mailingId) {
+    return antwoord(
+      {
+        fout: "Iemand anders stuurt dit bericht net. Kijk zo even of het gelukt is.",
+        al_verstuurd: true,
+      },
+      409,
+    );
+  }
+  const mailingRij = { id: String(mailingId) };
 
   function velden(o: Ontvanger | WaOntvanger) {
     return {

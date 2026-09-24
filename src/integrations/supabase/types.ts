@@ -4190,6 +4190,21 @@ export type Database = {
           map_id: string;
         }[];
       };
+      mailing_vastleggen: {
+        Args: {
+          bedrijf: string;
+          binnen_seconden?: number | null;
+          dag: string;
+          door: string;
+          is_test: boolean;
+          kanaal_in: string;
+          onderwerp_in: string;
+          sjabloon: string;
+          soort_in?: string | null;
+          tekst_in: string;
+        };
+        Returns: string;
+      };
       mijn_geldloop: { Args: never; Returns: Json };
       nieuw_aanmeld_token: { Args: never; Returns: string };
       openstaande_uitnodigingen: {
