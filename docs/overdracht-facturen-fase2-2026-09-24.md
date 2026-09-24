@@ -238,6 +238,91 @@ anders bestond de actie `voorbeeld` niet op de server. Daarmee zijn ook de twee
 dingen live die er nog op wachtten — de kopie in Verzonden en het euroteken.
 Die zijn dus nog steeds niet in een echte verzending bewezen.
 
+## Fase 3 is af: betalen via Mollie
+
+Bijgewerkt op 24-09-2026, later op de avond.
+
+### Wat het doet
+
+Bij het versturen maakt de server een **betaallink** bij Mollie en zet die als
+knop in de mail en als regel op de PDF. Betaalt de klant ermee, dan meldt
+Mollie dat en vinkt de factuur zichzelf af.
+
+Een **betaallink** (Payment Links API) en geen gewone Mollie-betaling, want een
+gewone betaling verloopt na een kwartier -- precies verkeerd voor een factuur
+die veertien dagen open staat. Een betaallink verloopt niet.
+
+Alles wat er al was blijft staan: de IBAN en het betaalkenmerk staan gewoon op
+de factuur, en met de hand afvinken werkt nog net zo.
+
+### De webhook heeft geen slot, en dat is met opzet
+
+`mollie-webhook` staat open op internet: `verify_jwt = false`, geen gedeeld
+geheim. De reden is dat de melding **nooit geloofd wordt**. Mollie zegt alleen
+"er is iets gebeurd"; wat er betaald is halen we daarna zelf op met
+`GET /v2/payment-links/<id>/payments` en de sleutel van dat bedrijf. Wie de
+URL kent kan dus hooguit een extra navraag uitlokken, en die zet de factuur op
+precies het bedrag waar hij al op stond.
+
+De factuur staat als `?factuur=<uuid>` in de meldings-URL die we bij het
+aanmaken van de link meegeven. Dat moet: de Payment Links API kent geen
+`metadata`, dus je kunt een link geen eigen kenmerk meegeven, en de melding
+zelf noemt alleen een betaling.
+
+### Het met de hand afgevinkte deel blijft staan
+
+`facturen.mollie_betaald` houdt apart bij wat er via de link binnenkwam. Zonder
+dat vak zou een melding van Mollie een bedrag overschrijven dat jij met de hand
+had afgevinkt -- of, als we zouden optellen, zou een tweede melding over
+dezelfde betaling het bedrag verdubbelen. De functie `factuur_mollie_betaald`
+zet daarom altijd het **volledige** bedrag dat bij Mollie binnenstaat, en telt
+het handmatige deel daarbij op. Twee meldingen over dezelfde betaling geven zo
+hetzelfde resultaat, en een terugstorting zet de factuur weer open.
+
+### Waar het staat
+
+| onderdeel                 | waar                                             |
+| ------------------------- | ------------------------------------------------ |
+| Praten met Mollie         | `supabase/functions/_gedeeld/mollie.ts`          |
+| Koppelen / loskoppelen    | `supabase/functions/mollie/index.ts`             |
+| De melding van Mollie     | `supabase/functions/mollie-webhook/index.ts`     |
+| De link bij het versturen | `supabase/functions/facturen/index.ts`           |
+| De knoppen                | `src/components/facturen/MollieInstellingen.tsx` |
+| Kolommen en de functie    | migratie `…119000`                               |
+
+De sleutel gaat versleuteld in `mollie_geheimen` (geen enkele policy, alleen de
+service role), met dezelfde `MAIL_SLEUTEL` als de mailbox: zelfde server,
+zelfde vertrouwensgrens. Op `companies` staat alleen `mollie_modus` -- `test`
+of `live` -- zodat het scherm kan laten zien wát er gekoppeld is zonder de
+sleutel te kennen.
+
+### Wat er bewezen is, en wat niet
+
+**Wel gelopen.** Het koppelscherm, de controle op de vorm van de sleutel
+("begint met test_ of live_"), en een échte aanroep naar Mollie met een
+verzonnen sleutel -- die komt netjes terug als _"Mollie herkent deze sleutel
+niet: Invalid Authorization header"_. De weg app → edge function → Mollie →
+terug werkt dus, inclusief de Nederlandse melding.
+
+**Niet gelopen, want daar is een echte sleutel voor nodig:** het aanmaken van
+een betaallink, de knop in de mail, de melding van Mollie en het afvinken.
+Timmie moet in zijn Mollie-dashboard een **testsleutel** maken (Ontwikkelaars →
+API-sleutels) en die in Instellingen → Facturen plakken. Daarna kan de hele weg
+één keer doorlopen worden met Mollie's testbetaling, zonder dat er geld in
+beweging komt.
+
+**Let op bij die eerste proef:** een betaallink ontstaat pas bij _Versturen_,
+en daar hangt een echt factuurnummer aan. Zie de waarschuwing hieronder over
+proeven zonder factuurnummer -- dit is het ene geval waarin je er niet omheen
+kunt, dus doe het bewust en met de testsleutel.
+
+### Nog niet gedaan
+
+- **Fase 4: herinneringen.** Een factuur die over de vervaldatum gaat, staat al
+  op "Te laat" in de lijst; er gaat alleen nog niets vanzelf de deur uit.
+- **Automatische incasso** blijft uitdrukkelijk buiten beeld, zoals in het plan
+  staat.
+
 ## Vallen waar anderen al in gelopen zijn
 
 - **Draai deno nooit vanuit de hoofdmap met `--node-modules-dir=auto`.** Dat

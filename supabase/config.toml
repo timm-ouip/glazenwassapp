@@ -68,3 +68,13 @@ verify_jwt = true
 # Geen gebruiker; het slot is het geheim BREVO_WEBHOOK_SLEUTEL.
 [functions.brevo-webhook]
 verify_jwt = false
+
+# De Mollie-sleutel koppelen of loskoppelen: alleen ingelogd, en de functie
+# kijkt zelf of je eigenaar bent.
+[functions.mollie]
+verify_jwt = true
+
+# Hier meldt Mollie dat er betaald is. Geen gebruiker en geen geheim: de
+# melding wordt nooit geloofd, er wordt altijd bij Mollie nagevraagd.
+[functions.mollie-webhook]
+verify_jwt = false

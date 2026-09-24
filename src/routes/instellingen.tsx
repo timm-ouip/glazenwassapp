@@ -98,6 +98,7 @@ import { WhatsAppInstellingen } from "@/components/whatsapp/WhatsAppInstellingen
 import { PaaltjeAfspraken, PaaltjeCategorieen } from "@/components/PaaltjeInstellingen";
 import { SchrijfstijlInstellingen } from "@/components/SchrijfstijlInstellingen";
 import { FactuurVormgeving } from "@/components/facturen/FactuurVormgeving";
+import { MollieInstellingen } from "@/components/facturen/MollieInstellingen";
 import { AppLayout } from "@/components/AppLayout";
 import { WijkToevoegenKnop } from "@/components/WijkKiezer";
 import { useBevestig } from "@/components/Bevestig";
@@ -283,7 +284,10 @@ function Instellingen() {
           {/* Hoe de factuur eruitziet. Kijken mag wie facturen mag versturen;
               veranderen is voor de eigenaar, want het pad naar het briefpapier
               staat op het bedrijf en daar komt alleen hij bij. */}
-          <TabsContent value="facturen">
+          <TabsContent value="facturen" className="space-y-4">
+            <div className="max-w-3xl">
+              <MollieInstellingen mag={isEigenaar} />
+            </div>
             <FactuurVormgeving mag={isEigenaar} />
           </TabsContent>
           {/* En hier alles wat je zelf inricht en daarna laat staan. Naast

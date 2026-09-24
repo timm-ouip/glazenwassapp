@@ -666,6 +666,7 @@ export type Database = {
           mail_afzender_email: string;
           mail_afzender_naam: string;
           mail_schrijfstijl: string;
+          mollie_modus: string | null;
           name: string;
           paaltje_daglimiet: number;
           plaats: string;
@@ -712,6 +713,7 @@ export type Database = {
           mail_afzender_email?: string;
           mail_afzender_naam?: string;
           mail_schrijfstijl?: string;
+          mollie_modus?: string | null;
           name: string;
           paaltje_daglimiet?: number;
           plaats?: string;
@@ -758,6 +760,7 @@ export type Database = {
           mail_afzender_email?: string;
           mail_afzender_naam?: string;
           mail_schrijfstijl?: string;
+          mollie_modus?: string | null;
           name?: string;
           paaltje_daglimiet?: number;
           plaats?: string;
@@ -1272,6 +1275,7 @@ export type Database = {
           klant_id: string;
           klantgegevens: Json | null;
           met_rust_tot: string | null;
+          mollie_betaald: number;
           mollie_id: string | null;
           mollie_link: string | null;
           nummer: string | null;
@@ -1299,6 +1303,7 @@ export type Database = {
           klant_id: string;
           klantgegevens?: Json | null;
           met_rust_tot?: string | null;
+          mollie_betaald?: number;
           mollie_id?: string | null;
           mollie_link?: string | null;
           nummer?: string | null;
@@ -1326,6 +1331,7 @@ export type Database = {
           klant_id?: string;
           klantgegevens?: Json | null;
           met_rust_tot?: string | null;
+          mollie_betaald?: number;
           mollie_id?: string | null;
           mollie_link?: string | null;
           nummer?: string | null;
@@ -2895,6 +2901,35 @@ export type Database = {
           },
         ];
       };
+      mollie_geheimen: {
+        Row: {
+          company_id: string;
+          iv: string;
+          updated_at: string;
+          versleuteld: string;
+        };
+        Insert: {
+          company_id?: string;
+          iv: string;
+          updated_at?: string;
+          versleuteld: string;
+        };
+        Update: {
+          company_id?: string;
+          iv?: string;
+          updated_at?: string;
+          versleuteld?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "mollie_geheimen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: true;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       paaltje_afspraken: {
         Row: {
           bron_bericht_id: string | null;
@@ -3835,6 +3870,10 @@ export type Database = {
       factuur_met_rust: {
         Args: { factuur: string; tot?: string | null };
         Returns: undefined;
+      };
+      factuur_mollie_betaald: {
+        Args: { bij_mollie: number; factuur: string; op?: string | null };
+        Returns: Json;
       };
       factuur_nummer_trekken: {
         Args: { bedrijf: string; voor_jaar: number };

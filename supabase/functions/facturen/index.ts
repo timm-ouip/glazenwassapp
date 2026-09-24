@@ -35,6 +35,7 @@ import {
   type FactuurVormgeving,
 } from "../_gedeeld/factuurpdf.ts";
 import { maakOp } from "../_gedeeld/opmaken.ts";
+import { maakBetaallink, meldingKenmerk, mollieSleutel } from "../_gedeeld/mollie.ts";
 import { kopieInVerzonden, mailboxVoorKopie, type KopieMail } from "../_gedeeld/verzenden.ts";
 
 interface Verzoek {
@@ -157,6 +158,13 @@ Deno.serve(async (req) => {
       ...(bedr.factuur_voettekst ? { voettekst: String(bedr.factuur_voettekst) } : {}),
     };
     return vormOnthouden;
+  }
+
+  /** De Mollie-sleutel, één keer opgehaald. Leeg = niet gekoppeld. */
+  let sleutelOnthouden: string | undefined;
+  async function mollie(): Promise<string> {
+    if (sleutelOnthouden === undefined) sleutelOnthouden = await mollieSleutel(beheerder, bedr.id);
+    return sleutelOnthouden;
   }
 
   let verzoek: Verzoek;
@@ -352,6 +360,59 @@ Deno.serve(async (req) => {
         btw_procent: Number(r.btw_procent),
       })) as FactuurRegel[];
       if (lijst.length === 0) throw new Error("Deze factuur heeft geen regels.");
+      const totaal = lijst.reduce((t, r) => t + r.bedrag_incl, 0);
+
+      // De betaallink hoort hier en niet eerder: hij moet het factuurnummer op
+      // het bankafschrift kunnen zetten en het bedrag kennen.
+      //
+      // Lukt het niet, dan gaat de factuur gewoon zonder knop de deur uit. Een
+      // factuur tegenhouden omdat Mollie even niet thuis geeft zou het middel
+      // erger maken dan de kwaal: de IBAN en het betaalkenmerk staan er toch
+      // al op, en met de hand afvinken blijft gewoon werken.
+      let betaallink = String(f.mollie_link ?? "");
+      const sleutel = f.soort === "credit" || totaal <= 0 || betaallink ? "" : await mollie();
+      if (sleutel) {
+        try {
+          const kenmerk = await meldingKenmerk(id);
+          const link = await maakBetaallink(sleutel, {
+            bedrag: totaal,
+            omschrijving: `Factuur ${kaart.nummer} - ${bedrijf.name}`,
+            meldingUrl: `${url}/functions/v1/mollie-webhook?factuur=${id}&kenmerk=${kenmerk}`,
+          });
+          // Alleen wegschrijven als er nog geen link staat. Twee verzendrondes
+          // tegelijk -- twee tabbladen, of jij en een collega -- zouden anders
+          // allebei een link maken en alleen de laatste bewaren. Betaalt de
+          // klant dan via de eerste, dan kijkt de melding naar de tweede,
+          // vindt daar niets, en blijft een betaalde factuur openstaan.
+          const { data: gezet, error: linkFout } = await beheerder
+            .from("facturen")
+            .update({ mollie_id: link.id, mollie_link: link.url })
+            .eq("id", id)
+            .eq("company_id", bedrijf.id)
+            .is("mollie_id", null)
+            .select("mollie_link")
+            .maybeSingle();
+          if (linkFout) throw new Error(linkFout.message);
+          if (gezet?.mollie_link) {
+            betaallink = String(gezet.mollie_link);
+          } else {
+            // De ander was ons voor. Zijn link ligt straks bij de klant, de
+            // onze is een ongebruikte link bij Mollie -- die doet geen kwaad.
+            const { data: al } = await beheerder
+              .from("facturen")
+              .select("mollie_link")
+              .eq("id", id)
+              .eq("company_id", bedrijf.id)
+              .maybeSingle();
+            betaallink = String(al?.mollie_link ?? "");
+          }
+        } catch (e) {
+          console.error(
+            `Betaallink voor ${kaart.nummer} mislukt:`,
+            e instanceof Error ? e.message : e,
+          );
+        }
+      }
 
       // 2. Het papier. Een particulier ziet bedragen inclusief btw, een
       //    bedrijf of VvE exclusief met de btw eronder.
@@ -382,7 +443,7 @@ Deno.serve(async (req) => {
           plaats: String(kg.plaats ?? ""),
         },
         regels: lijst,
-        ...(f.mollie_link ? { betaallink: String(f.mollie_link) } : {}),
+        ...(betaallink ? { betaallink } : {}),
         vormgeving: await vormgeving(),
       });
 
@@ -400,18 +461,17 @@ Deno.serve(async (req) => {
       }
 
       // 3. De mail.
-      const totaal = lijst.reduce((t, r) => t + r.bedrag_incl, 0);
       const naam = String(kg.bedrijfsnaam ?? "").trim() || String(kg.naam ?? "");
       const tekst =
         `Beste ${naam},\n\n` +
         `In de bijlage vind je factuur ${kaart.nummer} van ${euro(totaal)}.\n` +
         `Wij zien de betaling graag tegemoet vóór ${kaart.vervaldatum.split("-").reverse().join("-")}.\n` +
-        (f.mollie_link ? `\nDirect online betalen kan hier: ${f.mollie_link}\n` : "") +
+        (betaallink ? `\nDirect online betalen kan hier: ${betaallink}\n` : "") +
         (bedrijf.iban ? `\nOvermaken kan naar ${bedrijf.iban} o.v.v. ${kaart.nummer}.\n` : "") +
         `\nMet vriendelijke groet,\n${bedrijf.name}`;
 
-      const knop = f.mollie_link
-        ? `<p style="margin:18px 0"><a href="${veilig(String(f.mollie_link))}" style="background:#111;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;display:inline-block">Direct betalen</a></p>`
+      const knop = betaallink
+        ? `<p style="margin:18px 0"><a href="${veilig(betaallink)}" style="background:#111;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;display:inline-block">Direct betalen</a></p>`
         : "";
 
       const onderwerp = `Factuur ${kaart.nummer} · ${bedrijf.name}`;
