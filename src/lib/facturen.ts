@@ -14,6 +14,7 @@
  * facturen_maken); hier staat alleen hoe de app het opvraagt.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { haalAllePaginas } from "@/lib/pagineren";
 
 export type FactuurStatus = "concept" | "verstuurd" | "betaald" | "gecrediteerd";
 export type FactuurSoort = "factuur" | "credit";
@@ -240,4 +241,49 @@ export async function factuurOpnieuw(
 export async function factuurMetRust(id: string, tot: string | null) {
   const { error } = await supabase.rpc("factuur_met_rust", { factuur: id, tot });
   if (error) throw error;
+}
+
+/**
+ * Het btw-tarief van het bedrijf. Staat er niets, dan 21 — hetzelfde
+ * uitgangspunt als in de database (`factuur_btw_procent`).
+ *
+ * RLS laat je maar één bedrijf zien, dus er hoeft niet op gefilterd te worden.
+ */
+export async function fetchBtwProcent(): Promise<number> {
+  const { data, error } = await supabase.from("companies").select("btw_procent").limit(1).single();
+  if (error) throw error;
+  return Number(data.btw_procent ?? 21) || 21;
+}
+
+/**
+ * Hoeveel btw er in een bedrag zit. Staat de prijs inclusief (particulier),
+ * dan rekenen we hem eruit; staat hij exclusief (bedrijf, VvE), dan komt hij
+ * er bovenop. Dezelfde som als `factuur_excl` in de database.
+ */
+export function btwIn(bedrag: number, inclusief: boolean, procent: number): number {
+  const deel = procent / 100;
+  return inclusief ? bedrag - bedrag / (1 + deel) : bedrag * deel;
+}
+
+/**
+ * Van elke klant alleen zijn type. Genoeg om te weten of een prijs inclusief
+ * of exclusief btw genoteerd staat, en veel lichter dan het hele
+ * klantenbestand: daar zitten mailadressen en notities in die hier niets te
+ * zoeken hebben.
+ */
+export async function fetchKlanttypen(): Promise<Map<string, Klanttype>> {
+  const data = await haalAllePaginas((van, tot) =>
+    supabase
+      .from("klanten")
+      .select("id,klanttype")
+      .is("deleted_at", null)
+      .order("id", { ascending: true })
+      .range(van, tot),
+  );
+  return new Map(
+    (data as { id: string; klanttype: Klanttype | null }[]).map((k) => [
+      k.id,
+      k.klanttype ?? "particulier",
+    ]),
+  );
 }

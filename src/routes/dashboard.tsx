@@ -26,21 +26,20 @@ import {
 import { TelBedrag, TelGetal } from "@/components/TelBedrag";
 import { Button } from "@/components/ui/button";
 import { requireSession, useRequireAuth } from "@/lib/auth";
-import { effectieveMethode } from "@/lib/betalingen";
+import { btwIn, btwInclusief, fetchBtwProcent, fetchKlanttypen } from "@/lib/facturen";
 import { fetchKlachtenPeriode } from "@/lib/klachten";
 import {
   fetchCustomersMetInactief,
   fetchDistricts,
   fetchStreets,
   formatPrice,
-  type Customer,
 } from "@/lib/klanten";
 import { fetchKlussen, telDagVan } from "@/lib/klussen";
 import { fetchPof } from "@/lib/overzichten";
 import { useRecht } from "@/lib/rechten";
 import { cn } from "@/lib/utils";
 import { GeldfilterPillen } from "@/components/Geldfilter";
-import { teltMee, useGeldfilter } from "@/lib/geldfilter";
+import { adresgeldMap, contantVan, teltMee, useGeldfilter } from "@/lib/geldfilter";
 import { datumSleutel, fetchWasdagen, vandaag } from "@/lib/wasdag";
 
 export const Route = createFileRoute("/dashboard")({
@@ -83,21 +82,6 @@ function dagErbij(datum: string, dagen: number): string {
  * blijven de opgehaalde gegevens tien minuten goed staan: je komt hier om te
  * kijken, niet om te werken.
  */
-
-/**
- * Betaalde dit werk contant? De bij het afmelden vastgelegde methode gaat
- * voor; alleen als die er niet is (oude regels, en extra opdrachten) kijken
- * we naar hoe het adres nu staat. Null = niet te zeggen, bijvoorbeeld bij een
- * adres dat intussen weggegooid is.
- */
-function contantVan(
-  p: { customer_id: string | null; methode: "contant" | "overmaken" | null },
-  adresInfo: { info: Map<string, { contant: boolean | null }> } | null | undefined,
-): boolean | null {
-  if (p.methode) return p.methode === "contant";
-  const info = p.customer_id ? adresInfo?.info.get(p.customer_id) : undefined;
-  return info?.contant ?? null;
-}
 
 function Dashboard() {
   useRequireAuth();
@@ -151,6 +135,22 @@ function Dashboard() {
     enabled: mag,
     staleTime: 2 * MINUUT,
   });
+  // Voor de btw-regel: het klanttype bepaalt of de prijs van een adres
+  // inclusief of exclusief btw genoteerd staat. Alleen het type, niet het hele
+  // klantenbestand: hier hoeven geen mailadressen en notities voor over de
+  // lijn.
+  const klantenQuery = useQuery({
+    queryKey: ["klanttypen"],
+    queryFn: fetchKlanttypen,
+    enabled: mag,
+    staleTime: 5 * MINUUT,
+  });
+  const btwQuery = useQuery({
+    queryKey: ["btw-procent"],
+    queryFn: fetchBtwProcent,
+    enabled: mag,
+    staleTime: 30 * MINUUT,
+  });
   // Een dag ruimer ophalen en daarna op de Nederlandse datum filteren: de
   // database rekent in UTC, en een klacht van half één 's nachts hoort hier.
   const klachtenQuery = useQuery({
@@ -166,18 +166,29 @@ function Dashboard() {
     const streets = streetsQuery.data;
     const customers = customersQuery.data;
     if (!districts || !streets || !customers) return null;
-    const wijkVan = new Map(districts.map((d) => [d.id, d]));
-    const straatVan = new Map(streets.map((s) => [s.id, s]));
-    const info = new Map<string, { wijkId: string | null; contant: boolean }>();
-    for (const c of customers as Customer[]) {
-      const wijk = wijkVan.get(straatVan.get(c.street_id)?.district_id ?? "");
-      info.set(c.id, {
-        wijkId: wijk?.id ?? null,
-        contant: effectieveMethode(c, wijk) === "contant",
-      });
-    }
-    return { info, wijken: districts };
+    return { info: adresgeldMap(customers, streets, districts), wijken: districts };
   }, [districtsQuery.data, streetsQuery.data, customersQuery.data]);
+
+  /**
+   * Van elk adres: staat zijn prijs inclusief btw? Een particulier noteert
+   * inclusief, een bedrijf en een VvE exclusief. Kennen we de klant niet (geen
+   * klant aan het adres, of weggegooid), dan gaan we uit van particulier —
+   * zoals de database dat ook doet.
+   *
+   * Alleen het klanttype dus, en het tarief van het bedrijf. Een klant kan in
+   * de database een eigen `btw_inclusief` of `btw_procent` hebben (de
+   * nooduitgang), maar geen enkel scherm vult die, en ze horen ook niet bij
+   * `fetchKlanttypen`. Komt die nooduitgang ooit in gebruik, dan moeten ze
+   * hier mee.
+   */
+  const inclusiefVan = useMemo(() => {
+    const customers = customersQuery.data;
+    const klanten = klantenQuery.data;
+    if (!customers || !klanten) return null;
+    return new Map(
+      customers.map((c) => [c.id, btwInclusief(c.klant_id ? klanten.get(c.klant_id) : null, null)]),
+    );
+  }, [customersQuery.data, klantenQuery.data]);
 
   const [geldkeuze, zetGeldkeuze] = useGeldfilter();
 
@@ -223,8 +234,10 @@ function Dashboard() {
   const zichtbaar = useMemo(() => {
     if (!posten) return null;
     if (geldkeuze === "allebei") return posten;
-    return posten.filter((p) => teltMee(geldkeuze, contantVan(p, adresInfo)));
+    return posten.filter((p) => teltMee(geldkeuze, contantVan(p, adresInfo?.info)));
   }, [posten, geldkeuze, adresInfo]);
+
+  const btwProcent = btwQuery.data ?? 21;
 
   const cijfers = useMemo(() => {
     if (!zichtbaar) return null;
@@ -237,10 +250,17 @@ function Dashboard() {
     const werkdagen = Array.from({ length: aantalMaanden }, () => new Set<string>());
     /** Bedragen van adressen die we niet meer kennen (weggegooid). */
     let onbekend = 0;
+    /** De btw die in de omzet hierboven zit, of er bij een bedrijf nog bij komt. */
+    let btw = 0;
     for (const p of zichtbaar) {
       const m = Number(p.datum.slice(5, 7)) - 1;
       if (m < 0 || m >= aantalMaanden) continue;
       maandOmzet[m] = (maandOmzet[m] ?? 0) + p.prijs;
+      btw += btwIn(
+        p.prijs,
+        (p.customer_id ? inclusiefVan?.get(p.customer_id) : undefined) ?? true,
+        btwProcent,
+      );
       // Alleen wasbeurten tellen als gewassen adres; een extra opdracht is werk
       // bij een adres dat je vaak diezelfde dag al waste.
       if (p.wasbeurt) maandAdressen[m] = (maandAdressen[m] ?? 0) + 1;
@@ -251,7 +271,7 @@ function Dashboard() {
       // De vastgelegde methode wint: anders zou een klant die in november op
       // overmaken gezet wordt, zijn werk van juni met terugwerkende kracht
       // van de ene kolom naar de andere laten springen.
-      const contant = contantVan(p, adresInfo);
+      const contant = contantVan(p, adresInfo?.info);
       if (contant === true) maandContant[m] = (maandContant[m] ?? 0) + p.prijs;
       else if (contant === false) maandOvermaken[m] = (maandOvermaken[m] ?? 0) + p.prijs;
       else onbekend += p.prijs;
@@ -302,6 +322,8 @@ function Dashboard() {
       verloop,
       werkdagen: werkdagen.map((d) => d.size),
       onbekend,
+      btw,
+      btwBekend: inclusiefVan !== null && btwQuery.isSuccess,
     };
   }, [
     zichtbaar,
@@ -312,6 +334,9 @@ function Dashboard() {
     jaar,
     vanaf,
     tot,
+    inclusiefVan,
+    btwProcent,
+    btwQuery.isSuccess,
   ]);
 
   const pof = useMemo(() => {
@@ -332,11 +357,18 @@ function Dashboard() {
     pofQuery,
     klachtenQuery,
   ];
+  // klantenQuery en btwQuery staan er met opzet niet bij: die zijn alleen voor
+  // de btw-regel. Mislukken ze, dan blijft die regel leeg (btwBekend) en
+  // kloppen alle grafieken gewoon — daar hoort geen melding over het hele
+  // dashboard bij.
   const fout = vragen.some((q) => q.isError);
   const laadt = !fout && vragen.some((q) => q.isLoading);
 
   const leeg = <span className="opacity-40">—</span>;
   const euro = (n: number) => formatPrice(n);
+  /** Hele euro's, voor de regels waar geen centen bij horen. */
+  const rondEuro = (n: number) =>
+    n.toLocaleString("nl-NL", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
   const punten = (waarden: number[], vorm: (n: number) => string): Punt[] => {
     const hoogste = Math.max(1, ...waarden);
     return waarden.map((w, i) => ({
@@ -409,10 +441,15 @@ function Dashboard() {
                   leeg
                 )}
               </TegelGetal>
+              {/* Wat er over dit bedrag naar de Belastingdienst gaat. Niet
+                  "waarvan": bij een particulier zit de btw in de prijs, bij een
+                  bedrijf komt hij er juist bovenop, en dan zou "waarvan" een
+                  bedrag noemen dat niet in het getal erboven zit. Zonder
+                  centen, anders past de regel van een heel jaar niet meer op
+                  een telefoon. Het gemiddelde per maand staat in de grafiek
+                  hieronder. */}
               <TegelOnder>
-                {cijfers
-                  ? `${(cijfers.totaal / Math.max(1, aantalMaanden) || 0).toLocaleString("nl-NL", { style: "currency", currency: "EUR", maximumFractionDigits: 0 })} per maand`
-                  : " "}
+                {cijfers?.btwBekend ? `btw hierover ${rondEuro(cijfers.btw)}` : " "}
               </TegelOnder>
             </div>
             <div className={cn(TEGEL_VAK, TEGEL_KLEUR.creme, TEGEL_GEWOON, "md:h-[150px]")}>
@@ -477,8 +514,8 @@ function Dashboard() {
               extra={
                 cijfers && hoogsteMaand >= 0 ? (
                   <PaneelExtra>
-                    hoogste: {MAANDEN[hoogsteMaand]?.[0]},{" "}
-                    {euro(cijfers.maandOmzet[hoogsteMaand] ?? 0)}
+                    gemiddeld {rondEuro(cijfers.totaal / Math.max(1, aantalMaanden))} · hoogste:{" "}
+                    {MAANDEN[hoogsteMaand]?.[0]}, {euro(cijfers.maandOmzet[hoogsteMaand] ?? 0)}
                   </PaneelExtra>
                 ) : undefined
               }

@@ -16,6 +16,7 @@ import {
 } from "@tabler/icons-react";
 
 import { AppLayout } from "@/components/AppLayout";
+import { GeldfilterPillen } from "@/components/Geldfilter";
 import { TelBedrag, TelGetal } from "@/components/TelBedrag";
 import { Vorm } from "@/components/Vorm";
 import {
@@ -31,8 +32,10 @@ import { aantalOpenAanmeldingen } from "@/lib/aanmeldingen";
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { fetchAfmeldstatus } from "@/lib/dagklaar";
 import { naarDagBijOpstarten } from "@/lib/dagslot";
+import { adresgeldMap, contantVan, teltMee, useGeldfilter } from "@/lib/geldfilter";
 import {
   fetchCustomers,
+  fetchCustomersMetInactief,
   fetchDistricts,
   fetchKlanten,
   fetchStreets,
@@ -154,6 +157,19 @@ function Home() {
     staleTime: 10 * MINUUT,
   });
 
+  const [geldkeuze, zetGeldkeuze] = useGeldfilter();
+  const splitsen = magOmzet && geldkeuze !== "allebei";
+  // Alleen nodig zodra je contant en overmaken uit elkaar trekt, en dan met de
+  // inactieve adressen erbij: een adres dat later stopte, hoort nog wel bij de
+  // omzet van de maanden dat het gewassen werd. Dezelfde sleutel als op het
+  // dashboard, dus wie daarvandaan komt haalt het niet nog een keer op.
+  const omzetAdressenQuery = useQuery({
+    queryKey: ["customers", "met-inactief"],
+    queryFn: fetchCustomersMetInactief,
+    enabled: splitsen,
+    staleTime: 5 * MINUUT,
+  });
+
   const wijkenNodig = magKlantenZien || magPlannen;
   const districtsQuery = useQuery({
     queryKey: ["districts"],
@@ -211,18 +227,34 @@ function Home() {
   }, [dagQuery.data, dagKlussenQuery.data, afmeldQuery.data, nu]);
 
   // --- Omzet per maand -----------------------------------------------------
+  /** Van elk adres hoe het betaalt; alleen gevuld als je de twee splitst. */
+  const adresgeld = useMemo(() => {
+    const districts = districtsQuery.data;
+    const streets = streetsQuery.data;
+    const customers = omzetAdressenQuery.data;
+    if (!districts || !streets || !customers) return null;
+    return adresgeldMap(customers, streets, districts);
+  }, [districtsQuery.data, streetsQuery.data, omzetAdressenQuery.data]);
+
   const maanden = useMemo(() => {
     if (!jaarQuery.data || !jaarKlussenQuery.data) return null;
+    // Splitsen zonder te weten hoe de adressen betalen, zou een veel te laag
+    // getal opleveren; dan liever nog even niets laten zien.
+    if (splitsen && !adresgeld) return null;
     const aantal = Number(nu.slice(5, 7));
     const bedragen = Array.from({ length: aantal }, () => 0);
+    const meedoen = (customer_id: string | null, methode: "contant" | "overmaken" | null) =>
+      teltMee(geldkeuze, contantVan({ customer_id, methode }, adresgeld));
     for (const r of jaarQuery.data) {
       if (r.datum > nu) continue;
+      if (!meedoen(r.customer_id, r.betaalmethode ?? null)) continue;
       const m = Number(r.datum.slice(5, 7)) - 1;
       if (m >= 0 && m < aantal) bedragen[m] = (bedragen[m] ?? 0) + r.prijs;
     }
     for (const k of jaarKlussenQuery.data) {
       const d = telDagVan(k, nu);
       if (!d || d < jaarBegin || d > nu) continue;
+      if (!meedoen(k.customer_id, null)) continue;
       const m = Number(d.slice(5, 7)) - 1;
       if (m >= 0 && m < aantal) bedragen[m] = (bedragen[m] ?? 0) + k.prijs;
     }
@@ -231,7 +263,7 @@ function Home() {
       kort: MAANDEN[i]![1],
       bedrag,
     }));
-  }, [jaarQuery.data, jaarKlussenQuery.data, nu, jaarBegin]);
+  }, [jaarQuery.data, jaarKlussenQuery.data, nu, jaarBegin, geldkeuze, splitsen, adresgeld]);
   const dezeMaand = maanden?.[maanden.length - 1];
 
   // --- Klanten en wijken -----------------------------------------------------
@@ -333,6 +365,10 @@ function Home() {
               {moment && <span className="hidden md:inline"> · week {getISOWeek(moment)}</span>}
             </p>
           </div>
+          {/* Contant en overmaken uit elkaar. Stuurt de omzet, net als op het
+              dashboard — de keuze wordt op dit toestel onthouden en geldt daar
+              dus ook. */}
+          {magOmzet && <GeldfilterPillen keuze={geldkeuze} onChange={zetGeldkeuze} />}
           {magKlantenZien && (
             <div className="hidden md:block">
               <ZoekOpHome adressen={bestand?.adressen ?? []} laden={!bestand?.klaar} />

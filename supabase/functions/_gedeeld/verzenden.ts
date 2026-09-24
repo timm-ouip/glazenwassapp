@@ -7,7 +7,7 @@
  * bevestigingen het adres niet op een zwarte lijst krijgt.
  */
 import { ontsleutel } from "./geheim.ts";
-import { maakOp } from "./opmaken.ts";
+import { maakOp, type Opgemaakt } from "./opmaken.ts";
 import { eigenTekst } from "./paaltje.ts";
 import { knip, maakImap } from "./ophalen.ts";
 import { MogelijkVerstuurd, verstuurBericht } from "./smtp.ts";
@@ -175,6 +175,69 @@ export async function stuurAntwoord(db: Db, mail: AntwoordOp, tekst: string): Pr
     .eq("id", mail.id);
   if (markeerFout) console.error("antwoord markeren:", markeerFout.message);
 
+  await kopieInVerzonden(db, box, wachtwoord, vanNaam, [
+    {
+      opgemaakt,
+      aan: [{ naam: mail.van_naam, email: naar }],
+      onderwerp,
+      tekst,
+      ontvangen_op: tijd,
+      ...(antwoordOp ? { antwoordOp } : {}),
+      klant_id: mail.klant_id ?? null,
+    },
+  ]);
+  return "";
+}
+
+// ---------------------------------------------------------------------
+// De kopie in Verzonden
+// ---------------------------------------------------------------------
+
+/** Een mailbox, voor zover er een kopie in te leggen valt. */
+export interface KopieBox {
+  id: string;
+  company_id: string;
+  adres: string;
+  imap_host: string;
+  imap_poort: number;
+}
+
+export interface KopieMail {
+  /** De mail zoals hij de deur uit ging. */
+  opgemaakt: Opgemaakt;
+  aan: { naam?: string; email: string }[];
+  onderwerp: string;
+  tekst: string;
+  /** Wanneer hij verstuurd is (ISO). */
+  ontvangen_op: string;
+  /** Het afzenderadres, als dat niet de mailbox zelf was (Brevo). */
+  vanEmail?: string;
+  antwoordOp?: { messageId: string; referenties: string[] };
+  /** De klant bij wie hij in het dossier hoort. Leeg = zoek op het aan-adres. */
+  klant_id?: string | null;
+  /** Wat eraan vastzat — alleen de beschrijving, niet het bestand zelf. */
+  bijlagen?: { naam: string; type: string; grootte: number }[];
+}
+
+/**
+ * Verstuurde mail in de map Verzonden zetten, en daarmee in het klantdossier.
+ *
+ * Eén IMAP-sessie voor de hele lijst: bij een stapel facturen scheelt dat
+ * evenveel keer inloggen als er facturen zijn.
+ *
+ * Hier wordt niets gegooid en niets teruggegeven. De mail is al weg; dat de
+ * kopie niet lukte, is vervelend maar mag de verzending niet ongedaan maken.
+ * De ophaalronde vindt hem later alsnog als het mailprogramma hem zelf
+ * bewaarde.
+ */
+export async function kopieInVerzonden(
+  db: Db,
+  box: KopieBox,
+  wachtwoord: string,
+  vanNaam: string,
+  mails: KopieMail[],
+): Promise<void> {
+  if (mails.length === 0) return;
   try {
     const { data: verzonden } = await db
       .from("mail_mappen")
@@ -184,12 +247,20 @@ export async function stuurAntwoord(db: Db, mail: AntwoordOp, tekst: string): Pr
       .order("pad", { ascending: true })
       .limit(1)
       .maybeSingle();
-    if (verzonden) {
-      const client = maakImap(box, wachtwoord);
-      await client.connect();
-      try {
-        const res = await client.append(verzonden.pad, opgemaakt.bericht, ["\\Seen"], new Date());
-        if (res && typeof res.uid === "number" && res.uidValidity !== undefined) {
+    if (!verzonden) return;
+
+    const client = maakImap(box, wachtwoord);
+    await client.connect();
+    try {
+      for (const m of mails) {
+        try {
+          const res = await client.append(
+            verzonden.pad,
+            m.opgemaakt.bericht,
+            ["\\Seen"],
+            new Date(m.ontvangen_op),
+          );
+          if (!res || typeof res.uid !== "number" || res.uidValidity === undefined) continue;
           await db.from("berichten").upsert(
             {
               company_id: box.company_id,
@@ -197,37 +268,77 @@ export async function stuurAntwoord(db: Db, mail: AntwoordOp, tekst: string): Pr
               map_id: verzonden.id,
               uidvalidity: Number(res.uidValidity),
               uid: res.uid,
-              message_id: opgemaakt.messageId,
-              in_reply_to: antwoordOp?.messageId ?? "",
-              referenties: antwoordOp
-                ? [...antwoordOp.referenties, antwoordOp.messageId].slice(-20)
+              message_id: m.opgemaakt.messageId,
+              in_reply_to: m.antwoordOp?.messageId ?? "",
+              referenties: m.antwoordOp
+                ? [...m.antwoordOp.referenties, m.antwoordOp.messageId].slice(-20)
                 : [],
               richting: "uit",
               van_naam: vanNaam,
-              van_email: box.adres,
-              aan: [{ naam: mail.van_naam, email: naar }],
-              onderwerp,
-              fragment: knip(tekst.replace(/\s+/g, " ").trim(), 200),
-              tekst,
-              ontvangen_op: tijd,
+              van_email: m.vanEmail || box.adres,
+              aan: m.aan.map((a) => ({ naam: a.naam ?? "", email: a.email })),
+              onderwerp: m.onderwerp,
+              fragment: knip(m.tekst.replace(/\s+/g, " ").trim(), 200),
+              tekst: m.tekst,
+              bijlagen: m.bijlagen ?? [],
+              ontvangen_op: m.ontvangen_op,
               gelezen: true,
               paaltje_status: "overslaan",
               // Leeg: dan zoekt de database de klant op het aan-adres.
-              klant_id: mail.klant_id ?? null,
+              klant_id: m.klant_id ?? null,
             },
             { onConflict: "map_id,uidvalidity,uid", ignoreDuplicates: true },
           );
+        } catch (e) {
+          console.error("kopie in Verzonden:", e instanceof Error ? e.message : e);
         }
-      } finally {
-        try {
-          await client.logout();
-        } catch {
-          client.close();
-        }
+      }
+    } finally {
+      try {
+        await client.logout();
+      } catch {
+        client.close();
       }
     }
   } catch (e) {
     console.error("kopie in Verzonden:", e instanceof Error ? e.message : e);
   }
-  return "";
+}
+
+/**
+ * De actieve mailbox van een bedrijf plus zijn wachtwoord, om een kopie in
+ * Verzonden te kunnen leggen. Leeg als er geen bruikbare mailbox is — dan
+ * gaat de mail gewoon zonder kopie de deur uit.
+ */
+export async function mailboxVoorKopie(
+  db: Db,
+  bedrijf: string,
+): Promise<{ box: KopieBox; wachtwoord: string } | null> {
+  const { data: box, error: boxFout } = await db
+    .from("mailboxen")
+    .select("id,company_id,adres,imap_host,imap_poort,status")
+    .eq("company_id", bedrijf)
+    .eq("status", "actief")
+    // Eén rij: heeft een bedrijf er ooit twee, dan zou maybeSingle() een fout
+    // geven en verdween de kopie stilletjes.
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (boxFout) {
+    console.error("mailbox voor kopie:", boxFout.message);
+    return null;
+  }
+  if (!box) return null;
+  const { data: geheim, error: geheimFout } = await db
+    .from("mailbox_geheimen")
+    .select("versleuteld,iv")
+    .eq("mailbox_id", box.id)
+    .maybeSingle();
+  if (geheimFout) console.error("wachtwoord voor kopie:", geheimFout.message);
+  if (!geheim) return null;
+  try {
+    return { box: box as KopieBox, wachtwoord: await ontsleutel(geheim.versleuteld, geheim.iv) };
+  } catch {
+    return null;
+  }
 }

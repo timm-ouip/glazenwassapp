@@ -1149,6 +1149,7 @@ function DagPagina() {
                   : [...new Set((wasdagQuery.data ?? []).map((r) => r.ploeg_nr ?? null))]
               }
               regels={wasdagQuery.data ?? []}
+              klussen={klussen}
               adressen={adresOpId}
               straten={straatOpId}
               ploegen={dagPloegen}

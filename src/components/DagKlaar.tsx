@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconCircleCheck as CircleCheck, IconFlagCheck as FlagCheck } from "@tabler/icons-react";
@@ -19,6 +19,7 @@ import {
   type Afmeldstatus,
 } from "@/lib/dagklaar";
 import { formatNumber, sortCustomers, type Customer, type Street } from "@/lib/klanten";
+import { vinkKlusAf, type Klus } from "@/lib/klussen";
 import { zetOverslaan } from "@/lib/overslaan-keuze";
 import type { Ploeg } from "@/lib/dagplanning";
 import { ploegNaam } from "@/lib/ploegen";
@@ -43,6 +44,7 @@ export function DagKlaar({
   datum,
   groepen,
   regels,
+  klussen = [],
   adressen,
   straten,
   ploegen,
@@ -52,6 +54,8 @@ export function DagKlaar({
   groepen: (number | null)[];
   /** Alle regels van de dag. */
   regels: WasdagRegel[];
+  /** De extra opdrachten die op deze dag meetellen. */
+  klussen?: Klus[];
   adressen: Map<string, Customer>;
   straten: Map<string, Street>;
   ploegen: Ploeg[];
@@ -90,6 +94,28 @@ export function DagKlaar({
   }
 
   const meer = zichtbaar.length > 1;
+
+  /**
+   * Een extra opdracht hangt aan de dag, niet aan een team. Pas als iedereen
+   * klaar is, is de dag af — en dat is de laatste kans om te vragen of ze
+   * gedaan zijn. Blijft zo'n opdracht ongevinkt, dan telt hij nergens mee en
+   * komt er ook geen factuurregel van.
+   *
+   * Dit kijkt naar álle teams van de dag, niet alleen naar de teams die je
+   * hier ziet: wie alleen zijn eigen team bekijkt, is daarmee nog niet de
+   * laatste die buiten loopt.
+   */
+  const nogOpen = status.data.filter((s) => s.regels > 0 && !isAfgemeld(s));
+  const openKlussen = klussen.filter((k) => !k.gedaan_op);
+  const laatsteTeam = nogOpen.length === 1 && (nogOpen[0]?.ploeg_nr ?? null) === open;
+
+  /** "Reigerlaan 12 — dakrand", voor in het lijstje. */
+  const klusTekst = (k: Klus) => {
+    const c = adressen.get(k.customer_id);
+    const straat = c ? straten.get(c.street_id) : undefined;
+    const waar = c ? `${straat?.name ?? "?"} ${formatNumber(c)}` : "";
+    return [waar, k.omschrijving.trim()].filter(Boolean).join(" — ") || "Extra opdracht";
+  };
 
   return (
     <div className="space-y-2">
@@ -157,6 +183,8 @@ export function DagKlaar({
                 .map((r) => [r.customer_id!, r.volgorde!]),
             )
           }
+          klussen={laatsteTeam ? openKlussen : []}
+          klusTekst={klusTekst}
           onSluit={() => setOpen(undefined)}
           onKlaar={vernieuw}
         />
@@ -172,6 +200,8 @@ function DagKlaarDialog({
   adressen,
   straten,
   volgorde,
+  klussen,
+  klusTekst,
   onSluit,
   onKlaar,
 }: {
@@ -183,14 +213,38 @@ function DagKlaarDialog({
   /** Waar een adres in de rij van de dag staat, om de straten net zo te
    *  ordenen als op de dagpagina. */
   volgorde: Map<string, number>;
+  /** De extra opdrachten die nog afgevinkt moeten worden; leeg als er nog een
+   *  ander team buiten loopt. */
+  klussen: Klus[];
+  klusTekst: (k: Klus) => string;
   onSluit: () => void;
   onKlaar: () => void;
 }) {
   const qc = useQueryClient();
   /** Wat niet gedaan is, en waar het heen gaat. Leeg = alles gedaan. */
   const [nietGedaan, setNietGedaan] = useState<Map<string, Keuze>>(new Map());
+  /** Welke extra opdrachten gedaan zijn; net als de adressen staat alles aan. */
+  const [klusGedaan, setKlusGedaan] = useState<Set<string>>(
+    () => new Set(klussen.map((k) => k.id)),
+  );
+  /** Welke opdrachten we al eens getoond hebben; alleen nieuwe staan vanzelf aan. */
+  const gezien = useRef<Set<string>>(new Set(klussen.map((k) => k.id)));
   const [bezig, setBezig] = useState(false);
   useEffect(() => setNietGedaan(new Map()), [datum, ploeg]);
+  // Op de lijst met id's, niet op de array zelf: die is bij elke render nieuw,
+  // en dan zou een vinkje dat je net uitzette meteen weer terugspringen.
+  // Verandert de lijst wel echt (iemand anders vinkt er een af, of er komt er
+  // een bij), dan alleen het nieuwe erbij: wat jij hebt uitgezet, blijft uit.
+  const klusIds = klussen.map((k) => k.id).join(",");
+  useEffect(() => {
+    const nu = klusIds ? klusIds.split(",") : [];
+    setKlusGedaan((was) => {
+      const uit = new Set(nu.filter((id) => was.has(id)));
+      for (const id of nu) if (!gezien.current.has(id)) uit.add(id);
+      gezien.current = new Set(nu);
+      return uit;
+    });
+  }, [klusIds]);
 
   const perStraat = useMemo(() => {
     const groepen = new Map<string, Customer[]>();
@@ -245,23 +299,54 @@ function DagKlaarDialog({
         if (overslaanTerug) await overslaanTerug().catch(() => undefined);
         throw e;
       }
+      // Pas nu de extra opdrachten: gaat het afmelden mis, dan staan ze nog
+      // gewoon open. Elke klus maakt bij het afvinken zelf zijn factuurregel.
+      //
+      // Wat hier misgaat, mag niet als "Afmelden mislukt" in beeld komen: de
+      // dag ís afgemeld. Zou je dat zien, dan druk je nog een keer op Dag
+      // klaar en staat er een tweede afmelding in de database. Daarom een
+      // eigen vangnet, en alleen een zin erbij in de melding.
+      const gedaneKlussen: Klus[] = [];
+      let klusFout = "";
+      for (const k of klussen.filter((x) => klusGedaan.has(x.id))) {
+        try {
+          await vinkKlusAf(k, true, datum);
+          gedaneKlussen.push(k);
+        } catch (e) {
+          klusFout = (e as Error).message;
+          break;
+        }
+      }
+      if (gedaneKlussen.length > 0) void qc.invalidateQueries({ queryKey: ["klussen"] });
+
       pushUndo({
         label: `Dag klaar ${toonDatum(datum)}`,
         undo: async () => {
           await dagAfmeldenTerugdraaien(uitkomst.id);
+          for (const k of gedaneKlussen) await vinkKlusAf(k, false);
           if (overslaanTerug) await overslaanTerug();
           onKlaar();
           void qc.invalidateQueries({ queryKey: ["customers"] });
+          void qc.invalidateQueries({ queryKey: ["klussen"] });
         },
       });
       onKlaar();
       onSluit();
       const delen = [
         `${uitkomst.gedaan} gedaan`,
+        ...(gedaneKlussen.length > 0
+          ? [
+              `${gedaneKlussen.length} extra ${gedaneKlussen.length === 1 ? "opdracht" : "opdrachten"}`,
+            ]
+          : []),
         ...(aantalTerug > 0 ? [`${aantalTerug} terug naar de planning`] : []),
         ...(aantalOver > 0 ? [`${aantalOver} slaan ${maandNaam(maand).toLowerCase()} over`] : []),
       ];
-      toast.success(`Dag afgemeld: ${delen.join(", ")}`, { duration: 10000, action: undoKnop() });
+      toast.success(
+        `Dag afgemeld: ${delen.join(", ")}` +
+          (klusFout ? `. Niet alle extra opdrachten konden worden afgevinkt: ${klusFout}` : ""),
+        { duration: 10000, action: undoKnop() },
+      );
     } catch (e) {
       toast.error("Afmelden mislukt: " + (e as Error).message);
     } finally {
@@ -337,6 +422,47 @@ function DagKlaarDialog({
               </div>
             </div>
           ))}
+          {klussen.length > 0 && (
+            <div>
+              <p className="mb-1 text-[12px] font-medium text-muted-foreground">
+                Extra opdrachten van deze dag
+              </p>
+              <div className="divide-y divide-border/70 rounded-[14px] border border-border">
+                {klussen.map((k) => {
+                  const aan = klusGedaan.has(k.id);
+                  return (
+                    <label
+                      key={k.id}
+                      className="flex min-h-9 cursor-pointer items-center gap-3 px-3 py-2"
+                    >
+                      <Checkbox
+                        className="size-5"
+                        checked={aan}
+                        onCheckedChange={(v) =>
+                          setKlusGedaan((was) => {
+                            const nu = new Set(was);
+                            if (v === true) nu.add(k.id);
+                            else nu.delete(k.id);
+                            return nu;
+                          })
+                        }
+                      />
+                      <span
+                        className={`min-w-0 flex-1 text-[14px] ${
+                          aan ? "" : "text-muted-foreground line-through"
+                        }`}
+                      >
+                        {klusTekst(k)}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                Wat je uitvinkt blijft openstaan en komt morgen weer bovenaan.
+              </p>
+            </div>
+          )}
         </PopupBody>
         <PopupVoet>
           <span className="mr-auto text-[12.5px] text-muted-foreground">

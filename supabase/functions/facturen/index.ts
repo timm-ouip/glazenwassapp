@@ -6,6 +6,7 @@
  *   1. vastzetten  de factuur trekt zijn nummer en bevriest de klantgegevens
  *   2. PDF + mail  het papier wordt gemaakt en gaat de deur uit
  *   3. verstuurd   pas nu gaat de status om
+ *   4. de kopie    in Verzonden, en daarmee in het dossier van de klant
  *
  * Gaat stap 2 mis, dan blijft de factuur staan mét zijn nummer, maar nog niet
  * verstuurd. Je probeert het gewoon opnieuw en hij houdt hetzelfde nummer.
@@ -16,11 +17,18 @@
  * Mailen gaat via Brevo's transactionele weg: die kan per klant een eigen
  * bijlage meesturen en kent de rem van de eigen mailbox niet. Het antwoord
  * komt wel in de eigen mailbox binnen, want reply-to staat daarop.
+ *
+ * Omdat het buiten de eigen mailbox omgaat, zou de verstuurde factuur nergens
+ * te zien zijn: niet in Verzonden en niet bij de klant. Daarom legt stap 4 de
+ * mail alsnog in Verzonden, met de PDF eraan. De ophaalronde ziet hem daar en
+ * de database hangt hem aan de klant, net als elke andere verzonden mail.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-import { antwoord, CORS, perGroepje, stuurMail, veilig } from "../_gedeeld/mail.ts";
+import { antwoord, CORS, inStukjes, perGroepje, stuurMail, veilig } from "../_gedeeld/mail.ts";
 import { euro, maakFactuurPdf, type FactuurRegel } from "../_gedeeld/factuurpdf.ts";
+import { maakOp } from "../_gedeeld/opmaken.ts";
+import { kopieInVerzonden, mailboxVoorKopie, type KopieMail } from "../_gedeeld/verzenden.ts";
 
 interface Verzoek {
   actie: "versturen";
@@ -87,6 +95,8 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (!bedrijf) return antwoord({ fout: "Geen bedrijf gevonden." }, 403);
 
+  const afzenderNaam =
+    String(bedrijf.mail_afzender_naam ?? "").trim() || String(bedrijf.name ?? "");
   const afzenderEmail = String(bedrijf.mail_afzender_email ?? "").trim();
   if (!afzenderEmail) {
     return antwoord(
@@ -119,12 +129,35 @@ Deno.serve(async (req) => {
 
   const mislukt: { id: string; reden: string }[] = [];
   let gelukt = 0;
+  /**
+   * Wat er de deur uit ging, om in Verzonden en in het dossier te zetten.
+   * Wordt per stapel geleegd: in elke kopie zit de PDF als tekst, en vijfhonderd
+   * daarvan tegelijk in het geheugen houden is vragen om een functie die
+   * omvalt nadat de facturen al verstuurd zijn.
+   */
+  let kopieen: KopieMail[] = [];
+
+  /** De mailbox één keer opzoeken, ook als er meerdere stapels zijn. */
+  const bedrijfId = String(bedrijf.id);
+  let post: Awaited<ReturnType<typeof mailboxVoorKopie>> | undefined;
+  async function kopieenWegschrijven() {
+    if (kopieen.length === 0) return;
+    const lijst = kopieen;
+    kopieen = [];
+    try {
+      if (post === undefined) post = await mailboxVoorKopie(beheerder, bedrijfId);
+      if (post) await kopieInVerzonden(beheerder, post.box, post.wachtwoord, afzenderNaam, lijst);
+    } catch (e) {
+      // De facturen zijn verstuurd en afgemeld; dat blijft leidend.
+      console.error("kopieen in Verzonden:", e instanceof Error ? e.message : e);
+    }
+  }
 
   // Ontdubbelen: staat dezelfde factuur twee keer in de lijst, dan zouden
   // twee aanroepen langs elkaar lopen en de klant twee mails krijgen.
   const ids = [...new Set(verzoek.ids)];
 
-  await perGroepje(ids, 4, async (id: string) => {
+  const perStapel = async (id: string) => {
     try {
       // 1. Vastzetten. Was hij dat al (eerdere poging), dan geeft de functie
       //    gewoon hetzelfde nummer terug.
@@ -227,19 +260,18 @@ Deno.serve(async (req) => {
         ? `<p style="margin:18px 0"><a href="${veilig(String(f.mollie_link))}" style="background:#111;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;display:inline-block">Direct betalen</a></p>`
         : "";
 
+      const onderwerp = `Factuur ${kaart.nummer} · ${bedrijf.name}`;
+      const pdfBase64 = naarBase64(pdf);
       const uitkomst = await stuurMail(
         brevo,
-        {
-          naam: String(bedrijf.mail_afzender_naam ?? "").trim() || String(bedrijf.name ?? ""),
-          email: afzenderEmail,
-        },
+        { naam: afzenderNaam, email: afzenderEmail },
         {
           naar: { email: naar, naam },
-          onderwerp: `Factuur ${kaart.nummer} · ${bedrijf.name}`,
+          onderwerp,
           tekst,
           html: `<p>${veilig(tekst).replace(/\n/g, "<br>")}</p>${knop}`,
           ...(mailbox?.adres ? { antwoordNaar: String(mailbox.adres) } : {}),
-          bijlagen: [{ naam: bestandsnaam, inhoud: naarBase64(pdf) }],
+          bijlagen: [{ naam: bestandsnaam, inhoud: pdfBase64 }],
         },
       );
       if (!uitkomst.ok) throw new Error(uitkomst.fout);
@@ -252,10 +284,47 @@ Deno.serve(async (req) => {
       });
       if (klaarFout) throw new Error(klaarFout.message);
       gelukt += 1;
+
+      // 4. De kopie voor Verzonden en het klantdossier. Apart afgeschermd:
+      //    de factuur is hier al verstuurd en afgemeld, dus wat hier misgaat
+      //    mag hem niet alsnog op "mislukt" zetten.
+      //
+      //    De mail wordt hiervoor nog een keer opgemaakt, want Brevo geeft
+      //    niet terug wat het over de lijn stuurde. De kopie krijgt daardoor
+      //    een eigen Message-ID; voor Verzonden is dat geen bezwaar.
+      try {
+        kopieen.push({
+          opgemaakt: await maakOp({
+            van: { naam: afzenderNaam, adres: afzenderEmail },
+            aan: [{ naam, email: naar }],
+            onderwerp,
+            tekst,
+            html: `<p>${veilig(tekst).replace(/\n/g, "<br>")}</p>${knop}`,
+            bijlagen: [{ naam: bestandsnaam, type: "application/pdf", inhoud: pdfBase64 }],
+          }),
+          aan: [{ naam, email: naar }],
+          onderwerp,
+          tekst,
+          ontvangen_op: new Date().toISOString(),
+          vanEmail: afzenderEmail,
+          klant_id: f.klant_id ?? null,
+          bijlagen: [{ naam: bestandsnaam, type: "application/pdf", grootte: pdf.length }],
+        });
+      } catch (e) {
+        console.error(`Kopie van ${kaart.nummer} niet opgemaakt:`, e);
+      }
     } catch (e) {
       mislukt.push({ id, reden: e instanceof Error ? e.message : "onbekende fout" });
     }
-  });
+  };
+
+  // Per stapel van vijftig: versturen, en daarna de kopieën in één IMAP-sessie
+  // wegschrijven. Zo staat er nooit meer dan vijftig PDF's in het geheugen, en
+  // hoeven we niet per factuur opnieuw in te loggen op de mailbox.
+  for (const stapel of inStukjes(ids, 50)) {
+    await perGroepje(stapel, 4, perStapel);
+    await kopieenWegschrijven();
+  }
 
   return antwoord({ gelukt, mislukt });
 });
