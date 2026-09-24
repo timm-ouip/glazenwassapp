@@ -1391,6 +1391,7 @@ export type Database = {
           notitie: string;
           omschrijving: string;
           soort: string;
+          vervangen_op: string | null;
           wasdag_regel_id: string | null;
         };
         Insert: {
@@ -1412,6 +1413,7 @@ export type Database = {
           notitie?: string;
           omschrijving?: string;
           soort: string;
+          vervangen_op?: string | null;
           wasdag_regel_id?: string | null;
         };
         Update: {
@@ -1433,6 +1435,7 @@ export type Database = {
           notitie?: string;
           omschrijving?: string;
           soort?: string;
+          vervangen_op?: string | null;
           wasdag_regel_id?: string | null;
         };
         Relationships: [
@@ -3791,6 +3794,10 @@ export type Database = {
       };
       factuur_nummer_trekken: {
         Args: { bedrijf: string; voor_jaar: number };
+        Returns: number;
+      };
+      factuur_opnieuw: {
+        Args: { factuur: string; keuzes: Json };
         Returns: number;
       };
       factuur_termijn: {

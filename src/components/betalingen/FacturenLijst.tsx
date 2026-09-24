@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconArrowLeft as ArrowLeft, IconSend as Send } from "@tabler/icons-react";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import {
   factuurBetaald,
   factuurCrediteren,
   factuurMetRust,
+  factuurOpnieuw,
   factuurStand,
   factuurWeggooien,
   fetchFacturen,
@@ -264,8 +265,13 @@ function FactuurRegel({
   bevestig: ReturnType<typeof useBevestig>;
 }) {
   const concept = f.status === "concept";
+  const gecrediteerd = f.status === "gecrediteerd";
   // Een bedrijf of VvE rekent zonder btw; een particulier in wat hij betaalt.
   const exclVoorop = exclusiefVoorop(f);
+  const [opnieuwGekozen, setOpnieuwGekozen] = useState<string[]>([]);
+  // Per pand het bedrag dat op de aangepaste factuur moet, als tekst zodat je
+  // het veld ook even leeg kunt maken tijdens het typen.
+  const [opnieuwBedrag, setOpnieuwBedrag] = useState<Record<string, string>>({});
   const regels = useQuery({
     queryKey: ["factuurregels", f.id],
     queryFn: () => fetchFactuurregels(f.id),
@@ -273,6 +279,38 @@ function FactuurRegel({
   });
   const stand = factuurStand(f);
   const nogOpen = openBedrag(f);
+
+  // Standaard staat alles aan: meestal moet bijna al het werk opnieuw op de
+  // factuur en vink je alleen het pand uit dat niet gedaan is.
+  useEffect(() => {
+    if (!gecrediteerd || !regels.data) return;
+    setOpnieuwGekozen(regels.data.map((r) => r.id));
+    setOpnieuwBedrag(Object.fromEntries(regels.data.map((r) => [r.id, String(r.bedrag)])));
+  }, [gecrediteerd, regels.data]);
+
+  /**
+   * Het aangevinkte werk van deze gecrediteerde factuur opnieuw aanmelden. Het
+   * komt dan als los werk terug, waar je met "Concepten klaarzetten" een
+   * aangepaste factuur van maakt.
+   */
+  async function opnieuwFactureren() {
+    try {
+      const n = await factuurOpnieuw(
+        f.id,
+        opnieuwGekozen.map((id) => ({ id, bedrag: Number(opnieuwBedrag[id]) || 0 })),
+      );
+      onVeranderd();
+      if (n === 0) {
+        toast.info("Dit werk stond al klaar om opnieuw gefactureerd te worden.");
+      } else {
+        toast.success(n === 1 ? "1 pand staat weer klaar." : `${n} panden staan weer klaar.`, {
+          description: "Druk op “Concepten klaarzetten” voor de aangepaste factuur.",
+        });
+      }
+    } catch (e) {
+      toast.error("Niet gelukt: " + (e as Error).message);
+    }
+  }
 
   async function afvinken() {
     try {
@@ -380,6 +418,19 @@ function FactuurRegel({
             <div className="space-y-1">
               {(regels.data ?? []).map((r) => (
                 <div key={r.id} className="flex gap-3 text-[12.5px]">
+                  {/* Bij een gecrediteerde factuur vink je hier aan welke
+                      panden er op de aangepaste factuur moeten. */}
+                  {gecrediteerd && (
+                    <Checkbox
+                      checked={opnieuwGekozen.includes(r.id)}
+                      onCheckedChange={(v) =>
+                        setOpnieuwGekozen((l) =>
+                          v === true ? [...l, r.id] : l.filter((x) => x !== r.id),
+                        )
+                      }
+                      aria-label={`${r.omschrijving} op de aangepaste factuur`}
+                    />
+                  )}
                   <span className="w-20 shrink-0 text-muted-foreground tabular-nums">
                     {toonDatum(r.datum)}
                   </span>
@@ -387,9 +438,25 @@ function FactuurRegel({
                     {r.omschrijving}
                     {r.notitie && <span className="text-muted-foreground"> · {r.notitie}</span>}
                   </span>
-                  <span className="shrink-0 tabular-nums">
-                    {formatPrice(exclVoorop ? r.bedrag_excl : r.bedrag_incl)}
-                  </span>
+                  {/* Bij een gecrediteerde factuur is het bedrag aanpasbaar:
+                      soms is niet een heel pand overgeslagen maar de helft. */}
+                  {gecrediteerd ? (
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      inputMode="decimal"
+                      value={opnieuwBedrag[r.id] ?? ""}
+                      disabled={!opnieuwGekozen.includes(r.id)}
+                      onChange={(e) => setOpnieuwBedrag((b) => ({ ...b, [r.id]: e.target.value }))}
+                      aria-label={`Bedrag voor ${r.omschrijving}`}
+                      className="w-20 shrink-0 rounded-lg border border-input bg-background/70 px-2 py-0.5 text-right tabular-nums disabled:opacity-40"
+                    />
+                  ) : (
+                    <span className="shrink-0 tabular-nums">
+                      {formatPrice(exclVoorop ? r.bedrag_excl : r.bedrag_incl)}
+                    </span>
+                  )}
                 </div>
               ))}
               <div className="flex gap-3 border-t border-border/70 pt-1 text-[12.5px] text-muted-foreground">
@@ -402,7 +469,29 @@ function FactuurRegel({
             </div>
           )}
 
+          {/* Na het crediteren: welke panden gaan er op de aangepaste factuur?
+              Meestal alles op één na -- het pand dat niet gedaan is of vergeten
+              werd. Daarom staat alles standaard aan. */}
+          {gecrediteerd && (
+            <p className="rounded-[14px] bg-tint-amber px-3 py-2 text-[12.5px] text-tint-amber-ink">
+              Deze factuur is teruggeboekt. Vink hierboven aan wat er wél gedaan is en zet dat op
+              een aangepaste factuur.
+            </p>
+          )}
+
           <div className="flex flex-wrap gap-2">
+            {gecrediteerd && (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={opnieuwGekozen.length === 0}
+                onClick={() => void opnieuwFactureren()}
+              >
+                {opnieuwGekozen.length === 1
+                  ? "1 pand opnieuw factureren"
+                  : `${opnieuwGekozen.length} panden opnieuw factureren`}
+              </Button>
+            )}
             {concept && !f.nummer && (
               <Button size="sm" variant="ghost" onClick={() => void weggooien()}>
                 Weggooien

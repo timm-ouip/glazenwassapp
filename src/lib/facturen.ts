@@ -129,6 +129,9 @@ export interface Factuurregel {
   datum: string;
   omschrijving: string;
   notitie: string;
+  /** De prijs zoals ingevoerd: bij een particulier inclusief btw, bij een
+   *  bedrijf exclusief. Wat je aanpast als er maar een deel gedaan is. */
+  bedrag: number;
   bedrag_excl: number;
   btw_bedrag: number;
   bedrag_incl: number;
@@ -140,7 +143,7 @@ export async function fetchFactuurregels(factuurId: string): Promise<Factuurrege
   const { data, error } = await supabase
     .from("factuurregels")
     .select(
-      "id,soort,datum,omschrijving,notitie,bedrag_excl,btw_bedrag,bedrag_incl,btw_procent,factuur_id",
+      "id,soort,datum,omschrijving,notitie,bedrag,bedrag_excl,btw_bedrag,bedrag_incl,btw_procent,factuur_id",
     )
     .eq("factuur_id", factuurId)
     .is("deleted_at", null)
@@ -149,6 +152,7 @@ export async function fetchFactuurregels(factuurId: string): Promise<Factuurrege
   return (data ?? []).map((r) => ({
     ...r,
     soort: r.soort as "wasbeurt" | "klus",
+    bedrag: Number(r.bedrag ?? 0),
     bedrag_excl: Number(r.bedrag_excl ?? 0),
     btw_bedrag: Number(r.btw_bedrag ?? 0),
     bedrag_incl: Number(r.bedrag_incl ?? 0),
@@ -212,6 +216,20 @@ export async function factuurCrediteren(id: string, reden = ""): Promise<string>
   const { data, error } = await supabase.rpc("factuur_crediteren", { factuur: id, reden });
   if (error) throw error;
   return data as unknown as string;
+}
+
+/**
+ * Van een gecrediteerde factuur het aangevinkte werk opnieuw aanmelden, zodat
+ * het op een aangepaste factuur komt. Geeft terug hoeveel regels erbij kwamen;
+ * werk dat al opnieuw is aangemeld wordt overgeslagen.
+ */
+export async function factuurOpnieuw(
+  id: string,
+  keuzes: { id: string; bedrag: number }[],
+): Promise<number> {
+  const { data, error } = await supabase.rpc("factuur_opnieuw", { factuur: id, keuzes });
+  if (error) throw error;
+  return Number(data ?? 0);
 }
 
 /**

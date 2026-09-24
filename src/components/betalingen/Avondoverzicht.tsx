@@ -470,7 +470,7 @@ export function Avondoverzicht({
               {facturen.data
                 ? concepten === 0
                   ? `${formatPrice(nietBinnen)} nog niet binnen`
-                  : `concept(en) klaar · ${formatPrice(nietBinnen)} nog niet binnen`
+                  : `${concepten === 1 ? "concept" : "concepten"} klaar · ${formatPrice(nietBinnen)} nog niet binnen`
                 : "\u00a0"}
             </TegelOnder>
           </button>

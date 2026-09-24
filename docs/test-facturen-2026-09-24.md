@@ -265,3 +265,66 @@ Het crediteren, heropenen en afmelden zijn wél door de app zelf gedaan.
 Alles is daarna opgeruimd: geen facturen, geen regels, geen tellers, niets in
 de opslagbak, en `factuur_start_op` leeg. `bunx tsc --noEmit`, `bunx eslint` op
 de gewijzigde bestanden en `bun run build` zijn schoon.
+
+---
+
+# Na crediteren: het lijstje panden
+
+Idee van Timmie, en beter dan wat er eerst lag. Je crediteert omdat de factuur
+te hoog was: een deel van het werk is niet gedaan, of een huis is vergeten.
+Daarna hoort er een aangepaste factuur uit te gaan.
+
+Bij een gecrediteerde factuur staat nu een lijstje van de panden die erop
+stonden. Alles staat standaard aangevinkt — meestal is er maar één pand mis —
+en je vinkt uit wat er níet op moet. Per pand kun je het bedrag aanpassen,
+want soms is maar de helft van een pand gedaan. Eén knop zet het aangevinkte
+werk terug op de lijst, waar je er met "Concepten klaarzetten" een aangepaste
+factuur van maakt.
+
+## Waarom `vervangen_op` erbij kwam
+
+Mijn eerste oplossing maakte bij het crediteren de verwijzing naar de beurt
+leeg (`wasdag_regel_id`, `klus_id`). Dat werkte om het vastlopen op te heffen,
+maar het gooide ook weg *welke* beurt het was — en dat is precies wat dit
+lijstje nodig heeft.
+
+Nu krijgt de regel een stempel `vervangen_op`. De verwijzing blijft staan, de
+twee ontdubbelindexen kijken langs vervangen regels, en `factuurregels_maken`
+en de klus-trigger doen dat ook. Zo kan er wél een nieuwe regel voor dezelfde
+beurt komen, maar nooit twee levende — dubbele facturatie blijft onmogelijk.
+
+## Wat er van getest is in de app
+
+- Een gecrediteerde maandfactuur met twee panden (Fultonstraat 75 en 77): 77
+  uitgevinkt, en alleen 75 kwam terug als los werk. De gecrediteerde factuur
+  hield zijn twee regels en zijn bedrag.
+- Daarna "Concepten klaarzetten": de aangepaste factuur stond klaar naast de
+  creditnota.
+- Bedrag aangepast van € 15 naar € 7,50: de nieuwe regel werd € 7,50 excl met
+  € 1,58 btw (€ 9,08), terwijl de gecrediteerde factuur op € 15 / € 18,15
+  bleef staan. De btw wordt met het tarief van de oorspronkelijke regel
+  gerekend, niet met dat van vandaag.
+- Op databaseniveau: de vervangen regel houdt zijn `wasdag_regel_id`, een
+  nieuwe regel voor dezelfde beurt mag erbij, en twee levende regels voor
+  dezelfde beurt wordt nog steeds geweigerd.
+
+# Wat er níet getest is, en waarom
+
+**Het versturen is na de laatste wijziging niet meer echt gelopen.** Factuur
+2026-0001 is vanmorgen wél echt verstuurd, met PDF, dus de keten is bewezen.
+Maar daarna is `factuur_verstuurd` aangepast (een creditnota staat bij het
+versturen meteen verwerkt), en die wijziging is alleen op de kolommen
+nagemeten, niet door een echte verzending.
+
+De reden: **de app logt je uit zodra je op "Versturen" drukt.** Reproduceerbaar,
+ook binnen een minuut na opnieuw inloggen. Dat is geen factuurprobleem — de
+factuur krijgt geen nummer, en het nummer trekken is de eerste stap ín de
+verstuurfunctie, dus die komt niet eens op gang. Het struikelt op de
+authenticatie ervóór. Daar loopt een aparte opdracht voor.
+
+Zodra dat verholpen is: één concept versturen, dan crediteren, dan de
+creditnota versturen, en controleren dat die twee samen verwerkt op de lijst
+staan (de creditnota hoort meteen op "betaald" te komen en nooit in "Te laat").
+
+Ook nog niet aangeklikt, wel getypecheckt: de vraag "nog een keer versturen?"
+bij een factuur die al vastgezet was.
