@@ -647,6 +647,8 @@ export type Database = {
           btw_procent: number;
           created_at: string;
           email: string;
+          factuur_eerste_nummer: number | null;
+          factuur_eerste_nummer_jaar: number | null;
           factuur_start_op: string | null;
           factuur_termijn_dagen: number;
           geldloop_eindtijd: string;
@@ -683,6 +685,8 @@ export type Database = {
           btw_procent?: number;
           created_at?: string;
           email?: string;
+          factuur_eerste_nummer?: number | null;
+          factuur_eerste_nummer_jaar?: number | null;
           factuur_start_op?: string | null;
           factuur_termijn_dagen?: number;
           geldloop_eindtijd?: string;
@@ -719,6 +723,8 @@ export type Database = {
           btw_procent?: number;
           created_at?: string;
           email?: string;
+          factuur_eerste_nummer?: number | null;
+          factuur_eerste_nummer_jaar?: number | null;
           factuur_start_op?: string | null;
           factuur_termijn_dagen?: number;
           geldloop_eindtijd?: string;

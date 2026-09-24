@@ -68,6 +68,16 @@ export interface Factuur {
   totalen: FactuurTotalen;
 }
 
+/**
+ * Staan de bedragen van deze factuur exclusief btw vooraan? Een particulier
+ * ziet het bedrag dat hij overmaakt; een bedrijf of VvE rekent in bedragen
+ * zonder btw, met de btw eronder. Dezelfde regel als op de PDF, zodat het
+ * scherm en het papier hetzelfde getal groot maken.
+ */
+export function exclusiefVoorop(f: Pick<Factuur, "klanttype">): boolean {
+  return !btwInclusief(f.klanttype, null);
+}
+
 /** Wat er nog open staat op deze factuur. Nooit onder nul. */
 export function openBedrag(f: Factuur): number {
   return Math.max(0, Math.round((f.totalen.incl - f.betaald_bedrag) * 100) / 100);

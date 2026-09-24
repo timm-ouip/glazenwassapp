@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useBevestig } from "@/components/Bevestig";
 import { formatPrice } from "@/lib/klanten";
-import { toonDatum } from "@/lib/wasdag";
+import { datumSleutel, toonDatum } from "@/lib/wasdag";
 import {
   facturenKlaarzetten,
   facturenVersturen,
+  exclusiefVoorop,
   factuurBetaald,
   factuurCrediteren,
+  factuurMetRust,
   factuurStand,
   factuurWeggooien,
   fetchFacturen,
@@ -73,7 +75,13 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
     mutationFn: () => facturenKlaarzetten(false),
     onSuccess: (n) => {
       ververs();
-      toast.success(n === 0 ? "Er stond niets klaar te zetten." : `${n} concept(en) klaargezet.`);
+      toast.success(
+        n === 0
+          ? "Er stond niets klaar te zetten."
+          : n === 1
+            ? "1 concept klaargezet."
+            : `${n} concepten klaargezet.`,
+      );
     },
     onError: (e: Error) => toast.error("Klaarzetten mislukt: " + e.message),
   });
@@ -84,7 +92,7 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
       setGekozen([]);
       ververs();
       if (r.mislukt.length === 0) {
-        toast.success(`${r.gelukt} factuur(en) verstuurd.`);
+        toast.success(r.gelukt === 1 ? "1 factuur verstuurd." : `${r.gelukt} facturen verstuurd.`);
       } else {
         toast.error(
           `${r.gelukt} verstuurd, ${r.mislukt.length} niet: ${r.mislukt[0]?.reden ?? ""}`,
@@ -97,6 +105,29 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
   const teVersturen = gekozen.filter((id) =>
     alles.some((f) => f.id === id && f.status === "concept"),
   );
+
+  /**
+   * Een concept dat al een nummer heeft, is eerder vastgezet en toen blijven
+   * steken. Meestal ging het mailen mis -- maar het kán ook zijn dat alleen
+   * het laatste stapje ("zet de stand op verstuurd") niet lukte, en dan is de
+   * mail wél weg. Dat kan de app niet zien, dus vragen we het.
+   */
+  const opnieuw = alles.filter((f) => teVersturen.includes(f.id) && f.nummer);
+
+  async function versturenNaVraag() {
+    if (opnieuw.length > 0) {
+      const ja = await bevestig({
+        titel: "Nog een keer versturen?",
+        tekst:
+          `${opnieuw.length === 1 ? `Factuur ${opnieuw[0]?.nummer}` : `${opnieuw.length} facturen`}` +
+          " is eerder al vastgezet. Waarschijnlijk ging het mailen toen mis, maar als de mail toch" +
+          " is aangekomen krijgt de klant hem nu twee keer. Het nummer blijft hetzelfde.",
+        bevestigLabel: "Versturen",
+      });
+      if (!ja) return;
+    }
+    versturen.mutate(teVersturen);
+  }
 
   return (
     <div className="space-y-3 pb-24">
@@ -139,8 +170,10 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
       {(los.data ?? 0) > 0 && (
         <section className="flex flex-wrap items-center gap-3 rounded-[20px] bg-tint-amber px-4 py-3 text-[13px] text-tint-amber-ink">
           <span className="min-w-0 flex-1">
-            {los.data} te factureren regel{los.data === 1 ? "" : "s"} staan nog los. Klanten met
-            &ldquo;verzamelen per maand&rdquo; wachten tot de maand voorbij is.
+            {los.data === 1
+              ? "1 te factureren regel staat nog los."
+              : `${los.data} te factureren regels staan nog los.`}{" "}
+            Klanten met &ldquo;verzamelen per maand&rdquo; wachten tot de maand voorbij is.
           </span>
           <Button
             size="sm"
@@ -159,9 +192,13 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
       <section className="overflow-hidden rounded-[24px] border border-border bg-card shadow-card">
         {lijst.length === 0 && !facturen.isLoading ? (
           <p className="p-4 text-[13px] text-muted-foreground">
-            {filter === "concept"
-              ? "Geen concepten. Zodra een dag helemaal is afgemeld, komen ze hier vanzelf te staan."
-              : "Niets te zien onder deze keuze."}
+            {filter !== "concept"
+              ? "Niets te zien onder deze keuze."
+              : (los.data ?? 0) > 0
+                ? "Geen concepten. Er staan wel regels klaar: druk hierboven op “Concepten klaarzetten”."
+                : alles.length > 0
+                  ? "Geen concepten. Wat de deur uit is staat onder “Verstuurd”."
+                  : "Nog geen facturen. Meld een dag helemaal af, dan staan de regels hierboven klaar om er concepten van te maken."}
           </p>
         ) : (
           <div className="divide-y divide-border/70">
@@ -197,7 +234,7 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
             <Button
               className="rounded-full"
               disabled={versturen.isPending}
-              onClick={() => versturen.mutate(teVersturen)}
+              onClick={() => void versturenNaVraag()}
             >
               <Send className="size-4" />
               {versturen.isPending ? "Bezig…" : "Versturen"}
@@ -227,6 +264,8 @@ function FactuurRegel({
   bevestig: ReturnType<typeof useBevestig>;
 }) {
   const concept = f.status === "concept";
+  // Een bedrijf of VvE rekent zonder btw; een particulier in wat hij betaalt.
+  const exclVoorop = exclusiefVoorop(f);
   const regels = useQuery({
     queryKey: ["factuurregels", f.id],
     queryFn: () => fetchFactuurregels(f.id),
@@ -249,16 +288,39 @@ function FactuurRegel({
     const ja = await bevestig({
       titel: `Factuur ${f.nummer} crediteren?`,
       tekst:
-        "Er komt een creditfactuur met een eigen nummer die deze tegenboekt. Deze factuur zelf verandert niet — je klant heeft hem al.",
+        "Er komt een creditfactuur met een eigen nummer die deze tegenboekt. Deze factuur zelf verandert niet — je klant heeft hem al. Daarna stuur je een aangepaste factuur met het juiste werk erop.",
       bevestigLabel: "Crediteren",
     });
     if (!ja) return;
     try {
       await factuurCrediteren(f.id);
       onVeranderd();
-      toast.success("Creditfactuur gemaakt. Hij staat als concept klaar.");
+      // Twee stappen te gaan, en de tweede wordt het makkelijkst vergeten.
+      toast.success("Creditfactuur staat als concept klaar.", {
+        description: "Verstuur hem, en stuur daarna de aangepaste factuur met het juiste werk.",
+        duration: 8000,
+      });
     } catch (e) {
       toast.error("Crediteren mislukt: " + (e as Error).message);
+    }
+  }
+
+  /**
+   * Deze factuur even laten liggen: hij verdwijnt uit "Te laat" tot die
+   * datum. Bedoeld voor het VvE-bestuur dat het in de volgende vergadering
+   * behandelt. Twee weken is de standaard; nog een keer drukken haalt het
+   * weer weg, zoals alles wat de app zelf zet.
+   */
+  async function metRust() {
+    const aan = f.met_rust_tot !== null;
+    const tot = new Date();
+    tot.setDate(tot.getDate() + 14);
+    try {
+      await factuurMetRust(f.id, aan ? null : datumSleutel(tot));
+      onVeranderd();
+      toast.success(aan ? "Weer opgepakt." : "Twee weken met rust gelaten.");
+    } catch (e) {
+      toast.error("Niet gelukt: " + (e as Error).message);
     }
   }
 
@@ -281,7 +343,10 @@ function FactuurRegel({
   return (
     <div className={f.te_laat ? "bg-tint-rood/40" : ""}>
       <div className="flex items-center gap-3 px-4 py-2.5">
-        {concept && !f.nummer && (
+        {/* Ook een concept dat al een nummer heeft: dan is het vastzetten
+            gelukt maar het mailen niet, en moet je het opnieuw kunnen
+            proberen. Hij houdt hetzelfde nummer. */}
+        {concept && (
           <Checkbox
             checked={gekozen}
             onCheckedChange={(v) => onKies(v === true)}
@@ -297,12 +362,13 @@ function FactuurRegel({
             {stand}
             {f.factuurdatum && ` · ${toonDatum(f.factuurdatum)}`}
             {f.vervaldatum && f.status === "verstuurd" && ` · vervalt ${toonDatum(f.vervaldatum)}`}
-            {f.totalen.regels > 0 && ` · ${f.totalen.regels} regel(s)`}
+            {f.totalen.regels > 0 &&
+              ` · ${f.totalen.regels} ${f.totalen.regels === 1 ? "regel" : "regels"}`}
             {!f.mail && <span className="text-tint-rood-ink"> · geen e-mailadres</span>}
           </span>
         </button>
         <span className="w-24 shrink-0 text-right font-display text-[16px] font-semibold tabular-nums">
-          {formatPrice(f.totalen.incl)}
+          {formatPrice(exclVoorop ? f.totalen.excl : f.totalen.incl)}
         </span>
       </div>
 
@@ -321,12 +387,16 @@ function FactuurRegel({
                     {r.omschrijving}
                     {r.notitie && <span className="text-muted-foreground"> · {r.notitie}</span>}
                   </span>
-                  <span className="shrink-0 tabular-nums">{formatPrice(r.bedrag_incl)}</span>
+                  <span className="shrink-0 tabular-nums">
+                    {formatPrice(exclVoorop ? r.bedrag_excl : r.bedrag_incl)}
+                  </span>
                 </div>
               ))}
               <div className="flex gap-3 border-t border-border/70 pt-1 text-[12.5px] text-muted-foreground">
                 <span className="min-w-0 flex-1 text-right">
-                  Excl. btw {formatPrice(f.totalen.excl)} · waarvan btw {formatPrice(f.totalen.btw)}
+                  {exclVoorop
+                    ? `Btw ${formatPrice(f.totalen.btw)} · te betalen ${formatPrice(f.totalen.incl)}`
+                    : `Excl. btw ${formatPrice(f.totalen.excl)} · waarvan btw ${formatPrice(f.totalen.btw)}`}
                 </span>
               </div>
             </div>
@@ -343,10 +413,20 @@ function FactuurRegel({
                 <Button size="sm" variant="secondary" onClick={() => void afvinken()}>
                   Betaald ({formatPrice(nogOpen)})
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => void crediteren()}>
-                  Crediteren
+                <Button size="sm" variant="ghost" onClick={() => void metRust()}>
+                  {f.met_rust_tot ? "Weer oppakken" : "Even met rust"}
                 </Button>
               </>
+            )}
+            {/* Ook bij een betaalde factuur. Terugbetalen ná ontvangst is
+                juist het gewone geval, en het is de enige manier om een
+                verstuurde factuur recht te zetten. Maar niet bij een factuur
+                die alleen vastgezet is en nooit verstuurd: die heeft de klant
+                nooit gezien, dus daar is niets tegen te boeken. */}
+            {f.soort !== "credit" && (f.status === "verstuurd" || f.status === "betaald") && (
+              <Button size="sm" variant="ghost" onClick={() => void crediteren()}>
+                Crediteren
+              </Button>
             )}
             {f.betaald_bedrag > 0 && f.status !== "betaald" && (
               <span className="self-center text-[12.5px] text-muted-foreground">

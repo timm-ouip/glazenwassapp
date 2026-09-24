@@ -374,6 +374,8 @@ type Bedrijf = {
   factuur_termijn_dagen: string;
   /** Leeg = facturen staan uit: er ontstaan geen te factureren regels. */
   factuur_start_op: string;
+  /** Voor wie overstapt van een ander systeem en wil doortellen. */
+  factuur_eerste_nummer: string;
 };
 
 const LEEG_BEDRIJF: Bedrijf = {
@@ -389,6 +391,7 @@ const LEEG_BEDRIJF: Bedrijf = {
   btw_procent: "21",
   factuur_termijn_dagen: "14",
   factuur_start_op: "",
+  factuur_eerste_nummer: "",
 };
 
 function BedrijfTab({ isEigenaar }: { isEigenaar: boolean }) {
@@ -403,7 +406,7 @@ function BedrijfTab({ isEigenaar }: { isEigenaar: boolean }) {
     void supabase
       .from("companies")
       .select(
-        "name,adres,postcode,plaats,telefoon,email,kvk,btw,iban,btw_procent,factuur_termijn_dagen,factuur_start_op",
+        "name,adres,postcode,plaats,telefoon,email,kvk,btw,iban,btw_procent,factuur_termijn_dagen,factuur_start_op,factuur_eerste_nummer",
       )
       .eq("id", employee.company_id)
       .maybeSingle()
@@ -417,6 +420,10 @@ function BedrijfTab({ isEigenaar }: { isEigenaar: boolean }) {
             btw_procent: String(data.btw_procent ?? 21),
             factuur_termijn_dagen: String(data.factuur_termijn_dagen ?? 14),
             factuur_start_op: data.factuur_start_op ?? "",
+            factuur_eerste_nummer:
+              data.factuur_eerste_nummer && data.factuur_eerste_nummer > 1
+                ? String(data.factuur_eerste_nummer)
+                : "",
           });
         }
         setLaden(false);
@@ -436,6 +443,14 @@ function BedrijfTab({ isEigenaar }: { isEigenaar: boolean }) {
       toast.error("Een bedrijfsnaam is verplicht.");
       return;
     }
+    // Het startnummer geldt voor één jaar: dat van de startdatum als die er
+    // staat, anders dit jaar. Zo begint januari vanzelf weer bij 1 en hoeft
+    // niemand eraan te denken.
+    const eerste = Number(velden.factuur_eerste_nummer) || 0;
+    const eersteJaar = velden.factuur_start_op
+      ? Number(velden.factuur_start_op.slice(0, 4))
+      : new Date().getFullYear();
+
     setBezig(true);
     const { error } = await supabase
       .from("companies")
@@ -446,6 +461,8 @@ function BedrijfTab({ isEigenaar }: { isEigenaar: boolean }) {
         factuur_termijn_dagen: Number(velden.factuur_termijn_dagen) || 14,
         // Leeg betekent hier echt leeg: dan maakt de app geen facturen.
         factuur_start_op: velden.factuur_start_op || null,
+        factuur_eerste_nummer: eerste > 1 ? eerste : null,
+        factuur_eerste_nummer_jaar: eerste > 1 ? eersteJaar : null,
       })
       .eq("id", employee.company_id);
     setBezig(false);
@@ -546,6 +563,14 @@ function BedrijfTab({ isEigenaar }: { isEigenaar: boolean }) {
         uitleg="Voor de klanten die overmaken. Zolang er geen startdatum staat, maakt de app geen facturen."
       >
         <div className="grid gap-3">
+          {/* Een factuur om over te maken zonder rekeningnummer kan de klant
+              niet betalen. Dat mag je niet pas op het papier ontdekken. */}
+          {velden.factuur_start_op && !velden.iban.trim() && (
+            <p className="rounded-[16px] bg-tint-amber px-3.5 py-2.5 text-[13px] text-tint-amber-ink">
+              Er staat nog geen IBAN bij de contactgegevens. Zonder rekeningnummer gaat de factuur
+              er wel uit, maar kan de klant niet zien waar hij naartoe moet betalen.
+            </p>
+          )}
           <Veld
             id="factuurstart"
             label="Factureren vanaf"
@@ -566,6 +591,17 @@ function BedrijfTab({ isEigenaar }: { isEigenaar: boolean }) {
             onChange={zet("btw_procent")}
             lezen={!isEigenaar}
             hint="In procenten. Bij één klant kun je hier los van afwijken."
+          />
+          <Veld
+            id="factuureerstenummer"
+            label="Eerste factuurnummer"
+            type="number"
+            min={1}
+            max={99999}
+            waarde={velden.factuur_eerste_nummer}
+            onChange={zet("factuur_eerste_nummer")}
+            lezen={!isEigenaar}
+            hint="Alleen nodig als je overstapt van een ander systeem en wilt doortellen. Stond daar 2026-0249 als laatste, vul dan 250 in. Leeg laten = bij 1 beginnen. Het geldt voor het jaar van de startdatum; het jaar daarna begint de app vanzelf weer bij 1."
           />
           <Veld
             id="factuurtermijn"
