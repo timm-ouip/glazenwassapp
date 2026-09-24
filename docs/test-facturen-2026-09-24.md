@@ -367,3 +367,103 @@ Dat is precies waarom dit soort werk aangeklikt moet worden en niet alleen
 doorgezet: `supabase db push` zei drie keer "Finished" over een functie die bij
 de eerste aanroep klapte. Nu via `jsonb_array_elements`, en daarna werkt het:
 € 9,25 werd € 9,25 excl met € 1,94 btw (€ 11,19).
+
+---
+
+# De vier laatste losse eindjes van fase 1
+
+Later op 24-09. De lijst uit `overdracht-facturen-2026-09-23.md` had zeven
+punten; hiervan zijn de eerste vier gedaan.
+
+## 1. Contant en overmaken op de startpagina
+
+De pillen staan in de kop van `home.tsx` en sturen "Omzet per maand". De keuze
+zit in `localStorage` van het toestel, dus wie hem hier omzet, ziet het
+dashboard net zo staan. "Planning vandaag" blijft ongefilterd: dat vak gaat
+naar `/dag`, en daar is geen filter — elk vak laat zien wat er achter zit.
+
+De som erachter (welk adres ligt in welke wijk, en hoe betaalt het) stond in
+`dashboard.tsx` en zit nu in `geldfilter.ts` als `adresgeldMap` en
+`contantVan`. Home haalt de adressen met inactief erbij, net als het
+dashboard, maar pas zodra je echt splitst — bij "Allebei" komt er niets extra
+over de lijn.
+
+## 2. "Btw hierover" onder het omzetgetal
+
+Niet *waarvan* btw. Bij een particulier zit de btw in de prijs, bij een
+bedrijf of VvE komt hij er juist bovenop; "waarvan" zou dan een bedrag noemen
+dat niet in het getal erboven zit. Het klanttype bepaalt welke van de twee het
+is, met hetzelfde rekenwerk als `factuur_excl` in de database.
+
+Zonder centen, anders past de regel van een heel jaar niet meer op een
+telefoon (nagemeten op 375 px). Het gemiddelde per maand stond op die plek en
+is verhuisd naar de grafiek "Omzet per maand".
+
+Wat er níet in meegerekend wordt: een klant kan in de database een eigen
+`btw_inclusief` of `btw_procent` hebben. Geen enkel scherm vult die, dus het
+dashboard kijkt alleen naar het klanttype en het tarief van het bedrijf. Komt
+die nooduitgang ooit in gebruik, dan moeten ze mee in `fetchKlanttypen`.
+
+## 3. Extra opdrachten bij "Dag klaar"
+
+Vink je een extra opdracht niet af, dan telt hij nergens mee en komt er ook
+geen factuurregel van — hij is de volgende dag gewoon van die dag af. Daarom
+staan de openstaande opdrachten van die dag nu in de afmelddialoog, met een
+vinkje, standaard aan.
+
+Ze horen bij de dag en niet bij een team. De vraag komt dus bij het **laatste**
+team dat nog niet afgemeld is, gekeken naar álle teams van die dag — wie
+alleen zijn eigen team op het scherm heeft, is daarmee nog niet de laatste die
+buiten loopt.
+
+## 4. De verstuurde factuur in het klantdossier
+
+Facturen gaan via Brevo, buiten de eigen mailbox om. Daardoor stonden ze
+nergens: niet in Verzonden en niet bij de klant. Dat kan ook niet zomaar met
+een rij in `berichten`, want `berichten_kanaal_velden_check` eist bij
+`kanaal = 'mail'` een `uid` — een mail moet echt op de server staan.
+
+Daarom legt de edge function de mail nu na het versturen zelf in de map
+Verzonden (opnieuw opgemaakt, met de PDF eraan), en schrijft hij de rij in
+`berichten` met het `klant_id` van de factuur. Dat staartstuk zat al in
+`stuurAntwoord` en is eruit getrokken als `kopieInVerzonden`. Eén IMAP-sessie
+per stapel van vijftig facturen: niet per factuur opnieuw inloggen, en nooit
+meer dan vijftig PDF's tegelijk in het geheugen.
+
+De kopie heeft een eigen Message-ID (Brevo geeft niet terug wat het over de
+lijn stuurde). Voor Verzonden is dat geen bezwaar.
+
+## Wat er van gecontroleerd is in de app
+
+Aangeklikt en gezien: de pillen op Home (allebei € 267, contant € 252,
+overmaken € 15, ook meteen goed na een verse pagina), "btw hierover € 47"
+onder de omzet (€ 252 inclusief + € 15 exclusief = € 46,89), het gemiddelde
+bij de grafiek, en dat de afmelddialoog van 23-09 ongewijzigd opent.
+
+**Niet aangeklikt: het lijstje extra opdrachten in die dialoog.** Er staat op
+geen enkele dag een openstaande opdracht, en een opdracht op een dag zetten
+gaat alleen met slepen — dat lukte niet aan te sturen. Er staat nu wel één
+klaar om het mee te doen: *TEST dakrand (Claude)*, € 30, bij Markgraaf A 138,
+nog zonder dag. Sleep hem op een dag die nog niet afgemeld is, en hij hoort
+onderaan de dialoog te verschijnen.
+
+De kopie in het dossier is ook niet echt gelopen: daar hoort een echte
+verzending bij, en die ligt stil op het uitloggen.
+
+`bunx tsc --noEmit`, `bunx eslint` op de gewijzigde bestanden, `bun run build`
+en `deno check` op de edge function zijn schoon (deno geeft alleen de vier
+bekende fouten in `_gedeeld/geheim.ts` en `_gedeeld/smtp.ts`, die er al
+stonden).
+
+## Nog open van fase 1
+
+5. De vangnetten: tellen en waarschuwen bij een adres op overmaken zonder
+   klant of met prijs 0, een klant zonder e-mailadres, en bij het omzetten van
+   een hele wijk naar overmaken. Plus een lijstje "kan niet gemaild" met
+   printknop.
+6. Maandconcepten via `pg_cron` in de nacht van de 1e, en de por als er na de
+   5e nog concepten staan.
+7. Het btw-kwartaaloverzicht op het dashboard.
+
+En uit de vorige sessie nog steeds: een weggegooide of achteraf geprijsde klus
+houdt zijn factuurregel.
