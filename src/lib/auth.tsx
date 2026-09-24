@@ -45,6 +45,9 @@ type AuthState = {
   employee: Employee | null;
   company: Company | null;
   loading: boolean;
+  /** Wel een sessie, maar geen employees-rij (meer): opgehaald en niets
+   * gevonden. Zo weet `useRequireAuth` het verschil met "nog aan het laden". */
+  geenTeamregel: boolean;
   /** Haalt de employees-rij en het bedrijf opnieuw op — nodig vlak nadat die
    * rij is aangemaakt (bedrijf aanmaken / uitnodiging accepteren), want die
    * acties veranderen de sessie niet, dus `onAuthStateChange` vuurt daar niet
@@ -57,6 +60,7 @@ const AuthContext = createContext<AuthState>({
   employee: null,
   company: null,
   loading: true,
+  geenTeamregel: false,
   refreshEmployee: async () => {},
 });
 
@@ -78,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     employee: null,
     company: null,
     loading: true,
+    geenTeamregel: false,
   });
   const qc = useQueryClient();
 
@@ -99,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           employee: zelfde ? vorig.employee : null,
           company: zelfde ? vorig.company : null,
           loading: false,
+          geenTeamregel: zelfde ? vorig.geenTeamregel : false,
         };
       });
     }
@@ -138,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!actief) return;
       setState((vorig) =>
         vorig.session?.user.id === session.user.id
-          ? { ...vorig, employee, company, loading: false }
+          ? { ...vorig, employee, company, loading: false, geenTeamregel: !employee }
           : vorig,
       );
     }
@@ -171,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function refreshEmployee() {
     const { data } = await supabase.auth.getSession();
     if (!data.session) return;
-    const { data: emp } = await supabase
+    const { data: emp, error } = await supabase
       .from("employees")
       .select(MEDEWERKER_VELDEN)
       .eq("id", data.session.user.id)
@@ -182,6 +188,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       employee,
       company: await laadBedrijf(employee),
       loading: false,
+      // Een mislukte query is niet hetzelfde als "geen teamregel": alleen bij
+      // een geslaagde query zonder rij hoort iemand uitgelogd te worden.
+      geenTeamregel: !error && !employee,
     });
   }
 
@@ -220,7 +229,7 @@ export async function requireSession() {
 
 /** Client-side vangnet: stuurt alsnog naar /login als er (na laden) geen sessie blijkt te zijn. */
 export function useRequireAuth() {
-  const { session, loading } = useAuth();
+  const { session, loading, geenTeamregel } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -228,4 +237,26 @@ export function useRequireAuth() {
       void navigate({ to: "/login" });
     }
   }, [loading, session, navigate]);
+
+  // Uit het team gehaald: je sessie loopt nog (die verloopt pas later), maar
+  // er valt niets meer te zien. Dan hier uitloggen in plaats van je naar een
+  // lege app laten kijken. Eerst nog één keer navragen, want vlak na het
+  // aanmaken van een bedrijf of het accepteren van een uitnodiging kan de rij
+  // er nog net niet geweest zijn toen we keken.
+  useEffect(() => {
+    if (!session || !geenTeamregel) return;
+    let stop = false;
+    void supabase
+      .from("employees")
+      .select("id")
+      .eq("id", session.user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (stop || error || data) return;
+        void signOut().then(() => void navigate({ to: "/login" }));
+      });
+    return () => {
+      stop = true;
+    };
+  }, [session, geenTeamregel, navigate]);
 }

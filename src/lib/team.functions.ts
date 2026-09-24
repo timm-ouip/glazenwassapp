@@ -555,12 +555,30 @@ export const removeEmployee = createServerFn({ method: "POST" })
       throw new Error("Alleen de eigenaar kan medewerkers verwijderen");
     }
 
-    const { error } = await supabaseAdmin
+    // Met `select` erachter krijgen we terug wélke regel weg is. Zonder dat
+    // meldt Supabase ook "gelukt" als er niets te verwijderen viel — en dan
+    // zouden we hieronder de sessies intrekken van iemand van een ander
+    // bedrijf, puur omdat zijn id werd meegestuurd.
+    const { data: weg, error } = await supabaseAdmin
       .from("employees")
       .delete()
       .eq("id", data.employeeId)
-      .eq("company_id", me.company_id);
+      .eq("company_id", me.company_id)
+      .select("id")
+      .maybeSingle();
     if (error) throw new Error(error.message);
+    if (!weg) throw new Error("Deze medewerker staat niet (meer) in jouw team");
+
+    // Zonder zijn teamregel ziet hij niets meer — dat regelt RLS — maar zijn
+    // app blijft "ingelogd" tot zijn token verloopt. Zijn sessies er dus ook
+    // uit. Lukt dat niet, dan laten we het verwijderen niet alsnog stuklopen:
+    // uit het team is uit het team.
+    const { error: sessieFout } = await supabaseAdmin.rpc("sessies_intrekken", {
+      gebruiker: data.employeeId,
+    });
+    if (sessieFout) {
+      console.error("[team] Sessies intrekken mislukt:", sessieFout.message);
+    }
 
     return { ok: true };
   });

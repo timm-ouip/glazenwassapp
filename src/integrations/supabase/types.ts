@@ -4079,6 +4079,7 @@ export type Database = {
           prijs: number;
         }[];
       };
+      sessies_intrekken: { Args: { gebruiker: string }; Returns: undefined };
       standaard_sjablonen: { Args: { bedrijf: string }; Returns: undefined };
       stoppen_terugdraaien: {
         Args: { uitkomst: Json; voor_bedrijf?: string | null };
