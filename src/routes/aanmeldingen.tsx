@@ -44,6 +44,7 @@ import {
   updateKlant,
   type Klant,
   type KlantVelden,
+  type KlantTekstVeld,
 } from "@/lib/klanten";
 import { AppLayout } from "@/components/AppLayout";
 import { AanmeldingDialog } from "@/components/AanmeldingDialog";
@@ -409,7 +410,7 @@ function WijzigingKaart({
 }) {
   const [bezig, setBezig] = useState(false);
 
-  const velden: { veld: keyof KlantVelden; label: string; nieuw: string }[] = [
+  const velden: { veld: KlantTekstVeld; label: string; nieuw: string }[] = [
     { veld: "naam", label: "Naam", nieuw: aanmelding.naam },
     { veld: "telefoon", label: "Telefoon", nieuw: aanmelding.telefoon },
     { veld: "email", label: "E-mail", nieuw: aanmelding.email },

@@ -369,6 +369,11 @@ type Bedrijf = {
   kvk: string;
   btw: string;
   iban: string;
+  /** Als tekst in het formulier; bij het opslaan omgezet naar een getal. */
+  btw_procent: string;
+  factuur_termijn_dagen: string;
+  /** Leeg = facturen staan uit: er ontstaan geen te factureren regels. */
+  factuur_start_op: string;
 };
 
 const LEEG_BEDRIJF: Bedrijf = {
@@ -381,6 +386,9 @@ const LEEG_BEDRIJF: Bedrijf = {
   kvk: "",
   btw: "",
   iban: "",
+  btw_procent: "21",
+  factuur_termijn_dagen: "14",
+  factuur_start_op: "",
 };
 
 function BedrijfTab({ isEigenaar }: { isEigenaar: boolean }) {
@@ -394,12 +402,23 @@ function BedrijfTab({ isEigenaar }: { isEigenaar: boolean }) {
     let actief = true;
     void supabase
       .from("companies")
-      .select("name,adres,postcode,plaats,telefoon,email,kvk,btw,iban")
+      .select(
+        "name,adres,postcode,plaats,telefoon,email,kvk,btw,iban,btw_procent,factuur_termijn_dagen,factuur_start_op",
+      )
       .eq("id", employee.company_id)
       .maybeSingle()
       .then(({ data }) => {
         if (!actief) return;
-        if (data) setVelden(data as Bedrijf);
+        if (data) {
+          // De getallen en de datum komen als getal of leeg terug; in het
+          // formulier zijn het gewoon tekstvakjes.
+          setVelden({
+            ...(data as unknown as Bedrijf),
+            btw_procent: String(data.btw_procent ?? 21),
+            factuur_termijn_dagen: String(data.factuur_termijn_dagen ?? 14),
+            factuur_start_op: data.factuur_start_op ?? "",
+          });
+        }
         setLaden(false);
       });
     return () => {
@@ -420,7 +439,14 @@ function BedrijfTab({ isEigenaar }: { isEigenaar: boolean }) {
     setBezig(true);
     const { error } = await supabase
       .from("companies")
-      .update({ ...velden, name: velden.name.trim() })
+      .update({
+        ...velden,
+        name: velden.name.trim(),
+        btw_procent: Number(velden.btw_procent) || 21,
+        factuur_termijn_dagen: Number(velden.factuur_termijn_dagen) || 14,
+        // Leeg betekent hier echt leeg: dan maakt de app geen facturen.
+        factuur_start_op: velden.factuur_start_op || null,
+      })
       .eq("id", employee.company_id);
     setBezig(false);
     if (error) {
@@ -511,6 +537,46 @@ function BedrijfTab({ isEigenaar }: { isEigenaar: boolean }) {
             waarde={velden.iban}
             onChange={zet("iban")}
             lezen={!isEigenaar}
+          />
+        </div>
+      </Kaart>
+
+      <Kaart
+        titel="Facturen"
+        uitleg="Voor de klanten die overmaken. Zolang er geen startdatum staat, maakt de app geen facturen."
+      >
+        <div className="grid gap-3">
+          <Veld
+            id="factuurstart"
+            label="Factureren vanaf"
+            type="date"
+            waarde={velden.factuur_start_op}
+            onChange={zet("factuur_start_op")}
+            lezen={!isEigenaar}
+            hint="Werk van vóór deze dag blijft met rust: daar ontstaat nooit een factuur voor."
+          />
+          <Veld
+            id="btwprocent"
+            label="Btw-tarief"
+            type="number"
+            min={0}
+            max={100}
+            step="0.01"
+            waarde={velden.btw_procent}
+            onChange={zet("btw_procent")}
+            lezen={!isEigenaar}
+            hint="In procenten. Bij één klant kun je hier los van afwijken."
+          />
+          <Veld
+            id="factuurtermijn"
+            label="Betalen binnen"
+            type="number"
+            min={1}
+            max={120}
+            waarde={velden.factuur_termijn_dagen}
+            onChange={zet("factuur_termijn_dagen")}
+            lezen={!isEigenaar}
+            hint="In dagen. Bij een klant kun je een eigen termijn invullen."
           />
         </div>
       </Kaart>

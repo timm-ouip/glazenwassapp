@@ -39,6 +39,8 @@ import { fetchKlussen, telDagVan } from "@/lib/klussen";
 import { fetchPof } from "@/lib/overzichten";
 import { useRecht } from "@/lib/rechten";
 import { cn } from "@/lib/utils";
+import { GeldfilterPillen } from "@/components/Geldfilter";
+import { teltMee, useGeldfilter } from "@/lib/geldfilter";
 import { datumSleutel, fetchWasdagen, vandaag } from "@/lib/wasdag";
 
 export const Route = createFileRoute("/dashboard")({
@@ -81,6 +83,22 @@ function dagErbij(datum: string, dagen: number): string {
  * blijven de opgehaalde gegevens tien minuten goed staan: je komt hier om te
  * kijken, niet om te werken.
  */
+
+/**
+ * Betaalde dit werk contant? De bij het afmelden vastgelegde methode gaat
+ * voor; alleen als die er niet is (oude regels, en extra opdrachten) kijken
+ * we naar hoe het adres nu staat. Null = niet te zeggen, bijvoorbeeld bij een
+ * adres dat intussen weggegooid is.
+ */
+function contantVan(
+  p: { customer_id: string | null; methode: "contant" | "overmaken" | null },
+  adresInfo: { info: Map<string, { contant: boolean | null }> } | null | undefined,
+): boolean | null {
+  if (p.methode) return p.methode === "contant";
+  const info = p.customer_id ? adresInfo?.info.get(p.customer_id) : undefined;
+  return info?.contant ?? null;
+}
+
 function Dashboard() {
   useRequireAuth();
   const prijzenZien = useRecht("prijzen_zien");
@@ -161,30 +179,55 @@ function Dashboard() {
     return { info, wijken: districts };
   }, [districtsQuery.data, streetsQuery.data, customersQuery.data]);
 
+  const [geldkeuze, zetGeldkeuze] = useGeldfilter();
+
   /** Alle bedragen van dit jaar, op één hoop: wasbeurten plus extra opdrachten. */
   const posten = useMemo(() => {
     const regels = wasdagenQuery.data;
     const klussen = klussenQuery.data;
     if (!regels || !klussen) return null;
-    const uit: { datum: string; prijs: number; customer_id: string | null; wasbeurt: boolean }[] =
-      regels
-        .filter((r) => r.datum >= vanaf && r.datum <= tot)
-        .map((r) => ({
-          datum: r.datum,
-          prijs: r.prijs,
-          customer_id: r.customer_id,
-          wasbeurt: true,
-        }));
+    const uit: {
+      datum: string;
+      prijs: number;
+      customer_id: string | null;
+      wasbeurt: boolean;
+      /** Zoals het bij het afmelden vastgelegd is; leeg = kijk naar nu. */
+      methode: "contant" | "overmaken" | null;
+    }[] = regels
+      .filter((r) => r.datum >= vanaf && r.datum <= tot)
+      .map((r) => ({
+        datum: r.datum,
+        prijs: r.prijs,
+        customer_id: r.customer_id,
+        wasbeurt: true,
+        methode: r.betaalmethode ?? null,
+      }));
     for (const k of klussen) {
       const d = telDagVan(k, nu);
       if (!d || d < vanaf || d > tot) continue;
-      uit.push({ datum: d, prijs: k.prijs, customer_id: k.customer_id, wasbeurt: false });
+      uit.push({
+        datum: d,
+        prijs: k.prijs,
+        customer_id: k.customer_id,
+        wasbeurt: false,
+        methode: null,
+      });
     }
     return uit;
   }, [wasdagenQuery.data, klussenQuery.data, vanaf, tot, nu]);
 
-  const cijfers = useMemo(() => {
+  /**
+   * Wat je nu wilt zien. Alles hieronder rekent met deze lijst, dus de
+   * grafieken per maand, per wijk en per werkdag bewegen vanzelf mee.
+   */
+  const zichtbaar = useMemo(() => {
     if (!posten) return null;
+    if (geldkeuze === "allebei") return posten;
+    return posten.filter((p) => teltMee(geldkeuze, contantVan(p, adresInfo)));
+  }, [posten, geldkeuze, adresInfo]);
+
+  const cijfers = useMemo(() => {
+    if (!zichtbaar) return null;
     const maandOmzet = Array.from({ length: aantalMaanden }, () => 0);
     const maandAdressen = Array.from({ length: aantalMaanden }, () => 0);
     const maandContant = Array.from({ length: aantalMaanden }, () => 0);
@@ -194,7 +237,7 @@ function Dashboard() {
     const werkdagen = Array.from({ length: aantalMaanden }, () => new Set<string>());
     /** Bedragen van adressen die we niet meer kennen (weggegooid). */
     let onbekend = 0;
-    for (const p of posten) {
+    for (const p of zichtbaar) {
       const m = Number(p.datum.slice(5, 7)) - 1;
       if (m < 0 || m >= aantalMaanden) continue;
       maandOmzet[m] = (maandOmzet[m] ?? 0) + p.prijs;
@@ -205,8 +248,12 @@ function Dashboard() {
       const info = p.customer_id ? adresInfo?.info.get(p.customer_id) : undefined;
       // Een adres dat intussen weggegooid is, kennen we niet meer: dat telt
       // hier bij geen van beide, anders zou het stilletjes contant worden.
-      if (info?.contant === true) maandContant[m] = (maandContant[m] ?? 0) + p.prijs;
-      else if (info?.contant === false) maandOvermaken[m] = (maandOvermaken[m] ?? 0) + p.prijs;
+      // De vastgelegde methode wint: anders zou een klant die in november op
+      // overmaken gezet wordt, zijn werk van juni met terugwerkende kracht
+      // van de ene kolom naar de andere laten springen.
+      const contant = contantVan(p, adresInfo);
+      if (contant === true) maandContant[m] = (maandContant[m] ?? 0) + p.prijs;
+      else if (contant === false) maandOvermaken[m] = (maandOvermaken[m] ?? 0) + p.prijs;
       else onbekend += p.prijs;
       if (info?.wijkId) perWijk.set(info.wijkId, (perWijk.get(info.wijkId) ?? 0) + p.prijs);
     }
@@ -256,7 +303,16 @@ function Dashboard() {
       werkdagen: werkdagen.map((d) => d.size),
       onbekend,
     };
-  }, [posten, adresInfo, klachtenQuery.data, customersQuery.data, aantalMaanden, jaar, vanaf, tot]);
+  }, [
+    zichtbaar,
+    adresInfo,
+    klachtenQuery.data,
+    customersQuery.data,
+    aantalMaanden,
+    jaar,
+    vanaf,
+    tot,
+  ]);
 
   const pof = useMemo(() => {
     const open = (pofQuery.data ?? []).filter((r) => r.open > 0.005);
@@ -303,7 +359,10 @@ function Dashboard() {
       titel="Dashboard"
       naastTitel={lopend ? `januari tot en met vandaag` : `heel ${jaar}`}
       acties={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Contant en overmaken uit elkaar: standaard allebei, zodat je
+              binnenkomt op je hele omzet. */}
+          <GeldfilterPillen keuze={geldkeuze} onChange={zetGeldkeuze} />
           <Button
             variant={lopend ? "secondary" : "ghost"}
             size="sm"

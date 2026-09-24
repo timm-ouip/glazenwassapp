@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { netjesPostcode, netjesStraat, netjesVeld } from "@/lib/schoonschrift";
+import type { Klanttype } from "@/lib/facturen";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { eenVan } from "@/lib/embed";
 import { haalAllePaginas } from "@/lib/pagineren";
@@ -217,10 +218,44 @@ export interface Klant {
   postcode: string;
   plaats: string;
   notitie: string;
+  /**
+   * Wat de klant is. Bepaalt hoe de factuur rekent: aan een particulier hoor
+   * je prijzen inclusief btw te tonen, een bedrijf of VvE wil ze exclusief
+   * zien met de btw eronder.
+   */
+  klanttype: Klanttype;
+  bedrijfsnaam: string;
+  kvk: string;
+  btw_nummer: string;
+  website: string;
+  /** Leeg = gewoon het e-mailadres hierboven. Bij een VvE of bedrijf gaat de
+   *  factuur vaak naar de beheerder of naar facturen@, niet naar de bewoner. */
+  factuur_email: string;
+  factuur_straat: string;
+  factuur_huisnummer: string;
+  factuur_postcode: string;
+  factuur_plaats: string;
+  /** Leeg = de termijn van het bedrijf (standaard 14 dagen). */
+  betalingstermijn_dagen: number | null;
+  /** Vaste regel op elke factuur, bv. "Glasbewassing conform overeenkomst".
+   *  Leeg = per beurt het adres en de datum. */
+  factuur_omschrijving: string;
+  /** Elke beurt een factuur, of alles van een maand op één factuur. */
+  factuur_per: "beurt" | "maand";
 }
 
 /** De velden die je in de klantendialog invult — id en company_id niet. */
 export type KlantVelden = Omit<Klant, "id">;
+
+/**
+ * De klantvelden die gewone tekst zijn. De klantenlijst en de aanmeldingen
+ * bewerken velden los, als tekst; een termijn of een keuzelijst hoort daar
+ * niet bij.
+ */
+export type KlantTekstVeld = Exclude<
+  keyof KlantVelden,
+  "betalingstermijn_dagen" | "klanttype" | "factuur_per"
+>;
 
 export interface QuickNote {
   id: string;
@@ -582,8 +617,37 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
   })) as Customer[];
 }
 
-const KLANT_VELDEN =
-  "id,naam,email,email2,telefoon,telefoon2,straat,huisnummer,postcode,plaats,notitie";
+// Eén letterlijke tekst, niet opgeknipt met +: Supabase leidt het rijtype af
+// uit wat hier staat, en dat lukt alleen bij een losse string.
+// prettier-ignore
+const KLANT_VELDEN = "id,naam,email,email2,telefoon,telefoon2,straat,huisnummer,postcode,plaats,notitie,klanttype,bedrijfsnaam,kvk,btw_nummer,website,factuur_email,factuur_straat,factuur_huisnummer,factuur_postcode,factuur_plaats,betalingstermijn_dagen,factuur_omschrijving,factuur_per";
+
+/** Een lege klant: het startpunt van elk klantformulier. */
+export const LEEG_KLANT: KlantVelden = {
+  naam: "",
+  email: "",
+  email2: "",
+  telefoon: "",
+  telefoon2: "",
+  straat: "",
+  huisnummer: "",
+  postcode: "",
+  plaats: "",
+  notitie: "",
+  klanttype: "particulier",
+  bedrijfsnaam: "",
+  kvk: "",
+  btw_nummer: "",
+  website: "",
+  factuur_email: "",
+  factuur_straat: "",
+  factuur_huisnummer: "",
+  factuur_postcode: "",
+  factuur_plaats: "",
+  betalingstermijn_dagen: null,
+  factuur_omschrijving: "",
+  factuur_per: "beurt",
+};
 
 export async function fetchKlanten(): Promise<Klant[]> {
   // In stukken: met echte klanten zijn het er al snel meer dan 1000.
@@ -612,6 +676,19 @@ export async function bewaarKlant(id: string | null, velden: KlantVelden): Promi
     postcode: netjesVeld("postcode", velden.postcode),
     plaats: netjesVeld("plaats", velden.plaats),
     notitie: netjesVeld("notitie", velden.notitie),
+    klanttype: velden.klanttype,
+    bedrijfsnaam: netjesVeld("bedrijfsnaam", velden.bedrijfsnaam),
+    kvk: netjesVeld("kvk", velden.kvk),
+    btw_nummer: netjesVeld("btw_nummer", velden.btw_nummer),
+    website: netjesVeld("website", velden.website),
+    factuur_email: netjesVeld("factuur_email", velden.factuur_email),
+    factuur_straat: netjesVeld("factuur_straat", velden.factuur_straat),
+    factuur_huisnummer: netjesVeld("factuur_huisnummer", velden.factuur_huisnummer),
+    factuur_postcode: netjesVeld("factuur_postcode", velden.factuur_postcode),
+    factuur_plaats: netjesVeld("factuur_plaats", velden.factuur_plaats),
+    betalingstermijn_dagen: velden.betalingstermijn_dagen,
+    factuur_omschrijving: velden.factuur_omschrijving.trim(),
+    factuur_per: velden.factuur_per,
   };
   const query = id
     ? supabase.from("klanten").update(payload).eq("id", id)
@@ -623,9 +700,14 @@ export async function bewaarKlant(id: string | null, velden: KlantVelden): Promi
 
 /** Eén of enkele velden bijwerken — wat de klantenlijst doet bij inline typen. */
 export async function updateKlant(id: string, patch: Partial<KlantVelden>): Promise<void> {
-  const schoon: Partial<KlantVelden> = {};
-  for (const veld of Object.keys(patch) as (keyof KlantVelden)[]) {
-    schoon[veld] = netjesVeld(veld, patch[veld] ?? "");
+  const schoon: Partial<KlantVelden> = { ...patch };
+  for (const veld of Object.keys(schoon) as (keyof KlantVelden)[]) {
+    const waarde = schoon[veld];
+    // Alleen tekst gaat langs de opschoner; een termijn of een keuzelijst
+    // heeft er niets aan.
+    if (typeof waarde === "string") {
+      (schoon as Record<string, unknown>)[veld] = netjesVeld(veld, waarde);
+    }
   }
   const { error } = await supabase.from("klanten").update(schoon).eq("id", id);
   if (error) throw error;

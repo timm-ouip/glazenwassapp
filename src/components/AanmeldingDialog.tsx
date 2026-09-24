@@ -46,8 +46,7 @@ import {
   leesRitmeWaarde,
   vulPostcodeAan,
   zorgVoorAdresRegel,
-  type District,
-} from "@/lib/klanten";
+  type District, LEEG_KLANT,} from "@/lib/klanten";
 import { aanmeldNummer, zetVerwerkt, type Aanmelding } from "@/lib/aanmeldingen";
 import { useRecht } from "@/lib/rechten";
 
@@ -125,6 +124,7 @@ export function AanmeldingDialog({ open, onOpenChange, aanmelding, districts, on
       // de adresregel — tenzij er al een staat.
       await vulPostcodeAan(customerId, aanmelding!.postcode);
       const klant = await bewaarKlant(null, {
+        ...LEEG_KLANT,
         naam: aanmelding!.naam,
         email: aanmelding!.email,
         email2: "",

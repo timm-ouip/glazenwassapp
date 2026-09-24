@@ -24,6 +24,13 @@ export interface WasdagRegel {
   /** Vastgezet op een tijd; anders rekent de app hem uit. */
   vaste_start?: string | null;
   /**
+   * Hoe dit adres betaalde toen de dag werd afgemeld. Vastgelegd, juist zodat
+   * een klant die later van contant naar overmaken gaat de omzet van vorige
+   * maanden niet verschuift. Leeg = nog niet afgemeld, of van vóór de
+   * invoering: dan valt de app terug op hoe het adres nú staat.
+   */
+  betaalmethode?: "contant" | "overmaken" | null;
+  /**
    * Wat er die dag anders ging dan anders — "alleen de voorkant", "kon er
    * niet bij". Leeg is: gewoon zoals altijd. Hoort bij de dag en niet bij het
    * adres, net als het bedrag hierboven.
@@ -87,6 +94,7 @@ export async function fetchWasdag(datum: string): Promise<WasdagRegel[]> {
       volgorde: number | null;
       rest: boolean | null;
       vaste_start: string | null;
+      betaalmethode: string | null;
       niet_gewassen_op: string | null;
       niet_gewassen_naam: string | null;
       wasdag_prijzen: { prijs: number } | { prijs: number }[] | null;
@@ -99,6 +107,8 @@ export async function fetchWasdag(datum: string): Promise<WasdagRegel[]> {
     volgorde: r.volgorde,
     rest: r.rest ?? false,
     vaste_start: r.vaste_start ? r.vaste_start.slice(0, 5) : null,
+    betaalmethode:
+      r.betaalmethode === "contant" || r.betaalmethode === "overmaken" ? r.betaalmethode : null,
   }));
 }
 
@@ -175,7 +185,7 @@ export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagD
     supabase
       .from("wasdag_regels")
       .select(
-        "id,datum,customer_id,ploeg_nr,volgorde,rest,vaste_start,niet_gewassen_op,niet_gewassen_naam,wasdag_prijzen(prijs)",
+        "id,datum,customer_id,ploeg_nr,volgorde,rest,vaste_start,betaalmethode,niet_gewassen_op,niet_gewassen_naam,wasdag_prijzen(prijs)",
       )
       .gte("datum", vanaf)
       .lte("datum", tot)
@@ -191,6 +201,7 @@ export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagD
       volgorde: number | null;
       rest: boolean | null;
       vaste_start: string | null;
+      betaalmethode: string | null;
       niet_gewassen_op: string | null;
       niet_gewassen_naam: string | null;
       wasdag_prijzen: { prijs: number } | { prijs: number }[] | null;
@@ -203,6 +214,8 @@ export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagD
     volgorde: r.volgorde,
     rest: r.rest ?? false,
     vaste_start: r.vaste_start ? r.vaste_start.slice(0, 5) : null,
+    betaalmethode:
+      r.betaalmethode === "contant" || r.betaalmethode === "overmaken" ? r.betaalmethode : null,
   }));
 }
 

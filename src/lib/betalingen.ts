@@ -23,7 +23,7 @@ export const BETAALMETHODEN: { waarde: Betaalmethode; label: string }[] = [
  * waar ze als vak staan — de pof-lijst, het lopen, de wijkkaarten en het
  * venster om een wijk vrij te geven.
  */
-export const TABBLADEN = ["vanavond", "lopen", "pof", "kaart"] as const;
+export const TABBLADEN = ["vanavond", "lopen", "pof", "kaart", "facturen"] as const;
 
 export type BetalingenTab = (typeof TABBLADEN)[number];
 
@@ -32,6 +32,7 @@ export const TABNAAM: Record<BetalingenTab, string> = {
   lopen: "Lopen",
   pof: "Pof",
   kaart: "Wijkkaarten",
+  facturen: "Facturen",
 };
 
 export function betaalmethodeLabel(m: Betaalmethode): string {

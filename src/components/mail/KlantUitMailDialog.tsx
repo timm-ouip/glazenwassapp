@@ -49,8 +49,7 @@ import {
   leesRitmeWaarde,
   patchCustomer,
   vulPostcodeAan,
-  zorgVoorAdresRegel,
-} from "@/lib/klanten";
+  zorgVoorAdresRegel, LEEG_KLANT,} from "@/lib/klanten";
 import { klantVanAdres, type Bericht } from "@/lib/berichten";
 import { koppelKlant } from "@/lib/mailacties";
 import { zetVerwerkt } from "@/lib/aanmeldingen";
@@ -156,6 +155,7 @@ export function KlantUitMailDialog({ open, onOpenChange, b, onKlaar }: Props) {
       });
       await vulPostcodeAan(customerId, postcode);
       const klant = await bewaarKlant(null, {
+        ...LEEG_KLANT,
         naam,
         email,
         email2,

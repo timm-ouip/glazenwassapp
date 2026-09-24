@@ -74,6 +74,12 @@ export interface BrevoMail {
   /** Een eigen html-versie in plaats van de gemaakte, bv. met een knop. */
   html?: string;
   antwoordNaar?: string;
+  /**
+   * Bijlagen, base64. Brevo's transactionele weg kan dit gewoon: tot 20 MB
+   * per mail. (Een campagne kan het niet, want die gaat naar een hele lijst
+   * tegelijk en heeft dus niet per ontvanger een eigen bestand.)
+   */
+  bijlagen?: { naam: string; inhoud: string }[];
 }
 
 /**
@@ -108,6 +114,9 @@ export async function stuurMail(
     textContent: mail.tekst,
   };
   if (mail.antwoordNaar) body["replyTo"] = { email: mail.antwoordNaar, name: afzender.naam };
+  if (mail.bijlagen?.length) {
+    body["attachment"] = mail.bijlagen.map((b) => ({ name: b.naam, content: b.inhoud }));
+  }
 
   try {
     const res = await fetch("https://api.brevo.com/v3/smtp/email", {

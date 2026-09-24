@@ -17,6 +17,8 @@ import { DossierGeld } from "@/components/dossier/DossierGeld";
 import { BetaalIcoon } from "@/components/betalingen/BetaalIcoon";
 import { GeldloopWijzigingenVak } from "@/components/betalingen/GeldloopWijzigingenVak";
 import { effectieveMethode, type Betaalmethode } from "@/lib/betalingen";
+import { Pillen } from "@/components/Pillen";
+import { KLANTTYPEN } from "@/lib/facturen";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useBevestig } from "@/components/Bevestig";
 import {
@@ -50,6 +52,10 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
+  IconBuilding as Building,
+  IconFileInvoice as FileInvoice,
+  IconId as IdCard,
+  IconWorld as World,
   IconCalendar as CalendarDays,
   IconClock as Clock,
   IconCalendarOff as CalendarOff,
@@ -103,6 +109,7 @@ import {
   type Markering,
   type QuickNote,
   type Street,
+  LEEG_KLANT,
 } from "@/lib/klanten";
 import { zoekAdres, zoekStraten } from "@/lib/postcode";
 import { opslaanBijEnter } from "@/lib/dialoog";
@@ -227,18 +234,8 @@ function prijsGetal(waarde: string) {
   return Number.isFinite(n) ? n : 0;
 }
 
-const LEEG = {
-  naam: "",
-  email: "",
-  email2: "",
-  telefoon: "",
-  telefoon2: "",
-  straat: "",
-  huisnummer: "",
-  postcode: "",
-  plaats: "",
-  notitie: "",
-};
+// Eén lege klant voor de hele app; zie LEEG_KLANT in lib/klanten.
+const LEEG = LEEG_KLANT;
 
 export function KlantgegevensDialog({
   open,
@@ -330,6 +327,9 @@ export function KlantgegevensDialog({
       gelijk(velden.straat, pandAdres.straat) &&
       gelijk(velden.huisnummer, pandAdres.huisnummer));
   const openKlussen = klussen.filter((k) => k.customer_id === dossierCustomer?.id && staatOpen(k));
+
+  // Een bedrijf en een VvE krijgen dezelfde extra velden.
+  const zakelijk = velden.klanttype !== "particulier";
 
   function zet(patch: Partial<typeof LEEG>) {
     setVelden((v) => ({ ...v, ...patch }));
@@ -476,8 +476,18 @@ export function KlantgegevensDialog({
     // Een naam is niet verplicht: die ken je niet altijd, en een telefoon-
     // nummer of gekoppeld adres is op zichzelf al genoeg om te bewaren. Alleen
     // een dossier waar helemaal niets in staat heeft geen zin.
+    // Een keuzelijst telt niet als "ingevuld": klanttype en factuur_per
+    // staan er altijd, ook in een leeg formulier.
     const leeg =
-      Object.values(velden).every((v) => !v.trim()) && !dossierCustomer && extra.length === 0;
+      Object.entries(velden).every(([veld, v]) =>
+        veld === "klanttype" || veld === "factuur_per"
+          ? true
+          : typeof v === "string"
+            ? !v.trim()
+            : v == null,
+      ) &&
+      !dossierCustomer &&
+      extra.length === 0;
     if (leeg) {
       toast.error("Vul iets in, of koppel een adres.");
       return;
@@ -834,6 +844,169 @@ export function KlantgegevensDialog({
                 />
               </PopupVeld>
             </PopupBlok>
+
+            <PopupScheiding />
+
+            {/* Wat de klant is, bepaalt hoe zijn factuur rekent: aan een
+                  particulier hoor je prijzen inclusief btw te tonen, een
+                  bedrijf of VvE wil ze exclusief zien. */}
+            <PopupBlok
+              label="Wat voor klant"
+              terzijde={
+                <span className="text-[11.5px] text-muted-foreground">
+                  {KLANTTYPEN.find((k) => k.waarde === velden.klanttype)?.uitleg}
+                </span>
+              }
+            >
+              <Pillen
+                keuzes={KLANTTYPEN.map((k) => ({ waarde: k.waarde, label: k.label }))}
+                waarde={velden.klanttype}
+                onChange={(w) => zet({ klanttype: w })}
+                disabled={!magBewerken}
+                label="Klanttype"
+              />
+            </PopupBlok>
+
+            {zakelijk && (
+              <>
+                <PopupBlok label="Zakelijke gegevens">
+                  <PopupVeld icoon={<Building className="size-4" />}>
+                    <Input
+                      id="bedrijfsnaam"
+                      className={popupInvoer}
+                      placeholder={velden.klanttype === "vve" ? "Naam van de VvE" : "Bedrijfsnaam"}
+                      value={velden.bedrijfsnaam}
+                      onChange={(e) => zet({ bedrijfsnaam: e.target.value })}
+                    />
+                  </PopupVeld>
+                  <PopupPaar smal>
+                    <PopupVeld icoon={<IdCard className="size-4" />}>
+                      <Input
+                        id="kvk"
+                        className={popupInvoer}
+                        placeholder="KvK-nummer"
+                        value={velden.kvk}
+                        onChange={(e) => zet({ kvk: e.target.value })}
+                      />
+                    </PopupVeld>
+                    <PopupVeld>
+                      <Input
+                        id="btw_nummer"
+                        className={popupInvoer}
+                        placeholder="NL001234567B01"
+                        value={velden.btw_nummer}
+                        onChange={(e) => zet({ btw_nummer: e.target.value })}
+                      />
+                    </PopupVeld>
+                  </PopupPaar>
+                  <PopupVeld icoon={<World className="size-4" />}>
+                    <Input
+                      id="website"
+                      className={popupInvoer}
+                      placeholder="Website"
+                      value={velden.website}
+                      onChange={(e) => zet({ website: e.target.value })}
+                    />
+                  </PopupVeld>
+                </PopupBlok>
+
+                <PopupBlok
+                  label="Facturen"
+                  info="Laat leeg wat hetzelfde is als hierboven: dan gaat de factuur gewoon naar het e-mailadres en het adres van de klant."
+                >
+                  <PopupVeld icoon={<Mail className="size-4" />}>
+                    <Input
+                      id="factuur_email"
+                      type="email"
+                      inputMode="email"
+                      className={popupInvoer}
+                      placeholder="facturen@… (anders het gewone adres)"
+                      value={velden.factuur_email}
+                      onChange={(e) => zet({ factuur_email: e.target.value })}
+                    />
+                  </PopupVeld>
+                  <PopupPaar smal>
+                    <PopupVeld icoon={<Signpost className="size-4" />}>
+                      <Input
+                        id="factuur_straat"
+                        className={popupInvoer}
+                        placeholder="Factuuradres: straat"
+                        value={velden.factuur_straat}
+                        onChange={(e) => zet({ factuur_straat: e.target.value })}
+                      />
+                    </PopupVeld>
+                    <PopupVeld icoon={<Hash className="size-4" />}>
+                      <Input
+                        id="factuur_huisnummer"
+                        className={popupInvoer}
+                        placeholder="12a"
+                        value={velden.factuur_huisnummer}
+                        onChange={(e) => zet({ factuur_huisnummer: e.target.value })}
+                      />
+                    </PopupVeld>
+                  </PopupPaar>
+                  <PopupPaar smal>
+                    <PopupVeld icoon={<MapPin className="size-4" />}>
+                      <Input
+                        id="factuur_plaats"
+                        className={popupInvoer}
+                        placeholder="Plaats"
+                        value={velden.factuur_plaats}
+                        onChange={(e) => zet({ factuur_plaats: e.target.value })}
+                      />
+                    </PopupVeld>
+                    <PopupVeld>
+                      <Input
+                        id="factuur_postcode"
+                        className={popupInvoer}
+                        placeholder="1234 AB"
+                        value={velden.factuur_postcode}
+                        onChange={(e) => zet({ factuur_postcode: e.target.value })}
+                      />
+                    </PopupVeld>
+                  </PopupPaar>
+                  <PopupVeld icoon={<FileInvoice className="size-4" />}>
+                    <Input
+                      id="factuur_omschrijving"
+                      className={popupInvoer}
+                      placeholder="Vaste regel op de factuur, bv. Glasbewassing conform overeenkomst"
+                      value={velden.factuur_omschrijving}
+                      onChange={(e) => zet({ factuur_omschrijving: e.target.value })}
+                    />
+                  </PopupVeld>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <Pillen
+                      keuzes={[
+                        { waarde: "beurt" as const, label: "Factuur per beurt" },
+                        { waarde: "maand" as const, label: "Verzamelen per maand" },
+                      ]}
+                      waarde={velden.factuur_per}
+                      onChange={(w) => zet({ factuur_per: w })}
+                      disabled={!magBewerken}
+                      label="Hoe vaak factureren"
+                    />
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      Betalen binnen
+                      <Input
+                        id="betalingstermijn_dagen"
+                        type="number"
+                        min={1}
+                        max={120}
+                        className="h-7 w-16 px-2 text-xs"
+                        placeholder="14"
+                        value={velden.betalingstermijn_dagen ?? ""}
+                        onChange={(e) =>
+                          zet({
+                            betalingstermijn_dagen: e.target.value ? Number(e.target.value) : null,
+                          })
+                        }
+                      />
+                      dagen
+                    </label>
+                  </div>
+                </PopupBlok>
+              </>
+            )}
 
             <PopupScheiding />
 

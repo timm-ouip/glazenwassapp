@@ -7,6 +7,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Avondoverzicht } from "@/components/betalingen/Avondoverzicht";
 import { GeldKaart } from "@/components/betalingen/GeldKaart";
 import { PofLijst } from "@/components/betalingen/PofLijst";
+import { FacturenLijst } from "@/components/betalingen/FacturenLijst";
 import { GeldloopScherm } from "@/components/betalingen/GeldloopScherm";
 import { LoperStart } from "@/components/betalingen/LoperStart";
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
@@ -49,6 +50,7 @@ function Betalingen() {
   const [vrijgeefVenster, setVrijgeefVenster] = useState(false);
   const { employee } = useAuth();
   const ziedBedragen = heeftRecht(employee, "prijzen_zien");
+  const magFacturen = heeftRecht(employee, "facturen");
   const isEigenaar = employee?.rol === "eigenaar";
   const tab: Tab = gevraagd;
 
@@ -69,8 +71,19 @@ function Betalingen() {
     [navigate],
   );
 
-  // Een geldloper (zonder "prijzen zien") ziet alleen zijn avond.
-  if (employee && !ziedBedragen) return <Lopen />;
+  // Een geldloper (zonder "prijzen zien") ziet alleen zijn avond. Wie
+  // uitsluitend het recht "facturen" heeft, hoort juist niet de straat in:
+  // die krijgt meteen de facturen.
+  if (employee && !ziedBedragen) {
+    if (magFacturen) {
+      return (
+        <AppLayout titel="Betalingen · Facturen">
+          <FacturenLijst />
+        </AppLayout>
+      );
+    }
+    return <Lopen />;
+  }
 
   // De tabbladen staan in het menu (de zijbalk, en op de telefoon de balk
   // onderin), niet meer als pillenrij boven de pagina. De kop zegt daarom
@@ -97,12 +110,19 @@ function Betalingen() {
           onPof={() => naarTab("pof")}
           onLopen={() => naarTab("lopen")}
           onKaarten={() => naarTab("kaart")}
+          onFacturen={magFacturen ? () => naarTab("facturen") : undefined}
           vrijgeefVenster={vrijgeefVenster}
           onVrijgeefVenster={setVrijgeefVenster}
         />
       )}
       {tab === "pof" && <PofLijst onKaart={kiesStraat} onTerug={() => naarTab("vanavond")} />}
       {tab === "kaart" && <GeldKaart straatId={straat} wijkId={wijk} onStraat={kiesStraat} />}
+      {tab === "facturen" &&
+        (magFacturen ? (
+          <FacturenLijst onTerug={() => naarTab("vanavond")} />
+        ) : (
+          <p className="text-[13px] text-muted-foreground">Je rol mag de facturen niet zien.</p>
+        ))}
     </AppLayout>
   );
 }

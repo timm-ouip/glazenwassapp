@@ -29,6 +29,7 @@ import {
   wijzigingTekst,
 } from "@/lib/geldlopen";
 import { fetchDistricts, fetchStreets, formatPrice } from "@/lib/klanten";
+import { fetchFacturen, openBedrag } from "@/lib/facturen";
 import { zetKlachtStatus } from "@/lib/klachten";
 import { fetchAvond, fetchPof, perLoper, soortLabel, type Gebeurtenis } from "@/lib/overzichten";
 import { cn } from "@/lib/utils";
@@ -56,12 +57,15 @@ export function Avondoverzicht({
   onPof,
   onLopen,
   onKaarten,
+  onFacturen,
   vrijgeefVenster,
   onVrijgeefVenster,
 }: {
   onPof: () => void;
   onLopen: () => void;
   onKaarten: () => void;
+  /** Alleen voor wie het recht "facturen" heeft. */
+  onFacturen?: (() => void) | undefined;
   /** Open het vrijgeefvenster, bijvoorbeeld vanuit het loopscherm. */
   vrijgeefVenster?: boolean;
   onVrijgeefVenster?: (open: boolean) => void;
@@ -71,6 +75,20 @@ export function Avondoverzicht({
   const isEigenaar = employee?.rol === "eigenaar";
   const [datum, setDatum] = useState(vandaag());
   const [eigenVenster, setEigenVenster] = useState(false);
+  // Voor twee getallen op een tegel hoeft niet de hele factuurgeschiedenis
+  // over de lijn: vanaf 1 januari vorig jaar is ruim genoeg, want zo lang laat
+  // je een factuur niet openstaan. De facturentab zelf haalt wél alles op.
+  const factuurVanaf = `${new Date().getFullYear() - 1}-01-01`;
+  const facturen = useQuery({
+    queryKey: ["facturen", factuurVanaf],
+    queryFn: () => fetchFacturen(factuurVanaf),
+    enabled: Boolean(onFacturen),
+  });
+  const concepten = (facturen.data ?? []).filter((f) => f.status === "concept").length;
+  const nietBinnen = (facturen.data ?? []).reduce(
+    (t, f) => t + (f.status === "verstuurd" ? openBedrag(f) : 0),
+    0,
+  );
   const vrijgeven = vrijgeefVenster ?? eigenVenster;
   const zetVrijgeven = (open: boolean) => {
     setEigenVenster(open);
@@ -432,6 +450,31 @@ export function Avondoverzicht({
               : "\u00a0"}
           </TegelOnder>
         </button>
+        {/* De andere helft van het geld: wie overmaakt, betaalt niet aan de
+            deur maar op de factuur. */}
+        {onFacturen && (
+          <button
+            type="button"
+            onClick={onFacturen}
+            className={cn(
+              TEGEL_VAK,
+              TEGEL_KLIKBAAR,
+              TEGEL_KLEUR.aqua,
+              TEGEL_GEWOON,
+              "text-left md:h-[150px]",
+            )}
+          >
+            <TegelKop label="Facturen" />
+            <TegelGetal klein>{facturen.data ? <TelGetal waarde={concepten} /> : "—"}</TegelGetal>
+            <TegelOnder>
+              {facturen.data
+                ? concepten === 0
+                  ? `${formatPrice(nietBinnen)} nog niet binnen`
+                  : `concept(en) klaar · ${formatPrice(nietBinnen)} nog niet binnen`
+                : "\u00a0"}
+            </TegelOnder>
+          </button>
+        )}
         <div className={cn(TEGEL_VAK, TEGEL_KLEUR.paars, TEGEL_GEWOON, "md:h-[150px]")}>
           <TegelKop label="Korting" pijl={false} />
           <TegelGetal klein knippen={false}>

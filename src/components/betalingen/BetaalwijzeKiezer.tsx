@@ -1,3 +1,4 @@
+import { Pillen } from "@/components/Pillen";
 import { betaalmethodeLabel, BETAALMETHODEN, type Betaalmethode } from "@/lib/betalingen";
 
 /**
@@ -23,27 +24,12 @@ export function BetaalwijzeKiezer({
     ...BETAALMETHODEN,
   ];
   return (
-    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Betaalmethode">
-      {keuzes.map((k) => {
-        const aan = waarde === k.waarde;
-        return (
-          <button
-            key={k.label}
-            type="button"
-            role="radio"
-            aria-checked={aan}
-            disabled={disabled}
-            onClick={() => onChange(k.waarde)}
-            className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60 ${
-              aan
-                ? "border-transparent bg-tint-amber text-tint-amber-ink"
-                : "border-border bg-card text-muted-foreground hover:bg-accent"
-            }`}
-          >
-            {k.label}
-          </button>
-        );
-      })}
-    </div>
+    <Pillen
+      keuzes={keuzes}
+      waarde={waarde}
+      onChange={onChange}
+      disabled={disabled}
+      label="Betaalmethode"
+    />
   );
 }

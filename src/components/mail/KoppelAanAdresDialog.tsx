@@ -30,7 +30,7 @@ import {
   popupInvoer,
 } from "@/components/Popup";
 import { zoekAdresOfKlant, type AdresKeuze, type Bericht } from "@/lib/berichten";
-import { bewaarKlant, koppelKlant as hangKlantAanAdres } from "@/lib/klanten";
+import { bewaarKlant, koppelKlant as hangKlantAanAdres, LEEG_KLANT} from "@/lib/klanten";
 import { koppelKlant } from "@/lib/mailacties";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +76,7 @@ export function KoppelAanAdresDialog({ open, onOpenChange, b, onKlaar }: Props) 
         const g = b.klantgegevens.gevonden;
         naam = g?.naam || b.van_naam;
         const klant = await bewaarKlant(null, {
+          ...LEEG_KLANT,
           naam,
           email: b.van_email,
           email2: "",

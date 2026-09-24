@@ -66,9 +66,11 @@ import {
   type District,
   type Klant,
   type KlantVelden,
+  type KlantTekstVeld,
   type MarkeringRij,
   type QuickNote,
   type Street,
+  LEEG_KLANT,
 } from "@/lib/klanten";
 import { useRecht } from "@/lib/rechten";
 import { InactieveAdressen } from "@/components/InactieveAdressen";
@@ -234,7 +236,7 @@ const KlantRegel = memo(function KlantRegel({
   onKlus: (c: Customer) => void;
   onStoppen: (r: Regel) => void;
   onVerwijder: (r: Regel) => void;
-  onVeld: (r: Regel, veld: keyof KlantVelden, waarde: string) => void;
+  onVeld: (r: Regel, veld: KlantTekstVeld, waarde: string) => void;
   onPostcode: (c: Customer, waarde: string) => void;
   markeringen: MarkeringRij[];
   /** Naam, mail, telefoon en postcode wijzigen, stoppen en weggooien. */
@@ -984,7 +986,7 @@ function Klanten() {
    * postcode zichzelf kan opzoeken. Zo blijven er geen lege klanten achter
    * van rijen waar niemand ooit iets in typte.
    */
-  async function zetVeld(r: Regel, veld: keyof KlantVelden, waarde: string) {
+  async function zetVeld(r: Regel, veld: KlantTekstVeld, waarde: string) {
     const oud = r.klant?.[veld] ?? "";
     if (waarde.trim() === oud.trim()) return;
 
@@ -996,6 +998,7 @@ function Klanten() {
 
       const adres = adresVanRegel(r.customer, r.street, wijkVanNu);
       const nieuw = await bewaarKlant(null, {
+        ...LEEG_KLANT,
         naam: "",
         email: "",
         email2: "",
@@ -1027,7 +1030,7 @@ function Klanten() {
   }
 
   /** Eén veld van een bestaande klant, met ongedaan-maken erbij. */
-  async function zetKlantVeld(id: string, veld: keyof KlantVelden, waarde: string, oud: string) {
+  async function zetKlantVeld(id: string, veld: KlantTekstVeld, waarde: string, oud: string) {
     await updateKlant(id, { [veld]: waarde });
     pushUndo({
       label: `${KOLOMMEN.find((k) => k.veld === veld)?.kop.toLowerCase() ?? veld} wijzigen`,
@@ -1184,7 +1187,7 @@ function Klanten() {
   // Het prullenbakje bij een adres vraagt eerst waarom: verhuisd, gestopt, of echt weg.
   const opVerwijder = useStabiel((r: Regel) => setStop({ open: true, regel: r }));
   const opVeld = useStabiel(
-    (r: Regel, veld: keyof KlantVelden, waarde: string) => void zetVeld(r, veld, waarde),
+    (r: Regel, veld: KlantTekstVeld, waarde: string) => void zetVeld(r, veld, waarde),
   );
   const opPostcode = useStabiel((c: Customer, waarde: string) => void zetPostcode(c, waarde));
 

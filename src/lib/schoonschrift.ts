@@ -38,8 +38,8 @@ export function netjesEmail(waarde: string): string {
  * krijgt; wat hier niet in staat, wordt alleen ontdaan van spaties.
  */
 export function netjesVeld(veld: string, waarde: string): string {
-  if (veld === "email" || veld === "email2") return netjesEmail(waarde);
-  if (veld === "postcode") return netjesPostcode(waarde);
-  if (veld === "straat") return netjesStraat(waarde);
+  if (veld === "email" || veld === "email2" || veld === "factuur_email") return netjesEmail(waarde);
+  if (veld === "postcode" || veld === "factuur_postcode") return netjesPostcode(waarde);
+  if (veld === "straat" || veld === "factuur_straat") return netjesStraat(waarde);
   return waarde.trim();
 }

@@ -35,6 +35,12 @@ export const RECHTEN = [
   },
   { sleutel: "instellingen_team", label: "Team bekijken", uitleg: "Zien wie er in het team zit" },
   {
+    sleutel: "facturen",
+    label: "Facturen",
+    uitleg:
+      "Facturen nakijken, versturen en afvinken; een bedrag zien is iets anders dan namens het bedrijf post sturen",
+  },
+  {
     sleutel: "geldlopen",
     label: "Geld lopen",
     uitleg:
@@ -84,7 +90,7 @@ export function rechtenVoorPad(pad: string): Recht[] | null {
   }
   if (pad.startsWith("/mailing")) return ["mail_lezen", "mail_versturen"];
   if (pad.startsWith("/berichten")) return ["mail_lezen"];
-  if (pad.startsWith("/betalingen")) return ["geldlopen", "prijzen_zien"];
+  if (pad.startsWith("/betalingen")) return ["geldlopen", "prijzen_zien", "facturen"];
   return null;
 }
 
