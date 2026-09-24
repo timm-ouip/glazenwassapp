@@ -148,11 +148,17 @@ Deno.serve(async (req) => {
         // meteen te betalen is alleen maar een verwijt.
         const { data: f } = await db
           .from("facturen")
-          .select("mollie_link,klant_id")
+          .select("mollie_link,klant_id,betaald_bedrag")
           .eq("id", r.factuur_id)
           .eq("company_id", bedrijfId)
           .maybeSingle();
-        const link = String(f?.mollie_link ?? "");
+        // Maar alleen als er nog niets op betaald is. De link is bij het
+        // versturen gemaakt voor het hele bedrag en staat daar vast; heeft de
+        // klant de helft overgemaakt, dan zou de herinnering "nog € 50 open"
+        // zeggen met een knop die € 100 afschrijft. Dan liever geen knop: de
+        // IBAN en het betaalkenmerk staan er toch onder.
+        const alBetaald = Number(f?.betaald_bedrag ?? 0) > 0;
+        const link = alBetaald ? "" : String(f?.mollie_link ?? "");
 
         const velden: Record<string, string> = {
           naam: r.klant,

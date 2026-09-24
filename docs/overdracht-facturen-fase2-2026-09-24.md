@@ -376,6 +376,12 @@ De ronde zoekt niet "de volgende trap" maar **de eerstvolgende die aanstaat**.
 Zet je de eerste herinnering uit, dan schuift alles door naar de tweede in
 plaats van stil te vallen.
 
+**De Mollie-knop gaat niet mee in een herinnering zodra er iets op betaald
+is.** De betaallink is bij het versturen gemaakt voor het hele bedrag en staat
+daar vast; heeft de klant de helft overgemaakt, dan zou de herinnering "nog
+€ 50 open" zeggen met een knop die € 100 afschrijft. In dat geval blijven
+alleen de IBAN en het betaalkenmerk over, en die staan er toch al onder.
+
 ### Waar het staat
 
 | onderdeel                 | waar                                                            |
