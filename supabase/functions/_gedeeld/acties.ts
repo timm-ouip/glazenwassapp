@@ -21,7 +21,13 @@
  * gebeurt niets meer.
  */
 import { veiligVoorAutomatisch, voerOverslaanDoor, ZEKER_AUTOMATISCH } from "./doorvoeren.ts";
-import { telefoonAlsSleutel, type Categorie, type TeLezen, type Uitkomst, type Zelfstandigheid } from "./paaltje.ts";
+import {
+  telefoonAlsSleutel,
+  type Categorie,
+  type TeLezen,
+  type Uitkomst,
+  type Zelfstandigheid,
+} from "./paaltje.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -34,12 +40,20 @@ const NIVEAU: Record<Zelfstandigheid, number> = {
 };
 
 export interface Voorstel {
-  overslaan?: { maanden: string[]; adressen: string[]; doorgevoerd?: boolean; teruggedraaid?: boolean };
+  overslaan?: {
+    maanden: string[];
+    adressen: string[];
+    doorgevoerd?: boolean;
+    teruggedraaid?: boolean;
+  };
   stoppen?: { adressen: string[]; doorgevoerd?: boolean };
   /** Waarom Paaltje de bevestiging niet (zeker) kon versturen. */
   bevestiging_fout?: string;
   aanmelding_id?: string;
-  prijs?: { eigen?: { adres: string; prijs: number }[]; richtprijzen?: { wijk: string; prijs: number }[] };
+  prijs?: {
+    eigen?: { adres: string; prijs: number }[];
+    richtprijzen?: { wijk: string; prijs: number }[];
+  };
 }
 
 export interface Resultaat {
@@ -78,11 +92,21 @@ async function adressenVanKlant(db: Db, companyId: string, klantId: string) {
     .is("deleted_at", null)
     .is("inactief_op", null);
   if (error) throw new Error(`Adressen van klant: ${error.message}`);
-  return (data ?? []).map((c: { id: string; house_number: number; addition: string | null; adres_prijzen: { prijs: number } | { prijs: number }[] | null; streets: { name: string; volledige_naam: string } | null }) => ({
-    id: c.id,
-    omschrijving: `${c.streets?.volledige_naam || c.streets?.name || ""} ${c.house_number}${c.addition ?? ""}`.trim(),
-    prijs: Number((Array.isArray(c.adres_prijzen) ? c.adres_prijzen[0] : c.adres_prijzen)?.prijs) || 0,
-  }));
+  return (data ?? []).map(
+    (c: {
+      id: string;
+      house_number: number;
+      addition: string | null;
+      adres_prijzen: { prijs: number } | { prijs: number }[] | null;
+      streets: { name: string; volledige_naam: string } | null;
+    }) => ({
+      id: c.id,
+      omschrijving:
+        `${c.streets?.volledige_naam || c.streets?.name || ""} ${c.house_number}${c.addition ?? ""}`.trim(),
+      prijs:
+        Number((Array.isArray(c.adres_prijzen) ? c.adres_prijzen[0] : c.adres_prijzen)?.prijs) || 0,
+    }),
+  );
 }
 
 export async function voerActiesUit(
@@ -110,7 +134,10 @@ export async function voerActiesUit(
   }
 
   const niveauVoor = (sleutel: string) =>
-    Math.max(-1, ...gekozen.filter((c) => c.sleutel === sleutel).map((c) => NIVEAU[c.zelfstandigheid]));
+    Math.max(
+      -1,
+      ...gekozen.filter((c) => c.sleutel === sleutel).map((c) => NIVEAU[c.zelfstandigheid]),
+    );
 
   // Welke klant: die een mens koppelde gaat voor.
   const klantId = stand.klant_id ?? uit.klant_id;
@@ -128,9 +155,18 @@ export async function voerActiesUit(
 
   // Overslaan
   const overslaan = niveauVoor("overslaan");
-  if (overslaan >= NIVEAU.concept_voorstel && uit.maanden.length > 0 && adresIds.length > 0 && !eerder.overslaan?.doorgevoerd) {
+  if (
+    overslaan >= NIVEAU.concept_voorstel &&
+    uit.maanden.length > 0 &&
+    adresIds.length > 0 &&
+    !eerder.overslaan?.doorgevoerd
+  ) {
     const teruggedraaid = eerder.overslaan?.teruggedraaid === true;
-    voorstel.overslaan = { maanden: uit.maanden, adressen: adresIds, ...(teruggedraaid ? { teruggedraaid } : {}) };
+    voorstel.overslaan = {
+      maanden: uit.maanden,
+      adressen: adresIds,
+      ...(teruggedraaid ? { teruggedraaid } : {}),
+    };
     const mag =
       !teruggedraaid &&
       stand.klant_zeker !== false &&
@@ -213,7 +249,11 @@ export async function voerActiesUit(
   // Prijsopvraging: de prijs die Paaltje in zijn concept gebruikte, ook zichtbaar.
   if (niveauVoor("prijsopvraging") >= NIVEAU.concept) {
     voorstel.prijs = adressen.length
-      ? { eigen: adressen.filter((x) => x.prijs > 0).map((x) => ({ adres: x.omschrijving, prijs: x.prijs })) }
+      ? {
+          eigen: adressen
+            .filter((x) => x.prijs > 0)
+            .map((x) => ({ adres: x.omschrijving, prijs: x.prijs })),
+        }
       : { richtprijzen: uit.richtprijzen };
   }
 

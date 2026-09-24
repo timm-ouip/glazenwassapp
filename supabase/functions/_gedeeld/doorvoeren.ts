@@ -233,7 +233,8 @@ async function draaiStoppenTerug(
   customerId: string,
   d: StopDetails,
 ): Promise<{ ok: true } | { ok: false; fout: string }> {
-  if (!d.inactief_op) return { ok: false, fout: "Bij deze aanpassing staat niet wanneer het adres stopte." };
+  if (!d.inactief_op)
+    return { ok: false, fout: "Bij deze aanpassing staat niet wanneer het adres stopte." };
 
   // Eén stap in de database (stoppen_terugdraaien), dezelfde als de ongedaan-
   // knop in de app: alleen wat nog van déze stopzetting is, klantgegevens
@@ -358,7 +359,9 @@ export function overslaanTerug(
   const erbij = na.overslaan.filter((m) => !voor.overslaan.includes(m));
   // Wat de startmaand opschoof haalde maanden uit de lijst; die komen terug.
   const eraf = voor.overslaan.filter((m) => !na.overslaan.includes(m));
-  const overslaan = [...new Set([...nu.overslaan.filter((m) => !erbij.includes(m)), ...eraf])].sort();
+  const overslaan = [
+    ...new Set([...nu.overslaan.filter((m) => !erbij.includes(m)), ...eraf]),
+  ].sort();
   const start_maand = nu.start_maand === na.start_maand ? voor.start_maand : nu.start_maand;
   return { overslaan, start_maand };
 }
@@ -450,7 +453,11 @@ export async function draaiTerug(
       .eq("id", w.customer_id)
       .maybeSingle();
     if (!adres) return { ok: false, fout: "Het adres bestaat niet meer." };
-    if (adres.deleted_at && weggelegdOp && new Date(adres.deleted_at).getTime() === new Date(weggelegdOp).getTime()) {
+    if (
+      adres.deleted_at &&
+      weggelegdOp &&
+      new Date(adres.deleted_at).getTime() === new Date(weggelegdOp).getTime()
+    ) {
       const { error: terugFout } = await db
         .from("customers")
         .update({ deleted_at: null })
@@ -459,26 +466,26 @@ export async function draaiTerug(
       if (terugFout) return { ok: false, fout: "Het adres terugzetten lukte niet." };
     }
   } else {
-  const { data: c } = await db
-    .from("customers")
-    .select("id,overslaan,start_maand")
-    .eq("company_id", companyId)
-    .eq("id", w.customer_id)
-    .maybeSingle();
-  if (!c) return { ok: false, fout: "Het adres bestaat niet meer." };
+    const { data: c } = await db
+      .from("customers")
+      .select("id,overslaan,start_maand")
+      .eq("company_id", companyId)
+      .eq("id", w.customer_id)
+      .maybeSingle();
+    if (!c) return { ok: false, fout: "Het adres bestaat niet meer." };
 
-  const { overslaan, start_maand } = overslaanTerug(
-    { overslaan: c.overslaan ?? [], start_maand: c.start_maand },
-    { overslaan: w.voor_overslaan ?? [], start_maand: w.voor_start_maand },
-    { overslaan: w.na_overslaan ?? [], start_maand: w.na_start_maand },
-  );
+    const { overslaan, start_maand } = overslaanTerug(
+      { overslaan: c.overslaan ?? [], start_maand: c.start_maand },
+      { overslaan: w.voor_overslaan ?? [], start_maand: w.voor_start_maand },
+      { overslaan: w.na_overslaan ?? [], start_maand: w.na_start_maand },
+    );
 
-  const { error } = await db
-    .from("customers")
-    .update({ overslaan, start_maand })
-    .eq("company_id", companyId)
-    .eq("id", c.id);
-  if (error) return { ok: false, fout: "Het adres aanpassen lukte niet." };
+    const { error } = await db
+      .from("customers")
+      .update({ overslaan, start_maand })
+      .eq("company_id", companyId)
+      .eq("id", c.id);
+    if (error) return { ok: false, fout: "Het adres aanpassen lukte niet." };
   }
 
   await db
@@ -502,7 +509,10 @@ export async function draaiTerug(
         .eq("company_id", companyId)
         .eq("id", w.bericht_id)
         .maybeSingle();
-      const bijwerken: Record<string, unknown> = { doorgevoerd_op: null, doorgevoerd_automatisch: false };
+      const bijwerken: Record<string, unknown> = {
+        doorgevoerd_op: null,
+        doorgevoerd_automatisch: false,
+      };
       // Alleen het voorstel aanraken als het lezen lukte: anders zou een lege
       // waarde alles wegschrijven, ook de aanmelding en de prijzen.
       if (!leesFout && bericht) {

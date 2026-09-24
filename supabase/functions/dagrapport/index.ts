@@ -28,7 +28,8 @@ declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 // deno-lint-ignore no-explicit-any
 type Db = any;
 
-const APP_URL = Deno.env.get("WOOSHY_APP_URL") ?? "https://timm-ouip-glazenwassapp.wasapp.workers.dev";
+const APP_URL =
+  Deno.env.get("WOOSHY_APP_URL") ?? "https://timm-ouip-glazenwassapp.wasapp.workers.dev";
 
 /** Datum en uur in Nederland. */
 function nederland(nu: Date): { datum: string; uur: number } {
@@ -52,7 +53,9 @@ Deno.serve(async (req) => {
   const url = Deno.env.get("SUPABASE_URL") ?? "";
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   if (!url || !service) return antwoord({ ok: false, fase: "instellingen" }, 500);
-  const db = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
+  const db = createClient(url, service, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
   let proef = false;
   try {
@@ -74,16 +77,21 @@ Deno.serve(async (req) => {
     }
   }
 
-  if (!proef && uur !== 6) return antwoord({ ok: true, overgeslagen: `het is ${uur} uur in Nederland` });
+  if (!proef && uur !== 6)
+    return antwoord({ ok: true, overgeslagen: `het is ${uur} uur in Nederland` });
 
   const { data: bedrijven, error } = await db.from("companies").select("id,name");
-  if (error) return antwoord({ ok: false, fase: "bedrijven", fout: error.message.slice(0, 200) }, 500);
+  if (error)
+    return antwoord({ ok: false, fase: "bedrijven", fout: error.message.slice(0, 200) }, 500);
 
   const werk = async () => {
     const uitkomsten: Record<string, unknown>[] = [];
     for (const bedrijf of (bedrijven ?? []) as Bedrijf[]) {
       try {
-        uitkomsten.push({ bedrijf: bedrijf.name, ...(await rapportVoor(db, bedrijf, datum, nu, proef)) });
+        uitkomsten.push({
+          bedrijf: bedrijf.name,
+          ...(await rapportVoor(db, bedrijf, datum, nu, proef)),
+        });
       } catch (e) {
         const fout = e instanceof Error ? e.message.slice(0, 200) : String(e);
         console.error(`dagrapport ${bedrijf.id}:`, fout);
@@ -157,7 +165,13 @@ async function rapportVoor(
   // Eerst vastleggen (de unieke datum voorkomt een tweede), dan pas mailen.
   const { data: rapport, error } = await db
     .from("dagrapporten")
-    .insert({ company_id: bedrijf.id, datum, vanaf: vanaf.toISOString(), tot: nu.toISOString(), inhoud })
+    .insert({
+      company_id: bedrijf.id,
+      datum,
+      vanaf: vanaf.toISOString(),
+      tot: nu.toISOString(),
+      inhoud,
+    })
     .select("id")
     .single();
   if (error) {
@@ -177,10 +191,17 @@ async function mailEnNoteer(
   const mailFout = await mail(db, bedrijf, datum, alsTekst(inhoud, APP_URL));
   const { error } = await db
     .from("dagrapporten")
-    .update(mailFout ? { mail_fout: mailFout.slice(0, 300) } : { gemaild_op: new Date().toISOString(), mail_fout: "" })
+    .update(
+      mailFout
+        ? { mail_fout: mailFout.slice(0, 300) }
+        : { gemaild_op: new Date().toISOString(), mail_fout: "" },
+    )
     .eq("id", rapportId);
   if (error) console.error(`dagrapport ${bedrijf.id} vastleggen:`, error.message);
-  return { status: mailFout ? "bewaard, mailen mislukte" : "verstuurd", fout: mailFout || undefined };
+  return {
+    status: mailFout ? "bewaard, mailen mislukte" : "verstuurd",
+    fout: mailFout || undefined,
+  };
 }
 
 /** Het rapport mailen naar de eigenaar(s). Geeft een lege tekst als het lukte. */
@@ -191,7 +212,15 @@ async function mail(db: Db, bedrijf: Bedrijf, datum: string, tekst: string): Pro
     .eq("company_id", bedrijf.id)
     .eq("rol", "eigenaar");
   if (eigenaarFout) return `Eigenaren opzoeken lukte niet: ${eigenaarFout.message}`;
-  const aan = [...new Set((eigenaren ?? []).map((e: { email: string }) => String(e.email ?? "").trim().toLowerCase()))]
+  const aan = [
+    ...new Set(
+      (eigenaren ?? []).map((e: { email: string }) =>
+        String(e.email ?? "")
+          .trim()
+          .toLowerCase(),
+      ),
+    ),
+  ]
     .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))
     .map((email) => ({ email }));
   if (aan.length === 0) return "Geen eigenaar met een mailadres.";
@@ -207,7 +236,8 @@ async function mail(db: Db, bedrijf: Bedrijf, datum: string, tekst: string): Pro
   if (boxFout) return `Mailbox opzoeken lukte niet: ${boxFout.message}`;
   // Werkt de eigen mailbox niet (juist dan staat dat in het rapport), dan via
   // Brevo, waarmee ook de aankondigingen gaan.
-  if (!box || box.status !== "actief") return await viaBrevo(db, bedrijf, box?.adres ?? "", aan, onderwerp, tekst);
+  if (!box || box.status !== "actief")
+    return await viaBrevo(db, bedrijf, box?.adres ?? "", aan, onderwerp, tekst);
   const { data: geheim, error: geheimFout } = await db
     .from("mailbox_geheimen")
     .select("versleuteld,iv")
@@ -246,7 +276,13 @@ async function viaBrevo(
   tekst: string,
 ): Promise<string> {
   const sleutel = Deno.env.get("BREVO_API_KEY") ?? "";
-  const domeinVan = (a: string) => (a.lastIndexOf("@") < 0 ? "" : a.slice(a.lastIndexOf("@") + 1).trim().toLowerCase());
+  const domeinVan = (a: string) =>
+    a.lastIndexOf("@") < 0
+      ? ""
+      : a
+          .slice(a.lastIndexOf("@") + 1)
+          .trim()
+          .toLowerCase();
   const { data: instellingen, error } = await db
     .from("companies")
     .select("name,mail_afzender_naam,mail_afzender_email")
@@ -263,9 +299,16 @@ async function viaBrevo(
   if (!domein || domeinVan(afzenderEmail) !== domein) {
     return "De mailbox werkt niet, en de afzender staat niet op het domein van die mailbox; het rapport staat wel in Paaltje Systems.";
   }
-  const afzender = { naam: String(instellingen?.mail_afzender_naam || instellingen?.name || "Paaltje Systems"), email: afzenderEmail };
+  const afzender = {
+    naam: String(instellingen?.mail_afzender_naam || instellingen?.name || "Paaltje Systems"),
+    email: afzenderEmail,
+  };
   for (const ontvanger of aan) {
-    const uit = await stuurMail(sleutel, afzender, { naar: { email: ontvanger.email, naam: "" }, onderwerp, tekst });
+    const uit = await stuurMail(sleutel, afzender, {
+      naar: { email: ontvanger.email, naam: "" },
+      onderwerp,
+      tekst,
+    });
     if (!uit.ok) return `Via Brevo mailen lukte niet: ${uit.fout}`;
   }
   return "";

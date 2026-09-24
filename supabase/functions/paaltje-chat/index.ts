@@ -169,8 +169,10 @@ function vandaagVoluit(): string {
 /** Een fout van het model als zin voor op het scherm. */
 function modelFout(e: unknown): string {
   const status = e instanceof Anthropic.APIError ? e.status : undefined;
-  if (status === 429) return "Paaltje heeft het even te druk. Probeer het over een minuut nog eens.";
-  if (status === 529 || status === 503) return "Paaltje is even overbelast. Probeer het zo nog eens.";
+  if (status === 429)
+    return "Paaltje heeft het even te druk. Probeer het over een minuut nog eens.";
+  if (status === 529 || status === 503)
+    return "Paaltje is even overbelast. Probeer het zo nog eens.";
   if (status === 401 || status === 403) {
     return "Paaltje kan zijn AI-dienst niet bereiken. Laat de eigenaar de sleutel controleren.";
   }
@@ -244,7 +246,10 @@ function metCache(berichten: Anthropic.MessageParam[]): Anthropic.MessageParam[]
       ? [{ type: "text", text: laatste.content }]
       : [...laatste.content];
   const eind = blokken.length - 1;
-  blokken[eind] = { ...blokken[eind], cache_control: { type: "ephemeral" } } as Anthropic.ContentBlockParam;
+  blokken[eind] = {
+    ...blokken[eind],
+    cache_control: { type: "ephemeral" },
+  } as Anthropic.ContentBlockParam;
   kopie[kopie.length - 1] = { ...laatste, content: blokken };
   return kopie;
 }
@@ -252,7 +257,8 @@ function metCache(berichten: Anthropic.MessageParam[]): Anthropic.MessageParam[]
 async function stuur(db: Db, m: Medewerker, rechten: Rechten, invoer: string): Promise<Response> {
   const tekst = invoer.trim();
   if (!tekst) return antwoord({ fout: "Het bericht is leeg." }, 400);
-  if (tekst.length > MAX_BERICHT) return antwoord({ fout: `Hooguit ${MAX_BERICHT} tekens per bericht.` }, 400);
+  if (tekst.length > MAX_BERICHT)
+    return antwoord({ fout: `Hooguit ${MAX_BERICHT} tekens per bericht.` }, 400);
 
   const sleutel = (Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim();
   if (!sleutel) return antwoord({ fout: "Paaltje is nog niet ingesteld op de server." }, 500);
@@ -262,7 +268,8 @@ async function stuur(db: Db, m: Medewerker, rechten: Rechten, invoer: string): P
     .select("name,paaltje_daglimiet")
     .eq("id", m.company_id)
     .maybeSingle();
-  if (bedrijfFout || !bedrijf) throw new Error(`Bedrijf ophalen: ${bedrijfFout?.message ?? "niet gevonden"}`);
+  if (bedrijfFout || !bedrijf)
+    throw new Error(`Bedrijf ophalen: ${bedrijfFout?.message ?? "niet gevonden"}`);
   const limiet = Number(bedrijf.paaltje_daglimiet ?? 200);
 
   // Eerst tellen, dan pas praten — in één stap in de database. Andersom zien
@@ -278,7 +285,10 @@ async function stuur(db: Db, m: Medewerker, rechten: Rechten, invoer: string): P
   if (Number(stand ?? 0) > limiet) {
     // Geweigerd is niet gepraat: die telt niet mee.
     await telVerbruik(db, m.company_id, 0, 0, -1);
-    return antwoord({ fout: "Paaltje heeft vandaag genoeg gepraat, morgen weer.", limiet: true }, 429);
+    return antwoord(
+      { fout: "Paaltje heeft vandaag genoeg gepraat, morgen weer.", limiet: true },
+      429,
+    );
   }
 
   // Oude berichten van deze medewerker opruimen; mislukt dat, dan de volgende keer.
@@ -291,7 +301,10 @@ async function stuur(db: Db, m: Medewerker, rechten: Rechten, invoer: string): P
   if (opruimFout) console.error("oude berichten opruimen:", opruimFout.message);
 
   const begonnen = new Date().toISOString();
-  const [snelkeuzes, eerder] = await Promise.all([snelkeuzesVan(db, m.company_id), geschiedenis(db, m)]);
+  const [snelkeuzes, eerder] = await Promise.all([
+    snelkeuzesVan(db, m.company_id),
+    geschiedenis(db, m),
+  ]);
   const systeem = systeemPrompt(String(bedrijf.name ?? ""), snelkeuzes, rechten);
   const tools = gereedschap(rechten) as Anthropic.Tool[];
 
@@ -340,7 +353,14 @@ async function stuur(db: Db, m: Medewerker, rechten: Rechten, invoer: string): P
       const resultaten: Anthropic.ToolResultBlockParam[] = [];
       for (const blok of res.content) {
         if (blok.type !== "tool_use") continue;
-        const uit = await voerUit(db, m, rechten, blok.name, blok.input as Record<string, unknown>, voorstel);
+        const uit = await voerUit(
+          db,
+          m,
+          rechten,
+          blok.name,
+          blok.input as Record<string, unknown>,
+          voorstel,
+        );
         if (uit.voorstel) voorstel = uit.voorstel;
         resultaten.push({
           type: "tool_result",
@@ -363,7 +383,8 @@ async function stuur(db: Db, m: Medewerker, rechten: Rechten, invoer: string): P
         .eq("id", voorstel.id)
         .eq("status", "open");
     }
-    if (invoerTokens + uitvoerTokens > 0) await telVerbruik(db, m.company_id, invoerTokens, uitvoerTokens, 0);
+    if (invoerTokens + uitvoerTokens > 0)
+      await telVerbruik(db, m.company_id, invoerTokens, uitvoerTokens, 0);
     return antwoord({ fout: modelFout(e) }, 502);
   }
 
@@ -383,7 +404,13 @@ async function stuur(db: Db, m: Medewerker, rechten: Rechten, invoer: string): P
   const { data: opgeslagen, error: opslaanFout } = await db
     .from("paaltje_berichten")
     .insert([
-      { company_id: m.company_id, employee_id: m.id, rol: "gebruiker", tekst, created_at: begonnen },
+      {
+        company_id: m.company_id,
+        employee_id: m.id,
+        rol: "gebruiker",
+        tekst,
+        created_at: begonnen,
+      },
       {
         company_id: m.company_id,
         employee_id: m.id,
@@ -408,7 +435,13 @@ async function stuur(db: Db, m: Medewerker, rechten: Rechten, invoer: string): P
   });
 }
 
-async function telVerbruik(db: Db, companyId: string, invoer: number, uitvoer: number, bericht: number) {
+async function telVerbruik(
+  db: Db,
+  companyId: string,
+  invoer: number,
+  uitvoer: number,
+  bericht: number,
+) {
   const { error } = await db.rpc("paaltje_verbruik_tellen", {
     bedrijf: companyId,
     invoer,
@@ -444,7 +477,9 @@ async function voerUit(
       case "zoek_klant":
         return json(await zoekKlant(db, m.company_id, rechten, String(input?.zoekterm ?? "")));
       case "adres_details":
-        return json(await adresDetails(db, m.company_id, rechten, String(input?.customer_id ?? "")));
+        return json(
+          await adresDetails(db, m.company_id, rechten, String(input?.customer_id ?? "")),
+        );
       case "straat_adressen":
         return json(
           await straatAdressen(
@@ -458,7 +493,8 @@ async function voerUit(
       case "stel_wijziging_voor": {
         if (alVoorstel) {
           return {
-            tekst: "Er staat in dit antwoord al een voorstel klaar. Hooguit één voorstel per antwoord.",
+            tekst:
+              "Er staat in dit antwoord al een voorstel klaar. Hooguit één voorstel per antwoord.",
             fout: true,
           };
         }
@@ -476,6 +512,9 @@ async function voerUit(
     }
   } catch (e) {
     console.error(`gereedschap ${naam}:`, e instanceof Error ? e.message : e);
-    return { tekst: "Dat lukte niet door een fout in de database. Zeg dat tegen de medewerker.", fout: true };
+    return {
+      tekst: "Dat lukte niet door een fout in de database. Zeg dat tegen de medewerker.",
+      fout: true,
+    };
   }
 }

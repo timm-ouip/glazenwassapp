@@ -18,7 +18,13 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { antwoord } from "../_gedeeld/mail.ts";
 import { cronSleutelKlopt } from "../_gedeeld/cron.ts";
 import { ontsleutel } from "../_gedeeld/geheim.ts";
-import { binnenAntwoordtijd, toegangVan, VENSTER_MS, verstuurTekst, ververSjablonen } from "../_gedeeld/whatsapp.ts";
+import {
+  binnenAntwoordtijd,
+  toegangVan,
+  VENSTER_MS,
+  verstuurTekst,
+  ververSjablonen,
+} from "../_gedeeld/whatsapp.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -29,9 +35,13 @@ const VASTGELOPEN_MS = 10 * 60_000;
 
 Deno.serve(async (req) => {
   if (!(await cronSleutelKlopt(req))) return antwoord({ ok: false }, 401);
-  const db = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "", {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const db = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    {
+      auth: { persistSession: false, autoRefreshToken: false },
+    },
+  );
   // Vóór de ronde kijken: die kan langer dan een minuut duren.
   const sjablonenBeurt = new Date().getUTCMinutes() % 10 === 0;
   try {
@@ -42,7 +52,9 @@ Deno.serve(async (req) => {
     return antwoord({ ok: false }, 500);
   } finally {
     if (sjablonenBeurt) {
-      await sjablonenNakijken(db).catch((e) => console.error("sjablonen nakijken:", e instanceof Error ? e.message : e));
+      await sjablonenNakijken(db).catch((e) =>
+        console.error("sjablonen nakijken:", e instanceof Error ? e.message : e),
+      );
     }
   }
 });
@@ -91,7 +103,8 @@ async function ronde(db: Db): Promise<number> {
     .from("berichten")
     .update({
       wa_antwoord_status: "mislukt",
-      wa_antwoord_reden: "Onderbroken tijdens het versturen. Kijk op je telefoon of het is aangekomen.",
+      wa_antwoord_reden:
+        "Onderbroken tijdens het versturen. Kijk op je telefoon of het is aangekomen.",
     })
     .eq("wa_antwoord_status", "bezig")
     .lt("wa_antwoord_op", new Date(Date.now() - VASTGELOPEN_MS).toISOString());
@@ -135,7 +148,13 @@ async function ronde(db: Db): Promise<number> {
   return verstuurd;
 }
 
-async function zet(db: Db, id: string, status: string, reden: string, extra: Record<string, unknown> = {}) {
+async function zet(
+  db: Db,
+  id: string,
+  status: string,
+  reden: string,
+  extra: Record<string, unknown> = {},
+) {
   const { error } = await db
     .from("berichten")
     .update({ wa_antwoord_status: status, wa_antwoord_reden: reden, ...extra })
@@ -143,7 +162,11 @@ async function zet(db: Db, id: string, status: string, reden: string, extra: Rec
   if (error) console.error(`antwoord ${id} op ${status}:`, error.message);
 }
 
-async function verstuurEen(db: Db, b: Gepland, tijden: Map<string, { van: string; tot: string }>): Promise<boolean> {
+async function verstuurEen(
+  db: Db,
+  b: Gepland,
+  tijden: Map<string, { van: string; tot: string }>,
+): Promise<boolean> {
   const tekst = String(b.concept ?? "").trim();
   if (!tekst) {
     await zet(db, b.id, "geannuleerd", "Er was geen antwoord.");
@@ -157,7 +180,12 @@ async function verstuurEen(db: Db, b: Gepland, tijden: Map<string, { van: string
   if (!(await gesprekStil(db, b))) return false;
 
   if (Date.now() - new Date(b.ontvangen_op).getTime() > VENSTER_MS) {
-    await zet(db, b.id, "geannuleerd", "Meer dan 24 uur na het bericht van de klant; WhatsApp staat vrije tekst dan niet toe.");
+    await zet(
+      db,
+      b.id,
+      "geannuleerd",
+      "Meer dan 24 uur na het bericht van de klant; WhatsApp staat vrije tekst dan niet toe.",
+    );
     return false;
   }
 
@@ -168,7 +196,10 @@ async function verstuurEen(db: Db, b: Gepland, tijden: Map<string, { van: string
       .select("wa_antwoord_van,wa_antwoord_tot")
       .eq("id", b.company_id)
       .single();
-    t = { van: String(bedrijf?.wa_antwoord_van ?? "07:00"), tot: String(bedrijf?.wa_antwoord_tot ?? "21:00") };
+    t = {
+      van: String(bedrijf?.wa_antwoord_van ?? "07:00"),
+      tot: String(bedrijf?.wa_antwoord_tot ?? "21:00"),
+    };
     tijden.set(b.company_id, t);
   }
   const nu = new Date();
@@ -195,7 +226,11 @@ async function verstuurEen(db: Db, b: Gepland, tijden: Map<string, { van: string
   }
 
   // Vlak voor het versturen nog één keer: antwoordde iemand net?
-  const { data: nogGepakt } = await db.from("berichten").select("wa_antwoord_status,beantwoord_op").eq("id", b.id).single();
+  const { data: nogGepakt } = await db
+    .from("berichten")
+    .select("wa_antwoord_status,beantwoord_op")
+    .eq("id", b.id)
+    .single();
   if (nogGepakt?.wa_antwoord_status !== "bezig" || nogGepakt?.beantwoord_op) return false;
   if (!(await gesprekStil(db, b))) return false;
 
@@ -260,7 +295,12 @@ async function gesprekStil(db: Db, b: Gepland): Promise<boolean> {
     return false;
   }
   if ((later ?? []).some((r: { richting: string }) => r.richting === "in")) {
-    await zet(db, b.id, "geannuleerd", "De klant stuurde nog een bericht; Paaltje leest het gesprek opnieuw.");
+    await zet(
+      db,
+      b.id,
+      "geannuleerd",
+      "De klant stuurde nog een bericht; Paaltje leest het gesprek opnieuw.",
+    );
     return false;
   }
   return true;

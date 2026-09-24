@@ -95,7 +95,8 @@ Deno.serve(async (req) => {
   const url = Deno.env.get("SUPABASE_URL") ?? "";
   const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (!url || !anon || !service) return antwoord({ fout: "De server is niet goed ingesteld." }, 500);
+  if (!url || !anon || !service)
+    return antwoord({ fout: "De server is niet goed ingesteld." }, 500);
 
   const kop = req.headers.get("Authorization") ?? "";
   if (!kop.startsWith("Bearer ")) return antwoord({ fout: "Niet ingelogd." }, 401);
@@ -112,7 +113,9 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (!medewerker) return antwoord({ fout: "Geen bedrijf gevonden." }, 403);
   const m = medewerker as Medewerker;
-  const db = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
+  const db = createClient(url, service, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
   let verzoek: Verzoek;
   try {
@@ -124,22 +127,28 @@ Deno.serve(async (req) => {
   try {
     switch (verzoek.actie) {
       case "test_instellen":
-        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan WhatsApp koppelen." }, 403);
+        if (m.rol !== "eigenaar")
+          return antwoord({ fout: "Alleen de eigenaar kan WhatsApp koppelen." }, 403);
         return await testInstellen(db, m, verzoek);
       case "kapso_link":
-        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan WhatsApp koppelen." }, 403);
+        if (m.rol !== "eigenaar")
+          return antwoord({ fout: "Alleen de eigenaar kan WhatsApp koppelen." }, 403);
         return await kapsoLink(db, m, String(verzoek.terug_url ?? ""));
       case "kapso_afronden":
-        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan WhatsApp koppelen." }, 403);
+        if (m.rol !== "eigenaar")
+          return antwoord({ fout: "Alleen de eigenaar kan WhatsApp koppelen." }, 403);
         return await kapsoAfronden(db, m, String(verzoek.phone_number_id ?? ""));
       case "ontkoppelen":
-        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan WhatsApp ontkoppelen." }, 403);
+        if (m.rol !== "eigenaar")
+          return antwoord({ fout: "Alleen de eigenaar kan WhatsApp ontkoppelen." }, 403);
         return await ontkoppel(db, m);
       case "gelezen":
-        if (!(await heeftRecht(db, m, "mail_lezen"))) return antwoord({ fout: "Je mag geen berichten lezen." }, 403);
+        if (!(await heeftRecht(db, m, "mail_lezen")))
+          return antwoord({ fout: "Je mag geen berichten lezen." }, 403);
         return await markeerGelezen(db, m, String(verzoek.telefoon ?? ""));
       case "media_ophalen":
-        if (!(await heeftRecht(db, m, "mail_lezen"))) return antwoord({ fout: "Je mag geen berichten lezen." }, 403);
+        if (!(await heeftRecht(db, m, "mail_lezen")))
+          return antwoord({ fout: "Je mag geen berichten lezen." }, 403);
         return await mediaOphalen(db, m, String(verzoek.bericht_id ?? ""));
       case "versturen":
         if (!(await heeftRecht(db, m, "mail_versturen"))) {
@@ -151,12 +160,19 @@ Deno.serve(async (req) => {
         if (!(await heeftRecht(db, m, "mail_versturen"))) {
           return antwoord({ fout: "Je mag geen berichten versturen." }, 403);
         }
-        return await geplandAntwoord(db, m, String(verzoek.bericht_id ?? ""), verzoek.actie === "antwoord_nu");
+        return await geplandAntwoord(
+          db,
+          m,
+          String(verzoek.bericht_id ?? ""),
+          verzoek.actie === "antwoord_nu",
+        );
       case "sjabloon_maken":
-        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan templates maken." }, 403);
+        if (m.rol !== "eigenaar")
+          return antwoord({ fout: "Alleen de eigenaar kan templates maken." }, 403);
         return await sjabloonMaken(db, m, verzoek);
       case "sjabloon_weg":
-        if (m.rol !== "eigenaar") return antwoord({ fout: "Alleen de eigenaar kan templates weggooien." }, 403);
+        if (m.rol !== "eigenaar")
+          return antwoord({ fout: "Alleen de eigenaar kan templates weggooien." }, 403);
         return await sjabloonWeg(db, m, String(verzoek.sjabloon_id ?? ""));
       case "sjablonen_verversen":
         if (!(await heeftRecht(db, m, "mail_versturen"))) {
@@ -173,13 +189,21 @@ Deno.serve(async (req) => {
       // terugdraaien. Net als bij mail: wie berichten leest én klanten bewerkt.
       case "klant_bevestigen":
       case "klantgegevens_terugdraaien": {
-        if (!(await heeftRecht(db, m, "mail_lezen")) || !(await heeftRecht(db, m, "klanten_bewerken"))) {
+        if (
+          !(await heeftRecht(db, m, "mail_lezen")) ||
+          !(await heeftRecht(db, m, "klanten_bewerken"))
+        ) {
           return antwoord({ fout: "Je hebt geen recht om klanten te bewerken." }, 403);
         }
         const bereik = { kanaal: "whatsapp" as const, companyId: m.company_id };
         const uit =
           verzoek.actie === "klant_bevestigen"
-            ? await bevestigKlant(db, bereik, String(verzoek.bericht_id ?? ""), String(verzoek.klant_id ?? ""))
+            ? await bevestigKlant(
+                db,
+                bereik,
+                String(verzoek.bericht_id ?? ""),
+                String(verzoek.klant_id ?? ""),
+              )
             : await draaiKlantgegevensTerug(db, bereik, String(verzoek.bericht_id ?? ""));
         return antwoord(uit.body, uit.status);
       }
@@ -196,9 +220,12 @@ async function testInstellen(db: Db, m: Medewerker, verzoek: Verzoek): Promise<R
   const phoneNumberId = String(verzoek.phone_number_id ?? "").trim();
   const wabaId = String(verzoek.waba_id ?? "").trim();
   const token = String(verzoek.token ?? "").trim();
-  if (!/^\d{5,30}$/.test(phoneNumberId)) return antwoord({ fout: "Het nummer-ID bestaat alleen uit cijfers." }, 400);
-  if (!/^\d{5,30}$/.test(wabaId)) return antwoord({ fout: "Het account-ID bestaat alleen uit cijfers." }, 400);
-  if (token.length < 20 || token.length > 1000) return antwoord({ fout: "Dat lijkt geen toegangstoken." }, 400);
+  if (!/^\d{5,30}$/.test(phoneNumberId))
+    return antwoord({ fout: "Het nummer-ID bestaat alleen uit cijfers." }, 400);
+  if (!/^\d{5,30}$/.test(wabaId))
+    return antwoord({ fout: "Het account-ID bestaat alleen uit cijfers." }, 400);
+  if (token.length < 20 || token.length > 1000)
+    return antwoord({ fout: "Dat lijkt geen toegangstoken." }, 400);
 
   // Eerst bij Meta proberen: klopt het token bij dit nummer?
   const toegang: Toegang = { aanbieder: "meta", token };
@@ -214,9 +241,14 @@ async function testInstellen(db: Db, m: Medewerker, verzoek: Verzoek): Promise<R
   if (bezet) return bezet;
 
   // Zonder dit abonnement stuurt Meta geen berichten naar onze webhook.
-  const abonnement = await graph<{ success?: boolean }>(`${wabaId}/subscribed_apps`, toegang, { method: "POST" });
+  const abonnement = await graph<{ success?: boolean }>(`${wabaId}/subscribed_apps`, toegang, {
+    method: "POST",
+  });
   if (!abonnement.ok) {
-    return antwoord({ fout: `Het nummer klopt, maar aanmelden voor berichten mislukte: ${abonnement.fout}` }, 400);
+    return antwoord(
+      { fout: `Het nummer klopt, maar aanmelden voor berichten mislukte: ${abonnement.fout}` },
+      400,
+    );
   }
 
   const { data: koppeling, error } = await db
@@ -240,7 +272,8 @@ async function testInstellen(db: Db, m: Medewerker, verzoek: Verzoek): Promise<R
     .select("id")
     .single();
   // Twee pogingen tegelijk: de unieke index houdt de tweede tegen.
-  if (error?.code === "23505") return antwoord({ fout: "Dit nummer is al gekoppeld aan een ander bedrijf." }, 409);
+  if (error?.code === "23505")
+    return antwoord({ fout: "Dit nummer is al gekoppeld aan een ander bedrijf." }, 409);
   if (error) throw new Error(`Koppeling opslaan: ${error.message}`);
 
   const geheim = await versleutel(token);
@@ -249,14 +282,22 @@ async function testInstellen(db: Db, m: Medewerker, verzoek: Verzoek): Promise<R
     .upsert({ koppeling_id: koppeling.id, ...geheim, updated_at: new Date().toISOString() });
   if (geheimFout) throw new Error(`Token opslaan: ${geheimFout.message}`);
 
-  return antwoord({ ok: true, weergavenummer: nummer.data.display_phone_number ?? "", naam: nummer.data.verified_name ?? "" });
+  return antwoord({
+    ok: true,
+    weergavenummer: nummer.data.display_phone_number ?? "",
+    naam: nummer.data.verified_name ?? "",
+  });
 }
 
 /**
  * Hoort dit nummer al bij een ander bedrijf, dan niet overnemen (foutantwoord).
  * Was dat bedrijf al ontkoppeld, dan ruimen we die oude koppeling op.
  */
-async function nummerVanAnder(db: Db, m: Medewerker, phoneNumberId: string): Promise<Response | null> {
+async function nummerVanAnder(
+  db: Db,
+  m: Medewerker,
+  phoneNumberId: string,
+): Promise<Response | null> {
   const { data: bestaand } = await db
     .from("whatsapp_koppelingen")
     .select("id,company_id,status")
@@ -266,7 +307,10 @@ async function nummerVanAnder(db: Db, m: Medewerker, phoneNumberId: string): Pro
   if (bestaand.status !== "uit") {
     return antwoord({ fout: "Dit nummer is al gekoppeld aan een ander bedrijf." }, 409);
   }
-  const { error: opruimFout } = await db.from("whatsapp_koppelingen").delete().eq("id", bestaand.id);
+  const { error: opruimFout } = await db
+    .from("whatsapp_koppelingen")
+    .delete()
+    .eq("id", bestaand.id);
   if (opruimFout) throw new Error(`Oude koppeling opruimen: ${opruimFout.message}`);
   return null;
 }
@@ -280,7 +324,8 @@ const TOEGESTANE_HOSTS = ["timm-ouip-glazenwassapp.wasapp.workers.dev", "localho
 
 function kapsoSleutel(): string | Response {
   const sleutel = Deno.env.get("KAPSO_API_KEY") ?? "";
-  if (!sleutel) return antwoord({ fout: "De Kapso-sleutel staat nog niet op de server (KAPSO_API_KEY)." }, 500);
+  if (!sleutel)
+    return antwoord({ fout: "De Kapso-sleutel staat nog niet op de server (KAPSO_API_KEY)." }, 500);
   return sleutel;
 }
 
@@ -299,8 +344,15 @@ async function kapsoCustomer(db: Db, m: Medewerker, sleutel: string): Promise<st
   if (error) throw new Error(`Kapso-klant ophalen: ${error.message}`);
   if (bekend?.customer_id) return String(bekend.customer_id);
 
-  const { data: bedrijf } = await db.from("companies").select("name").eq("id", m.company_id).maybeSingle();
-  const naam = String(bedrijf?.name ?? "").trim().slice(0, 100) || "Paaltje Systems-bedrijf";
+  const { data: bedrijf } = await db
+    .from("companies")
+    .select("name")
+    .eq("id", m.company_id)
+    .maybeSingle();
+  const naam =
+    String(bedrijf?.name ?? "")
+      .trim()
+      .slice(0, 100) || "Paaltje Systems-bedrijf";
   const extern = `wooshy-${m.company_id}`;
   let customerId = "";
   const nieuw = await kapsoPlatform<{ data?: { id?: string } }>("customers", sleutel, {
@@ -317,7 +369,9 @@ async function kapsoCustomer(db: Db, m: Medewerker, sleutel: string): Promise<st
         meta?: { total_pages?: number };
       }>(`customers?per_page=100&page=${pagina}`, sleutel);
       if (!lijst.ok) break;
-      customerId = String(lijst.data.data?.find((c) => c.external_customer_id === extern)?.id ?? "");
+      customerId = String(
+        lijst.data.data?.find((c) => c.external_customer_id === extern)?.id ?? "",
+      );
       if (pagina >= Number(lijst.data.meta?.total_pages ?? 1)) break;
     }
     if (!customerId) throw new Error(`Kapso-klant aanmaken: ${nieuw.fout}`);
@@ -373,7 +427,8 @@ async function kapsoLink(db: Db, m: Medewerker, terugUrl: string): Promise<Respo
   );
   if (!link.ok) return antwoord({ fout: `Kapso maakte geen koppellink: ${link.fout}` }, 502);
   const url = String(link.data.data?.url ?? "");
-  if (!url.startsWith("https://")) return antwoord({ fout: "Kapso gaf geen bruikbare koppellink terug." }, 502);
+  if (!url.startsWith("https://"))
+    return antwoord({ fout: "Kapso gaf geen bruikbare koppellink terug." }, 502);
   return antwoord({ ok: true, url });
 }
 
@@ -396,16 +451,22 @@ async function kapsoAfronden(db: Db, m: Medewerker, gevraagd: string): Promise<R
   const sleutel = kapsoSleutel();
   if (sleutel instanceof Response) return sleutel;
   const geheim = Deno.env.get("KAPSO_WEBHOOK_SECRET") ?? "";
-  if (!geheim) return antwoord({ fout: "Het webhookgeheim voor Kapso staat nog niet op de server." }, 500);
+  if (!geheim)
+    return antwoord({ fout: "Het webhookgeheim voor Kapso staat nog niet op de server." }, 500);
   if (gevraagd && !/^\d{5,30}$/.test(gevraagd)) return antwoord({ fout: "Onbekend nummer." }, 400);
 
   // Om te testen: één bedrijf (KAPSO_SANDBOX_BEDRIJF) mag Kapso's
   // sandbox-nummer van het project koppelen. Dat nummer hoort bij geen customer.
   const sandboxMag = (Deno.env.get("KAPSO_SANDBOX_BEDRIJF") ?? "") === m.company_id;
 
-  const { data: bekend } = await db.from("kapso_klanten").select("customer_id").eq("company_id", m.company_id).maybeSingle();
+  const { data: bekend } = await db
+    .from("kapso_klanten")
+    .select("customer_id")
+    .eq("company_id", m.company_id)
+    .maybeSingle();
   const customerId = String(bekend?.customer_id ?? "");
-  if (!customerId && !sandboxMag) return antwoord({ fout: "Begin eerst met koppelen via Kapso." }, 409);
+  if (!customerId && !sandboxMag)
+    return antwoord({ fout: "Begin eerst met koppelen via Kapso." }, 409);
 
   let nummers: KapsoNummer[] = [];
   if (customerId) {
@@ -415,7 +476,9 @@ async function kapsoAfronden(db: Db, m: Medewerker, gevraagd: string): Promise<R
     );
     if (!lijst.ok) return antwoord({ fout: `Kapso gaf de nummers niet: ${lijst.fout}` }, 502);
     // Het filter nog eens zelf nakijken: nooit een nummer van een andere customer.
-    nummers = (lijst.data.data ?? []).filter((n) => n.customer_id === customerId && n.phone_number_id);
+    nummers = (lijst.data.data ?? []).filter(
+      (n) => n.customer_id === customerId && n.phone_number_id,
+    );
   }
   const sandbox: KapsoNummer[] = [];
   if (sandboxMag) {
@@ -425,7 +488,11 @@ async function kapsoAfronden(db: Db, m: Medewerker, gevraagd: string): Promise<R
         sleutel,
       );
       if (!lijst.ok) return antwoord({ fout: `Kapso gaf de nummers niet: ${lijst.fout}` }, 502);
-      sandbox.push(...(lijst.data.data ?? []).filter((n) => n.kind === "sandbox" && !n.customer_id && n.phone_number_id));
+      sandbox.push(
+        ...(lijst.data.data ?? []).filter(
+          (n) => n.kind === "sandbox" && !n.customer_id && n.phone_number_id,
+        ),
+      );
       if (pagina >= Number(lijst.data.meta?.total_pages ?? 1)) break;
     }
   }
@@ -434,10 +501,16 @@ async function kapsoAfronden(db: Db, m: Medewerker, gevraagd: string): Promise<R
     ? [...nummers, ...sandbox].find((n) => n.phone_number_id === gevraagd)
     : (nummers[0] ?? sandbox[0]);
   if (!nummer?.phone_number_id) {
-    return antwoord({ fout: "Bij Kapso is nog geen nummer gekoppeld. Maak de koppeling eerst af via de link." }, 409);
+    return antwoord(
+      { fout: "Bij Kapso is nog geen nummer gekoppeld. Maak de koppeling eerst af via de link." },
+      409,
+    );
   }
   if (!gevraagd && nummers.length > 1) {
-    return antwoord({ fout: "Bij Kapso staan meer nummers voor dit bedrijf. Koppel opnieuw via de link." }, 409);
+    return antwoord(
+      { fout: "Bij Kapso staan meer nummers voor dit bedrijf. Koppel opnieuw via de link." },
+      409,
+    );
   }
   const phoneNumberId = nummer.phone_number_id;
 
@@ -452,7 +525,9 @@ async function kapsoAfronden(db: Db, m: Medewerker, gevraagd: string): Promise<R
   if (!oud.ok) return antwoord({ fout: `Kapso gaf de webhooks niet: ${oud.fout}` }, 502);
   for (const w of oud.data.data ?? []) {
     if (w.id && w.url === adres) {
-      const weg = await kapsoPlatform(`${pad}/${encodeURIComponent(w.id)}`, sleutel, { method: "DELETE" });
+      const weg = await kapsoPlatform(`${pad}/${encodeURIComponent(w.id)}`, sleutel, {
+        method: "DELETE",
+      });
       if (!weg.ok && weg.status !== 404) console.error("kapso oude webhook weghalen:", weg.fout);
     }
   }
@@ -506,10 +581,14 @@ async function kapsoAfronden(db: Db, m: Medewerker, gevraagd: string): Promise<R
     )
     .select("id")
     .single();
-  if (error?.code === "23505") return antwoord({ fout: "Dit nummer is al gekoppeld aan een ander bedrijf." }, 409);
+  if (error?.code === "23505")
+    return antwoord({ fout: "Dit nummer is al gekoppeld aan een ander bedrijf." }, 409);
   if (error) throw new Error(`Koppeling opslaan: ${error.message}`);
   // Een oud Meta-token hoort niet meer bij deze koppeling.
-  const { error: geheimFout } = await db.from("whatsapp_geheimen").delete().eq("koppeling_id", koppeling.id);
+  const { error: geheimFout } = await db
+    .from("whatsapp_geheimen")
+    .delete()
+    .eq("koppeling_id", koppeling.id);
   if (geheimFout) console.error("oud token weghalen:", geheimFout.message);
 
   return antwoord({
@@ -538,7 +617,10 @@ async function ontkoppel(db: Db, m: Medewerker): Promise<Response> {
     );
     if (!weg.ok && weg.status !== 404) console.error("kapso webhook afmelden:", weg.fout);
   }
-  const { error: geheimFout } = await db.from("whatsapp_geheimen").delete().eq("koppeling_id", koppeling.id);
+  const { error: geheimFout } = await db
+    .from("whatsapp_geheimen")
+    .delete()
+    .eq("koppeling_id", koppeling.id);
   const { error } = await db
     .from("whatsapp_koppelingen")
     .update({ status: "uit", fout: "", updated_at: new Date().toISOString() })
@@ -572,18 +654,26 @@ async function actieveKoppeling(
     .eq("company_id", m.company_id)
     .maybeSingle();
   if (error) throw new Error(`Koppeling ophalen: ${error.message}`);
-  if (!koppeling || koppeling.status === "uit") return antwoord({ fout: "Er is geen WhatsApp gekoppeld." }, 404);
+  if (!koppeling || koppeling.status === "uit")
+    return antwoord({ fout: "Er is geen WhatsApp gekoppeld." }, 404);
   const toegang = await toegangVan(db, koppeling.id, ontsleutel);
-  if (!toegang) return antwoord({ fout: "De toegang tot WhatsApp ontbreekt. Koppel het nummer opnieuw." }, 409);
+  if (!toegang)
+    return antwoord({ fout: "De toegang tot WhatsApp ontbreekt. Koppel het nummer opnieuw." }, 409);
   return { id: koppeling.id, phone_number_id: koppeling.phone_number_id, toegang };
 }
 
-async function verstuur(db: Db, m: Medewerker, telefoon: string, invoer: string): Promise<Response> {
+async function verstuur(
+  db: Db,
+  m: Medewerker,
+  telefoon: string,
+  invoer: string,
+): Promise<Response> {
   const nummer = waNummer(telefoon);
   const tekst = invoer.trim();
   if (!nummer) return antwoord({ fout: "Geen nummer." }, 400);
   if (!tekst) return antwoord({ fout: "Het bericht is leeg." }, 400);
-  if (tekst.length > MAX_TEKST) return antwoord({ fout: `Hooguit ${MAX_TEKST} tekens per bericht.` }, 400);
+  if (tekst.length > MAX_TEKST)
+    return antwoord({ fout: `Hooguit ${MAX_TEKST} tekens per bericht.` }, 400);
 
   const koppeling = await actieveKoppeling(db, m);
   if (koppeling instanceof Response) return koppeling;
@@ -626,7 +716,12 @@ async function verstuur(db: Db, m: Medewerker, telefoon: string, invoer: string)
 
   // Eerst Paaltjes ingeplande antwoord tegenhouden, dan pas zelf versturen:
   // anders kunnen ze tegelijk weggaan.
-  await annuleerGeplandeAntwoorden(db, m.company_id, nummer, "Er is vanuit Paaltje Systems geantwoord.");
+  await annuleerGeplandeAntwoorden(
+    db,
+    m.company_id,
+    nummer,
+    "Er is vanuit Paaltje Systems geantwoord.",
+  );
   const uit = await verstuurTekst(koppeling.toegang, koppeling.phone_number_id, nummer, tekst);
   if (!uit.ok) {
     console.error("whatsapp versturen:", uit.status, uit.fout);
@@ -687,12 +782,19 @@ async function mediaOphalen(db: Db, m: Medewerker, berichtId: string): Promise<R
   const media = (bericht.media ?? []) as WaMedia[];
   if (media.every((x) => x.pad)) return antwoord({ ok: true, media });
   if (Date.now() - new Date(bericht.ontvangen_op).getTime() > 7 * 24 * 60 * 60 * 1000) {
-    return antwoord({ fout: "Dit bestand is ouder dan 7 dagen; WhatsApp bewaart het niet meer." }, 410);
+    return antwoord(
+      { fout: "Dit bestand is ouder dan 7 dagen; WhatsApp bewaart het niet meer." },
+      410,
+    );
   }
   const koppeling = await actieveKoppeling(db, m);
   if (koppeling instanceof Response) return koppeling;
   const uit = await haalMediaBinnen(db, koppeling.toegang, m.company_id, bericht.id, media);
-  if (!uit.compleet) return antwoord({ fout: "Het bestand kon niet worden opgehaald. Probeer het zo nog eens." }, 502);
+  if (!uit.compleet)
+    return antwoord(
+      { fout: "Het bestand kon niet worden opgehaald. Probeer het zo nog eens." },
+      502,
+    );
   return antwoord({ ok: true, media: uit.media });
 }
 
@@ -701,14 +803,23 @@ async function mediaOphalen(db: Db, m: Medewerker, berichtId: string): Promise<R
  * het moment op nu; de planner verstuurt het binnen een minuut, met alle
  * controles (al geantwoord, nieuw bericht, 24 uur).
  */
-async function geplandAntwoord(db: Db, m: Medewerker, berichtId: string, nu: boolean): Promise<Response> {
+async function geplandAntwoord(
+  db: Db,
+  m: Medewerker,
+  berichtId: string,
+  nu: boolean,
+): Promise<Response> {
   if (!/^[0-9a-f-]{36}$/i.test(berichtId)) return antwoord({ fout: "Onbekend bericht." }, 400);
   const { data, error } = await db
     .from("berichten")
     .update(
       nu
         ? { wa_antwoord_op: new Date().toISOString(), wa_antwoord_direct: true }
-        : { wa_antwoord_status: "geannuleerd", wa_antwoord_reden: "Je zette het stop.", wa_antwoord_op: null },
+        : {
+            wa_antwoord_status: "geannuleerd",
+            wa_antwoord_reden: "Je zette het stop.",
+            wa_antwoord_op: null,
+          },
     )
     .eq("company_id", m.company_id)
     .eq("kanaal", "whatsapp")
@@ -729,14 +840,21 @@ const UUID = /^[0-9a-f-]{36}$/i;
 async function koppelingMetAccount(db: Db, m: Medewerker) {
   const k = await actieveKoppeling(db, m);
   if (k instanceof Response) return k;
-  const { data, error } = await db.from("whatsapp_koppelingen").select("waba_id").eq("id", k.id).single();
+  const { data, error } = await db
+    .from("whatsapp_koppelingen")
+    .select("waba_id")
+    .eq("id", k.id)
+    .single();
   if (error) throw new Error(`Account ophalen: ${error.message}`);
-  if (!data?.waba_id) return antwoord({ fout: "Het WhatsApp-account-ID ontbreekt. Koppel het nummer opnieuw." }, 409);
+  if (!data?.waba_id)
+    return antwoord({ fout: "Het WhatsApp-account-ID ontbreekt. Koppel het nummer opnieuw." }, 409);
   return { ...k, waba_id: String(data.waba_id) };
 }
 
 async function sjabloonMaken(db: Db, m: Medewerker, verzoek: Verzoek): Promise<Response> {
-  const titel = String(verzoek.titel ?? "").trim().slice(0, 60);
+  const titel = String(verzoek.titel ?? "")
+    .trim()
+    .slice(0, 60);
   const categorie = verzoek.categorie === "marketing" ? "marketing" : "utility";
   if (!titel) return antwoord({ fout: "Geef de template een naam." }, 400);
   const omgezet = sjabloonVoorMeta(String(verzoek.tekst ?? ""));
@@ -747,32 +865,37 @@ async function sjabloonMaken(db: Db, m: Medewerker, verzoek: Verzoek): Promise<R
 
   // De naam bij Meta: uit de titel, met iets unieks erachter (een afgewezen
   // naam kun je bij Meta een tijd niet opnieuw gebruiken).
-  const basis = titel
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 40) || "sjabloon";
+  const basis =
+    titel
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 40) || "sjabloon";
   const metaNaam = `${basis}_${crypto.randomUUID().slice(0, 6)}`;
 
-  const uit = await graph<{ id?: string; status?: string; category?: string }>(`${k.waba_id}/message_templates`, k.toegang, {
-    method: "POST",
-    body: JSON.stringify({
-      name: metaNaam,
-      language: "nl",
-      category: categorie === "marketing" ? "MARKETING" : "UTILITY",
-      components: [
-        {
-          type: "BODY",
-          text: omgezet.body,
-          ...(omgezet.variabelen.length > 0
-            ? { example: { body_text: [voorbeeldWaarden(omgezet.variabelen)] } }
-            : {}),
-        },
-      ],
-    }),
-  });
+  const uit = await graph<{ id?: string; status?: string; category?: string }>(
+    `${k.waba_id}/message_templates`,
+    k.toegang,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name: metaNaam,
+        language: "nl",
+        category: categorie === "marketing" ? "MARKETING" : "UTILITY",
+        components: [
+          {
+            type: "BODY",
+            text: omgezet.body,
+            ...(omgezet.variabelen.length > 0
+              ? { example: { body_text: [voorbeeldWaarden(omgezet.variabelen)] } }
+              : {}),
+          },
+        ],
+      }),
+    },
+  );
   if (!uit.ok) return antwoord({ fout: `Meta nam het sjabloon niet aan: ${uit.fout}` }, 400);
 
   const { data, error } = await db
@@ -783,8 +906,11 @@ async function sjabloonMaken(db: Db, m: Medewerker, verzoek: Verzoek): Promise<R
       meta_naam: metaNaam,
       meta_id: String(uit.data.id ?? ""),
       // Meta kan de categorie meteen aanpassen (utility dat eigenlijk reclame is).
-      categorie: String(uit.data.category ?? "").toUpperCase() === "MARKETING" ? "marketing" : categorie,
-      tekst: String(verzoek.tekst ?? "").replace(/\r\n/g, "\n").trim(),
+      categorie:
+        String(uit.data.category ?? "").toUpperCase() === "MARKETING" ? "marketing" : categorie,
+      tekst: String(verzoek.tekst ?? "")
+        .replace(/\r\n/g, "\n")
+        .trim(),
       variabelen: omgezet.variabelen,
       status: SJABLOON_STATUS[String(uit.data.status ?? "PENDING").toUpperCase()] ?? "ingediend",
     })
@@ -816,9 +942,13 @@ async function sjabloonWeg(db: Db, m: Medewerker, id: string): Promise<Response>
   // denk je dat hij weg is terwijl hij bij Meta nog bestaat.
   const k = await koppelingMetAccount(db, m);
   if (k instanceof Response) return k;
-  const uit = await graph(`${k.waba_id}/message_templates?name=${encodeURIComponent(sjabloon.meta_naam)}`, k.toegang, {
-    method: "DELETE",
-  });
+  const uit = await graph(
+    `${k.waba_id}/message_templates?name=${encodeURIComponent(sjabloon.meta_naam)}`,
+    k.toegang,
+    {
+      method: "DELETE",
+    },
+  );
   // Bestaat hij bij Meta al niet meer, dan is dat prima.
   if (!uit.ok && uit.status !== 404) {
     return antwoord({ fout: `Meta gooide het sjabloon niet weg: ${uit.fout}` }, 502);
@@ -836,7 +966,12 @@ async function sjabloonWeg(db: Db, m: Medewerker, id: string): Promise<Response>
  * `versturen` stuurt hem. De waarden vult de server zelf in uit de klant
  * (naam, adres, volgende wasdag); wat je zelf intypt gaat voor.
  */
-async function sjabloonNaarKlant(db: Db, m: Medewerker, verzoek: Verzoek, versturen: boolean): Promise<Response> {
+async function sjabloonNaarKlant(
+  db: Db,
+  m: Medewerker,
+  verzoek: Verzoek,
+  versturen: boolean,
+): Promise<Response> {
   const nummer = waNummer(verzoek.telefoon);
   const id = String(verzoek.sjabloon_id ?? "");
   if (!nummer || !UUID.test(id)) return antwoord({ fout: "Kies een klant en een template." }, 400);
@@ -849,7 +984,8 @@ async function sjabloonNaarKlant(db: Db, m: Medewerker, verzoek: Verzoek, verstu
     .is("deleted_at", null)
     .maybeSingle();
   if (!sjabloon) return antwoord({ fout: "Onbekende template." }, 404);
-  if (sjabloon.status !== "goedgekeurd") return antwoord({ fout: "Deze template is (nog) niet goedgekeurd door Meta." }, 409);
+  if (sjabloon.status !== "goedgekeurd")
+    return antwoord({ fout: "Deze template is (nog) niet goedgekeurd door Meta." }, 409);
 
   // Alleen naar een nummer dat bij een klant hoort.
   const sleutel = telefoonAlsSleutel(nummer);
@@ -861,8 +997,11 @@ async function sjabloonNaarKlant(db: Db, m: Medewerker, verzoek: Verzoek, verstu
     .is("klanten.deleted_at", null)
     .limit(5);
   if (nummerFout) throw new Error(`Klant zoeken: ${nummerFout.message}`);
-  const klantIds = [...new Set<string>((bijNummer ?? []).map((r: { klant_id: string }) => r.klant_id))];
-  if (klantIds.length !== 1) return antwoord({ fout: "Dit nummer hoort niet bij (precies één) klant." }, 409);
+  const klantIds = [
+    ...new Set<string>((bijNummer ?? []).map((r: { klant_id: string }) => r.klant_id)),
+  ];
+  if (klantIds.length !== 1)
+    return antwoord({ fout: "Dit nummer hoort niet bij (precies één) klant." }, 409);
   const klantId = klantIds[0];
   const { data: klant } = await db
     .from("klanten")
@@ -875,7 +1014,10 @@ async function sjabloonNaarKlant(db: Db, m: Medewerker, verzoek: Verzoek, verstu
     return antwoord({ fout: "Deze klant wil geen WhatsApp-berichten meer." }, 409);
   }
   if (versturen && sjabloon.categorie === "marketing" && !klant.wa_marketing_op) {
-    return antwoord({ fout: "Deze klant gaf geen toestemming voor nieuws en acties via WhatsApp." }, 409);
+    return antwoord(
+      { fout: "Deze klant gaf geen toestemming voor nieuws en acties via WhatsApp." },
+      409,
+    );
   }
 
   const standaard = await klantWaarden(db, m.company_id, klant.id, klant.naam);
@@ -883,7 +1025,8 @@ async function sjabloonNaarKlant(db: Db, m: Medewerker, verzoek: Verzoek, verstu
   const waarden: Record<Plaatshouder, string> = { ...standaard };
   for (const sleutel of ["naam", "datum", "adres"] as Plaatshouder[]) {
     const v = eigen[sleutel];
-    if (typeof v === "string" && v.trim()) waarden[sleutel] = v.replace(/\s+/g, " ").trim().slice(0, 200);
+    if (typeof v === "string" && v.trim())
+      waarden[sleutel] = v.replace(/\s+/g, " ").trim().slice(0, 200);
   }
   const variabelen = (sjabloon.variabelen ?? []) as Plaatshouder[];
   const tekst = vulSjabloonIn(sjabloon.tekst, waarden);
@@ -906,7 +1049,13 @@ async function sjabloonNaarKlant(db: Db, m: Medewerker, verzoek: Verzoek, verstu
 
   const k = await actieveKoppeling(db, m);
   if (k instanceof Response) return k;
-  const uit = await verstuurSjabloon(k.toegang, k.phone_number_id, nummer, sjabloon.meta_naam, variabelen.map((v) => waarden[v]));
+  const uit = await verstuurSjabloon(
+    k.toegang,
+    k.phone_number_id,
+    nummer,
+    sjabloon.meta_naam,
+    variabelen.map((v) => waarden[v]),
+  );
   if (!uit.ok) return antwoord({ fout: `WhatsApp weigerde het bericht: ${uit.fout}` }, 502);
 
   const nu = new Date().toISOString();
@@ -931,7 +1080,12 @@ async function sjabloonNaarKlant(db: Db, m: Medewerker, verzoek: Verzoek, verstu
 }
 
 /** Naam, adres(sen) en de eerstvolgende wasdag van een klant, voor in een sjabloon. */
-async function klantWaarden(db: Db, companyId: string, klantId: string, naam: string): Promise<Record<Plaatshouder, string>> {
+async function klantWaarden(
+  db: Db,
+  companyId: string,
+  klantId: string,
+  naam: string,
+): Promise<Record<Plaatshouder, string>> {
   const { data: adressen, error } = await db
     .from("customers")
     .select("id,house_number,addition,overslaan,streets(name,volledige_naam)")
@@ -948,24 +1102,32 @@ async function klantWaarden(db: Db, companyId: string, klantId: string, naam: st
     streets: { name: string; volledige_naam: string } | null;
   }[];
   const adres = lijst
-    .map((a) => `${a.streets?.volledige_naam || a.streets?.name || ""} ${a.house_number}${a.addition ?? ""}`.trim())
+    .map((a) =>
+      `${a.streets?.volledige_naam || a.streets?.name || ""} ${a.house_number}${a.addition ?? ""}`.trim(),
+    )
     .join(" en ");
 
   let datum = "";
   if (lijst.length > 0) {
-    const vandaag = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Amsterdam" }).format(new Date());
+    const vandaag = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Amsterdam" }).format(
+      new Date(),
+    );
     const { data: dagen, error: dagFout } = await db
       .from("wasdag_regels")
       .select("customer_id,datum")
       .eq("company_id", companyId)
-      .in("customer_id", lijst.map((a) => a.id))
+      .in(
+        "customer_id",
+        lijst.map((a) => a.id),
+      )
       .gte("datum", vandaag)
       .order("datum")
       .limit(50);
     if (dagFout) throw new Error(`Planning: ${dagFout.message}`);
     const overslaan = new Map(lijst.map((a) => [a.id, new Set(a.overslaan ?? [])]));
     const eerst = (dagen ?? []).find(
-      (d: { customer_id: string; datum: string }) => !overslaan.get(d.customer_id)?.has(String(d.datum).slice(0, 7)),
+      (d: { customer_id: string; datum: string }) =>
+        !overslaan.get(d.customer_id)?.has(String(d.datum).slice(0, 7)),
     );
     if (eerst) datum = datumVoluit(String(eerst.datum));
   }

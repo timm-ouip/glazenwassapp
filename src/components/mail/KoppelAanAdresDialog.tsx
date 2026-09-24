@@ -30,7 +30,7 @@ import {
   popupInvoer,
 } from "@/components/Popup";
 import { zoekAdresOfKlant, type AdresKeuze, type Bericht } from "@/lib/berichten";
-import { bewaarKlant, koppelKlant as hangKlantAanAdres, LEEG_KLANT} from "@/lib/klanten";
+import { bewaarKlant, koppelKlant as hangKlantAanAdres, LEEG_KLANT } from "@/lib/klanten";
 import { koppelKlant } from "@/lib/mailacties";
 import { cn } from "@/lib/utils";
 

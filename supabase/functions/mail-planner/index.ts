@@ -12,7 +12,14 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { antwoord } from "../_gedeeld/mail.ts";
 import { MogelijkVerstuurd } from "../_gedeeld/smtp.ts";
 import { uitlegFout } from "../_gedeeld/ophalen.ts";
-import { type Box, type Db, laadBox, mapMetRol, verplaats, verstuur } from "../_gedeeld/mailwerk.ts";
+import {
+  type Box,
+  type Db,
+  laadBox,
+  mapMetRol,
+  verplaats,
+  verstuur,
+} from "../_gedeeld/mailwerk.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
@@ -42,7 +49,9 @@ Deno.serve(async (req) => {
   const url = Deno.env.get("SUPABASE_URL") ?? "";
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   if (!url || !service) return antwoord({ ok: false, fase: "instellingen" }, 500);
-  const db = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
+  const db = createClient(url, service, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
   const werk = (async () => {
     try {
@@ -100,22 +109,26 @@ async function verstuurGepland(db: Db) {
           fout = uit.fout ?? "Versturen lukte niet.";
         }
       } catch (e) {
-        fout =
-          e instanceof MogelijkVerstuurd
-            ? e.message
-            : uitlegFout(e).tekst;
+        fout = e instanceof MogelijkVerstuurd ? e.message : uitlegFout(e).tekst;
       }
     }
     const { error: bijFout } = await db
       .from("geplande_mails")
-      .update({ status, fout: fout.slice(0, 300), verstuurd_op: status === "verstuurd" ? new Date().toISOString() : null })
+      .update({
+        status,
+        fout: fout.slice(0, 300),
+        verstuurd_op: status === "verstuurd" ? new Date().toISOString() : null,
+      })
       .eq("id", g.id);
     if (bijFout) console.error(`gepland ${g.id}:`, bijFout.message);
   }
 }
 
 async function spamRegels(db: Db) {
-  const { data: regels, error } = await db.from("mail_regels").select("mailbox_id,van_email").eq("actie", "spam");
+  const { data: regels, error } = await db
+    .from("mail_regels")
+    .select("mailbox_id,van_email")
+    .eq("actie", "spam");
   if (error) throw new Error(`Regels: ${error.message}`);
   const perBox = new Map<string, string[]>();
   for (const r of (regels ?? []) as { mailbox_id: string; van_email: string }[]) {

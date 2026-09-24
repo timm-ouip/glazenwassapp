@@ -49,7 +49,9 @@ import {
   leesRitmeWaarde,
   patchCustomer,
   vulPostcodeAan,
-  zorgVoorAdresRegel, LEEG_KLANT,} from "@/lib/klanten";
+  zorgVoorAdresRegel,
+  LEEG_KLANT,
+} from "@/lib/klanten";
 import { klantVanAdres, type Bericht } from "@/lib/berichten";
 import { koppelKlant } from "@/lib/mailacties";
 import { zetVerwerkt } from "@/lib/aanmeldingen";

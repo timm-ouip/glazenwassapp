@@ -96,7 +96,6 @@ interface Verzoek {
   antwoord_op?: string;
 }
 
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
@@ -141,17 +140,21 @@ Deno.serve(async (req) => {
   // invulde, mag ook wie klanten bewerkt.
   // Een map maken verandert de echte mailbox (ook op de telefoon): dat is meer dan lezen.
   if (
-    ["versturen", "inplannen", "gepland-annuleren", "map-maken", "map-hernoemen", "map-verwijderen"].includes(
-      verzoek.actie,
-    ) &&
+    [
+      "versturen",
+      "inplannen",
+      "gepland-annuleren",
+      "map-maken",
+      "map-hernoemen",
+      "map-verwijderen",
+    ].includes(verzoek.actie) &&
     !(await heeftRecht(db, medewerker, "mail_versturen"))
   ) {
     return antwoord(
       {
-        fout:
-          verzoek.actie.startsWith("map-")
-            ? "Je hebt geen recht om mappen te beheren."
-            : "Je hebt geen recht om mail te versturen.",
+        fout: verzoek.actie.startsWith("map-")
+          ? "Je hebt geen recht om mappen te beheren."
+          : "Je hebt geen recht om mail te versturen.",
       },
       403,
     );
@@ -161,7 +164,10 @@ Deno.serve(async (req) => {
     return antwoord({ fout: "Alleen de eigenaar kan dit doorvoeren." }, 403);
   }
   const klantActies = ["klant-koppelen", "klantgegevens-terugdraaien"];
-  if (klantActies.includes(String(verzoek.actie)) && !(await heeftRecht(db, medewerker, "klanten_bewerken"))) {
+  if (
+    klantActies.includes(String(verzoek.actie)) &&
+    !(await heeftRecht(db, medewerker, "klanten_bewerken"))
+  ) {
     return antwoord({ fout: "Je hebt geen recht om klanten te bewerken." }, 403);
   }
 
@@ -207,11 +213,23 @@ Deno.serve(async (req) => {
       case "map-maken":
         return await maakMap(db, box, wachtwoord, String(verzoek.naam ?? ""));
       case "map-hernoemen":
-        return await hernoemMap(db, box, wachtwoord, String(verzoek.map_id ?? ""), String(verzoek.naam ?? ""));
+        return await hernoemMap(
+          db,
+          box,
+          wachtwoord,
+          String(verzoek.map_id ?? ""),
+          String(verzoek.naam ?? ""),
+        );
       case "map-verwijderen":
         return await verwijderMap(db, box, wachtwoord, String(verzoek.map_id ?? ""));
       case "bijlage": {
-        const uit = await haalBijlagen(db, box, wachtwoord, String(verzoek.bericht_id ?? ""), Number(verzoek.index));
+        const uit = await haalBijlagen(
+          db,
+          box,
+          wachtwoord,
+          String(verzoek.bericht_id ?? ""),
+          Number(verzoek.index),
+        );
         if ("fout" in uit) return antwoord({ fout: uit.fout }, 400);
         return antwoord({ ok: true, bijlage: uit.bijlagen[0] });
       }
@@ -220,8 +238,14 @@ Deno.serve(async (req) => {
       case "altijd-spam":
         return await altijdSpam(db, box, wachtwoord, String(verzoek.bericht_id ?? ""));
       case "spamregel-weg": {
-        const email = String(verzoek.email ?? "").trim().toLowerCase();
-        const { error } = await db.from("mail_regels").delete().eq("mailbox_id", box.id).eq("van_email", email);
+        const email = String(verzoek.email ?? "")
+          .trim()
+          .toLowerCase();
+        const { error } = await db
+          .from("mail_regels")
+          .delete()
+          .eq("mailbox_id", box.id)
+          .eq("van_email", email);
         if (error) throw new Error(`Regel weghalen: ${error.message}`);
         return antwoord({ ok: true });
       }
@@ -240,7 +264,8 @@ Deno.serve(async (req) => {
           .eq("status", "wacht")
           .select("id");
         if (error) throw new Error(`Annuleren: ${error.message}`);
-        if (!data?.length) return antwoord({ fout: "Die mail is al verstuurd of geannuleerd." }, 409);
+        if (!data?.length)
+          return antwoord({ fout: "Die mail is al verstuurd of geannuleerd." }, 409);
         return antwoord({ ok: true });
       }
       case "weggooien":
@@ -312,18 +337,23 @@ async function zetGelezen(
   if (!plek) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
   const gelezen = verzoek.gelezen !== false;
 
-  const gelukt = await metImap(box, wachtwoord, async (client) => {
-    const lock = await client.getMailboxLock(plek.pad);
-    try {
-      if (Number(client.mailbox && client.mailbox.uidValidity) !== plek.uidvalidity) return false;
-      const bereik = String(plek.uid);
-      if (gelezen) await client.messageFlagsAdd(bereik, ["\\Seen"], { uid: true });
-      else await client.messageFlagsRemove(bereik, ["\\Seen"], { uid: true });
-      return true;
-    } finally {
-      lock.release();
-    }
-  }, verbinding);
+  const gelukt = await metImap(
+    box,
+    wachtwoord,
+    async (client) => {
+      const lock = await client.getMailboxLock(plek.pad);
+      try {
+        if (Number(client.mailbox && client.mailbox.uidValidity) !== plek.uidvalidity) return false;
+        const bereik = String(plek.uid);
+        if (gelezen) await client.messageFlagsAdd(bereik, ["\\Seen"], { uid: true });
+        else await client.messageFlagsRemove(bereik, ["\\Seen"], { uid: true });
+        return true;
+      } finally {
+        lock.release();
+      }
+    },
+    verbinding,
+  );
   if (!gelukt) return antwoord({ fout: VERANDERD }, 409);
 
   const { error } = await db.from("berichten").update({ gelezen }).eq("id", plek.id);
@@ -344,18 +374,23 @@ async function zetGemarkeerd(
   if (!plek) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
   const gemarkeerd = verzoek.gemarkeerd !== false;
 
-  const gelukt = await metImap(box, wachtwoord, async (client) => {
-    const lock = await client.getMailboxLock(plek.pad);
-    try {
-      if (Number(client.mailbox && client.mailbox.uidValidity) !== plek.uidvalidity) return false;
-      const bereik = String(plek.uid);
-      if (gemarkeerd) await client.messageFlagsAdd(bereik, ["\\Flagged"], { uid: true });
-      else await client.messageFlagsRemove(bereik, ["\\Flagged"], { uid: true });
-      return true;
-    } finally {
-      lock.release();
-    }
-  }, verbinding);
+  const gelukt = await metImap(
+    box,
+    wachtwoord,
+    async (client) => {
+      const lock = await client.getMailboxLock(plek.pad);
+      try {
+        if (Number(client.mailbox && client.mailbox.uidValidity) !== plek.uidvalidity) return false;
+        const bereik = String(plek.uid);
+        if (gemarkeerd) await client.messageFlagsAdd(bereik, ["\\Flagged"], { uid: true });
+        else await client.messageFlagsRemove(bereik, ["\\Flagged"], { uid: true });
+        return true;
+      } finally {
+        lock.release();
+      }
+    },
+    verbinding,
+  );
   if (!gelukt) return antwoord({ fout: VERANDERD }, 409);
 
   const { error } = await db.from("berichten").update({ gemarkeerd }).eq("id", plek.id);
@@ -389,7 +424,10 @@ async function maakMap(db: Db, box: Box, wachtwoord: string, ruweNaam: string): 
 
   const { data, error } = await db
     .from("mail_mappen")
-    .upsert({ company_id: box.company_id, mailbox_id: box.id, pad, rol: "overig" }, { onConflict: "mailbox_id,pad" })
+    .upsert(
+      { company_id: box.company_id, mailbox_id: box.id, pad, rol: "overig" },
+      { onConflict: "mailbox_id,pad" },
+    )
     .select("id")
     .single();
   if (error) throw new Error(`Map bewaren: ${error.message}`);
@@ -462,7 +500,9 @@ async function overslaanDoorvoeren(db: Db, box: Box, id: string, door: string): 
     .maybeSingle();
   if (error) throw new Error(`Mail opzoeken: ${error.message}`);
   if (!rij) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
-  const voorstel = (rij.voorstel ?? {}) as { overslaan?: { maanden?: string[]; adressen?: string[]; doorgevoerd?: boolean } };
+  const voorstel = (rij.voorstel ?? {}) as {
+    overslaan?: { maanden?: string[]; adressen?: string[]; doorgevoerd?: boolean };
+  };
   const o = voorstel.overslaan;
   if (!o?.maanden?.length || !o.adressen?.length) {
     return antwoord({ fout: "Bij deze mail staat geen voorstel om over te slaan." }, 400);
@@ -496,7 +536,10 @@ async function overslaanDoorvoeren(db: Db, box: Box, id: string, door: string): 
     // Niet (helemaal) gelukt: slot eraf, zodat het opnieuw kan. Nog een keer
     // doorvoeren slaat de adressen die al klopten vanzelf over.
     await db.from("berichten").update({ doorgevoerd_op: null }).eq("id", rij.id);
-    return antwoord({ fout: "Niet alle adressen konden aangepast worden. Probeer het opnieuw." }, 500);
+    return antwoord(
+      { fout: "Niet alle adressen konden aangepast worden. Probeer het opnieuw." },
+      500,
+    );
   }
   const { error: bewaarFout } = await db
     .from("berichten")
@@ -538,7 +581,8 @@ async function stoppenPlanning(db: Db, box: Box, id: string): Promise<Response> 
   if (!rij) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
   const voorstel = (rij.voorstel ?? {}) as { stoppen?: { adressen?: string[] } };
   const gevraagd = (voorstel.stoppen?.adressen ?? []).filter((a) => UUID.test(String(a)));
-  if (gevraagd.length === 0) return antwoord({ fout: "Bij deze mail staat geen stopvoorstel." }, 400);
+  if (gevraagd.length === 0)
+    return antwoord({ fout: "Bij deze mail staat geen stopvoorstel." }, 400);
 
   const { data: actief, error: adresFout } = await db
     .from("customers")
@@ -587,9 +631,12 @@ async function stoppenDoorvoeren(
     .maybeSingle();
   if (error) throw new Error(`Mail opzoeken: ${error.message}`);
   if (!rij) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
-  const voorstel = (rij.voorstel ?? {}) as { stoppen?: { adressen?: string[]; doorgevoerd?: boolean } };
+  const voorstel = (rij.voorstel ?? {}) as {
+    stoppen?: { adressen?: string[]; doorgevoerd?: boolean };
+  };
   const s = voorstel.stoppen;
-  if (!s?.adressen?.length) return antwoord({ fout: "Bij deze mail staat geen stopvoorstel." }, 400);
+  if (!s?.adressen?.length)
+    return antwoord({ fout: "Bij deze mail staat geen stopvoorstel." }, 400);
   if (s.doorgevoerd) return antwoord({ ok: true, aangepast: 0 });
 
   // Pakken: het voorstel alleen op "doorgevoerd" zetten als het dat nog niet
@@ -628,7 +675,9 @@ async function stoppenDoorvoeren(
       .update({ voorstel: { ...voorstel, stoppen: { adressen: uit.mislukteIds } } })
       .eq("id", rij.id);
     return antwoord(
-      { fout: `${uit.mislukt} ${uit.mislukt === 1 ? "adres kon" : "adressen konden"} niet op inactief gezet worden. Probeer het nog eens.` },
+      {
+        fout: `${uit.mislukt} ${uit.mislukt === 1 ? "adres kon" : "adressen konden"} niet op inactief gezet worden. Probeer het nog eens.`,
+      },
       500,
     );
   }
@@ -636,7 +685,13 @@ async function stoppenDoorvoeren(
 }
 
 /** Een eigen map een andere naam geven (ook op de server, dus ook op de telefoon). */
-async function hernoemMap(db: Db, box: Box, wachtwoord: string, id: string, ruweNaam: string): Promise<Response> {
+async function hernoemMap(
+  db: Db,
+  box: Box,
+  wachtwoord: string,
+  id: string,
+  ruweNaam: string,
+): Promise<Response> {
   const map = await eigenMap(db, box, id);
   if (!map) return antwoord({ fout: "Alleen je eigen mappen kun je hernoemen." }, 400);
   const naam = ruweNaam.replace(/\s+/g, " ").trim();
@@ -665,7 +720,11 @@ async function verwijderMap(db: Db, box: Box, wachtwoord: string, id: string): P
     await client.mailboxDelete(map.pad);
     return true;
   });
-  if (!leeg) return antwoord({ fout: "Deze map is niet leeg. Verplaats of verwijder eerst de mail erin." }, 409);
+  if (!leeg)
+    return antwoord(
+      { fout: "Deze map is niet leeg. Verplaats of verwijder eerst de mail erin." },
+      409,
+    );
   const { error } = await db.from("mail_mappen").delete().eq("id", map.id);
   if (error) throw new Error(`Map weghalen: ${error.message}`);
   return antwoord({ ok: true });
@@ -696,7 +755,9 @@ const MAX_BULK = 50;
 
 /** Hetzelfde met meerdere mails. Eén voor één: de mailserver houdt niet van tien tegelijk. */
 async function bulk(db: Db, box: Box, wachtwoord: string, verzoek: Verzoek): Promise<Response> {
-  const ids = Array.isArray(verzoek.bericht_ids) ? [...new Set(verzoek.bericht_ids.map(String))] : [];
+  const ids = Array.isArray(verzoek.bericht_ids)
+    ? [...new Set(verzoek.bericht_ids.map(String))]
+    : [];
   if (ids.length === 0) return antwoord({ fout: "Kies eerst een of meer mails." }, 400);
   if (ids.length > MAX_BULK) return antwoord({ fout: `Hooguit ${MAX_BULK} mails tegelijk.` }, 400);
 
@@ -738,7 +799,14 @@ async function bulk(db: Db, box: Box, wachtwoord: string, verzoek: Verzoek): Pro
             res = await verplaats(db, box, wachtwoord, id, "weg", verbinding);
             break;
           case "verplaatsen":
-            res = await verplaats(db, box, wachtwoord, id, { naar: String(verzoek.map_id ?? "") }, verbinding);
+            res = await verplaats(
+              db,
+              box,
+              wachtwoord,
+              id,
+              { naar: String(verzoek.map_id ?? "") },
+              verbinding,
+            );
             break;
           default:
             return antwoord({ fout: "Onbekende actie." }, 400);
@@ -773,9 +841,13 @@ async function altijdSpam(db: Db, box: Box, wachtwoord: string, id: string): Pro
     .eq("mailbox_id", box.id)
     .maybeSingle();
   if (error) throw new Error(`Mail opzoeken: ${error.message}`);
-  const email = String(mail?.van_email ?? "").trim().toLowerCase();
-  if (!mail || mail.richting !== "in" || !email) return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
-  if (email === box.adres.toLowerCase()) return antwoord({ fout: "Je eigen adres kan niet naar spam." }, 400);
+  const email = String(mail?.van_email ?? "")
+    .trim()
+    .toLowerCase();
+  if (!mail || mail.richting !== "in" || !email)
+    return antwoord({ fout: "Die mail bestaat niet (meer)." }, 404);
+  if (email === box.adres.toLowerCase())
+    return antwoord({ fout: "Je eigen adres kan niet naar spam." }, 400);
 
   const { error: regelFout } = await db
     .from("mail_regels")
@@ -799,7 +871,8 @@ async function herinner(db: Db, box: Box, id: string, op: string | null): Promis
   if (op) {
     const d = new Date(op);
     if (Number.isNaN(d.getTime())) return antwoord({ fout: "Dat moment klopt niet." }, 400);
-    if (d.getTime() > Date.now() + 366 * 24 * 3600_000) return antwoord({ fout: "Hooguit een jaar vooruit." }, 400);
+    if (d.getTime() > Date.now() + 366 * 24 * 3600_000)
+      return antwoord({ fout: "Hooguit een jaar vooruit." }, 400);
     moment = d.toISOString();
   }
   const { data, error } = await db
@@ -819,12 +892,15 @@ async function herinner(db: Db, box: Box, id: string, op: string | null): Promis
 async function planIn(db: Db, box: Box, door: string, verzoek: Verzoek): Promise<Response> {
   const d = new Date(String(verzoek.op ?? ""));
   if (Number.isNaN(d.getTime())) return antwoord({ fout: "Kies wanneer de mail weg moet." }, 400);
-  if (d.getTime() < Date.now() + 60_000) return antwoord({ fout: "Kies een moment in de toekomst." }, 400);
-  if (d.getTime() > Date.now() + 366 * 24 * 3600_000) return antwoord({ fout: "Hooguit een jaar vooruit." }, 400);
+  if (d.getTime() < Date.now() + 60_000)
+    return antwoord({ fout: "Kies een moment in de toekomst." }, 400);
+  if (d.getTime() > Date.now() + 366 * 24 * 3600_000)
+    return antwoord({ fout: "Hooguit een jaar vooruit." }, 400);
 
   const aan = adressenUit(verzoek.aan);
   const cc = adressenUit(verzoek.cc);
-  if (!aan || !cc || aan.length === 0) return antwoord({ fout: "Een van de adressen klopt niet." }, 400);
+  if (!aan || !cc || aan.length === 0)
+    return antwoord({ fout: "Een van de adressen klopt niet." }, 400);
   if (!String(verzoek.tekst ?? "").trim()) return antwoord({ fout: "De mail is nog leeg." }, 400);
   const inhoud = {
     aan,
@@ -834,9 +910,12 @@ async function planIn(db: Db, box: Box, door: string, verzoek: Verzoek): Promise
     ...(verzoek.antwoord_op ? { antwoord_op: String(verzoek.antwoord_op) } : {}),
     ...(verzoek.klant_id ? { klant_id: String(verzoek.klant_id) } : {}),
     ...(verzoek.bijlagen_van ? { bijlagen_van: String(verzoek.bijlagen_van) } : {}),
-    ...(Array.isArray(verzoek.bijlagen) && verzoek.bijlagen.length ? { bijlagen: verzoek.bijlagen } : {}),
+    ...(Array.isArray(verzoek.bijlagen) && verzoek.bijlagen.length
+      ? { bijlagen: verzoek.bijlagen }
+      : {}),
   };
-  if (JSON.stringify(inhoud).length > 21_000_000) return antwoord({ fout: "De bijlagen zijn te groot." }, 400);
+  if (JSON.stringify(inhoud).length > 21_000_000)
+    return antwoord({ fout: "De bijlagen zijn te groot." }, 400);
 
   const { data, error } = await db
     .from("geplande_mails")
@@ -846,7 +925,10 @@ async function planIn(db: Db, box: Box, door: string, verzoek: Verzoek): Promise
       door,
       inhoud,
       onderwerp: String(verzoek.onderwerp ?? "").slice(0, 300),
-      aan_tekst: aan.map((a) => a.naam || a.email).join(", ").slice(0, 300),
+      aan_tekst: aan
+        .map((a) => a.naam || a.email)
+        .join(", ")
+        .slice(0, 300),
       versturen_op: d.toISOString(),
     })
     .select("id")

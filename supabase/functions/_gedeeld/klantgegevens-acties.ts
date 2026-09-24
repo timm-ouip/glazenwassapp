@@ -48,13 +48,21 @@ function woord(bereik: Bereik) {
  * Dit bericht hoort bij deze klant. Het mailadres of nummer komt bij de klant,
  * de klant komt op het bericht, en Paaltje leest het opnieuw met die klant erbij.
  */
-export async function bevestigKlant(db: Db, bereik: Bereik, id: string, klantId: string): Promise<Uitkomst> {
+export async function bevestigKlant(
+  db: Db,
+  bereik: Bereik,
+  id: string,
+  klantId: string,
+): Promise<Uitkomst> {
   const w = woord(bereik);
   if (!UUID.test(id) || !UUID.test(klantId)) {
     return { status: 404, body: { fout: `${w.die} of klant bestaat niet.` } };
   }
   const { data: rij, error } = await binnen(
-    db.from("berichten").select("id,van_email,wa_telefoon,beantwoord_op,klantgegevens").eq("id", id),
+    db
+      .from("berichten")
+      .select("id,van_email,wa_telefoon,beantwoord_op,klantgegevens")
+      .eq("id", id),
     bereik,
   ).maybeSingle();
   if (error) throw new Error(`Bericht opzoeken: ${error.message}`);
@@ -72,13 +80,23 @@ export async function bevestigKlant(db: Db, bereik: Bereik, id: string, klantId:
   // dan is het nu door een mens bevestigd.
   const koppeling =
     bereik.kanaal === "mail"
-      ? { tabel: "klant_emails", kolom: "email", waarde: String(rij.van_email ?? "").trim().toLowerCase() }
+      ? {
+          tabel: "klant_emails",
+          kolom: "email",
+          waarde: String(rij.van_email ?? "")
+            .trim()
+            .toLowerCase(),
+        }
       : { tabel: "klant_telefoons", kolom: "telefoon", waarde: telefoonSleutel(rij.wa_telefoon) };
   if (koppeling.waarde) {
-    const { error: koppelFout } = await db
-      .from(koppeling.tabel)
-      .insert({ company_id: bereik.companyId, klant_id: klant.id, [koppeling.kolom]: koppeling.waarde, bron: "mens" });
-    if (koppelFout && koppelFout.code !== "23505") throw new Error(`Koppelen: ${koppelFout.message}`);
+    const { error: koppelFout } = await db.from(koppeling.tabel).insert({
+      company_id: bereik.companyId,
+      klant_id: klant.id,
+      [koppeling.kolom]: koppeling.waarde,
+      bron: "mens",
+    });
+    if (koppelFout && koppelFout.code !== "23505")
+      throw new Error(`Koppelen: ${koppelFout.message}`);
     if (koppelFout) {
       const { error: bevestigFout } = await db
         .from(koppeling.tabel)
@@ -115,7 +133,9 @@ export async function bevestigKlant(db: Db, bereik: Bereik, id: string, klantId:
     const wat = bereik.kanaal === "mail" ? "Het mailadres" : "Het nummer";
     return {
       status: 409,
-      body: { fout: `${wat} is gekoppeld, maar Paaltje leest ${w.deze} net. Probeer het zo nog eens.` },
+      body: {
+        fout: `${wat} is gekoppeld, maar Paaltje leest ${w.deze} net. Probeer het zo nog eens.`,
+      },
     };
   }
   // Zette Paaltje het zelf op afgehandeld (hij dacht: geen klantbericht), dan
@@ -138,11 +158,18 @@ export async function bevestigKlant(db: Db, bereik: Bereik, id: string, klantId:
  * of nummer ook, en Paaltje leest het opnieuw zonder die klant. Wat
  * teruggedraaid is doet Paaltje Systems bij opnieuw lezen niet nog eens.
  */
-export async function draaiKlantgegevensTerug(db: Db, bereik: Bereik, id: string): Promise<Uitkomst> {
+export async function draaiKlantgegevensTerug(
+  db: Db,
+  bereik: Bereik,
+  id: string,
+): Promise<Uitkomst> {
   const w = woord(bereik);
   if (!UUID.test(id)) return { status: 404, body: { fout: `${w.die} bestaat niet (meer).` } };
   const { data: rij, error } = await binnen(
-    db.from("berichten").select("id,klant_id,paaltje_status,klantgegevens,wa_telefoon").eq("id", id),
+    db
+      .from("berichten")
+      .select("id,klant_id,paaltje_status,klantgegevens,wa_telefoon")
+      .eq("id", id),
     bereik,
   ).maybeSingle();
   if (error) throw new Error(`Bericht opzoeken: ${error.message}`);
@@ -152,7 +179,8 @@ export async function draaiKlantgegevensTerug(db: Db, bereik: Bereik, id: string
   }
   const kg = leesKlantgegevens(rij.klantgegevens);
   const { toegevoegd, herkend } = kg;
-  if (!toegevoegd && !herkend) return { status: 400, body: { fout: "Er is niets om terug te draaien." } };
+  if (!toegevoegd && !herkend)
+    return { status: 400, body: { fout: "Er is niets om terug te draaien." } };
 
   // WhatsApp: het terugdraaien raakt het hele gesprek. Leest Paaltje net een
   // ander appje van dit nummer, dan kan hij de herkenning er meteen weer op
@@ -168,7 +196,10 @@ export async function draaiKlantgegevensTerug(db: Db, bereik: Bereik, id: string
       .eq("paaltje_status", "bezig");
     if (bezigFout) throw new Error(`Gesprek nakijken: ${bezigFout.message}`);
     if ((count ?? 0) > 0) {
-      return { status: 409, body: { fout: "Paaltje leest net een appje van dit nummer. Probeer het zo nog eens." } };
+      return {
+        status: 409,
+        body: { fout: "Paaltje leest net een appje van dit nummer. Probeer het zo nog eens." },
+      };
     }
   }
 
@@ -242,7 +273,10 @@ export async function draaiKlantgegevensTerug(db: Db, bereik: Bereik, id: string
       .eq("company_id", bereik.companyId)
       .maybeSingle();
     if (leesFout) throw new Error(`Terugdraaien: ${leesFout.message}`);
-    const kaal = (t: unknown) => String(t ?? "").replace(/\s+/g, "").toLowerCase();
+    const kaal = (t: unknown) =>
+      String(t ?? "")
+        .replace(/\s+/g, "")
+        .toLowerCase();
     const rij = (nu ?? {}) as Record<string, unknown>;
 
     for (const veld of VELDEN) {
@@ -336,7 +370,11 @@ export async function draaiKlantgegevensTerug(db: Db, bereik: Bereik, id: string
   // klant weer van het adres af. Naar de prullenbak (daar terug te halen) alleen
   // als hij echt van dit adres af ging en aan geen ander adres meer hangt:
   // hing iemand hem intussen ergens anders aan, dan blijft hij staan.
-  if (herkend?.aangemaakt && UUID.test(String(herkend.klant_id)) && UUID.test(String(herkend.customer_id ?? ""))) {
+  if (
+    herkend?.aangemaakt &&
+    UUID.test(String(herkend.klant_id)) &&
+    UUID.test(String(herkend.customer_id ?? ""))
+  ) {
     try {
       const { data: los, error: losFout } = await db
         .from("customers")
@@ -361,7 +399,8 @@ export async function draaiKlantgegevensTerug(db: Db, bereik: Bereik, id: string
             .eq("id", herkend.klant_id)
             .eq("company_id", bereik.companyId)
             .is("deleted_at", null);
-          if (prullenbakFout) throw new Error(`Klant naar de prullenbak: ${prullenbakFout.message}`);
+          if (prullenbakFout)
+            throw new Error(`Klant naar de prullenbak: ${prullenbakFout.message}`);
         }
       }
     } catch (e) {
@@ -382,7 +421,10 @@ export async function draaiKlantgegevensTerug(db: Db, bereik: Bereik, id: string
       .update({
         klantgegevens: {
           ...nieuw,
-          teruggedraaid: { ...nieuw.teruggedraaid, bleven: [...new Set([...eerderBleven, ...bleven])] },
+          teruggedraaid: {
+            ...nieuw.teruggedraaid,
+            bleven: [...new Set([...eerderBleven, ...bleven])],
+          },
         },
       })
       .eq("id", rij.id)

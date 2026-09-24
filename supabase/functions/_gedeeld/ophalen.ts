@@ -86,7 +86,14 @@ const WEG_NA_MS = 2 * 24 * 60 * 60 * 1000;
 const NUL_TEKEN = String.fromCharCode(0);
 
 /** Volgorde van ophalen: waar vandaag post binnenkomt eerst. */
-const MAP_VOORRANG: MapRol[] = ["postvak", "verzonden", "overig", "concepten", "spam", "prullenbak"];
+const MAP_VOORRANG: MapRol[] = [
+  "postvak",
+  "verzonden",
+  "overig",
+  "concepten",
+  "spam",
+  "prullenbak",
+];
 
 export function maakImap(
   box: Pick<MailboxRij, "adres" | "imap_host" | "imap_poort">,
@@ -450,7 +457,11 @@ async function loopMapNa(db: Db, client: ImapFlow, map: MapRij): Promise<MapStan
 
     // 2. Weg van de server.
     const weg = bekend.filter((r) => !opServer.has(r.uid));
-    await zet(db, weg.map((r) => r.id), { op_server: false, weg_sinds: new Date().toISOString() });
+    await zet(
+      db,
+      weg.map((r) => r.id),
+      { op_server: false, weg_sinds: new Date().toISOString() },
+    );
     const blijft = bekend.filter((r) => opServer.has(r.uid));
 
     // 3. Gelezen en gemarkeerd. Eerst alles verzamelen: tijdens een lopende
@@ -540,7 +551,14 @@ async function haalNieuwOp(
         { uid: true, source: groot ? { start: 0, maxLength: DEEL_VAN_GROTE_MAIL } : true },
         { uid: true },
       );
-      const rij = await maakRij(box, map, stand.uidvalidity, kop, bron ? bron.source : undefined, groot);
+      const rij = await maakRij(
+        box,
+        map,
+        stand.uidvalidity,
+        kop,
+        bron ? bron.source : undefined,
+        groot,
+      );
       // Eén mail die niet op te slaan is mag de rest niet tegenhouden: anders
       // staat hij elke ronde weer vooraan en komt er nooit meer iets binnen.
       // Dan eerst een kale versie proberen, en lukt ook dat niet, overslaan.
@@ -625,7 +643,9 @@ interface Structuur {
 }
 
 /** Welke bijlagen erbij zaten, uit de structuur die de server al gaf. */
-export function bijlagenUit(structuur: Structuur | undefined): { naam: string; type: string; grootte: number }[] {
+export function bijlagenUit(
+  structuur: Structuur | undefined,
+): { naam: string; type: string; grootte: number }[] {
   return bijlageDelen(structuur).map(({ naam, type, grootte }) => ({ naam, type, grootte }));
 }
 

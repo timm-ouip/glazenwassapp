@@ -98,8 +98,14 @@ Deno.serve(async (req) => {
   if (verzoek.actie === "ontkoppelen") {
     // Het slot blijft staan: loopt er nog een ronde, dan maakt die zelf af en
     // ziet aan de status dat hij niet meer "actief" terug mag zetten.
-    const { error: geheimFout } = await db.from("mailbox_geheimen").delete().eq("mailbox_id", box.id);
-    const { error } = await db.from("mailboxen").update({ status: "uit", fout: "" }).eq("id", box.id);
+    const { error: geheimFout } = await db
+      .from("mailbox_geheimen")
+      .delete()
+      .eq("mailbox_id", box.id);
+    const { error } = await db
+      .from("mailboxen")
+      .update({ status: "uit", fout: "" })
+      .eq("id", box.id);
     if (geheimFout || error) {
       return antwoord({ fout: `Ontkoppelen mislukte: ${(geheimFout ?? error)?.message}` }, 500);
     }
@@ -117,7 +123,9 @@ async function koppel(
   medewerker: { id: string; company_id: string },
   verzoek: Verzoek,
 ): Promise<Response> {
-  const adres = String(verzoek.adres ?? "").trim().toLowerCase();
+  const adres = String(verzoek.adres ?? "")
+    .trim()
+    .toLowerCase();
   // Het wachtwoord niet trimmen: een spatie aan het eind kan er echt bij horen.
   const wachtwoord = String(verzoek.wachtwoord ?? "");
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(adres) || adres.length > 254) {
@@ -129,17 +137,17 @@ async function koppel(
 
   // 1. Eerst proberen, dan pas bewaren. Een fout wachtwoord hoort niet in de
   //    database te belanden en daar elke twee minuten geweigerd te worden.
-  const client = maakImap(
-    { adres, imap_host: STANDAARD_HOST, imap_poort: IMAP_POORT },
-    wachtwoord,
-  );
+  const client = maakImap({ adres, imap_host: STANDAARD_HOST, imap_poort: IMAP_POORT }, wachtwoord);
   let mappen = 0;
   try {
     await client.connect();
     mappen = (await client.list()).filter((m) => rolVan(m.path, m.specialUse) !== null).length;
   } catch (e) {
     const { tekst, inlog } = uitlegFout(e);
-    return antwoord({ fout: inlog ? "Inloggen geweigerd: kloppen het adres en wachtwoord?" : tekst }, 400);
+    return antwoord(
+      { fout: inlog ? "Inloggen geweigerd: kloppen het adres en wachtwoord?" : tekst },
+      400,
+    );
   } finally {
     try {
       await client.logout();
@@ -166,7 +174,8 @@ async function koppel(
     .maybeSingle();
   if (bestaand && bestaand.adres !== adres) {
     const { error } = await db.from("mailboxen").delete().eq("id", bestaand.id);
-    if (error) return antwoord({ fout: `De oude mailbox weghalen mislukte: ${error.message}` }, 500);
+    if (error)
+      return antwoord({ fout: `De oude mailbox weghalen mislukte: ${error.message}` }, 500);
   }
 
   let mailboxId: string;

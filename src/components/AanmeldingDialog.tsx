@@ -46,7 +46,9 @@ import {
   leesRitmeWaarde,
   vulPostcodeAan,
   zorgVoorAdresRegel,
-  type District, LEEG_KLANT,} from "@/lib/klanten";
+  type District,
+  LEEG_KLANT,
+} from "@/lib/klanten";
 import { aanmeldNummer, zetVerwerkt, type Aanmelding } from "@/lib/aanmeldingen";
 import { useRecht } from "@/lib/rechten";
 

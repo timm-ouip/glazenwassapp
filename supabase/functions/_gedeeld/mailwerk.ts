@@ -202,25 +202,31 @@ export async function verplaats(
   // Onthouden waar hij vandaan kwam: terugzetten uit de prullenbak gaat daarheen.
   const vorige = richting === "terug" ? null : plek.map_id;
 
-  const uitkomst = await metImap(box, wachtwoord, async (client) => {
-    const lock = await client.getMailboxLock(plek.pad);
-    try {
-      if (Number(client.mailbox && client.mailbox.uidValidity) !== plek.uidvalidity) return null;
-      const res = await client.messageMove(String(plek.uid), bestemming.pad, { uid: true });
-      if (!res) throw new Error("Verplaatsen lukte niet.");
-      const nieuweUid = res.uidMap?.get(plek.uid);
-      return {
-        uid: typeof nieuweUid === "number" ? nieuweUid : null,
-        uidvalidity: res.uidValidity !== undefined ? Number(res.uidValidity) : null,
-      };
-    } finally {
-      lock.release();
-    }
-  }, verbinding);
+  const uitkomst = await metImap(
+    box,
+    wachtwoord,
+    async (client) => {
+      const lock = await client.getMailboxLock(plek.pad);
+      try {
+        if (Number(client.mailbox && client.mailbox.uidValidity) !== plek.uidvalidity) return null;
+        const res = await client.messageMove(String(plek.uid), bestemming.pad, { uid: true });
+        if (!res) throw new Error("Verplaatsen lukte niet.");
+        const nieuweUid = res.uidMap?.get(plek.uid);
+        return {
+          uid: typeof nieuweUid === "number" ? nieuweUid : null,
+          uidvalidity: res.uidValidity !== undefined ? Number(res.uidValidity) : null,
+        };
+      } finally {
+        lock.release();
+      }
+    },
+    verbinding,
+  );
   if (!uitkomst) return antwoord({ fout: VERANDERD }, 409);
 
   const uidvalidity =
-    uitkomst.uidvalidity ?? (bestemming.uidvalidity !== null ? Number(bestemming.uidvalidity) : null);
+    uitkomst.uidvalidity ??
+    (bestemming.uidvalidity !== null ? Number(bestemming.uidvalidity) : null);
   if (uitkomst.uid !== null && uidvalidity !== null) {
     const nieuwePlek = {
       map_id: bestemming.id,
@@ -299,9 +305,16 @@ export function adressenUit(lijst: unknown): Adres[] | null {
   if (!Array.isArray(lijst)) return null;
   const uit: Adres[] = [];
   for (const a of lijst) {
-    const email = String((a as Adres)?.email ?? "").trim().toLowerCase();
+    const email = String((a as Adres)?.email ?? "")
+      .trim()
+      .toLowerCase();
     if (!EMAIL.test(email) || email.length > 254) return null;
-    const naam = knip(String((a as Adres)?.naam ?? "").replace(/[\r\n]/g, " ").trim(), 200);
+    const naam = knip(
+      String((a as Adres)?.naam ?? "")
+        .replace(/[\r\n]/g, " ")
+        .trim(),
+      200,
+    );
     uit.push({ email, naam });
   }
   return uit;
@@ -318,7 +331,12 @@ export async function verstuurdSinds(db: Db, box: Box, sinds: Date): Promise<num
   return count ?? 0;
 }
 
-export async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: VerstuurVerzoek): Promise<Response> {
+export async function verstuur(
+  db: Db,
+  box: Box,
+  wachtwoord: string,
+  verzoek: VerstuurVerzoek,
+): Promise<Response> {
   const aan = adressenUit(verzoek.aan);
   const cc = adressenUit(verzoek.cc);
   if (!aan || !cc) return antwoord({ fout: "Een van de adressen klopt niet." }, 400);
@@ -326,7 +344,12 @@ export async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Ve
   if (aan.length + cc.length > MAX_ONTVANGERS) {
     return antwoord({ fout: `Hooguit ${MAX_ONTVANGERS} ontvangers per mail.` }, 400);
   }
-  const onderwerp = knip(String(verzoek.onderwerp ?? "").replace(/[\r\n]+/g, " ").trim(), MAX_ONDERWERP);
+  const onderwerp = knip(
+    String(verzoek.onderwerp ?? "")
+      .replace(/[\r\n]+/g, " ")
+      .trim(),
+    MAX_ONDERWERP,
+  );
   const tekst = String(verzoek.tekst ?? "");
   if (!tekst.trim()) return antwoord({ fout: "De mail is nog leeg." }, 400);
   if (tekst.length > MAX_TEKST) return antwoord({ fout: "De mail is te lang." }, 400);
@@ -407,10 +430,19 @@ export async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Ve
     }
     for (const b of verzoek.bijlagen) {
       const inhoud = String(b?.inhoud ?? "");
-      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(inhoud)) return antwoord({ fout: "Een bijlage is onleesbaar." }, 400);
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(inhoud))
+        return antwoord({ fout: "Een bijlage is onleesbaar." }, 400);
       bijlagen.push({
-        naam: knip(String(b?.naam ?? "bijlage").replace(/[\r\n"\\/]/g, " ").trim(), 200) || "bijlage",
-        type: /^[\w.+-]+\/[\w.+-]+$/.test(String(b?.type ?? "")) ? String(b.type) : "application/octet-stream",
+        naam:
+          knip(
+            String(b?.naam ?? "bijlage")
+              .replace(/[\r\n"\\/]/g, " ")
+              .trim(),
+            200,
+          ) || "bijlage",
+        type: /^[\w.+-]+\/[\w.+-]+$/.test(String(b?.type ?? ""))
+          ? String(b.type)
+          : "application/octet-stream",
         inhoud,
       });
     }
@@ -466,7 +498,9 @@ export async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Ve
           uid: res.uid,
           message_id: opgemaakt.messageId,
           in_reply_to: antwoordOp?.messageId ?? "",
-          referenties: antwoordOp ? [...antwoordOp.referenties, antwoordOp.messageId].slice(-20) : [],
+          referenties: antwoordOp
+            ? [...antwoordOp.referenties, antwoordOp.messageId].slice(-20)
+            : [],
           richting: "uit",
           van_naam: vanNaam,
           van_email: box.adres,
@@ -476,7 +510,11 @@ export async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Ve
           fragment: knip(tekst.replace(/\s+/g, " ").trim(), 200),
           tekst,
           html: "",
-          bijlagen: bijlagen.map((b) => ({ naam: b.naam, type: b.type, grootte: Math.round((b.inhoud.length * 3) / 4) })),
+          bijlagen: bijlagen.map((b) => ({
+            naam: b.naam,
+            type: b.type,
+            grootte: Math.round((b.inhoud.length * 3) / 4),
+          })),
           ontvangen_op: new Date().toISOString(),
           gelezen: true,
           paaltje_status: "overslaan",
@@ -501,7 +539,12 @@ export async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Ve
     const nu = new Date().toISOString();
     const { error } = await db
       .from("berichten")
-      .update({ beantwoord_op: nu, afgehandeld_op: nu, herinner_op: null, concept: knip(eigenTekst(tekst), 20_000) })
+      .update({
+        beantwoord_op: nu,
+        afgehandeld_op: nu,
+        herinner_op: null,
+        concept: knip(eigenTekst(tekst), 20_000),
+      })
       .eq("id", String(verzoek.antwoord_op))
       .eq("mailbox_id", box.id);
     if (error) console.error("antwoord markeren:", error.message);
@@ -509,7 +552,6 @@ export async function verstuur(db: Db, box: Box, wachtwoord: string, verzoek: Ve
 
   return antwoord({ ok: true, kopieFout });
 }
-
 
 const MAX_BIJLAGEN = 10;
 /** Samen; Mijndomein neemt grotere mail wel aan, maar de functie moet het ook in zijn geheugen houden. */
@@ -535,19 +577,23 @@ export async function haalBijlagen(
   alleen?: number,
 ): Promise<{ bijlagen: { naam: string; type: string; inhoud: string }[] } | { fout: string }> {
   const plek = await plekVan(db, box, berichtId);
-  if (!plek) return { fout: "Die mail staat niet meer in je mailbox; de bijlagen zijn er niet meer." };
+  if (!plek)
+    return { fout: "Die mail staat niet meer in je mailbox; de bijlagen zijn er niet meer." };
 
   return await metImap(box, wachtwoord, async (client) => {
     const lock = await client.getMailboxLock(plek.pad);
     try {
-      if (Number(client.mailbox && client.mailbox.uidValidity) !== plek.uidvalidity) return { fout: VERANDERD };
+      if (Number(client.mailbox && client.mailbox.uidValidity) !== plek.uidvalidity)
+        return { fout: VERANDERD };
       const kop = await client.fetchOne(String(plek.uid), { bodyStructure: true }, { uid: true });
       if (!kop) return { fout: "Die mail staat niet meer in je mailbox." };
-      let delen = bijlageDelen(kop.bodyStructure as Parameters<typeof bijlageDelen>[0]).map((d) => ({
-        ...d,
-        // Een mail die in zijn geheel één bestand is, heeft geen deelnummer: dan deel 1.
-        part: d.part || "1",
-      }));
+      let delen = bijlageDelen(kop.bodyStructure as Parameters<typeof bijlageDelen>[0]).map(
+        (d) => ({
+          ...d,
+          // Een mail die in zijn geheel één bestand is, heeft geen deelnummer: dan deel 1.
+          part: d.part || "1",
+        }),
+      );
       if (alleen !== undefined) delen = delen.filter((_, i) => i === alleen);
       if (delen.length === 0) return { fout: "Die bijlage is er niet (meer)." };
       if (delen.reduce((som, d) => som + d.grootte, 0) > MAX_BIJLAGEN_BYTES * 1.4) {
@@ -561,7 +607,8 @@ export async function haalBijlagen(
         const stukken: Uint8Array[] = [];
         for await (const stuk of content as AsyncIterable<Uint8Array>) {
           totaal += stuk.length;
-          if (totaal > MAX_BIJLAGEN_BYTES) return { fout: "De bijlagen zijn te groot (hooguit 15 MB)." };
+          if (totaal > MAX_BIJLAGEN_BYTES)
+            return { fout: "De bijlagen zijn te groot (hooguit 15 MB)." };
           stukken.push(stuk);
         }
         const bytes = new Uint8Array(stukken.reduce((som, s) => som + s.length, 0));
@@ -570,7 +617,11 @@ export async function haalBijlagen(
           bytes.set(s, plekInBytes);
           plekInBytes += s.length;
         }
-        uit.push({ naam: deel.naam, type: deel.type || "application/octet-stream", inhoud: naarBase64(bytes) });
+        uit.push({
+          naam: deel.naam,
+          type: deel.type || "application/octet-stream",
+          inhoud: naarBase64(bytes),
+        });
       }
       if (uit.length === 0) return { fout: "Die bijlage kon niet opgehaald worden." };
       return { bijlagen: uit };

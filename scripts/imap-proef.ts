@@ -32,7 +32,8 @@ function vraag(tekst: string, verborgen = false): Promise<string> {
           return;
         }
         if (teken === "") process.exit(1); // ctrl+c
-        if (teken === "") invoer = invoer.slice(0, -1); // backspace
+        if (teken === "")
+          invoer = invoer.slice(0, -1); // backspace
         else invoer += teken;
       }
     };
@@ -57,7 +58,13 @@ function verbind(host: string, poort: number) {
     const eind = Date.now() + ms;
     while (!klaar(buffer)) {
       if (Date.now() > eind) throw new Error(`Geen antwoord van ${host} binnen ${ms / 1000}s`);
-      await Promise.race([new Promise<void>((r) => { wachters.push(r); setTimeout(r, 500); }), fout]);
+      await Promise.race([
+        new Promise<void>((r) => {
+          wachters.push(r);
+          setTimeout(r, 500);
+        }),
+        fout,
+      ]);
     }
     const uit = buffer;
     buffer = "";
@@ -161,6 +168,8 @@ console.log("\n── Uitkomst ──");
 console.log(`IMAP (mail ophalen):   ${imap ? "werkt" : "werkt niet"}`);
 console.log(`SMTP (mail versturen): ${smtp ? "werkt" : "werkt niet"}`);
 if (!imap || !smtp) {
-  console.log("Werkt het niet terwijl webmail wel lukt? Vraag Soverin-support om een app-wachtwoord.");
+  console.log(
+    "Werkt het niet terwijl webmail wel lukt? Vraag Soverin-support om een app-wachtwoord.",
+  );
 }
 process.exit(0);

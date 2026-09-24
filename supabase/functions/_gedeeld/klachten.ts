@@ -77,7 +77,8 @@ export async function klachtUitMail(
     .from("klacht_berichten")
     .insert({ klacht_id: klachtId, bericht_id: mail.id, company_id: mail.company_id });
   // Twee rondes tegelijk: de koppeling staat er al, prima.
-  if (koppelFout && koppelFout.code !== "23505") throw new Error(`Mail aan klacht: ${koppelFout.message}`);
+  if (koppelFout && koppelFout.code !== "23505")
+    throw new Error(`Mail aan klacht: ${koppelFout.message}`);
 }
 
 /** Het adres van de klacht, alleen als het duidelijk is. */
@@ -107,7 +108,9 @@ async function adresVanKlacht(
   const straat = schoon(adres.straat);
   const nummer = schoon(adres.huisnummer);
   const treffers = adressen.filter((c) => {
-    const namen = [c.streets?.name ?? "", c.streets?.volledige_naam ?? ""].map(schoon).filter(Boolean);
+    const namen = [c.streets?.name ?? "", c.streets?.volledige_naam ?? ""]
+      .map(schoon)
+      .filter(Boolean);
     return namen.includes(straat) && schoon(`${c.house_number}${c.addition ?? ""}`) === nummer;
   });
   return treffers.length === 1 ? treffers[0].id : null;

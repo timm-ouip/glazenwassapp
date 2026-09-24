@@ -470,7 +470,9 @@ Elk bedrijf heeft een daglimiet op het aantal berichten aan Paaltje.
 export function leesUitleg(
   onderwerp: unknown,
 ): { onderwerp: Onderwerp; uitleg: string } | { fout: string; onderwerpen: string[] } {
-  const naam = String(onderwerp ?? "").trim().toLowerCase();
+  const naam = String(onderwerp ?? "")
+    .trim()
+    .toLowerCase();
   if ((ONDERWERPEN as readonly string[]).includes(naam)) {
     const o = naam as Onderwerp;
     return { onderwerp: o, uitleg: UITLEG[o].trim() };

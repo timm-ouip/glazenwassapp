@@ -16,14 +16,7 @@
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-import {
-  antwoord,
-  CORS,
-  inStukjes,
-  perGroepje,
-  stuurMail,
-  vulIn,
-} from "../_gedeeld/mail.ts";
+import { antwoord, CORS, inStukjes, perGroepje, stuurMail, vulIn } from "../_gedeeld/mail.ts";
 import { draaiTerug } from "../_gedeeld/doorvoeren.ts";
 import { ontsleutel } from "../_gedeeld/geheim.ts";
 import {
@@ -238,8 +231,12 @@ Deno.serve(async (req) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) {
     return antwoord({ fout: "Geen geldige datum." }, 400);
   }
-  const onderwerp = String(verzoek.onderwerp ?? "").trim().slice(0, MAX_ONDERWERP);
-  const tekst = String(verzoek.tekst ?? "").trim().slice(0, MAX_TEKST);
+  const onderwerp = String(verzoek.onderwerp ?? "")
+    .trim()
+    .slice(0, MAX_ONDERWERP);
+  const tekst = String(verzoek.tekst ?? "")
+    .trim()
+    .slice(0, MAX_TEKST);
   const versturen = verzoek.actie === "versturen";
   const test = verzoek.test === true;
   const kanaal: Kanaal = ["mail", "whatsapp", "beide", "voorkeur"].includes(String(verzoek.kanaal))
@@ -320,7 +317,12 @@ Deno.serve(async (req) => {
 
   // Mag dit bedrijf vanaf zijn afzender mailen? Eerst dat, dan pas versturen.
   if (metMail) {
-    const vooraf = await afzenderFout(beheerder, bedrijf.id, brevo, String(bedrijf.mail_afzender_email ?? ""));
+    const vooraf = await afzenderFout(
+      beheerder,
+      bedrijf.id,
+      brevo,
+      String(bedrijf.mail_afzender_email ?? ""),
+    );
     if (vooraf) return antwoord({ fout: vooraf }, 400);
   }
 
@@ -332,9 +334,15 @@ Deno.serve(async (req) => {
       .select("id,phone_number_id,status")
       .eq("company_id", bedrijf.id)
       .maybeSingle();
-    const toegang = koppeling && koppeling.status !== "uit" ? await toegangVan(beheerder, koppeling.id, ontsleutel) : null;
+    const toegang =
+      koppeling && koppeling.status !== "uit"
+        ? await toegangVan(beheerder, koppeling.id, ontsleutel)
+        : null;
     if (!koppeling || !toegang) {
-      return antwoord({ fout: "WhatsApp is niet (meer) gekoppeld. Koppel het nummer opnieuw bij Instellingen." }, 400);
+      return antwoord(
+        { fout: "WhatsApp is niet (meer) gekoppeld. Koppel het nummer opnieuw bij Instellingen." },
+        400,
+      );
     }
     wa = { phoneNumberId: koppeling.phone_number_id, toegang };
   }
@@ -348,10 +356,7 @@ Deno.serve(async (req) => {
   }
   const afzenderEmail = (bedrijf.mail_afzender_email ?? "").trim();
   if (metMail && !afzenderEmail) {
-    return antwoord(
-      { fout: "Stel eerst een afzender in bij Instellingen." },
-      400,
-    );
+    return antwoord({ fout: "Stel eerst een afzender in bij Instellingen." }, 400);
   }
   const afzender = {
     naam: (bedrijf.mail_afzender_naam ?? "").trim() || bedrijf.name,
@@ -372,7 +377,9 @@ Deno.serve(async (req) => {
   // los mail te versturen.
   let proefAdres = String(medewerker.email ?? "");
   if (test) {
-    const gekozen = String(verzoek.proef_naar ?? "").trim().toLowerCase();
+    const gekozen = String(verzoek.proef_naar ?? "")
+      .trim()
+      .toLowerCase();
     if (gekozen) {
       if (gekozen.length > 254 || !/^[^@\s,;<>"]+@[^@\s,;<>"]+\.[^@\s,;<>"]+$/.test(gekozen)) {
         return antwoord({ fout: "Dat proefadres klopt niet." }, 400);
@@ -427,7 +434,10 @@ Deno.serve(async (req) => {
     });
     if (plekFout) return antwoord({ fout: "Kon de proef niet vastleggen." }, 500);
     if (!plek) {
-      return antwoord({ fout: "Je hebt het afgelopen uur al 10 proeven verstuurd. Probeer het straks nog eens." }, 429);
+      return antwoord(
+        { fout: "Je hebt het afgelopen uur al 10 proeven verstuurd. Probeer het straks nog eens." },
+        429,
+      );
     }
     mailing = { id: String(plek) };
     const { error: kanaalFout } = await beheerder
@@ -490,7 +500,10 @@ Deno.serve(async (req) => {
               .gte("created_at", uurGeleden)
               .limit(1);
             if (alFout) {
-              return antwoord({ fout: "Kon niet nagaan of deze adressen al een mail kregen." }, 500);
+              return antwoord(
+                { fout: "Kon niet nagaan of deze adressen al een mail kregen." },
+                500,
+              );
             }
             if ((al ?? []).length > 0) {
               overlapt = true;
@@ -578,9 +591,21 @@ Deno.serve(async (req) => {
   const datumTekst = datumVoluit(datum);
   const waUitslag = await perGroepje(appjes, 4, async (o) => {
     // Zelfde als in de mail: zonder naam "buurtbewoner", en dat staat dan ook in het gesprek.
-    const waarden = { naam: o.naam || "buurtbewoner", adres: o.adressen.join(" en "), datum: datumTekst };
-    const parameters = (sjabloon!.variabelen ?? []).map((v) => waarden[v as keyof typeof waarden] ?? "");
-    const res = await verstuurSjabloon(wa!.toegang, wa!.phoneNumberId, o.wa, sjabloon!.meta_naam, parameters);
+    const waarden = {
+      naam: o.naam || "buurtbewoner",
+      adres: o.adressen.join(" en "),
+      datum: datumTekst,
+    };
+    const parameters = (sjabloon!.variabelen ?? []).map(
+      (v) => waarden[v as keyof typeof waarden] ?? "",
+    );
+    const res = await verstuurSjabloon(
+      wa!.toegang,
+      wa!.phoneNumberId,
+      o.wa,
+      sjabloon!.meta_naam,
+      parameters,
+    );
     return { o, res, tekst: vulSjabloonIn(sjabloon!.tekst, waarden) };
   });
   for (const { o, res } of waUitslag) {
@@ -681,7 +706,8 @@ Deno.serve(async (req) => {
   }
 
   const mislukt = rijen.filter((r) => r.status === "mislukt").length;
-  const gelukt = (k: string) => rijen.filter((r) => r.kanaal === k && r.status === "verzonden").length;
+  const gelukt = (k: string) =>
+    rijen.filter((r) => r.kanaal === k && r.status === "verzonden").length;
   const { error: aantalFout } = await beheerder
     .from("mailingen")
     .update({ aantal: gelukt("mail"), aantal_whatsapp: gelukt("whatsapp"), mislukt })
@@ -714,7 +740,12 @@ Deno.serve(async (req) => {
 // deno-lint-ignore no-explicit-any
 async function wijzigingsbericht(
   db: any,
-  bedrijf: { id: string; name: string; mail_afzender_naam: string | null; mail_afzender_email: string | null },
+  bedrijf: {
+    id: string;
+    name: string;
+    mail_afzender_naam: string | null;
+    mail_afzender_email: string | null;
+  },
   medewerker: { id: string; naam: string; email: string },
   verzoek: Verzoek,
   brevo: string,
@@ -843,9 +874,15 @@ async function wijzigingsbericht(
     }
   }
 
-  const onderwerp = String(verzoek.onderwerp ?? "").trim().slice(0, MAX_ONDERWERP);
-  const tekst = String(verzoek.tekst ?? "").trim().slice(0, MAX_TEKST);
-  const reden = String(verzoek.reden ?? "").trim().slice(0, 120);
+  const onderwerp = String(verzoek.onderwerp ?? "")
+    .trim()
+    .slice(0, MAX_ONDERWERP);
+  const tekst = String(verzoek.tekst ?? "")
+    .trim()
+    .slice(0, MAX_TEKST);
+  const reden = String(verzoek.reden ?? "")
+    .trim()
+    .slice(0, 120);
   if (!onderwerp || !tekst) return antwoord({ fout: "Vul een onderwerp en een tekst in." }, 400);
   if (verdeling.mail.length === 0 && verdeling.whatsapp.length === 0) {
     return antwoord(
@@ -922,7 +959,13 @@ async function wijzigingsbericht(
         );
         const koppeling = await waToegang(db, bedrijf.id);
         const res = koppeling
-          ? await verstuurSjabloon(koppeling.toegang, koppeling.phoneNumberId, o.wa, sjabloon!.meta_naam, parameters)
+          ? await verstuurSjabloon(
+              koppeling.toegang,
+              koppeling.phoneNumberId,
+              o.wa,
+              sjabloon!.meta_naam,
+              parameters,
+            )
           : { ok: false as const, fout: "WhatsApp is niet gekoppeld." };
         return { o, res };
       })
@@ -1002,7 +1045,8 @@ async function wijzigingsbericht(
     }
   }
 
-  const gelukt = (k: string) => rijen.filter((r) => r.kanaal === k && r.status === "verzonden").length;
+  const gelukt = (k: string) =>
+    rijen.filter((r) => r.kanaal === k && r.status === "verzonden").length;
   const mislukt = rijen.filter((r) => r.status === "mislukt").length;
   await db
     .from("mailingen")
@@ -1047,7 +1091,9 @@ async function controleer(
   brevo: string,
   mailboxAdres: string,
 ): Promise<Response> {
-  const afzender = String(bedrijf["mail_afzender_email"] ?? "").trim().toLowerCase();
+  const afzender = String(bedrijf["mail_afzender_email"] ?? "")
+    .trim()
+    .toLowerCase();
 
   const uit: Record<string, unknown> = {
     sleutel: false,
@@ -1152,7 +1198,12 @@ async function mailboxAdresVan(db: any, companyId: string): Promise<string> {
 
 function domeinVan(adres: string): string {
   const at = adres.lastIndexOf("@");
-  return at < 0 ? "" : adres.slice(at + 1).trim().toLowerCase();
+  return at < 0
+    ? ""
+    : adres
+        .slice(at + 1)
+        .trim()
+        .toLowerCase();
 }
 
 /** Staat de afzender op hetzelfde domein als de gekoppelde mailbox? */
@@ -1170,7 +1221,12 @@ function afzenderPastBij(afzender: string, mailboxAdres: string): boolean {
  * wachtwoord, dus het domein daarvan is het bewijs dat het adres van jou is.
  */
 // deno-lint-ignore no-explicit-any
-async function afzenderFout(db: any, companyId: string, brevo: string, afzender: string): Promise<string> {
+async function afzenderFout(
+  db: any,
+  companyId: string,
+  brevo: string,
+  afzender: string,
+): Promise<string> {
   const adres = afzender.trim().toLowerCase();
   if (!brevo) return "De Brevo-sleutel ontbreekt op de server.";
   if (!adres) return "Stel eerst een afzender in bij Instellingen.";
@@ -1195,11 +1251,16 @@ async function afzenderFout(db: any, companyId: string, brevo: string, afzender:
       headers: { "api-key": brevo.trim(), Accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) return `Brevo kon de afzender niet controleren (${res.status}). Probeer het zo nog eens.`;
+    if (!res.ok)
+      return `Brevo kon de afzender niet controleren (${res.status}). Probeer het zo nog eens.`;
     const lijst = (await res.json()) as { senders?: { email?: string; active?: boolean }[] };
-    const gevonden = (lijst.senders ?? []).find((s) => (s.email ?? "").trim().toLowerCase() === adres);
-    if (!gevonden) return `${adres} staat nog niet bij Brevo als afzender. Laat hem daar eerst toevoegen.`;
-    if (gevonden.active !== true) return `${adres} is bij Brevo nog niet goedgekeurd. Bevestig hem eerst via de mail van Brevo.`;
+    const gevonden = (lijst.senders ?? []).find(
+      (s) => (s.email ?? "").trim().toLowerCase() === adres,
+    );
+    if (!gevonden)
+      return `${adres} staat nog niet bij Brevo als afzender. Laat hem daar eerst toevoegen.`;
+    if (gevonden.active !== true)
+      return `${adres} is bij Brevo nog niet goedgekeurd. Bevestig hem eerst via de mail van Brevo.`;
   } catch {
     return "Brevo is even niet bereikbaar. Probeer het zo nog eens.";
   }
@@ -1330,7 +1391,9 @@ async function klantenVoorAdressen(
   for (const stuk of inStukjes(klantIds)) {
     const { data } = await db
       .from("klanten")
-      .select("id,naam,email,telefoon,telefoon2,kanaal_voorkeur,wa_toestemming_op,wa_marketing_op,wa_afgemeld_op")
+      .select(
+        "id,naam,email,telefoon,telefoon2,kanaal_voorkeur,wa_toestemming_op,wa_marketing_op,wa_afgemeld_op",
+      )
       .eq("company_id", companyId)
       .is("deleted_at", null)
       .in("id", stuk);
@@ -1386,7 +1449,10 @@ function verdeel(
     const doeWa = wilWa && kanWa;
     if (wilWa && !kanWa) zonderWhatsApp += 1;
     const doeMail =
-      !!k.email && (wil === "mail" || wil === "beide" || (kanaal === "voorkeur" && wil === "whatsapp" && !kanWa));
+      !!k.email &&
+      (wil === "mail" ||
+        wil === "beide" ||
+        (kanaal === "voorkeur" && wil === "whatsapp" && !kanWa));
 
     if (doeMail) {
       // Op e-mailadres: twee klantkaarten met hetzelfde adres erachter is één
@@ -1395,7 +1461,8 @@ function verdeel(
       const bestaand = perEmail.get(sleutel);
       if (bestaand) {
         for (const a of k.adressen) if (!bestaand.adressen.includes(a)) bestaand.adressen.push(a);
-        for (const id of k.customer_ids) if (!bestaand.customer_ids.includes(id)) bestaand.customer_ids.push(id);
+        for (const id of k.customer_ids)
+          if (!bestaand.customer_ids.includes(id)) bestaand.customer_ids.push(id);
       } else {
         perEmail.set(sleutel, {
           email: k.email,
@@ -1412,7 +1479,8 @@ function verdeel(
       const bestaand = perNummer.get(k.wa);
       if (bestaand) {
         for (const a of k.adressen) if (!bestaand.adressen.includes(a)) bestaand.adressen.push(a);
-        for (const id of k.customer_ids) if (!bestaand.customer_ids.includes(id)) bestaand.customer_ids.push(id);
+        for (const id of k.customer_ids)
+          if (!bestaand.customer_ids.includes(id)) bestaand.customer_ids.push(id);
       } else {
         perNummer.set(k.wa, {
           wa: k.wa,
@@ -1428,7 +1496,6 @@ function verdeel(
   }
   return { mail: [...perEmail.values()], whatsapp: [...perNummer.values()], zonderWhatsApp };
 }
-
 
 /**
  * Hoe goed de aankondiging deze dag dekt: hoeveel adressen we niet kunnen

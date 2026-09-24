@@ -54,8 +54,12 @@ export async function stuurAntwoord(db: Db, mail: AntwoordOp, tekst: string): Pr
   // Paaltje herkent de klant aan de afzender. Een apart "antwoord naar"-adres
   // kiest de schrijver zelf; daar sturen we niets heen zonder dat een mens
   // meekijkt, anders gaan adres en maanden van de klant naar een vreemde.
-  const afzender = String(mail.van_email || "").trim().toLowerCase();
-  const antwoordNaar = String(mail.antwoord_naar || "").trim().toLowerCase();
+  const afzender = String(mail.van_email || "")
+    .trim()
+    .toLowerCase();
+  const antwoordNaar = String(mail.antwoord_naar || "")
+    .trim()
+    .toLowerCase();
   if (antwoordNaar && antwoordNaar !== afzender) {
     return "De mail vraagt om een antwoord naar een ander adres dan de afzender; dat stuurt Paaltje niet zelf.";
   }
@@ -101,7 +105,9 @@ export async function stuurAntwoord(db: Db, mail: AntwoordOp, tekst: string): Pr
     .single();
   const vanNaam = String(bedrijf?.mail_afzender_naam || bedrijf?.name || "").trim();
   const onderwerp = knip(
-    (/^re:/i.test(mail.onderwerp) ? mail.onderwerp : `Re: ${mail.onderwerp}`).replace(/[\r\n]+/g, " ").trim(),
+    (/^re:/i.test(mail.onderwerp) ? mail.onderwerp : `Re: ${mail.onderwerp}`)
+      .replace(/[\r\n]+/g, " ")
+      .trim(),
     300,
   );
   const antwoordOp = mail.message_id
@@ -154,7 +160,11 @@ export async function stuurAntwoord(db: Db, mail: AntwoordOp, tekst: string): Pr
       return e.message;
     }
     // Zeker niet verstuurd: terug naar "wacht op jou".
-    await db.from("berichten").update({ beantwoord_op: null }).eq("id", mail.id).eq("beantwoord_op", tijd);
+    await db
+      .from("berichten")
+      .update({ beantwoord_op: null })
+      .eq("id", mail.id)
+      .eq("beantwoord_op", tijd);
     return e instanceof Error ? e.message : String(e);
   }
 
@@ -189,7 +199,9 @@ export async function stuurAntwoord(db: Db, mail: AntwoordOp, tekst: string): Pr
               uid: res.uid,
               message_id: opgemaakt.messageId,
               in_reply_to: antwoordOp?.messageId ?? "",
-              referenties: antwoordOp ? [...antwoordOp.referenties, antwoordOp.messageId].slice(-20) : [],
+              referenties: antwoordOp
+                ? [...antwoordOp.referenties, antwoordOp.messageId].slice(-20)
+                : [],
               richting: "uit",
               van_naam: vanNaam,
               van_email: box.adres,
