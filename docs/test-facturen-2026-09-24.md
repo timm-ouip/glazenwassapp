@@ -457,13 +457,77 @@ stonden).
 
 ## Nog open van fase 1
 
-5. De vangnetten: tellen en waarschuwen bij een adres op overmaken zonder
-   klant of met prijs 0, een klant zonder e-mailadres, en bij het omzetten van
-   een hele wijk naar overmaken. Plus een lijstje "kan niet gemaild" met
-   printknop.
 6. Maandconcepten via `pg_cron` in de nacht van de 1e, en de por als er na de
    5e nog concepten staan.
 7. Het btw-kwartaaloverzicht op het dashboard.
 
 En uit de vorige sessie nog steeds: een weggegooide of achteraf geprijsde klus
 houdt zijn factuurregel.
+
+---
+
+# De vangnetten (punt 5)
+
+Vier manieren waarop een adres op "overmaken" geen factuur oplevert, en alle
+vier gebeuren ze zonder dat je er iets van merkt — er staat dan gewoon geen
+factuur, en een getal dat er niet is valt niemand op:
+
+| reden | wat er gebeurt |
+|---|---|
+| Geen klant aan het adres | `factuurregels_maken` doet een join op `klanten`; de regel ontstaat niet |
+| Geen prijs | `wp.prijs > 0` slaat hem over |
+| Geen e-mailadres | regel en factuur ontstaan wél, maar het versturen strandt: de factuur blijft als concept liggen |
+| Extra opdracht zonder prijs | `klus_factuurregel_bijhouden` slaat hem over |
+
+## Waar het vandaan komt
+
+Migratie `20261012109000_facturen_vangnet.sql` (plus `20261012110000` met wat
+de review ving) zet er twee functies neer:
+
+- **`facturen_vangnet()`** — één rij per adres dat het laat afweten, met de
+  reden erbij. Staat het factureren uit (`factuur_start_op` leeg), dan komt er
+  niets terug: dan valt er ook niets te missen. Ook leeg zonder het recht
+  `facturen`.
+- **`wijk_overmaken_telling(wijk)`** — hoeveel adressen meegaan als een wijk op
+  overmaken gaat, en hoeveel daarvan het laten afweten. Alleen voor de
+  eigenaar, want alleen die mag de betaalmethode van een wijk veranderen.
+
+Allebei gebruiken ze **`adres_heeft_prijs(adres)`**: de basisprijs, óf een
+meerprijs voor maandwerk die ergens boven nul staat. Een adres dat alleen in
+oktober de serre doet, kost dus niet "niets" — dat stond er eerst wel in.
+
+## Waar je het ziet
+
+- **Rood vak boven de facturenlijst** met de telling, en achter "Bekijken" een
+  eigen blad met de lijst per reden en een printknop. Om mee de straat in te
+  nemen: bij het ene adres haal je een mailadres op, bij het andere een naam.
+- **Bij het omzetten van een wijk** komt er eerst een vraag: "2 adressen volgen
+  de wijk en gaan dus mee naar overmaken… Bij één daarvan komt er geen factuur
+  de deur uit: 1 zonder prijs." Zeg je nee, dan springt de keuze terug.
+- **In het klantdossier** een geel briefje zodra een klant nergens een
+  e-mailadres heeft — bij de e-mailvelden zelf, dus ook bij een particulier.
+
+## Wat er van getest is in de app
+
+Tijdelijk één adres in Rijswijk op overmaken gezet en het factureren
+aangezet:
+
+- de lijst vond **Birkhoven 36** als "geen klant aan het adres", met de
+  officiële straatnaam en niet de werknaam ("Zwaanwijck");
+- het rode vak, het blad en de teksten klopten;
+- de wijkvraag bij Scheveningen las de zin hierboven, en "Annuleren" liet
+  alles staan zoals het was;
+- het gele briefje verscheen zodra de e-mailvelden leeg waren (in het scherm,
+  zonder op te slaan).
+
+Daarna alles teruggezet: `factuur_start_op` weer leeg, het adres volgt weer de
+wijk.
+
+Ook nagemeten zonder het factureren aan: `wijk_overmaken_telling` gaf voor
+Madestein 507 adressen waarvan 507 zonder klant, voor Rijswijk 152 waarvan 149
+zonder klant, en voor Scheveningen 2 waarvan 1 zonder prijs. Dat klopt met
+"656 van de 662 adressen nog zonder naam".
+
+**Niet aangeklikt:** de printknop zelf — die opent het printvenster van de Mac,
+en dat blokkeert de browser. De knoppen staan op `print:hidden` en `AppLayout`
+verbergt de zijbalk en de titelbalk al bij het printen.
