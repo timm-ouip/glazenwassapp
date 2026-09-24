@@ -4,14 +4,72 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15";
+    PostgrestVersion: "14.5";
   };
   public: {
     Tables: {
-      aanmeldingen: {
+      aankondiging_adressen: {
         Row: {
           company_id: string;
+          created_at: string;
+          customer_id: string | null;
+          datum: string;
+          id: string;
+          ontvanger_id: string;
+          soort: string;
+          tijdvak_tot: string | null;
+          tijdvak_van: string | null;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          customer_id?: string | null;
+          datum: string;
+          id?: string;
+          ontvanger_id: string;
+          soort?: string;
+          tijdvak_tot?: string | null;
+          tijdvak_van?: string | null;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          customer_id?: string | null;
+          datum?: string;
+          id?: string;
+          ontvanger_id?: string;
+          soort?: string;
+          tijdvak_tot?: string | null;
+          tijdvak_van?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "aankondiging_adressen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "aankondiging_adressen_customer_id_fkey";
+            columns: ["customer_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "aankondiging_adressen_ontvanger_id_fkey";
+            columns: ["ontvanger_id"];
+            isOneToOne: false;
+            referencedRelation: "mail_ontvangers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      aanmeldingen: {
+        Row: {
           automatisch: Json | null;
+          company_id: string;
           created_at: string;
           customer_id: string | null;
           deleted_at: string | null;
@@ -30,8 +88,8 @@ export type Database = {
           toevoeging: string;
         };
         Insert: {
-          company_id?: string;
           automatisch?: Json | null;
+          company_id?: string;
           created_at?: string;
           customer_id?: string | null;
           deleted_at?: string | null;
@@ -50,8 +108,8 @@ export type Database = {
           toevoeging?: string;
         };
         Update: {
-          company_id?: string;
           automatisch?: Json | null;
+          company_id?: string;
           created_at?: string;
           customer_id?: string | null;
           deleted_at?: string | null;
@@ -69,29 +127,529 @@ export type Database = {
           telefoon?: string;
           toevoeging?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "aanmeldingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "aanmeldingen_customer_id_fkey";
+            columns: ["customer_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "aanmeldingen_klant_id_fkey";
+            columns: ["klant_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      adres_prijzen: {
+        Row: {
+          company_id: string;
+          customer_id: string;
+          maandwerk_extra: Json;
+          prijs: number;
+        };
+        Insert: {
+          company_id?: string;
+          customer_id: string;
+          maandwerk_extra?: Json;
+          prijs?: number;
+        };
+        Update: {
+          company_id?: string;
+          customer_id?: string;
+          maandwerk_extra?: Json;
+          prijs?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "adres_prijzen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "adres_prijzen_customer_id_company_id_fkey";
+            columns: ["customer_id", "company_id"];
+            isOneToOne: true;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      bericht_categorieen: {
+        Row: {
+          bericht_id: string;
+          categorie_id: string;
+          company_id: string;
+          created_at: string;
+          door: string;
+          zekerheid: number | null;
+        };
+        Insert: {
+          bericht_id: string;
+          categorie_id: string;
+          company_id?: string;
+          created_at?: string;
+          door?: string;
+          zekerheid?: number | null;
+        };
+        Update: {
+          bericht_id?: string;
+          categorie_id?: string;
+          company_id?: string;
+          created_at?: string;
+          door?: string;
+          zekerheid?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "bericht_categorieen_bericht_id_company_id_fkey";
+            columns: ["bericht_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "berichten";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "bericht_categorieen_categorie_id_company_id_fkey";
+            columns: ["categorie_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "mail_categorieen";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "bericht_categorieen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      bericht_sjablonen: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          deleted_at: string | null;
+          id: string;
+          naam: string;
+          onderwerp: string;
+          soort: string;
+          sort_order: number;
+          standaard: boolean;
+          tekst: string;
+          updated_at: string;
+          wa_sjabloon_id: string | null;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          id?: string;
+          naam: string;
+          onderwerp?: string;
+          soort: string;
+          sort_order?: number;
+          standaard?: boolean;
+          tekst: string;
+          updated_at?: string;
+          wa_sjabloon_id?: string | null;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          id?: string;
+          naam?: string;
+          onderwerp?: string;
+          soort?: string;
+          sort_order?: number;
+          standaard?: boolean;
+          tekst?: string;
+          updated_at?: string;
+          wa_sjabloon_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "bericht_sjablonen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "bericht_sjablonen_wa_sjabloon_id_fkey";
+            columns: ["wa_sjabloon_id"];
+            isOneToOne: false;
+            referencedRelation: "wa_sjablonen";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      berichten: {
+        Row: {
+          aan: Json;
+          afgehandeld_door_paaltje: boolean;
+          afgehandeld_op: string | null;
+          afgekapt: boolean;
+          afspraak_bekeken_op: string | null;
+          ai_fout: string;
+          antwoord_naar: string;
+          beantwoord_op: string | null;
+          bijlagen: Json;
+          bron: string;
+          cc: Json;
+          company_id: string;
+          concept: string;
+          concept_paaltje: string;
+          created_at: string;
+          deleted_at: string | null;
+          doorgevoerd_automatisch: boolean;
+          doorgevoerd_op: string | null;
+          fragment: string;
+          gelezen: boolean;
+          gelezen_door_paaltje_op: string | null;
+          gemarkeerd: boolean;
+          grootte: number;
+          herinner_op: string | null;
+          html: string;
+          id: string;
+          in_reply_to: string;
+          indeling_door_mens: boolean;
+          is_klantmail: boolean | null;
+          kanaal: string;
+          klant_gok_id: string | null;
+          klant_id: string | null;
+          klantgegevens: Json;
+          mailbox_id: string | null;
+          map_id: string | null;
+          media: Json;
+          message_id: string;
+          onderwerp: string;
+          ontvangen_op: string;
+          op_server: boolean;
+          paaltje_pogingen: number;
+          paaltje_status: string;
+          referenties: string[];
+          richting: string;
+          samenvatting: string;
+          tekst: string;
+          uid: number | null;
+          uidvalidity: number | null;
+          uit_dossier_op: string | null;
+          van_email: string;
+          van_naam: string;
+          voorstel: Json;
+          vorige_map_id: string | null;
+          wa_antwoord_direct: boolean;
+          wa_antwoord_op: string | null;
+          wa_antwoord_reden: string;
+          wa_antwoord_status: string;
+          wa_id: string | null;
+          wa_sleutel: string | null;
+          wa_status: string;
+          wa_telefoon: string;
+          wa_type: string;
+          weg_sinds: string | null;
+          zekerheid: number | null;
+        };
+        Insert: {
+          aan?: Json;
+          afgehandeld_door_paaltje?: boolean;
+          afgehandeld_op?: string | null;
+          afgekapt?: boolean;
+          afspraak_bekeken_op?: string | null;
+          ai_fout?: string;
+          antwoord_naar?: string;
+          beantwoord_op?: string | null;
+          bijlagen?: Json;
+          bron?: string;
+          cc?: Json;
+          company_id?: string;
+          concept?: string;
+          concept_paaltje?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          doorgevoerd_automatisch?: boolean;
+          doorgevoerd_op?: string | null;
+          fragment?: string;
+          gelezen?: boolean;
+          gelezen_door_paaltje_op?: string | null;
+          gemarkeerd?: boolean;
+          grootte?: number;
+          herinner_op?: string | null;
+          html?: string;
+          id?: string;
+          in_reply_to?: string;
+          indeling_door_mens?: boolean;
+          is_klantmail?: boolean | null;
+          kanaal?: string;
+          klant_gok_id?: string | null;
+          klant_id?: string | null;
+          klantgegevens?: Json;
+          mailbox_id?: string | null;
+          map_id?: string | null;
+          media?: Json;
+          message_id?: string;
+          onderwerp?: string;
+          ontvangen_op: string;
+          op_server?: boolean;
+          paaltje_pogingen?: number;
+          paaltje_status?: string;
+          referenties?: string[];
+          richting?: string;
+          samenvatting?: string;
+          tekst?: string;
+          uid?: number | null;
+          uidvalidity?: number | null;
+          uit_dossier_op?: string | null;
+          van_email?: string;
+          van_naam?: string;
+          voorstel?: Json;
+          vorige_map_id?: string | null;
+          wa_antwoord_direct?: boolean;
+          wa_antwoord_op?: string | null;
+          wa_antwoord_reden?: string;
+          wa_antwoord_status?: string;
+          wa_id?: string | null;
+          wa_sleutel?: string | null;
+          wa_status?: string;
+          wa_telefoon?: string;
+          wa_type?: string;
+          weg_sinds?: string | null;
+          zekerheid?: number | null;
+        };
+        Update: {
+          aan?: Json;
+          afgehandeld_door_paaltje?: boolean;
+          afgehandeld_op?: string | null;
+          afgekapt?: boolean;
+          afspraak_bekeken_op?: string | null;
+          ai_fout?: string;
+          antwoord_naar?: string;
+          beantwoord_op?: string | null;
+          bijlagen?: Json;
+          bron?: string;
+          cc?: Json;
+          company_id?: string;
+          concept?: string;
+          concept_paaltje?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          doorgevoerd_automatisch?: boolean;
+          doorgevoerd_op?: string | null;
+          fragment?: string;
+          gelezen?: boolean;
+          gelezen_door_paaltje_op?: string | null;
+          gemarkeerd?: boolean;
+          grootte?: number;
+          herinner_op?: string | null;
+          html?: string;
+          id?: string;
+          in_reply_to?: string;
+          indeling_door_mens?: boolean;
+          is_klantmail?: boolean | null;
+          kanaal?: string;
+          klant_gok_id?: string | null;
+          klant_id?: string | null;
+          klantgegevens?: Json;
+          mailbox_id?: string | null;
+          map_id?: string | null;
+          media?: Json;
+          message_id?: string;
+          onderwerp?: string;
+          ontvangen_op?: string;
+          op_server?: boolean;
+          paaltje_pogingen?: number;
+          paaltje_status?: string;
+          referenties?: string[];
+          richting?: string;
+          samenvatting?: string;
+          tekst?: string;
+          uid?: number | null;
+          uidvalidity?: number | null;
+          uit_dossier_op?: string | null;
+          van_email?: string;
+          van_naam?: string;
+          voorstel?: Json;
+          vorige_map_id?: string | null;
+          wa_antwoord_direct?: boolean;
+          wa_antwoord_op?: string | null;
+          wa_antwoord_reden?: string;
+          wa_antwoord_status?: string;
+          wa_id?: string | null;
+          wa_sleutel?: string | null;
+          wa_status?: string;
+          wa_telefoon?: string;
+          wa_type?: string;
+          weg_sinds?: string | null;
+          zekerheid?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "berichten_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "berichten_klant_gok_fkey";
+            columns: ["klant_gok_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "berichten_klant_id_fkey";
+            columns: ["klant_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "berichten_mailbox_id_fkey";
+            columns: ["mailbox_id"];
+            isOneToOne: false;
+            referencedRelation: "mailboxen";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "berichten_map_id_fkey";
+            columns: ["map_id"];
+            isOneToOne: false;
+            referencedRelation: "mail_mappen";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "berichten_vorige_map_id_fkey";
+            columns: ["vorige_map_id"];
+            isOneToOne: false;
+            referencedRelation: "mail_mappen";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      betaal_gebeurtenissen: {
+        Row: {
+          aantal: number | null;
+          adres: string;
+          bedrag: number;
+          botsing_met: string | null;
+          bron: string;
+          company_id: string;
+          customer_id: string;
+          door: string | null;
+          door_naam: string;
+          getoond_open: number | null;
+          herroept_id: string | null;
+          id: string;
+          maanden: string[] | null;
+          ontvangen_op: string;
+          op: string;
+          peildatum: string | null;
+          reden: string;
+          soort: string;
+          vaste_korting_id: string | null;
+          vrijgave_id: string | null;
+        };
+        Insert: {
+          aantal?: number | null;
+          adres?: string;
+          bedrag?: number;
+          botsing_met?: string | null;
+          bron?: string;
+          company_id?: string;
+          customer_id: string;
+          door?: string | null;
+          door_naam?: string;
+          getoond_open?: number | null;
+          herroept_id?: string | null;
+          id?: string;
+          maanden?: string[] | null;
+          ontvangen_op?: string;
+          op?: string;
+          peildatum?: string | null;
+          reden?: string;
+          soort: string;
+          vaste_korting_id?: string | null;
+          vrijgave_id?: string | null;
+        };
+        Update: {
+          aantal?: number | null;
+          adres?: string;
+          bedrag?: number;
+          botsing_met?: string | null;
+          bron?: string;
+          company_id?: string;
+          customer_id?: string;
+          door?: string | null;
+          door_naam?: string;
+          getoond_open?: number | null;
+          herroept_id?: string | null;
+          id?: string;
+          maanden?: string[] | null;
+          ontvangen_op?: string;
+          op?: string;
+          peildatum?: string | null;
+          reden?: string;
+          soort?: string;
+          vaste_korting_id?: string | null;
+          vrijgave_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "betaal_gebeurtenissen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "betaal_gebeurtenissen_customer_id_company_id_fkey";
+            columns: ["customer_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "betaal_gebeurtenissen_herroept_id_fkey";
+            columns: ["herroept_id"];
+            isOneToOne: false;
+            referencedRelation: "betaal_gebeurtenissen";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "betaal_gebeurtenissen_vrijgave_fkey";
+            columns: ["vrijgave_id"];
+            isOneToOne: false;
+            referencedRelation: "geldloop_vrijgaven";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       companies: {
         Row: {
-          geldloop_eindtijd: string;
-          plan_tarief_uur: number;
-          plan_begin: string;
-          plan_eind: string;
-          plan_pauze_van: string;
-          plan_pauze_min: number;
-          plan_rijtijd_min: number;
-          plan_groot_pand_min: number;
-          plan_tijdlijn: boolean;
-          plan_tijdvak_mailen: boolean;
-          wa_wachttijd_min: number;
-          wa_antwoord_van: string;
-          wa_antwoord_tot: string;
           aanmeld_aan: boolean;
           aanmeld_token: string;
           adres: string;
           btw: string;
+          btw_procent: number;
           created_at: string;
           email: string;
+          factuur_start_op: string | null;
+          factuur_termijn_dagen: number;
+          geldloop_eindtijd: string;
           iban: string;
           id: string;
           kvk: string;
@@ -101,30 +659,33 @@ export type Database = {
           name: string;
           paaltje_daglimiet: number;
           plaats: string;
+          plan_begin: string;
+          plan_eind: string;
+          plan_groot_pand_min: number;
+          plan_pauze_min: number;
+          plan_pauze_van: string;
+          plan_rijtijd_min: number;
+          plan_tarief_uur: number;
+          plan_tijdlijn: boolean;
+          plan_tijdvak_mailen: boolean;
           postcode: string;
           telefoon: string;
+          wa_antwoord_tot: string;
+          wa_antwoord_van: string;
+          wa_wachttijd_min: number;
           werkdagen: number[];
         };
         Insert: {
-          geldloop_eindtijd?: string;
-          plan_tarief_uur?: number;
-          plan_begin?: string;
-          plan_eind?: string;
-          plan_pauze_van?: string;
-          plan_pauze_min?: number;
-          plan_rijtijd_min?: number;
-          plan_groot_pand_min?: number;
-          plan_tijdlijn?: boolean;
-          plan_tijdvak_mailen?: boolean;
-          wa_wachttijd_min?: number;
-          wa_antwoord_van?: string;
-          wa_antwoord_tot?: string;
           aanmeld_aan?: boolean;
           aanmeld_token?: string;
           adres?: string;
           btw?: string;
+          btw_procent?: number;
           created_at?: string;
           email?: string;
+          factuur_start_op?: string | null;
+          factuur_termijn_dagen?: number;
+          geldloop_eindtijd?: string;
           iban?: string;
           id?: string;
           kvk?: string;
@@ -134,30 +695,33 @@ export type Database = {
           name: string;
           paaltje_daglimiet?: number;
           plaats?: string;
+          plan_begin?: string;
+          plan_eind?: string;
+          plan_groot_pand_min?: number;
+          plan_pauze_min?: number;
+          plan_pauze_van?: string;
+          plan_rijtijd_min?: number;
+          plan_tarief_uur?: number;
+          plan_tijdlijn?: boolean;
+          plan_tijdvak_mailen?: boolean;
           postcode?: string;
           telefoon?: string;
+          wa_antwoord_tot?: string;
+          wa_antwoord_van?: string;
+          wa_wachttijd_min?: number;
           werkdagen?: number[];
         };
         Update: {
-          geldloop_eindtijd?: string;
-          plan_tarief_uur?: number;
-          plan_begin?: string;
-          plan_eind?: string;
-          plan_pauze_van?: string;
-          plan_pauze_min?: number;
-          plan_rijtijd_min?: number;
-          plan_groot_pand_min?: number;
-          plan_tijdlijn?: boolean;
-          plan_tijdvak_mailen?: boolean;
-          wa_wachttijd_min?: number;
-          wa_antwoord_van?: string;
-          wa_antwoord_tot?: string;
           aanmeld_aan?: boolean;
           aanmeld_token?: string;
           adres?: string;
           btw?: string;
+          btw_procent?: number;
           created_at?: string;
           email?: string;
+          factuur_start_op?: string | null;
+          factuur_termijn_dagen?: number;
+          geldloop_eindtijd?: string;
           iban?: string;
           id?: string;
           kvk?: string;
@@ -167,110 +731,164 @@ export type Database = {
           name?: string;
           paaltje_daglimiet?: number;
           plaats?: string;
+          plan_begin?: string;
+          plan_eind?: string;
+          plan_groot_pand_min?: number;
+          plan_pauze_min?: number;
+          plan_pauze_van?: string;
+          plan_rijtijd_min?: number;
+          plan_tarief_uur?: number;
+          plan_tijdlijn?: boolean;
+          plan_tijdvak_mailen?: boolean;
           postcode?: string;
           telefoon?: string;
+          wa_antwoord_tot?: string;
+          wa_antwoord_van?: string;
+          wa_wachttijd_min?: number;
           werkdagen?: number[];
         };
         Relationships: [];
       };
+      contant_periodes: {
+        Row: {
+          company_id: string;
+          customer_id: string;
+          gemaakt_op: string;
+          id: string;
+          tot: string | null;
+          vanaf: string;
+        };
+        Insert: {
+          company_id?: string;
+          customer_id: string;
+          gemaakt_op?: string;
+          id?: string;
+          tot?: string | null;
+          vanaf: string;
+        };
+        Update: {
+          company_id?: string;
+          customer_id?: string;
+          gemaakt_op?: string;
+          id?: string;
+          tot?: string | null;
+          vanaf?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "contant_periodes_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "contant_periodes_customer_id_company_id_fkey";
+            columns: ["customer_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
       customers: {
         Row: {
-          betaalmethode: "contant" | "overmaken" | null;
-          duur_min: number | null;
-          duur_zelf: boolean;
-          eigen_blok: boolean | null;
-          inactief_op: string | null;
-          inactief_reden: string | null;
           aangemeld_op: string | null;
           addition: string;
+          betaalmethode: string | null;
           company_id: string;
           created_at: string;
           deleted_at: string | null;
+          duur_min: number | null;
+          duur_zelf: boolean;
+          eigen_blok: boolean | null;
           frequency: string;
           geimporteerd: boolean;
-          house_number: number;
+          hoek_kant: string;
           hoek_straat: string;
           hoek_straat_volledig: string;
-          hoek_kant: string;
-          interval_maanden: number;
-          ritme: number;
-          maandwerk: Json;
+          house_number: number;
           id: string;
+          inactief_op: string | null;
+          inactief_reden: string | null;
+          interval_maanden: number;
           klant_id: string | null;
+          maandwerk: Json;
           markering: string;
-          overslaan: string[];
-          start_maand: string;
           note: string;
           note_even: string;
           note_oneven: string;
+          overslaan: string[];
           postcode: string;
+          ritme: number;
           sort_order: number;
+          start_maand: string;
           street_id: string;
         };
         Insert: {
-          betaalmethode?: "contant" | "overmaken" | null;
-          duur_min?: number | null;
-          duur_zelf?: boolean;
-          eigen_blok?: boolean | null;
-          inactief_op?: string | null;
-          inactief_reden?: string | null;
           aangemeld_op?: string | null;
           addition?: string;
+          betaalmethode?: string | null;
           company_id?: string;
           created_at?: string;
           deleted_at?: string | null;
+          duur_min?: number | null;
+          duur_zelf?: boolean;
+          eigen_blok?: boolean | null;
           frequency?: string;
           geimporteerd?: boolean;
-          house_number: number;
+          hoek_kant?: string;
           hoek_straat?: string;
           hoek_straat_volledig?: string;
-          hoek_kant?: string;
-          interval_maanden?: number;
-          ritme?: number;
-          maandwerk?: Json;
+          house_number: number;
           id?: string;
+          inactief_op?: string | null;
+          inactief_reden?: string | null;
+          interval_maanden?: number;
           klant_id?: string | null;
+          maandwerk?: Json;
           markering?: string;
-          overslaan?: string[];
-          start_maand?: string;
           note?: string;
           note_even?: string;
           note_oneven?: string;
+          overslaan?: string[];
           postcode?: string;
+          ritme?: number;
           sort_order?: number;
+          start_maand?: string;
           street_id: string;
         };
         Update: {
-          betaalmethode?: "contant" | "overmaken" | null;
-          duur_min?: number | null;
-          duur_zelf?: boolean;
-          eigen_blok?: boolean | null;
-          inactief_op?: string | null;
-          inactief_reden?: string | null;
           aangemeld_op?: string | null;
           addition?: string;
+          betaalmethode?: string | null;
           company_id?: string;
           created_at?: string;
           deleted_at?: string | null;
+          duur_min?: number | null;
+          duur_zelf?: boolean;
+          eigen_blok?: boolean | null;
           frequency?: string;
           geimporteerd?: boolean;
-          house_number?: number;
+          hoek_kant?: string;
           hoek_straat?: string;
           hoek_straat_volledig?: string;
-          hoek_kant?: string;
-          interval_maanden?: number;
-          ritme?: number;
-          maandwerk?: Json;
+          house_number?: number;
           id?: string;
+          inactief_op?: string | null;
+          inactief_reden?: string | null;
+          interval_maanden?: number;
           klant_id?: string | null;
+          maandwerk?: Json;
           markering?: string;
-          overslaan?: string[];
-          start_maand?: string;
           note?: string;
           note_even?: string;
           note_oneven?: string;
+          overslaan?: string[];
           postcode?: string;
+          ritme?: number;
           sort_order?: number;
+          start_maand?: string;
           street_id?: string;
         };
         Relationships: [
@@ -297,15 +915,199 @@ export type Database = {
           },
         ];
       };
+      dag_afmeldingen: {
+        Row: {
+          company_id: string;
+          datum: string;
+          door: string | null;
+          door_naam: string;
+          gedaan: number;
+          heropend_door: string | null;
+          heropend_naam: string | null;
+          heropend_op: string | null;
+          id: string;
+          op: string;
+          ploeg_nr: number | null;
+          weg: number;
+          weg_kenmerk: string | null;
+        };
+        Insert: {
+          company_id?: string;
+          datum: string;
+          door?: string | null;
+          door_naam?: string;
+          gedaan?: number;
+          heropend_door?: string | null;
+          heropend_naam?: string | null;
+          heropend_op?: string | null;
+          id?: string;
+          op?: string;
+          ploeg_nr?: number | null;
+          weg?: number;
+          weg_kenmerk?: string | null;
+        };
+        Update: {
+          company_id?: string;
+          datum?: string;
+          door?: string | null;
+          door_naam?: string;
+          gedaan?: number;
+          heropend_door?: string | null;
+          heropend_naam?: string | null;
+          heropend_op?: string | null;
+          id?: string;
+          op?: string;
+          ploeg_nr?: number | null;
+          weg?: number;
+          weg_kenmerk?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "dag_afmeldingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      dag_ploeg_leden: {
+        Row: {
+          company_id: string;
+          datum: string;
+          nr: number;
+          teamlid_id: string;
+        };
+        Insert: {
+          company_id?: string;
+          datum: string;
+          nr: number;
+          teamlid_id: string;
+        };
+        Update: {
+          company_id?: string;
+          datum?: string;
+          nr?: number;
+          teamlid_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "dag_ploeg_leden_company_id_datum_nr_fkey";
+            columns: ["company_id", "datum", "nr"];
+            isOneToOne: false;
+            referencedRelation: "dag_ploegen";
+            referencedColumns: ["company_id", "datum", "nr"];
+          },
+          {
+            foreignKeyName: "dag_ploeg_leden_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "dag_ploeg_leden_teamlid_fkey";
+            columns: ["company_id", "teamlid_id"];
+            isOneToOne: false;
+            referencedRelation: "teamleden";
+            referencedColumns: ["company_id", "id"];
+          },
+        ];
+      };
+      dag_ploegen: {
+        Row: {
+          begin_tijd: string | null;
+          company_id: string;
+          created_at: string;
+          datum: string;
+          eind_tijd: string | null;
+          nr: number;
+          pauze_min: number | null;
+          pauze_van: string | null;
+        };
+        Insert: {
+          begin_tijd?: string | null;
+          company_id?: string;
+          created_at?: string;
+          datum: string;
+          eind_tijd?: string | null;
+          nr: number;
+          pauze_min?: number | null;
+          pauze_van?: string | null;
+        };
+        Update: {
+          begin_tijd?: string | null;
+          company_id?: string;
+          created_at?: string;
+          datum?: string;
+          eind_tijd?: string | null;
+          nr?: number;
+          pauze_min?: number | null;
+          pauze_van?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "dag_ploegen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      dagrapporten: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          datum: string;
+          gemaild_op: string | null;
+          id: string;
+          inhoud: Json;
+          mail_fout: string;
+          tot: string;
+          vanaf: string;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          datum: string;
+          gemaild_op?: string | null;
+          id?: string;
+          inhoud?: Json;
+          mail_fout?: string;
+          tot: string;
+          vanaf: string;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          datum?: string;
+          gemaild_op?: string | null;
+          id?: string;
+          inhoud?: Json;
+          mail_fout?: string;
+          tot?: string;
+          vanaf?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "dagrapporten_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       districts: {
         Row: {
-          betaalmethode: "contant" | "overmaken";
-          geld_peildatum: string | null;
-          geld_klaar_op: string | null;
-          geld_klaar_door: string | null;
+          betaalmethode: string;
           company_id: string;
           created_at: string;
           deleted_at: string | null;
+          geld_klaar_door: string | null;
+          geld_klaar_op: string | null;
+          geld_peildatum: string | null;
           id: string;
           name: string;
           plaats: string;
@@ -313,13 +1115,13 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
-          betaalmethode?: "contant" | "overmaken";
-          geld_peildatum?: string | null;
-          geld_klaar_op?: string | null;
-          geld_klaar_door?: string | null;
+          betaalmethode?: string;
           company_id?: string;
           created_at?: string;
           deleted_at?: string | null;
+          geld_klaar_door?: string | null;
+          geld_klaar_op?: string | null;
+          geld_peildatum?: string | null;
           id?: string;
           name: string;
           plaats?: string;
@@ -327,13 +1129,13 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
-          betaalmethode?: "contant" | "overmaken";
-          geld_peildatum?: string | null;
-          geld_klaar_op?: string | null;
-          geld_klaar_door?: string | null;
+          betaalmethode?: string;
           company_id?: string;
           created_at?: string;
           deleted_at?: string | null;
+          geld_klaar_door?: string | null;
+          geld_klaar_op?: string | null;
+          geld_peildatum?: string | null;
           id?: string;
           name?: string;
           plaats?: string;
@@ -343,6 +1145,35 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "districts_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      duur_herberekening: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          id: string;
+          waarden: Json;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          waarden: Json;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          waarden?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "duur_herberekening_company_id_fkey";
             columns: ["company_id"];
             isOneToOne: false;
             referencedRelation: "companies";
@@ -361,7 +1192,7 @@ export type Database = {
           rol_id: string | null;
         };
         Insert: {
-          company_id: string;
+          company_id?: string;
           created_at?: string;
           email: string;
           id: string;
@@ -395,32 +1226,968 @@ export type Database = {
           },
         ];
       };
-      adres_prijzen: {
+      facturen: {
         Row: {
+          betaald_bedrag: number;
+          betaald_op: string | null;
           company_id: string;
-          customer_id: string;
-          prijs: number;
-          maandwerk_extra: Json;
+          created_at: string;
+          crediteert_id: string | null;
+          deleted_at: string | null;
+          factuurdatum: string | null;
+          gemaakt_door: string | null;
+          herinnering_trap: number;
+          id: string;
+          jaar: number | null;
+          klant_id: string;
+          klantgegevens: Json | null;
+          met_rust_tot: string | null;
+          mollie_id: string | null;
+          mollie_link: string | null;
+          nummer: string | null;
+          pdf_pad: string | null;
+          soort: string;
+          status: string;
+          verstuurd_naar: string;
+          verstuurd_op: string | null;
+          verstuurd_via: string | null;
+          vervaldatum: string | null;
+          volgnummer: number | null;
         };
         Insert: {
+          betaald_bedrag?: number;
+          betaald_op?: string | null;
           company_id?: string;
-          customer_id: string;
-          prijs?: number;
-          maandwerk_extra?: Json;
+          created_at?: string;
+          crediteert_id?: string | null;
+          deleted_at?: string | null;
+          factuurdatum?: string | null;
+          gemaakt_door?: string | null;
+          herinnering_trap?: number;
+          id?: string;
+          jaar?: number | null;
+          klant_id: string;
+          klantgegevens?: Json | null;
+          met_rust_tot?: string | null;
+          mollie_id?: string | null;
+          mollie_link?: string | null;
+          nummer?: string | null;
+          pdf_pad?: string | null;
+          soort?: string;
+          status?: string;
+          verstuurd_naar?: string;
+          verstuurd_op?: string | null;
+          verstuurd_via?: string | null;
+          vervaldatum?: string | null;
+          volgnummer?: number | null;
         };
         Update: {
+          betaald_bedrag?: number;
+          betaald_op?: string | null;
           company_id?: string;
-          customer_id?: string;
-          prijs?: number;
-          maandwerk_extra?: Json;
+          created_at?: string;
+          crediteert_id?: string | null;
+          deleted_at?: string | null;
+          factuurdatum?: string | null;
+          gemaakt_door?: string | null;
+          herinnering_trap?: number;
+          id?: string;
+          jaar?: number | null;
+          klant_id?: string;
+          klantgegevens?: Json | null;
+          met_rust_tot?: string | null;
+          mollie_id?: string | null;
+          mollie_link?: string | null;
+          nummer?: string | null;
+          pdf_pad?: string | null;
+          soort?: string;
+          status?: string;
+          verstuurd_naar?: string;
+          verstuurd_op?: string | null;
+          verstuurd_via?: string | null;
+          vervaldatum?: string | null;
+          volgnummer?: number | null;
         };
         Relationships: [
           {
-            foreignKeyName: "adres_prijzen_customer_id_company_id_fkey";
+            foreignKeyName: "facturen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "facturen_crediteert_id_fkey";
+            columns: ["crediteert_id"];
+            isOneToOne: false;
+            referencedRelation: "facturen";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "facturen_klant_id_company_id_fkey";
+            columns: ["klant_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "facturen_klant_id_fkey";
+            columns: ["klant_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      factuur_tellers: {
+        Row: {
+          company_id: string;
+          jaar: number;
+          laatste: number;
+        };
+        Insert: {
+          company_id?: string;
+          jaar: number;
+          laatste?: number;
+        };
+        Update: {
+          company_id?: string;
+          jaar?: number;
+          laatste?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "factuur_tellers_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      factuurregels: {
+        Row: {
+          bedrag: number;
+          bedrag_excl: number;
+          bedrag_incl: number | null;
+          btw_bedrag: number | null;
+          btw_inclusief: boolean;
+          btw_procent: number;
+          company_id: string;
+          created_at: string;
+          customer_id: string | null;
+          datum: string;
+          deleted_at: string | null;
+          factuur_id: string | null;
+          id: string;
+          klant_id: string;
+          klus_id: string | null;
+          notitie: string;
+          omschrijving: string;
+          soort: string;
+          wasdag_regel_id: string | null;
+        };
+        Insert: {
+          bedrag: number;
+          bedrag_excl: number;
+          bedrag_incl?: number | null;
+          btw_bedrag?: number | null;
+          btw_inclusief: boolean;
+          btw_procent: number;
+          company_id?: string;
+          created_at?: string;
+          customer_id?: string | null;
+          datum: string;
+          deleted_at?: string | null;
+          factuur_id?: string | null;
+          id?: string;
+          klant_id: string;
+          klus_id?: string | null;
+          notitie?: string;
+          omschrijving?: string;
+          soort: string;
+          wasdag_regel_id?: string | null;
+        };
+        Update: {
+          bedrag?: number;
+          bedrag_excl?: number;
+          bedrag_incl?: number | null;
+          btw_bedrag?: number | null;
+          btw_inclusief?: boolean;
+          btw_procent?: number;
+          company_id?: string;
+          created_at?: string;
+          customer_id?: string | null;
+          datum?: string;
+          deleted_at?: string | null;
+          factuur_id?: string | null;
+          id?: string;
+          klant_id?: string;
+          klus_id?: string | null;
+          notitie?: string;
+          omschrijving?: string;
+          soort?: string;
+          wasdag_regel_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "factuurregels_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "factuurregels_factuur_fk";
+            columns: ["factuur_id"];
+            isOneToOne: false;
+            referencedRelation: "facturen";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "factuurregels_klant_id_company_id_fkey";
+            columns: ["klant_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "factuurregels_klant_id_fkey";
+            columns: ["klant_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      geldloop_straat_lopers: {
+        Row: {
+          company_id: string;
+          employee_id: string;
+          street_id: string;
+          vrijgave_id: string;
+        };
+        Insert: {
+          company_id?: string;
+          employee_id: string;
+          street_id: string;
+          vrijgave_id: string;
+        };
+        Update: {
+          company_id?: string;
+          employee_id?: string;
+          street_id?: string;
+          vrijgave_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "geldloop_straat_lopers_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "geldloop_straat_lopers_employee_id_fkey";
+            columns: ["employee_id"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "geldloop_straat_lopers_street_id_fkey";
+            columns: ["street_id"];
+            isOneToOne: false;
+            referencedRelation: "streets";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "geldloop_straat_lopers_vrijgave_id_company_id_fkey";
+            columns: ["vrijgave_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "geldloop_vrijgaven";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      geldloop_straat_wijzigingen: {
+        Row: {
+          company_id: string;
+          door: string | null;
+          door_naam: string;
+          id: string;
+          na: string[];
+          na_naam: string;
+          op: string;
+          straat: string;
+          street_id: string;
+          teruggedraaid_door: string | null;
+          teruggedraaid_naam: string | null;
+          teruggedraaid_op: string | null;
+          voor: string[];
+          voor_naam: string;
+          vrijgave_id: string;
+        };
+        Insert: {
+          company_id?: string;
+          door?: string | null;
+          door_naam?: string;
+          id?: string;
+          na?: string[];
+          na_naam?: string;
+          op?: string;
+          straat?: string;
+          street_id: string;
+          teruggedraaid_door?: string | null;
+          teruggedraaid_naam?: string | null;
+          teruggedraaid_op?: string | null;
+          voor?: string[];
+          voor_naam?: string;
+          vrijgave_id: string;
+        };
+        Update: {
+          company_id?: string;
+          door?: string | null;
+          door_naam?: string;
+          id?: string;
+          na?: string[];
+          na_naam?: string;
+          op?: string;
+          straat?: string;
+          street_id?: string;
+          teruggedraaid_door?: string | null;
+          teruggedraaid_naam?: string | null;
+          teruggedraaid_op?: string | null;
+          voor?: string[];
+          voor_naam?: string;
+          vrijgave_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "geldloop_straat_wijzigingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "geldloop_straat_wijzigingen_street_id_fkey";
+            columns: ["street_id"];
+            isOneToOne: false;
+            referencedRelation: "streets";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "geldloop_straat_wijzigingen_vrijgave_id_company_id_fkey";
+            columns: ["vrijgave_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "geldloop_vrijgaven";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      geldloop_vrijgave_lopers: {
+        Row: {
+          company_id: string;
+          employee_id: string;
+          vrijgave_id: string;
+        };
+        Insert: {
+          company_id?: string;
+          employee_id: string;
+          vrijgave_id: string;
+        };
+        Update: {
+          company_id?: string;
+          employee_id?: string;
+          vrijgave_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "geldloop_vrijgave_lopers_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "geldloop_vrijgave_lopers_employee_id_fkey";
+            columns: ["employee_id"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "geldloop_vrijgave_lopers_vrijgave_id_company_id_fkey";
+            columns: ["vrijgave_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "geldloop_vrijgaven";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      geldloop_vrijgave_wijken: {
+        Row: {
+          company_id: string;
+          district_id: string;
+          vrijgave_id: string;
+        };
+        Insert: {
+          company_id?: string;
+          district_id: string;
+          vrijgave_id: string;
+        };
+        Update: {
+          company_id?: string;
+          district_id?: string;
+          vrijgave_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "geldloop_vrijgave_wijken_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "geldloop_vrijgave_wijken_district_id_fkey";
+            columns: ["district_id"];
+            isOneToOne: false;
+            referencedRelation: "districts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "geldloop_vrijgave_wijken_vrijgave_id_company_id_fkey";
+            columns: ["vrijgave_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "geldloop_vrijgaven";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      geldloop_vrijgaven: {
+        Row: {
+          begin_op: string;
+          company_id: string;
+          datum: string;
+          eind_op: string;
+          id: string;
+          ingetrokken_door: string | null;
+          ingetrokken_op: string | null;
+          vrijgegeven_door: string | null;
+          vrijgegeven_naam: string;
+          vrijgegeven_op: string;
+        };
+        Insert: {
+          begin_op: string;
+          company_id?: string;
+          datum: string;
+          eind_op: string;
+          id?: string;
+          ingetrokken_door?: string | null;
+          ingetrokken_op?: string | null;
+          vrijgegeven_door?: string | null;
+          vrijgegeven_naam?: string;
+          vrijgegeven_op?: string;
+        };
+        Update: {
+          begin_op?: string;
+          company_id?: string;
+          datum?: string;
+          eind_op?: string;
+          id?: string;
+          ingetrokken_door?: string | null;
+          ingetrokken_op?: string | null;
+          vrijgegeven_door?: string | null;
+          vrijgegeven_naam?: string;
+          vrijgegeven_op?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "geldloop_vrijgaven_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      geldloop_wijzigingen: {
+        Row: {
+          adres: string;
+          company_id: string;
+          customer_id: string;
+          door: string | null;
+          door_naam: string;
+          id: string;
+          na: Json;
+          op: string;
+          soort: string;
+          teruggedraaid_door: string | null;
+          teruggedraaid_naam: string | null;
+          teruggedraaid_op: string | null;
+          voor: Json;
+          vrijgave_id: string | null;
+        };
+        Insert: {
+          adres?: string;
+          company_id?: string;
+          customer_id: string;
+          door?: string | null;
+          door_naam?: string;
+          id?: string;
+          na?: Json;
+          op?: string;
+          soort: string;
+          teruggedraaid_door?: string | null;
+          teruggedraaid_naam?: string | null;
+          teruggedraaid_op?: string | null;
+          voor?: Json;
+          vrijgave_id?: string | null;
+        };
+        Update: {
+          adres?: string;
+          company_id?: string;
+          customer_id?: string;
+          door?: string | null;
+          door_naam?: string;
+          id?: string;
+          na?: Json;
+          op?: string;
+          soort?: string;
+          teruggedraaid_door?: string | null;
+          teruggedraaid_naam?: string | null;
+          teruggedraaid_op?: string | null;
+          voor?: Json;
+          vrijgave_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "geldloop_wijzigingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "geldloop_wijzigingen_customer_id_company_id_fkey";
             columns: ["customer_id", "company_id"];
-            isOneToOne: true;
+            isOneToOne: false;
             referencedRelation: "customers";
             referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "geldloop_wijzigingen_vrijgave_id_fkey";
+            columns: ["vrijgave_id"];
+            isOneToOne: false;
+            referencedRelation: "geldloop_vrijgaven";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      geplande_mails: {
+        Row: {
+          aan_tekst: string;
+          company_id: string;
+          created_at: string;
+          door: string | null;
+          fout: string;
+          id: string;
+          inhoud: Json;
+          mailbox_id: string;
+          onderwerp: string;
+          status: string;
+          versturen_op: string;
+          verstuurd_op: string | null;
+        };
+        Insert: {
+          aan_tekst?: string;
+          company_id?: string;
+          created_at?: string;
+          door?: string | null;
+          fout?: string;
+          id?: string;
+          inhoud: Json;
+          mailbox_id: string;
+          onderwerp?: string;
+          status?: string;
+          versturen_op: string;
+          verstuurd_op?: string | null;
+        };
+        Update: {
+          aan_tekst?: string;
+          company_id?: string;
+          created_at?: string;
+          door?: string | null;
+          fout?: string;
+          id?: string;
+          inhoud?: Json;
+          mailbox_id?: string;
+          onderwerp?: string;
+          status?: string;
+          versturen_op?: string;
+          verstuurd_op?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "geplande_mails_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "geplande_mails_mailbox_id_fkey";
+            columns: ["mailbox_id"];
+            isOneToOne: false;
+            referencedRelation: "mailboxen";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kapso_klanten: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          customer_id: string;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          customer_id: string;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          customer_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "kapso_klanten_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: true;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      klacht_berichten: {
+        Row: {
+          bericht_id: string;
+          company_id: string;
+          created_at: string;
+          klacht_id: string;
+        };
+        Insert: {
+          bericht_id: string;
+          company_id?: string;
+          created_at?: string;
+          klacht_id: string;
+        };
+        Update: {
+          bericht_id?: string;
+          company_id?: string;
+          created_at?: string;
+          klacht_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "klacht_berichten_bericht_id_company_id_fkey";
+            columns: ["bericht_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "berichten";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "klacht_berichten_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "klacht_berichten_klacht_id_company_id_fkey";
+            columns: ["klacht_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "klachten";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      klachten: {
+        Row: {
+          afgehandeld_op: string | null;
+          bron: string;
+          company_id: string;
+          created_at: string;
+          customer_id: string | null;
+          deleted_at: string | null;
+          door_paaltje: boolean;
+          gemaakt_door: string | null;
+          id: string;
+          klant_id: string | null;
+          omschrijving: string;
+          ontvangen_op: string;
+          status: string;
+        };
+        Insert: {
+          afgehandeld_op?: string | null;
+          bron?: string;
+          company_id?: string;
+          created_at?: string;
+          customer_id?: string | null;
+          deleted_at?: string | null;
+          door_paaltje?: boolean;
+          gemaakt_door?: string | null;
+          id?: string;
+          klant_id?: string | null;
+          omschrijving: string;
+          ontvangen_op?: string;
+          status?: string;
+        };
+        Update: {
+          afgehandeld_op?: string | null;
+          bron?: string;
+          company_id?: string;
+          created_at?: string;
+          customer_id?: string | null;
+          deleted_at?: string | null;
+          door_paaltje?: boolean;
+          gemaakt_door?: string | null;
+          id?: string;
+          klant_id?: string | null;
+          omschrijving?: string;
+          ontvangen_op?: string;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "klachten_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "klachten_customer_id_company_id_fkey";
+            columns: ["customer_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "klachten_klant_id_company_id_fkey";
+            columns: ["klant_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      klant_emails: {
+        Row: {
+          bron: string;
+          company_id: string;
+          created_at: string;
+          email: string;
+          id: string;
+          klant_id: string;
+        };
+        Insert: {
+          bron?: string;
+          company_id?: string;
+          created_at?: string;
+          email: string;
+          id?: string;
+          klant_id: string;
+        };
+        Update: {
+          bron?: string;
+          company_id?: string;
+          created_at?: string;
+          email?: string;
+          id?: string;
+          klant_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "klant_emails_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "klant_emails_klant_id_company_id_fkey";
+            columns: ["klant_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      klant_telefoons: {
+        Row: {
+          bron: string;
+          company_id: string;
+          created_at: string;
+          id: string;
+          klant_id: string;
+          telefoon: string;
+        };
+        Insert: {
+          bron?: string;
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          klant_id: string;
+          telefoon: string;
+        };
+        Update: {
+          bron?: string;
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          klant_id?: string;
+          telefoon?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "klant_telefoons_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "klant_telefoons_klant_id_company_id_fkey";
+            columns: ["klant_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      klanten: {
+        Row: {
+          bedrijfsnaam: string;
+          betalingstermijn_dagen: number | null;
+          btw_inclusief: boolean | null;
+          btw_nummer: string;
+          btw_procent: number | null;
+          company_id: string;
+          created_at: string;
+          deleted_at: string | null;
+          email: string;
+          email2: string;
+          factuur_email: string;
+          factuur_huisnummer: string;
+          factuur_omschrijving: string;
+          factuur_per: string;
+          factuur_plaats: string;
+          factuur_postcode: string;
+          factuur_straat: string;
+          huisnummer: string;
+          id: string;
+          kanaal_voorkeur: string;
+          klanttype: string;
+          kvk: string;
+          naam: string;
+          notitie: string;
+          plaats: string;
+          postcode: string;
+          straat: string;
+          telefoon: string;
+          telefoon2: string;
+          updated_at: string;
+          wa_afgemeld_op: string | null;
+          wa_marketing_op: string | null;
+          wa_toestemming_bron: string;
+          wa_toestemming_op: string | null;
+          website: string;
+        };
+        Insert: {
+          bedrijfsnaam?: string;
+          betalingstermijn_dagen?: number | null;
+          btw_inclusief?: boolean | null;
+          btw_nummer?: string;
+          btw_procent?: number | null;
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          email?: string;
+          email2?: string;
+          factuur_email?: string;
+          factuur_huisnummer?: string;
+          factuur_omschrijving?: string;
+          factuur_per?: string;
+          factuur_plaats?: string;
+          factuur_postcode?: string;
+          factuur_straat?: string;
+          huisnummer?: string;
+          id?: string;
+          kanaal_voorkeur?: string;
+          klanttype?: string;
+          kvk?: string;
+          naam: string;
+          notitie?: string;
+          plaats?: string;
+          postcode?: string;
+          straat?: string;
+          telefoon?: string;
+          telefoon2?: string;
+          updated_at?: string;
+          wa_afgemeld_op?: string | null;
+          wa_marketing_op?: string | null;
+          wa_toestemming_bron?: string;
+          wa_toestemming_op?: string | null;
+          website?: string;
+        };
+        Update: {
+          bedrijfsnaam?: string;
+          betalingstermijn_dagen?: number | null;
+          btw_inclusief?: boolean | null;
+          btw_nummer?: string;
+          btw_procent?: number | null;
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          email?: string;
+          email2?: string;
+          factuur_email?: string;
+          factuur_huisnummer?: string;
+          factuur_omschrijving?: string;
+          factuur_per?: string;
+          factuur_plaats?: string;
+          factuur_postcode?: string;
+          factuur_straat?: string;
+          huisnummer?: string;
+          id?: string;
+          kanaal_voorkeur?: string;
+          klanttype?: string;
+          kvk?: string;
+          naam?: string;
+          notitie?: string;
+          plaats?: string;
+          postcode?: string;
+          straat?: string;
+          telefoon?: string;
+          telefoon2?: string;
+          updated_at?: string;
+          wa_afgemeld_op?: string | null;
+          wa_marketing_op?: string | null;
+          wa_toestemming_bron?: string;
+          wa_toestemming_op?: string | null;
+          website?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "klanten_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -442,6 +2209,13 @@ export type Database = {
         };
         Relationships: [
           {
+            foreignKeyName: "klus_prijzen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "klus_prijzen_klus_id_company_id_fkey";
             columns: ["klus_id", "company_id"];
             isOneToOne: true;
@@ -450,186 +2224,51 @@ export type Database = {
           },
         ];
       };
-      wasdag_prijzen: {
-        Row: {
-          company_id: string;
-          regel_id: string;
-          prijs: number;
-        };
-        Insert: {
-          company_id?: string;
-          regel_id: string;
-          prijs?: number;
-        };
-        Update: {
-          company_id?: string;
-          regel_id?: string;
-          prijs?: number;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "wasdag_prijzen_regel_id_company_id_fkey";
-            columns: ["regel_id", "company_id"];
-            isOneToOne: true;
-            referencedRelation: "wasdag_regels";
-            referencedColumns: ["id", "company_id"];
-          },
-        ];
-      };
-      rollen: {
-        Row: {
-          company_id: string;
-          created_at: string;
-          id: string;
-          naam: string;
-          rechten: string[];
-        };
-        Insert: {
-          company_id?: string;
-          created_at?: string;
-          id?: string;
-          naam: string;
-          rechten?: string[];
-        };
-        Update: {
-          company_id?: string;
-          created_at?: string;
-          id?: string;
-          naam?: string;
-          rechten?: string[];
-        };
-        Relationships: [
-          {
-            foreignKeyName: "rollen_company_id_fkey";
-            columns: ["company_id"];
-            isOneToOne: false;
-            referencedRelation: "companies";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      klanten: {
-        Row: {
-          kanaal_voorkeur: string;
-          wa_toestemming_op: string | null;
-          wa_toestemming_bron: string;
-          wa_marketing_op: string | null;
-          wa_afgemeld_op: string | null;
-          company_id: string;
-          created_at: string;
-          deleted_at: string | null;
-          email: string;
-          email2: string;
-          huisnummer: string;
-          id: string;
-          naam: string;
-          notitie: string;
-          plaats: string;
-          postcode: string;
-          straat: string;
-          telefoon: string;
-          telefoon2: string;
-          updated_at: string;
-        };
-        Insert: {
-          kanaal_voorkeur?: string;
-          wa_toestemming_op?: string | null;
-          wa_toestemming_bron?: string;
-          wa_marketing_op?: string | null;
-          wa_afgemeld_op?: string | null;
-          company_id?: string;
-          created_at?: string;
-          deleted_at?: string | null;
-          email?: string;
-          email2?: string;
-          huisnummer?: string;
-          id?: string;
-          naam: string;
-          notitie?: string;
-          plaats?: string;
-          postcode?: string;
-          straat?: string;
-          telefoon?: string;
-          telefoon2?: string;
-          updated_at?: string;
-        };
-        Update: {
-          kanaal_voorkeur?: string;
-          wa_toestemming_op?: string | null;
-          wa_toestemming_bron?: string;
-          wa_marketing_op?: string | null;
-          wa_afgemeld_op?: string | null;
-          company_id?: string;
-          created_at?: string;
-          deleted_at?: string | null;
-          email?: string;
-          email2?: string;
-          huisnummer?: string;
-          id?: string;
-          naam?: string;
-          notitie?: string;
-          plaats?: string;
-          postcode?: string;
-          straat?: string;
-          telefoon?: string;
-          telefoon2?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "klanten_company_id_fkey";
-            columns: ["company_id"];
-            isOneToOne: false;
-            referencedRelation: "companies";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       klussen: {
         Row: {
-          duur_min: number | null;
-          duur_zelf: boolean;
-          ploeg_nr: number | null;
-          volgorde: number | null;
-          vaste_start: string | null;
           company_id: string;
           created_at: string;
           customer_id: string;
           deleted_at: string | null;
+          duur_min: number | null;
+          duur_zelf: boolean;
           gedaan_op: string | null;
           gepland_op: string | null;
           id: string;
           omschrijving: string;
+          ploeg_nr: number | null;
+          vaste_start: string | null;
+          volgorde: number | null;
         };
         Insert: {
-          duur_min?: number | null;
-          duur_zelf?: boolean;
-          ploeg_nr?: number | null;
-          volgorde?: number | null;
-          vaste_start?: string | null;
           company_id?: string;
           created_at?: string;
           customer_id: string;
           deleted_at?: string | null;
+          duur_min?: number | null;
+          duur_zelf?: boolean;
           gedaan_op?: string | null;
           gepland_op?: string | null;
           id?: string;
           omschrijving: string;
+          ploeg_nr?: number | null;
+          vaste_start?: string | null;
+          volgorde?: number | null;
         };
         Update: {
-          duur_min?: number | null;
-          duur_zelf?: boolean;
-          ploeg_nr?: number | null;
-          volgorde?: number | null;
-          vaste_start?: string | null;
           company_id?: string;
           created_at?: string;
           customer_id?: string;
           deleted_at?: string | null;
+          duur_min?: number | null;
+          duur_zelf?: boolean;
           gedaan_op?: string | null;
           gepland_op?: string | null;
           id?: string;
           omschrijving?: string;
+          ploeg_nr?: number | null;
+          vaste_start?: string | null;
+          volgorde?: number | null;
         };
         Relationships: [
           {
@@ -648,60 +2287,158 @@ export type Database = {
           },
         ];
       };
+      mail_categorieen: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          deleted_at: string | null;
+          id: string;
+          naam: string;
+          omschrijving: string;
+          sleutel: string | null;
+          volgorde: number;
+          zelf_antwoorden_whatsapp: boolean;
+          zelfstandigheid: string;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          id?: string;
+          naam: string;
+          omschrijving?: string;
+          sleutel?: string | null;
+          volgorde?: number;
+          zelf_antwoorden_whatsapp?: boolean;
+          zelfstandigheid?: string;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          id?: string;
+          naam?: string;
+          omschrijving?: string;
+          sleutel?: string | null;
+          volgorde?: number;
+          zelf_antwoorden_whatsapp?: boolean;
+          zelfstandigheid?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "mail_categorieen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      mail_mappen: {
+        Row: {
+          aantal: number;
+          bijgewerkt_op: string | null;
+          company_id: string;
+          id: string;
+          mailbox_id: string;
+          ongelezen: number;
+          pad: string;
+          rol: string;
+          uidvalidity: number | null;
+        };
+        Insert: {
+          aantal?: number;
+          bijgewerkt_op?: string | null;
+          company_id?: string;
+          id?: string;
+          mailbox_id: string;
+          ongelezen?: number;
+          pad: string;
+          rol?: string;
+          uidvalidity?: number | null;
+        };
+        Update: {
+          aantal?: number;
+          bijgewerkt_op?: string | null;
+          company_id?: string;
+          id?: string;
+          mailbox_id?: string;
+          ongelezen?: number;
+          pad?: string;
+          rol?: string;
+          uidvalidity?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "mail_mappen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "mail_mappen_mailbox_id_fkey";
+            columns: ["mailbox_id"];
+            isOneToOne: false;
+            referencedRelation: "mailboxen";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       mail_ontvangers: {
         Row: {
-          message_id: string;
-          wa_id: string;
-          bezorgstatus: string;
-          status_op: string | null;
-          kanaal: string;
-          telefoon: string;
           adressen: string;
+          bezorgstatus: string;
           company_id: string;
           created_at: string;
           email: string;
           fout: string;
           id: string;
+          kanaal: string;
           klant_id: string | null;
           mailing_id: string;
+          message_id: string;
           naam: string;
           status: string;
+          status_op: string | null;
+          telefoon: string;
+          wa_id: string;
         };
         Insert: {
-          message_id?: string;
-          wa_id?: string;
-          bezorgstatus?: string;
-          status_op?: string | null;
-          kanaal?: string;
-          telefoon?: string;
           adressen?: string;
-          company_id: string;
-          created_at?: string;
-          email: string;
-          fout?: string;
-          id?: string;
-          klant_id?: string | null;
-          mailing_id: string;
-          naam?: string;
-          status?: string;
-        };
-        Update: {
-          message_id?: string;
-          wa_id?: string;
           bezorgstatus?: string;
-          status_op?: string | null;
-          kanaal?: string;
-          telefoon?: string;
-          adressen?: string;
           company_id?: string;
           created_at?: string;
           email?: string;
           fout?: string;
           id?: string;
+          kanaal?: string;
           klant_id?: string | null;
-          mailing_id?: string;
+          mailing_id: string;
+          message_id?: string;
           naam?: string;
           status?: string;
+          status_op?: string | null;
+          telefoon?: string;
+          wa_id?: string;
+        };
+        Update: {
+          adressen?: string;
+          bezorgstatus?: string;
+          company_id?: string;
+          created_at?: string;
+          email?: string;
+          fout?: string;
+          id?: string;
+          kanaal?: string;
+          klant_id?: string | null;
+          mailing_id?: string;
+          message_id?: string;
+          naam?: string;
+          status?: string;
+          status_op?: string | null;
+          telefoon?: string;
+          wa_id?: string;
         };
         Relationships: [
           {
@@ -727,16 +2464,94 @@ export type Database = {
           },
         ];
       };
+      mail_regels: {
+        Row: {
+          actie: string;
+          company_id: string;
+          created_at: string;
+          id: string;
+          mailbox_id: string;
+          van_email: string;
+        };
+        Insert: {
+          actie?: string;
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          mailbox_id: string;
+          van_email: string;
+        };
+        Update: {
+          actie?: string;
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          mailbox_id?: string;
+          van_email?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "mail_regels_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "mail_regels_mailbox_id_fkey";
+            columns: ["mailbox_id"];
+            isOneToOne: false;
+            referencedRelation: "mailboxen";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      mail_verzendpogingen: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          id: string;
+          mailbox_id: string;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          mailbox_id: string;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          mailbox_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "mail_verzendpogingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "mail_verzendpogingen_mailbox_id_fkey";
+            columns: ["mailbox_id"];
+            isOneToOne: false;
+            referencedRelation: "mailboxen";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       mail_wijzigingen: {
         Row: {
-          bericht_id: string | null;
-          details: Json;
           adres: string;
           antwoord_id: string | null;
           automatisch: boolean;
+          bericht_id: string | null;
           company_id: string;
           created_at: string;
           customer_id: string | null;
+          details: Json;
           door: string | null;
           id: string;
           klant: string;
@@ -751,14 +2566,14 @@ export type Database = {
           zekerheid: number | null;
         };
         Insert: {
-          bericht_id?: string | null;
-          details?: Json;
           adres?: string;
           antwoord_id?: string | null;
           automatisch?: boolean;
-          company_id: string;
+          bericht_id?: string | null;
+          company_id?: string;
           created_at?: string;
           customer_id?: string | null;
+          details?: Json;
           door?: string | null;
           id?: string;
           klant?: string;
@@ -773,14 +2588,14 @@ export type Database = {
           zekerheid?: number | null;
         };
         Update: {
-          bericht_id?: string | null;
-          details?: Json;
           adres?: string;
           antwoord_id?: string | null;
           automatisch?: boolean;
+          bericht_id?: string | null;
           company_id?: string;
           created_at?: string;
           customer_id?: string | null;
+          details?: Json;
           door?: string | null;
           id?: string;
           klant?: string;
@@ -795,6 +2610,13 @@ export type Database = {
           zekerheid?: number | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "mail_wijzigingen_bericht_fkey";
+            columns: ["bericht_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "berichten";
+            referencedColumns: ["id", "company_id"];
+          },
           {
             foreignKeyName: "mail_wijzigingen_company_id_fkey";
             columns: ["company_id"];
@@ -809,592 +2631,47 @@ export type Database = {
             referencedRelation: "customers";
             referencedColumns: ["id"];
           },
-        ];
-      };
-      mailingen: {
-        Row: {
-          soort: string;
-          kanaal: string;
-          sjabloon_id: string | null;
-          aantal_whatsapp: number;
-          aantal: number;
-          company_id: string;
-          created_at: string;
-          datum: string | null;
-          id: string;
-          mislukt: number;
-          onderwerp: string;
-          tekst: string;
-          test: boolean;
-          verzonden_door: string | null;
-        };
-        Insert: {
-          soort?: string;
-          kanaal?: string;
-          sjabloon_id?: string | null;
-          aantal_whatsapp?: number;
-          aantal?: number;
-          company_id: string;
-          created_at?: string;
-          datum?: string | null;
-          id?: string;
-          mislukt?: number;
-          onderwerp: string;
-          tekst: string;
-          test?: boolean;
-          verzonden_door?: string | null;
-        };
-        Update: {
-          soort?: string;
-          kanaal?: string;
-          sjabloon_id?: string | null;
-          aantal_whatsapp?: number;
-          aantal?: number;
-          company_id?: string;
-          created_at?: string;
-          datum?: string | null;
-          id?: string;
-          mislukt?: number;
-          onderwerp?: string;
-          tekst?: string;
-          test?: boolean;
-          verzonden_door?: string | null;
-        };
-        Relationships: [
           {
-            foreignKeyName: "mailingen_company_id_fkey";
-            columns: ["company_id"];
+            foreignKeyName: "mail_wijzigingen_door_fkey";
+            columns: ["door"];
             isOneToOne: false;
-            referencedRelation: "companies";
+            referencedRelation: "employees";
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "mailingen_verzonden_door_fkey";
-            columns: ["verzonden_door"];
+            foreignKeyName: "mail_wijzigingen_teruggedraaid_door_fkey";
+            columns: ["teruggedraaid_door"];
             isOneToOne: false;
             referencedRelation: "employees";
             referencedColumns: ["id"];
           },
         ];
       };
-      markeringen: {
+      mailbox_geheimen: {
         Row: {
-          company_id: string;
-          created_at: string;
-          id: string;
-          naam: string;
-          sleutel: string;
-          sort_order: number;
-          tint: string;
-        };
-        Insert: {
-          company_id?: string;
-          created_at?: string;
-          id?: string;
-          naam: string;
-          sleutel: string;
-          sort_order?: number;
-          tint: string;
-        };
-        Update: {
-          company_id?: string;
-          created_at?: string;
-          id?: string;
-          naam?: string;
-          sleutel?: string;
-          sort_order?: number;
-          tint?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "markeringen_company_id_fkey";
-            columns: ["company_id"];
-            isOneToOne: false;
-            referencedRelation: "companies";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      quick_notes: {
-        Row: {
-          company_id: string;
-          created_at: string;
-          id: string;
-          label: string;
-          omschrijving: string;
-          sort_order: number;
-        };
-        Insert: {
-          company_id?: string;
-          created_at?: string;
-          id?: string;
-          label: string;
-          omschrijving?: string;
-          sort_order?: number;
-        };
-        Update: {
-          company_id?: string;
-          created_at?: string;
-          id?: string;
-          label?: string;
-          omschrijving?: string;
-          sort_order?: number;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "quick_notes_company_id_fkey";
-            columns: ["company_id"];
-            isOneToOne: false;
-            referencedRelation: "companies";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      straat_groepen: {
-        Row: {
-          company_id: string;
-          created_at: string;
-          district_id: string;
-          id: string;
-          naam: string;
-          sort_order: number;
-        };
-        Insert: {
-          company_id?: string;
-          created_at?: string;
-          district_id: string;
-          id?: string;
-          naam: string;
-          sort_order?: number;
-        };
-        Update: {
-          company_id?: string;
-          created_at?: string;
-          district_id?: string;
-          id?: string;
-          naam?: string;
-          sort_order?: number;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "straat_groepen_company_id_fkey";
-            columns: ["company_id"];
-            isOneToOne: false;
-            referencedRelation: "companies";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "straat_groepen_district_id_fkey";
-            columns: ["district_id"];
-            isOneToOne: false;
-            referencedRelation: "districts";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      streets: {
-        Row: {
-          company_id: string;
-          created_at: string;
-          deleted_at: string | null;
-          district_id: string;
-          groep_id: string | null;
-          id: string;
-          name: string;
-          print_col: number | null;
-          print_row: number | null;
-          sort_desc: boolean;
-          kolom_start: boolean;
-          doorlopend: boolean;
-          sort_order: number;
-          volledige_naam: string;
-        };
-        Insert: {
-          company_id?: string;
-          created_at?: string;
-          deleted_at?: string | null;
-          district_id: string;
-          groep_id?: string | null;
-          id?: string;
-          name: string;
-          print_col?: number | null;
-          print_row?: number | null;
-          sort_desc?: boolean;
-          kolom_start?: boolean;
-          doorlopend?: boolean;
-          sort_order?: number;
-          volledige_naam?: string;
-        };
-        Update: {
-          company_id?: string;
-          created_at?: string;
-          deleted_at?: string | null;
-          district_id?: string;
-          groep_id?: string | null;
-          id?: string;
-          name?: string;
-          print_col?: number | null;
-          print_row?: number | null;
-          sort_desc?: boolean;
-          kolom_start?: boolean;
-          doorlopend?: boolean;
-          sort_order?: number;
-          volledige_naam?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "streets_company_id_fkey";
-            columns: ["company_id"];
-            isOneToOne: false;
-            referencedRelation: "companies";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "streets_district_id_fkey";
-            columns: ["district_id"];
-            isOneToOne: false;
-            referencedRelation: "districts";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "streets_groep_id_fkey";
-            columns: ["groep_id"];
-            isOneToOne: false;
-            referencedRelation: "straat_groepen";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      teamleden: {
-        Row: {
-          id: string;
-          company_id: string;
-          naam: string;
-          employee_id: string | null;
-          uitgenodigd_user_id: string | null;
-          deleted_at: string | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          company_id?: string;
-          naam: string;
-          employee_id?: string | null;
-          uitgenodigd_user_id?: string | null;
-          deleted_at?: string | null;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          company_id?: string;
-          naam?: string;
-          employee_id?: string | null;
-          uitgenodigd_user_id?: string | null;
-          deleted_at?: string | null;
-          created_at?: string;
-        };
-        Relationships: [];
-      };
-      dag_ploegen: {
-        Row: {
-          company_id: string;
-          datum: string;
-          nr: number;
-          begin_tijd: string | null;
-          eind_tijd: string | null;
-          pauze_van: string | null;
-          pauze_min: number | null;
-          created_at: string;
-        };
-        Insert: {
-          company_id?: string;
-          datum: string;
-          nr: number;
-          begin_tijd?: string | null;
-          eind_tijd?: string | null;
-          pauze_van?: string | null;
-          pauze_min?: number | null;
-          created_at?: string;
-        };
-        Update: {
-          company_id?: string;
-          datum?: string;
-          nr?: number;
-          begin_tijd?: string | null;
-          eind_tijd?: string | null;
-          pauze_van?: string | null;
-          pauze_min?: number | null;
-          created_at?: string;
-        };
-        Relationships: [];
-      };
-      dag_ploeg_leden: {
-        Row: {
-          company_id: string;
-          datum: string;
-          nr: number;
-          teamlid_id: string;
-        };
-        Insert: {
-          company_id?: string;
-          datum: string;
-          nr: number;
-          teamlid_id: string;
-        };
-        Update: {
-          company_id?: string;
-          datum?: string;
-          nr?: number;
-          teamlid_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "dag_ploeg_leden_teamlid_id_fkey";
-            columns: ["teamlid_id"];
-            isOneToOne: false;
-            referencedRelation: "teamleden";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      aankondiging_adressen: {
-        Row: {
-          id: string;
-          company_id: string;
-          ontvanger_id: string;
-          customer_id: string | null;
-          datum: string;
-          tijdvak_van: string | null;
-          tijdvak_tot: string | null;
-          soort: string;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          company_id?: string;
-          ontvanger_id: string;
-          customer_id?: string | null;
-          datum: string;
-          tijdvak_van?: string | null;
-          tijdvak_tot?: string | null;
-          soort?: string;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          company_id?: string;
-          ontvanger_id?: string;
-          customer_id?: string | null;
-          datum?: string;
-          tijdvak_van?: string | null;
-          tijdvak_tot?: string | null;
-          soort?: string;
-          created_at?: string;
-        };
-        Relationships: [];
-      };
-      bericht_sjablonen: {
-        Row: {
-          id: string;
-          company_id: string;
-          soort: string;
-          naam: string;
-          onderwerp: string;
-          tekst: string;
-          wa_sjabloon_id: string | null;
-          standaard: boolean;
-          sort_order: number;
-          deleted_at: string | null;
-          created_at: string;
+          iv: string;
+          mailbox_id: string;
           updated_at: string;
+          versleuteld: string;
         };
         Insert: {
-          id?: string;
-          company_id?: string;
-          soort: string;
-          naam: string;
-          onderwerp?: string;
-          tekst: string;
-          wa_sjabloon_id?: string | null;
-          standaard?: boolean;
-          sort_order?: number;
-          deleted_at?: string | null;
-          created_at?: string;
+          iv: string;
+          mailbox_id: string;
           updated_at?: string;
+          versleuteld: string;
         };
         Update: {
-          id?: string;
-          company_id?: string;
-          soort?: string;
-          naam?: string;
-          onderwerp?: string;
-          tekst?: string;
-          wa_sjabloon_id?: string | null;
-          standaard?: boolean;
-          sort_order?: number;
-          deleted_at?: string | null;
-          created_at?: string;
+          iv?: string;
+          mailbox_id?: string;
           updated_at?: string;
-        };
-        Relationships: [];
-      };
-      snelle_redenen: {
-        Row: {
-          id: string;
-          company_id: string;
-          tekst: string;
-          sort_order: number;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          company_id?: string;
-          tekst: string;
-          sort_order?: number;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          company_id?: string;
-          tekst?: string;
-          sort_order?: number;
-          created_at?: string;
-        };
-        Relationships: [];
-      };
-      betaal_gebeurtenissen: {
-        Row: {
-          id: string;
-          company_id: string;
-          customer_id: string;
-          adres: string;
-          soort: "beginstand" | "betaald" | "korting" | "niet_thuis" | "geen_geld" | "ongedaan";
-          bedrag: number;
-          aantal: number | null;
-          peildatum: string | null;
-          maanden: string[] | null;
-          reden: string;
-          vaste_korting_id: string | null;
-          herroept_id: string | null;
-          vrijgave_id: string | null;
-          bron: "geldloop" | "dag" | "kantoor";
-          door: string | null;
-          door_naam: string;
-          op: string;
-          ontvangen_op: string;
-          getoond_open: number | null;
-          botsing_met: string | null;
-        };
-        Insert: never;
-        Update: never;
-        Relationships: [];
-      };
-      dag_afmeldingen: {
-        Row: {
-          id: string;
-          company_id: string;
-          datum: string;
-          ploeg_nr: number | null;
-          door: string | null;
-          door_naam: string;
-          op: string;
-          gedaan: number;
-          weg: number;
-          weg_kenmerk: string | null;
-          heropend_op: string | null;
-          heropend_door: string | null;
-          heropend_naam: string | null;
-        };
-        Insert: never;
-        Update: never;
-        Relationships: [];
-      };
-      geldloop_straat_lopers: {
-        Row: {
-          vrijgave_id: string;
-          street_id: string;
-          employee_id: string;
-          company_id: string;
-        };
-        Insert: {
-          vrijgave_id: string;
-          street_id: string;
-          employee_id: string;
-          company_id?: string;
-        };
-        Update: {
-          vrijgave_id?: string;
-          street_id?: string;
-          employee_id?: string;
-          company_id?: string;
-        };
-        Relationships: [];
-      };
-      wasdag_regels: {
-        Row: {
-          gedaan_op: string | null;
-          gedaan_door: string | null;
-          niet_gewassen_op: string | null;
-          niet_gewassen_door: string | null;
-          niet_gewassen_naam: string | null;
-          ploeg_nr: number | null;
-          volgorde: number | null;
-          rest: boolean;
-          vaste_start: string | null;
-          company_id: string;
-          created_at: string;
-          customer_id: string | null;
-          datum: string;
-          id: string;
-          notitie: string | null;
-        };
-        Insert: {
-          gedaan_op?: string | null;
-          gedaan_door?: string | null;
-          niet_gewassen_op?: string | null;
-          niet_gewassen_door?: string | null;
-          niet_gewassen_naam?: string | null;
-          ploeg_nr?: number | null;
-          volgorde?: number | null;
-          rest?: boolean;
-          vaste_start?: string | null;
-          company_id?: string;
-          created_at?: string;
-          customer_id?: string | null;
-          datum: string;
-          id?: string;
-          notitie?: string | null;
-        };
-        Update: {
-          gedaan_op?: string | null;
-          gedaan_door?: string | null;
-          niet_gewassen_op?: string | null;
-          niet_gewassen_door?: string | null;
-          niet_gewassen_naam?: string | null;
-          ploeg_nr?: number | null;
-          volgorde?: number | null;
-          rest?: boolean;
-          vaste_start?: string | null;
-          company_id?: string;
-          created_at?: string;
-          customer_id?: string | null;
-          datum?: string;
-          id?: string;
-          notitie?: string | null;
+          versleuteld?: string;
         };
         Relationships: [
           {
-            foreignKeyName: "wasdag_regels_company_id_fkey";
-            columns: ["company_id"];
-            isOneToOne: false;
-            referencedRelation: "companies";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "wasdag_regels_customer_id_fkey";
-            columns: ["customer_id"];
-            isOneToOne: false;
-            referencedRelation: "customers";
+            foreignKeyName: "mailbox_geheimen_mailbox_id_fkey";
+            columns: ["mailbox_id"];
+            isOneToOne: true;
+            referencedRelation: "mailboxen";
             referencedColumns: ["id"];
           },
         ];
@@ -1454,616 +2731,133 @@ export type Database = {
           smtp_poort?: number;
           status?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "mailboxen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: true;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "mailboxen_gekoppeld_door_fkey";
+            columns: ["gekoppeld_door"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
       };
-      mail_mappen: {
+      mailingen: {
         Row: {
           aantal: number;
-          bijgewerkt_op: string | null;
+          aantal_whatsapp: number;
           company_id: string;
+          created_at: string;
+          datum: string | null;
           id: string;
-          mailbox_id: string;
-          ongelezen: number;
-          pad: string;
-          rol: string;
-          uidvalidity: number | null;
-        };
-        Insert: {
-          aantal?: number;
-          bijgewerkt_op?: string | null;
-          company_id: string;
-          id?: string;
-          mailbox_id: string;
-          ongelezen?: number;
-          pad: string;
-          rol?: string;
-          uidvalidity?: number | null;
-        };
-        Update: {
-          aantal?: number;
-          bijgewerkt_op?: string | null;
-          company_id?: string;
-          id?: string;
-          mailbox_id?: string;
-          ongelezen?: number;
-          pad?: string;
-          rol?: string;
-          uidvalidity?: number | null;
-        };
-        Relationships: [];
-      };
-      berichten: {
-        Row: {
-          wa_antwoord_direct: boolean;
-          wa_antwoord_op: string | null;
-          wa_antwoord_status: string;
-          wa_antwoord_reden: string;
           kanaal: string;
-          wa_id: string | null;
-          wa_telefoon: string;
-          wa_type: string;
-          wa_status: string;
-          media: Json;
-          bron: string;
-          afgehandeld_door_paaltje: boolean;
-          afgehandeld_op: string | null;
-          indeling_door_mens: boolean;
-          ai_fout: string;
-          beantwoord_op: string | null;
-          concept: string;
-          concept_paaltje: string;
-          doorgevoerd_automatisch: boolean;
-          doorgevoerd_op: string | null;
-          gelezen_door_paaltje_op: string | null;
-          is_klantmail: boolean | null;
-          klant_gok_id: string | null;
-          klantgegevens: Json;
-          samenvatting: string;
-          voorstel: Json;
-          zekerheid: number | null;
-          aan: Json;
-          afgekapt: boolean;
-          antwoord_naar: string;
-          bijlagen: Json;
-          cc: Json;
-          company_id: string;
-          created_at: string;
-          deleted_at: string | null;
-          fragment: string;
-          gelezen: boolean;
-          gemarkeerd: boolean;
-          grootte: number;
-          html: string;
-          id: string;
-          in_reply_to: string;
-          klant_id: string | null;
-          mailbox_id: string | null;
-          map_id: string | null;
-          message_id: string;
+          mislukt: number;
           onderwerp: string;
-          ontvangen_op: string;
-          op_server: boolean;
-          paaltje_pogingen: number;
-          paaltje_status: string;
-          referenties: string[];
-          richting: string;
+          sjabloon_id: string | null;
+          soort: string;
           tekst: string;
-          uid: number | null;
-          uit_dossier_op: string | null;
-          herinner_op: string | null;
-          uidvalidity: number | null;
-          van_email: string;
-          van_naam: string;
-          vorige_map_id: string | null;
-          weg_sinds: string | null;
+          test: boolean;
+          verzonden_door: string | null;
         };
         Insert: {
-          wa_antwoord_direct?: boolean;
-          wa_antwoord_op?: string | null;
-          wa_antwoord_status?: string;
-          wa_antwoord_reden?: string;
-          kanaal?: string;
-          wa_id?: string | null;
-          wa_telefoon?: string;
-          wa_type?: string;
-          wa_status?: string;
-          media?: Json;
-          bron?: string;
-          afgehandeld_door_paaltje?: boolean;
-          afgehandeld_op?: string | null;
-          indeling_door_mens?: boolean;
-          ai_fout?: string;
-          beantwoord_op?: string | null;
-          concept?: string;
-          concept_paaltje?: string;
-          doorgevoerd_automatisch?: boolean;
-          doorgevoerd_op?: string | null;
-          gelezen_door_paaltje_op?: string | null;
-          is_klantmail?: boolean | null;
-          klant_gok_id?: string | null;
-          klantgegevens?: Json;
-          samenvatting?: string;
-          voorstel?: Json;
-          zekerheid?: number | null;
-          aan?: Json;
-          afgekapt?: boolean;
-          antwoord_naar?: string;
-          bijlagen?: Json;
-          cc?: Json;
+          aantal?: number;
+          aantal_whatsapp?: number;
           company_id?: string;
           created_at?: string;
-          deleted_at?: string | null;
-          fragment?: string;
-          gelezen?: boolean;
-          gemarkeerd?: boolean;
-          grootte?: number;
-          html?: string;
+          datum?: string | null;
           id?: string;
-          in_reply_to?: string;
-          klant_id?: string | null;
-          mailbox_id?: string | null;
-          map_id?: string | null;
-          message_id?: string;
-          onderwerp?: string;
-          ontvangen_op: string;
-          op_server?: boolean;
-          paaltje_pogingen?: number;
-          paaltje_status?: string;
-          referenties?: string[];
-          richting?: string;
-          tekst?: string;
-          uid?: number | null;
-          uit_dossier_op?: string | null;
-          herinner_op?: string | null;
-          uidvalidity?: number | null;
-          van_email?: string;
-          van_naam?: string;
-          vorige_map_id?: string | null;
-          weg_sinds?: string | null;
+          kanaal?: string;
+          mislukt?: number;
+          onderwerp: string;
+          sjabloon_id?: string | null;
+          soort?: string;
+          tekst: string;
+          test?: boolean;
+          verzonden_door?: string | null;
         };
         Update: {
-          wa_antwoord_direct?: boolean;
-          wa_antwoord_op?: string | null;
-          wa_antwoord_status?: string;
-          wa_antwoord_reden?: string;
-          kanaal?: string;
-          wa_id?: string | null;
-          wa_telefoon?: string;
-          wa_type?: string;
-          wa_status?: string;
-          media?: Json;
-          bron?: string;
-          afgehandeld_door_paaltje?: boolean;
-          afgehandeld_op?: string | null;
-          indeling_door_mens?: boolean;
-          ai_fout?: string;
-          beantwoord_op?: string | null;
-          concept?: string;
-          concept_paaltje?: string;
-          doorgevoerd_automatisch?: boolean;
-          doorgevoerd_op?: string | null;
-          gelezen_door_paaltje_op?: string | null;
-          is_klantmail?: boolean | null;
-          klant_gok_id?: string | null;
-          klantgegevens?: Json;
-          samenvatting?: string;
-          voorstel?: Json;
-          zekerheid?: number | null;
-          aan?: Json;
-          afgekapt?: boolean;
-          antwoord_naar?: string;
-          bijlagen?: Json;
-          cc?: Json;
+          aantal?: number;
+          aantal_whatsapp?: number;
           company_id?: string;
           created_at?: string;
-          deleted_at?: string | null;
-          fragment?: string;
-          gelezen?: boolean;
-          gemarkeerd?: boolean;
-          grootte?: number;
-          html?: string;
+          datum?: string | null;
           id?: string;
-          in_reply_to?: string;
-          klant_id?: string | null;
-          mailbox_id?: string | null;
-          map_id?: string | null;
-          message_id?: string;
+          kanaal?: string;
+          mislukt?: number;
           onderwerp?: string;
-          ontvangen_op?: string;
-          op_server?: boolean;
-          paaltje_pogingen?: number;
-          paaltje_status?: string;
-          referenties?: string[];
-          richting?: string;
+          sjabloon_id?: string | null;
+          soort?: string;
           tekst?: string;
-          uid?: number | null;
-          uit_dossier_op?: string | null;
-          herinner_op?: string | null;
-          uidvalidity?: number | null;
-          van_email?: string;
-          van_naam?: string;
-          vorige_map_id?: string | null;
-          weg_sinds?: string | null;
+          test?: boolean;
+          verzonden_door?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "mailingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "mailingen_sjabloon_id_fkey";
+            columns: ["sjabloon_id"];
+            isOneToOne: false;
+            referencedRelation: "wa_sjablonen";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "mailingen_verzonden_door_fkey";
+            columns: ["verzonden_door"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
       };
-      mail_categorieen: {
+      markeringen: {
         Row: {
-          zelf_antwoorden_whatsapp: boolean;
           company_id: string;
           created_at: string;
-          deleted_at: string | null;
           id: string;
           naam: string;
-          omschrijving: string;
-          sleutel: string | null;
-          volgorde: number;
-          zelfstandigheid: string;
+          sleutel: string;
+          sort_order: number;
+          tint: string;
         };
         Insert: {
-          zelf_antwoorden_whatsapp?: boolean;
           company_id?: string;
           created_at?: string;
-          deleted_at?: string | null;
           id?: string;
           naam: string;
-          omschrijving?: string;
-          sleutel?: string | null;
-          volgorde?: number;
-          zelfstandigheid?: string;
+          sleutel: string;
+          sort_order?: number;
+          tint: string;
         };
         Update: {
-          zelf_antwoorden_whatsapp?: boolean;
           company_id?: string;
           created_at?: string;
-          deleted_at?: string | null;
           id?: string;
           naam?: string;
-          omschrijving?: string;
-          sleutel?: string | null;
-          volgorde?: number;
-          zelfstandigheid?: string;
+          sleutel?: string;
+          sort_order?: number;
+          tint?: string;
         };
-        Relationships: [];
-      };
-      bericht_categorieen: {
-        Row: {
-          bericht_id: string;
-          categorie_id: string;
-          company_id: string;
-          created_at: string;
-          door: string;
-          zekerheid: number | null;
-        };
-        Insert: {
-          bericht_id: string;
-          categorie_id: string;
-          company_id?: string;
-          created_at?: string;
-          door?: string;
-          zekerheid?: number | null;
-        };
-        Update: {
-          bericht_id?: string;
-          categorie_id?: string;
-          company_id?: string;
-          created_at?: string;
-          door?: string;
-          zekerheid?: number | null;
-        };
-        Relationships: [];
-      };
-      klacht_berichten: {
-        Row: {
-          bericht_id: string;
-          company_id: string;
-          created_at: string;
-          klacht_id: string;
-        };
-        Insert: {
-          bericht_id: string;
-          company_id?: string;
-          created_at?: string;
-          klacht_id: string;
-        };
-        Update: {
-          bericht_id?: string;
-          company_id?: string;
-          created_at?: string;
-          klacht_id?: string;
-        };
-        Relationships: [];
-      };
-      klachten: {
-        Row: {
-          afgehandeld_op: string | null;
-          bron: string;
-          company_id: string;
-          created_at: string;
-          customer_id: string | null;
-          deleted_at: string | null;
-          door_paaltje: boolean;
-          gemaakt_door: string | null;
-          id: string;
-          klant_id: string | null;
-          omschrijving: string;
-          ontvangen_op: string;
-          status: string;
-        };
-        Insert: {
-          afgehandeld_op?: string | null;
-          bron?: string;
-          company_id?: string;
-          created_at?: string;
-          customer_id?: string | null;
-          deleted_at?: string | null;
-          door_paaltje?: boolean;
-          gemaakt_door?: string | null;
-          id?: string;
-          klant_id?: string | null;
-          omschrijving: string;
-          ontvangen_op?: string;
-          status?: string;
-        };
-        Update: {
-          afgehandeld_op?: string | null;
-          bron?: string;
-          company_id?: string;
-          created_at?: string;
-          customer_id?: string | null;
-          deleted_at?: string | null;
-          door_paaltje?: boolean;
-          gemaakt_door?: string | null;
-          id?: string;
-          klant_id?: string | null;
-          omschrijving?: string;
-          ontvangen_op?: string;
-          status?: string;
-        };
-        Relationships: [];
-      };
-      geplande_mails: {
-        Row: {
-          aan_tekst: string;
-          company_id: string;
-          created_at: string;
-          door: string | null;
-          fout: string;
-          id: string;
-          inhoud: Json;
-          mailbox_id: string;
-          onderwerp: string;
-          status: string;
-          verstuurd_op: string | null;
-          versturen_op: string;
-        };
-        Insert: {
-          aan_tekst?: string;
-          company_id?: string;
-          created_at?: string;
-          door?: string | null;
-          fout?: string;
-          id?: string;
-          inhoud: Json;
-          mailbox_id: string;
-          onderwerp?: string;
-          status?: string;
-          verstuurd_op?: string | null;
-          versturen_op: string;
-        };
-        Update: {
-          aan_tekst?: string;
-          company_id?: string;
-          created_at?: string;
-          door?: string | null;
-          fout?: string;
-          id?: string;
-          inhoud?: Json;
-          mailbox_id?: string;
-          onderwerp?: string;
-          status?: string;
-          verstuurd_op?: string | null;
-          versturen_op?: string;
-        };
-        Relationships: [];
-      };
-      klant_telefoons: {
-        Row: {
-          bron: string;
-          company_id: string;
-          created_at: string;
-          id: string;
-          klant_id: string;
-          telefoon: string;
-        };
-        Insert: {
-          bron?: string;
-          company_id?: string;
-          created_at?: string;
-          id?: string;
-          klant_id: string;
-          telefoon: string;
-        };
-        Update: {
-          bron?: string;
-          company_id?: string;
-          created_at?: string;
-          id?: string;
-          klant_id?: string;
-          telefoon?: string;
-        };
-        Relationships: [];
-      };
-      wa_sjablonen: {
-        Row: {
-          afwijsreden: string;
-          categorie: string;
-          company_id: string;
-          created_at: string;
-          deleted_at: string | null;
-          id: string;
-          meta_id: string;
-          meta_naam: string;
-          status: string;
-          tekst: string;
-          titel: string;
-          updated_at: string;
-          variabelen: string[];
-        };
-        Insert: {
-          afwijsreden?: string;
-          categorie: string;
-          company_id?: string;
-          created_at?: string;
-          deleted_at?: string | null;
-          id?: string;
-          meta_id?: string;
-          meta_naam: string;
-          status?: string;
-          tekst: string;
-          titel: string;
-          updated_at?: string;
-          variabelen?: string[];
-        };
-        Update: {
-          afwijsreden?: string;
-          categorie?: string;
-          company_id?: string;
-          created_at?: string;
-          deleted_at?: string | null;
-          id?: string;
-          meta_id?: string;
-          meta_naam?: string;
-          status?: string;
-          tekst?: string;
-          titel?: string;
-          updated_at?: string;
-          variabelen?: string[];
-        };
-        Relationships: [];
-      };
-      whatsapp_koppelingen: {
-        Row: {
-          aanbieder: string;
-          company_id: string;
-          created_at: string;
-          fout: string;
-          id: string;
-          kapso_webhook_id: string;
-          laatste_bericht_op: string | null;
-          paaltje_vanaf: string;
-          phone_number_id: string;
-          soort: string;
-          status: string;
-          updated_at: string;
-          waba_id: string;
-          weergavenummer: string;
-        };
-        Insert: {
-          aanbieder?: string;
-          company_id?: string;
-          created_at?: string;
-          fout?: string;
-          id?: string;
-          kapso_webhook_id?: string;
-          laatste_bericht_op?: string | null;
-          paaltje_vanaf?: string;
-          phone_number_id: string;
-          soort?: string;
-          status?: string;
-          updated_at?: string;
-          waba_id?: string;
-          weergavenummer?: string;
-        };
-        Update: {
-          aanbieder?: string;
-          company_id?: string;
-          created_at?: string;
-          fout?: string;
-          id?: string;
-          kapso_webhook_id?: string;
-          laatste_bericht_op?: string | null;
-          paaltje_vanaf?: string;
-          phone_number_id?: string;
-          soort?: string;
-          status?: string;
-          updated_at?: string;
-          waba_id?: string;
-          weergavenummer?: string;
-        };
-        Relationships: [];
-      };
-      kapso_klanten: {
-        Row: {
-          company_id: string;
-          created_at: string;
-          customer_id: string;
-        };
-        Insert: {
-          company_id: string;
-          created_at?: string;
-          customer_id: string;
-        };
-        Update: {
-          company_id?: string;
-          created_at?: string;
-          customer_id?: string;
-        };
-        Relationships: [];
-      };
-      klant_emails: {
-        Row: {
-          bron: string;
-          company_id: string;
-          created_at: string;
-          email: string;
-          id: string;
-          klant_id: string;
-        };
-        Insert: {
-          bron?: string;
-          company_id?: string;
-          created_at?: string;
-          email: string;
-          id?: string;
-          klant_id: string;
-        };
-        Update: {
-          bron?: string;
-          company_id?: string;
-          created_at?: string;
-          email?: string;
-          id?: string;
-          klant_id?: string;
-        };
-        Relationships: [];
-      };
-      mail_regels: {
-        Row: {
-          actie: string;
-          company_id: string;
-          created_at: string;
-          id: string;
-          mailbox_id: string;
-          van_email: string;
-        };
-        Insert: {
-          actie?: string;
-          company_id?: string;
-          created_at?: string;
-          id?: string;
-          mailbox_id: string;
-          van_email: string;
-        };
-        Update: {
-          actie?: string;
-          company_id?: string;
-          created_at?: string;
-          id?: string;
-          mailbox_id?: string;
-          van_email?: string;
-        };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "markeringen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       paaltje_afspraken: {
         Row: {
@@ -2096,43 +2890,29 @@ export type Database = {
           status?: string;
           tekst?: string;
         };
-        Relationships: [];
-      };
-      dagrapporten: {
-        Row: {
-          company_id: string;
-          created_at: string;
-          datum: string;
-          gemaild_op: string | null;
-          id: string;
-          inhoud: Json;
-          mail_fout: string;
-          tot: string;
-          vanaf: string;
-        };
-        Insert: {
-          company_id?: string;
-          created_at?: string;
-          datum: string;
-          gemaild_op?: string | null;
-          id?: string;
-          inhoud?: Json;
-          mail_fout?: string;
-          tot: string;
-          vanaf: string;
-        };
-        Update: {
-          company_id?: string;
-          created_at?: string;
-          datum?: string;
-          gemaild_op?: string | null;
-          id?: string;
-          inhoud?: Json;
-          mail_fout?: string;
-          tot?: string;
-          vanaf?: string;
-        };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "paaltje_afspraken_bron_bericht_id_company_id_fkey";
+            columns: ["bron_bericht_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "berichten";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "paaltje_afspraken_categorie_id_company_id_fkey";
+            columns: ["categorie_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "mail_categorieen";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "paaltje_afspraken_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       paaltje_berichten: {
         Row: {
@@ -2186,89 +2966,6 @@ export type Database = {
           },
         ];
       };
-      paaltje_voorstellen: {
-        Row: {
-          aangevraagd_door: string | null;
-          aangepast_door_keurder: boolean;
-          afgehandeld_door: string | null;
-          afgehandeld_op: string | null;
-          company_id: string;
-          created_at: string;
-          doorgevoerd: Json | null;
-          gevraagd: Json;
-          id: string;
-          reden: string;
-          samenvatting: string;
-          status: string;
-          teruggedraaid_door: string | null;
-          teruggedraaid_op: string | null;
-          updated_at: string;
-        };
-        Insert: {
-          aangevraagd_door?: string | null;
-          aangepast_door_keurder?: boolean;
-          afgehandeld_door?: string | null;
-          afgehandeld_op?: string | null;
-          company_id?: string;
-          created_at?: string;
-          doorgevoerd?: Json | null;
-          gevraagd?: Json;
-          id?: string;
-          reden?: string;
-          samenvatting?: string;
-          status?: string;
-          teruggedraaid_door?: string | null;
-          teruggedraaid_op?: string | null;
-          updated_at?: string;
-        };
-        Update: {
-          aangevraagd_door?: string | null;
-          aangepast_door_keurder?: boolean;
-          afgehandeld_door?: string | null;
-          afgehandeld_op?: string | null;
-          company_id?: string;
-          created_at?: string;
-          doorgevoerd?: Json | null;
-          gevraagd?: Json;
-          id?: string;
-          reden?: string;
-          samenvatting?: string;
-          status?: string;
-          teruggedraaid_door?: string | null;
-          teruggedraaid_op?: string | null;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "paaltje_voorstellen_company_id_fkey";
-            columns: ["company_id"];
-            isOneToOne: false;
-            referencedRelation: "companies";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "paaltje_voorstellen_aangevraagd_door_fkey";
-            columns: ["aangevraagd_door"];
-            isOneToOne: false;
-            referencedRelation: "employees";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "paaltje_voorstellen_afgehandeld_door_fkey";
-            columns: ["afgehandeld_door"];
-            isOneToOne: false;
-            referencedRelation: "employees";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "paaltje_voorstellen_teruggedraaid_door_fkey";
-            columns: ["teruggedraaid_door"];
-            isOneToOne: false;
-            referencedRelation: "employees";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       paaltje_verbruik: {
         Row: {
           berichten: number;
@@ -2301,33 +2998,985 @@ export type Database = {
           },
         ];
       };
+      paaltje_voorstellen: {
+        Row: {
+          aangepast_door_keurder: boolean;
+          aangevraagd_door: string | null;
+          afgehandeld_door: string | null;
+          afgehandeld_op: string | null;
+          company_id: string;
+          created_at: string;
+          doorgevoerd: Json | null;
+          gevraagd: Json;
+          id: string;
+          reden: string;
+          samenvatting: string;
+          status: string;
+          teruggedraaid_door: string | null;
+          teruggedraaid_op: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          aangepast_door_keurder?: boolean;
+          aangevraagd_door?: string | null;
+          afgehandeld_door?: string | null;
+          afgehandeld_op?: string | null;
+          company_id?: string;
+          created_at?: string;
+          doorgevoerd?: Json | null;
+          gevraagd?: Json;
+          id?: string;
+          reden?: string;
+          samenvatting?: string;
+          status?: string;
+          teruggedraaid_door?: string | null;
+          teruggedraaid_op?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          aangepast_door_keurder?: boolean;
+          aangevraagd_door?: string | null;
+          afgehandeld_door?: string | null;
+          afgehandeld_op?: string | null;
+          company_id?: string;
+          created_at?: string;
+          doorgevoerd?: Json | null;
+          gevraagd?: Json;
+          id?: string;
+          reden?: string;
+          samenvatting?: string;
+          status?: string;
+          teruggedraaid_door?: string | null;
+          teruggedraaid_op?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "paaltje_voorstellen_aangevraagd_door_fkey";
+            columns: ["aangevraagd_door"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "paaltje_voorstellen_afgehandeld_door_fkey";
+            columns: ["afgehandeld_door"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "paaltje_voorstellen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "paaltje_voorstellen_teruggedraaid_door_fkey";
+            columns: ["teruggedraaid_door"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      quick_notes: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          id: string;
+          label: string;
+          omschrijving: string;
+          sort_order: number;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          label: string;
+          omschrijving?: string;
+          sort_order?: number;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          label?: string;
+          omschrijving?: string;
+          sort_order?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "quick_notes_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      rollen: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          id: string;
+          naam: string;
+          rechten: string[];
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          naam: string;
+          rechten?: string[];
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          naam?: string;
+          rechten?: string[];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "rollen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      snelle_redenen: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          id: string;
+          sort_order: number;
+          tekst: string;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          sort_order?: number;
+          tekst: string;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          sort_order?: number;
+          tekst?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "snelle_redenen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      straat_groepen: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          district_id: string;
+          id: string;
+          naam: string;
+          sort_order: number;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          district_id: string;
+          id?: string;
+          naam: string;
+          sort_order?: number;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          district_id?: string;
+          id?: string;
+          naam?: string;
+          sort_order?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "straat_groepen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "straat_groepen_district_id_fkey";
+            columns: ["district_id"];
+            isOneToOne: false;
+            referencedRelation: "districts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      streets: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          deleted_at: string | null;
+          district_id: string;
+          doorlopend: boolean;
+          groep_id: string | null;
+          id: string;
+          kolom_start: boolean;
+          name: string;
+          print_col: number | null;
+          print_row: number | null;
+          sort_desc: boolean;
+          sort_order: number;
+          volledige_naam: string;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          district_id: string;
+          doorlopend?: boolean;
+          groep_id?: string | null;
+          id?: string;
+          kolom_start?: boolean;
+          name: string;
+          print_col?: number | null;
+          print_row?: number | null;
+          sort_desc?: boolean;
+          sort_order?: number;
+          volledige_naam?: string;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          district_id?: string;
+          doorlopend?: boolean;
+          groep_id?: string | null;
+          id?: string;
+          kolom_start?: boolean;
+          name?: string;
+          print_col?: number | null;
+          print_row?: number | null;
+          sort_desc?: boolean;
+          sort_order?: number;
+          volledige_naam?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "streets_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "streets_district_id_fkey";
+            columns: ["district_id"];
+            isOneToOne: false;
+            referencedRelation: "districts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "streets_groep_id_fkey";
+            columns: ["groep_id"];
+            isOneToOne: false;
+            referencedRelation: "straat_groepen";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      teamleden: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          deleted_at: string | null;
+          employee_id: string | null;
+          id: string;
+          naam: string;
+          uitgenodigd_user_id: string | null;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          employee_id?: string | null;
+          id?: string;
+          naam: string;
+          uitgenodigd_user_id?: string | null;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          employee_id?: string | null;
+          id?: string;
+          naam?: string;
+          uitgenodigd_user_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "teamleden_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "teamleden_employee_id_fkey";
+            columns: ["employee_id"];
+            isOneToOne: true;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      vaste_kortingen: {
+        Row: {
+          bedrag: number;
+          company_id: string;
+          customer_id: string;
+          deleted_at: string | null;
+          deleted_door: string | null;
+          gemaakt_door: string | null;
+          gemaakt_naam: string;
+          gemaakt_op: string;
+          id: string;
+          naam: string;
+        };
+        Insert: {
+          bedrag: number;
+          company_id?: string;
+          customer_id: string;
+          deleted_at?: string | null;
+          deleted_door?: string | null;
+          gemaakt_door?: string | null;
+          gemaakt_naam?: string;
+          gemaakt_op?: string;
+          id?: string;
+          naam: string;
+        };
+        Update: {
+          bedrag?: number;
+          company_id?: string;
+          customer_id?: string;
+          deleted_at?: string | null;
+          deleted_door?: string | null;
+          gemaakt_door?: string | null;
+          gemaakt_naam?: string;
+          gemaakt_op?: string;
+          id?: string;
+          naam?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "vaste_kortingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "vaste_kortingen_customer_id_company_id_fkey";
+            columns: ["customer_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      wa_sjablonen: {
+        Row: {
+          afwijsreden: string;
+          categorie: string;
+          company_id: string;
+          created_at: string;
+          deleted_at: string | null;
+          id: string;
+          meta_id: string;
+          meta_naam: string;
+          status: string;
+          tekst: string;
+          titel: string;
+          updated_at: string;
+          variabelen: string[];
+        };
+        Insert: {
+          afwijsreden?: string;
+          categorie: string;
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          id?: string;
+          meta_id?: string;
+          meta_naam: string;
+          status?: string;
+          tekst: string;
+          titel: string;
+          updated_at?: string;
+          variabelen?: string[];
+        };
+        Update: {
+          afwijsreden?: string;
+          categorie?: string;
+          company_id?: string;
+          created_at?: string;
+          deleted_at?: string | null;
+          id?: string;
+          meta_id?: string;
+          meta_naam?: string;
+          status?: string;
+          tekst?: string;
+          titel?: string;
+          updated_at?: string;
+          variabelen?: string[];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "wa_sjablonen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      wasdag_prijzen: {
+        Row: {
+          company_id: string;
+          prijs: number;
+          regel_id: string;
+        };
+        Insert: {
+          company_id?: string;
+          prijs?: number;
+          regel_id: string;
+        };
+        Update: {
+          company_id?: string;
+          prijs?: number;
+          regel_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "wasdag_prijzen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "wasdag_prijzen_regel_id_company_id_fkey";
+            columns: ["regel_id", "company_id"];
+            isOneToOne: true;
+            referencedRelation: "wasdag_regels";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      wasdag_regels: {
+        Row: {
+          betaalmethode: string | null;
+          company_id: string;
+          created_at: string;
+          customer_id: string | null;
+          datum: string;
+          gedaan_bewaard: Json | null;
+          gedaan_door: string | null;
+          gedaan_op: string | null;
+          id: string;
+          niet_gewassen_door: string | null;
+          niet_gewassen_naam: string | null;
+          niet_gewassen_op: string | null;
+          notitie: string | null;
+          notitie_op_factuur: boolean;
+          ploeg_nr: number | null;
+          rest: boolean;
+          vaste_start: string | null;
+          volgorde: number | null;
+        };
+        Insert: {
+          betaalmethode?: string | null;
+          company_id?: string;
+          created_at?: string;
+          customer_id?: string | null;
+          datum: string;
+          gedaan_bewaard?: Json | null;
+          gedaan_door?: string | null;
+          gedaan_op?: string | null;
+          id?: string;
+          niet_gewassen_door?: string | null;
+          niet_gewassen_naam?: string | null;
+          niet_gewassen_op?: string | null;
+          notitie?: string | null;
+          notitie_op_factuur?: boolean;
+          ploeg_nr?: number | null;
+          rest?: boolean;
+          vaste_start?: string | null;
+          volgorde?: number | null;
+        };
+        Update: {
+          betaalmethode?: string | null;
+          company_id?: string;
+          created_at?: string;
+          customer_id?: string | null;
+          datum?: string;
+          gedaan_bewaard?: Json | null;
+          gedaan_door?: string | null;
+          gedaan_op?: string | null;
+          id?: string;
+          niet_gewassen_door?: string | null;
+          niet_gewassen_naam?: string | null;
+          niet_gewassen_op?: string | null;
+          notitie?: string | null;
+          notitie_op_factuur?: boolean;
+          ploeg_nr?: number | null;
+          rest?: boolean;
+          vaste_start?: string | null;
+          volgorde?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "wasdag_regels_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "wasdag_regels_customer_id_fkey";
+            columns: ["customer_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      wasdag_weggehaald: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          id: string;
+          regels: Json;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          regels: Json;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          id?: string;
+          regels?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "wasdag_weggehaald_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      whatsapp_geheimen: {
+        Row: {
+          iv: string;
+          koppeling_id: string;
+          updated_at: string;
+          versleuteld: string;
+        };
+        Insert: {
+          iv: string;
+          koppeling_id: string;
+          updated_at?: string;
+          versleuteld: string;
+        };
+        Update: {
+          iv?: string;
+          koppeling_id?: string;
+          updated_at?: string;
+          versleuteld?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_geheimen_koppeling_id_fkey";
+            columns: ["koppeling_id"];
+            isOneToOne: true;
+            referencedRelation: "whatsapp_koppelingen";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      whatsapp_koppelingen: {
+        Row: {
+          aanbieder: string;
+          company_id: string;
+          created_at: string;
+          fout: string;
+          id: string;
+          kapso_webhook_id: string;
+          laatste_bericht_op: string | null;
+          paaltje_vanaf: string;
+          phone_number_id: string;
+          soort: string;
+          status: string;
+          updated_at: string;
+          waba_id: string;
+          weergavenummer: string;
+        };
+        Insert: {
+          aanbieder?: string;
+          company_id?: string;
+          created_at?: string;
+          fout?: string;
+          id?: string;
+          kapso_webhook_id?: string;
+          laatste_bericht_op?: string | null;
+          paaltje_vanaf?: string;
+          phone_number_id: string;
+          soort?: string;
+          status?: string;
+          updated_at?: string;
+          waba_id?: string;
+          weergavenummer?: string;
+        };
+        Update: {
+          aanbieder?: string;
+          company_id?: string;
+          created_at?: string;
+          fout?: string;
+          id?: string;
+          kapso_webhook_id?: string;
+          laatste_bericht_op?: string | null;
+          paaltje_vanaf?: string;
+          phone_number_id?: string;
+          soort?: string;
+          status?: string;
+          updated_at?: string;
+          waba_id?: string;
+          weergavenummer?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_koppelingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: true;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
-      dag_geld_stand: {
-        Args: { adres_id: string };
+      aankondigingen_voor: {
+        Args: { tot: string; vanaf: string };
+        Returns: {
+          aangekondigd_voor: string;
+          bezorgstatus: string;
+          customer_id: string;
+          kanaal: string;
+          soort: string;
+          status: string;
+          tijdvak_tot: string;
+          tijdvak_van: string;
+          verstuurd_op: string;
+        }[];
+      };
+      aanmelding_terugdraaien: {
+        Args: { aanmelding: string };
+        Returns: undefined;
+      };
+      bekend_adres_overnemen: {
+        Args: { aanmelding: string; met_vorige_klant: boolean };
+        Returns: string;
+      };
+      bericht_echt_wissen: { Args: { bericht: string }; Returns: undefined };
+      bericht_uit_dossier: {
+        Args: { bericht: string; weg: boolean };
+        Returns: undefined;
+      };
+      current_company_id: { Args: never; Returns: string };
+      dag_afmelden: {
+        Args: { dag: string; ploeg: number | null; weg?: string[] | null };
         Returns: Json;
       };
-      geldloop_dossier: {
-        Args: { adres_id: string };
+      dag_afmelden_terugdraaien: {
+        Args: { afmelding: string };
+        Returns: undefined;
+      };
+      dag_afmelding_mag_open: {
+        Args: { a: Database["public"]["Tables"]["dag_afmeldingen"]["Row"] };
+        Returns: boolean;
+      };
+      dag_afmeldstatus: { Args: { tot: string; vanaf: string }; Returns: Json };
+      dag_geld_stand: { Args: { adres_id: string }; Returns: Json };
+      dag_geld_toegang: { Args: { adres_id: string }; Returns: boolean };
+      dag_heropenen: { Args: { dag: string; ploeg: number | null }; Returns: number };
+      dag_ploegen_zetten: {
+        Args: { dag: string; ploegen: Json };
+        Returns: number;
+      };
+      dag_volgorde_zetten: {
+        Args: { blokken: Json; dag: string };
+        Returns: number;
+      };
+      duren_herberekenen: {
+        Args: { ook_zelf?: boolean | null; tarief: number };
         Returns: Json;
       };
+      duren_terugzetten: { Args: { kenmerk: string }; Returns: number };
+      duur_uit_prijs: {
+        Args: { prijs: number; tarief: number };
+        Returns: number;
+      };
+      enige_klant_bij_email: {
+        Args: { adres: string; bedrijf: string };
+        Returns: string;
+      };
+      enige_klant_bij_telefoon: {
+        Args: { bedrijf: string; nummer: string };
+        Returns: string;
+      };
+      facturen_klaarzetten: { Args: { nu_ook?: boolean | null }; Returns: number };
+      facturen_lijst: { Args: { tot?: string | null; vanaf?: string | null }; Returns: Json };
+      factuur_adres_tekst: { Args: { adres: string }; Returns: string };
+      factuur_betaald: {
+        Args: { bedrag: number; factuur: string; op?: string | null };
+        Returns: Json;
+      };
+      factuur_btw_inclusief: {
+        Args: { k: Database["public"]["Tables"]["klanten"]["Row"] };
+        Returns: boolean;
+      };
+      factuur_btw_procent: {
+        Args: { k: Database["public"]["Tables"]["klanten"]["Row"] };
+        Returns: number;
+      };
+      factuur_crediteren: {
+        Args: { factuur: string; reden?: string | null };
+        Returns: string;
+      };
+      factuur_excl: {
+        Args: { bedrag: number; inclusief: boolean; procent: number };
+        Returns: number;
+      };
+      factuur_mailadres: {
+        Args: { k: Database["public"]["Tables"]["klanten"]["Row"] };
+        Returns: string;
+      };
+      factuur_met_rust: {
+        Args: { factuur: string; tot?: string | null };
+        Returns: undefined;
+      };
+      factuur_nummer_trekken: {
+        Args: { bedrijf: string; voor_jaar: number };
+        Returns: number;
+      };
+      factuur_termijn: {
+        Args: { k: Database["public"]["Tables"]["klanten"]["Row"] };
+        Returns: number;
+      };
+      factuur_totalen: { Args: { factuur: string }; Returns: Json };
+      factuur_vastzetten: { Args: { factuur: string }; Returns: Json };
+      factuur_verstuurd: {
+        Args: { factuur: string; naar: string; pdf?: string | null; via: string };
+        Returns: undefined;
+      };
+      factuurregels_maken: { Args: { dag: string }; Returns: number };
+      factuurregels_terug: { Args: { dag: string }; Returns: number };
+      gebruiker_met_email: { Args: { adres: string }; Returns: string };
+      geld_adres: { Args: { adres: string }; Returns: Json };
+      geld_adres_tekst: { Args: { adres: string }; Returns: string };
+      geld_avond: { Args: { datum: string }; Returns: Json };
+      geld_beginstand_zetten: {
+        Args: {
+          aantal?: number | null;
+          adres_id: string;
+          bedrag: number;
+          maanden?: string[] | null;
+        };
+        Returns: undefined;
+      };
+      geld_boeken: {
+        Args: {
+          adres_id: string;
+          bedrag?: number | null;
+          bron?: string | null;
+          getoond_open?: number | null;
+          herroept?: string | null;
+          id: string;
+          op?: string | null;
+          reden?: string | null;
+          soort: string;
+          vaste_korting?: string | null;
+        };
+        Returns: Json;
+      };
+      geld_gebeurtenis_json: {
+        Args: {
+          g: Database["public"]["Tables"]["betaal_gebeurtenissen"]["Row"];
+        };
+        Returns: Json;
+      };
+      geld_kaart: { Args: { jaar: number; straat: string }; Returns: Json };
+      geld_krediet: {
+        Args: { adressen: string[]; bedrijf: string };
+        Returns: {
+          bedrag: number;
+          customer_id: string;
+          door_naam: string;
+          id: string;
+          op: string;
+          soort: string;
+        }[];
+      };
+      geld_mijn_naam: { Args: never; Returns: string };
+      geld_niet_afgemeld: {
+        Args: { bedrijf: string; wijken: string[] };
+        Returns: Json;
+      };
+      geld_periode_bijwerken: {
+        Args: { adres: string; start?: string | null };
+        Returns: undefined;
+      };
+      geld_pof: { Args: { wijken?: string[] | null }; Returns: Json };
+      geld_posten: {
+        Args: { adressen: string[]; bedrijf: string };
+        Returns: {
+          aantal: number;
+          bedrag: number;
+          customer_id: string;
+          datum: string;
+          gedekt: number;
+          omschrijving: string;
+          ref: string;
+          soort: string;
+          volg: number;
+        }[];
+      };
+      geld_posten_betaald: {
+        Args: { adressen: string[]; bedrijf: string };
+        Returns: {
+          aantal: number;
+          bedrag: number;
+          betaald_door: string;
+          betaald_met: string;
+          betaald_op: string;
+          betaald_soort: string;
+          customer_id: string;
+          datum: string;
+          gedekt: number;
+          omschrijving: string;
+          ref: string;
+          soort: string;
+        }[];
+      };
+      geld_schuld: {
+        Args: { adressen: string[]; bedrijf: string };
+        Returns: {
+          aantal: number;
+          bedrag: number;
+          customer_id: string;
+          datum: string;
+          omschrijving: string;
+          ref: string;
+          soort: string;
+          volg: number;
+        }[];
+      };
+      geld_stand: {
+        Args: { adressen: string[]; bedrijf: string };
+        Returns: {
+          customer_id: string;
+          delen: Json;
+          open: number;
+          open_wassen: number;
+        }[];
+      };
+      geld_stand_wijk: { Args: { wijk: string }; Returns: Json };
+      geld_vaste_korting: {
+        Args: { adres: string; bedrag: number; naam: string };
+        Returns: string;
+      };
+      geld_vaste_korting_weg: { Args: { korting: string }; Returns: undefined };
+      geld_wijk_klaar: {
+        Args: { klaar: boolean; wijk: string };
+        Returns: undefined;
+      };
+      geld_wijk_starten: {
+        Args: { peildatum: string; wijk: string };
+        Returns: undefined;
+      };
+      geldloop_dossier: { Args: { adres_id: string }; Returns: Json };
       geldloop_dossier_bewaren: {
         Args: { adres_id: string; wijzigingen: Json };
         Returns: Json;
       };
-      geldloop_vergeten: {
-        Args: { vanaf: string; tot: string };
-        Returns: Json;
+      geldloop_dossier_toegang: { Args: { adres_id: string }; Returns: string };
+      geldloop_eind_wijzigen: {
+        Args: { eind: string; vrijgave: string };
+        Returns: undefined;
       };
+      geldloop_intrekken: { Args: { vrijgave: string }; Returns: undefined };
+      geldloop_klacht: {
+        Args: { adres: string; omschrijving: string };
+        Returns: string;
+      };
+      geldloop_lijst: { Args: { vrijgave: string }; Returns: Json };
+      geldloop_loopt_voor_mij: { Args: { vrijgave: string }; Returns: boolean };
+      geldloop_lopers_naam: { Args: { lopers: string[] }; Returns: string };
+      geldloop_mogelijke_lopers: { Args: never; Returns: Json };
+      geldloop_niet_afgemeld: { Args: { wijken: string[] }; Returns: Json };
       geldloop_niet_gewassen: {
         Args: { adres_id: string; dag: string };
         Returns: undefined;
       };
       geldloop_stoppen: {
-        Args: { adres_id: string; reden: string; planning_weg: boolean };
+        Args: { adres_id: string; planning_weg: boolean; reden: string };
+        Returns: Json;
+      };
+      geldloop_straat_verdelen: {
+        Args: { lopers: string[]; straat: string; vrijgave: string };
+        Returns: Json;
+      };
+      geldloop_straat_wijziging_terugdraaien: {
+        Args: { wijziging: string };
+        Returns: undefined;
+      };
+      geldloop_straat_wijzigingen_van: {
+        Args: { datum: string };
+        Returns: Json;
+      };
+      geldloop_straten_eerlijk: { Args: { vrijgave: string }; Returns: Json };
+      geldloop_toegang: { Args: { adres: string }; Returns: boolean };
+      geldloop_vergeten: { Args: { tot: string; vanaf: string }; Returns: Json };
+      geldloop_vrijgave_voor: {
+        Args: { adres: string; moment?: string | null };
+        Returns: string;
+      };
+      geldloop_vrijgaven_vanaf: { Args: { vanaf: string }; Returns: Json };
+      geldloop_vrijgeven: {
+        Args: {
+          datum: string;
+          eind?: string | null;
+          lopers: string[];
+          wijken: string[];
+        };
         Returns: Json;
       };
       geldloop_wijziging_terugdraaien: {
@@ -2338,233 +3987,76 @@ export type Database = {
         Args: { adres_id?: string | null; datum?: string | null };
         Returns: Json;
       };
-      geld_avond: {
-        Args: { datum: string };
-        Returns: Json;
-      };
-      geld_pof: {
-        Args: { wijken?: string[] | null };
-        Returns: Json;
-      };
-      geld_kaart: {
-        Args: { straat: string; jaar: number };
-        Returns: Json;
-      };
-      geld_adres: {
-        Args: { adres: string };
-        Returns: Json;
-      };
-      geldloop_straat_verdelen: {
-        Args: { vrijgave: string; straat: string; lopers: string[] };
-        Returns: Json;
-      };
-      geldloop_straten_eerlijk: {
-        Args: { vrijgave: string };
-        Returns: Json;
-      };
-      geldloop_straat_wijzigingen_van: {
-        Args: { datum: string };
-        Returns: Json;
-      };
-      geldloop_straat_wijziging_terugdraaien: {
-        Args: { wijziging: string };
-        Returns: undefined;
-      };
-      geldloop_vrijgeven: {
-        Args: { datum: string; wijken: string[]; lopers: string[]; eind?: string | null };
-        Returns: Json;
-      };
-      geldloop_intrekken: {
-        Args: { vrijgave: string };
-        Returns: undefined;
-      };
-      geldloop_eind_wijzigen: {
-        Args: { vrijgave: string; eind: string };
-        Returns: undefined;
-      };
-      geldloop_vrijgaven_vanaf: {
-        Args: { vanaf: string };
-        Returns: Json;
-      };
-      geldloop_mogelijke_lopers: {
-        Args: Record<string, never>;
-        Returns: Json;
-      };
-      geldloop_niet_afgemeld: {
-        Args: { wijken: string[] };
-        Returns: Json;
-      };
-      mijn_geldloop: {
-        Args: Record<string, never>;
-        Returns: Json;
-      };
-      geldloop_lijst: {
-        Args: { vrijgave: string };
-        Returns: Json;
-      };
-      geld_boeken: {
-        Args: {
-          id: string;
-          adres_id: string;
-          soort: string;
-          bedrag?: number;
-          reden?: string;
-          vaste_korting?: string | null;
-          herroept?: string | null;
-          op?: string | null;
-          getoond_open?: number | null;
-          bron?: string;
-        };
-        Returns: Json;
-      };
-      geld_vaste_korting: {
-        Args: { adres: string; naam: string; bedrag: number };
-        Returns: string;
-      };
-      geld_vaste_korting_weg: {
-        Args: { korting: string };
-        Returns: undefined;
-      };
-      geldloop_klacht: {
-        Args: { adres: string; omschrijving: string };
-        Returns: string;
-      };
-      geld_wijk_starten: {
-        Args: { wijk: string; peildatum: string };
-        Returns: undefined;
-      };
-      geld_beginstand_zetten: {
-        Args: { adres_id: string; bedrag: number; aantal?: number; maanden?: string[] | null };
-        Returns: undefined;
-      };
-      geld_wijk_klaar: {
-        Args: { wijk: string; klaar: boolean };
-        Returns: undefined;
-      };
-      geld_stand_wijk: {
-        Args: { wijk: string };
-        Returns: Json;
-      };
-      dag_afmelden: {
-        Args: { dag: string; ploeg: number | null; weg?: string[] };
-        Returns: Json;
-      };
-      dag_heropenen: {
-        Args: { dag: string; ploeg: number | null };
-        Returns: number;
-      };
-      dag_afmelden_terugdraaien: {
-        Args: { afmelding: string };
-        Returns: undefined;
-      };
-      dag_afmeldstatus: {
-        Args: { vanaf: string; tot: string };
-        Returns: Json;
-      };
+      geplande_mails_oppakken: { Args: { maximaal: number }; Returns: string[] };
+      geplande_mails_opruimen: { Args: never; Returns: undefined };
       gesprek_van: {
         Args: { bericht: string };
         Returns: {
-          id: string;
-          richting: string;
-          van_naam: string;
-          van_email: string;
-          onderwerp: string;
           fragment: string;
+          id: string;
+          onderwerp: string;
           ontvangen_op: string;
           op_server: boolean;
+          richting: string;
+          van_email: string;
+          van_naam: string;
         }[];
       };
-      bericht_uit_dossier: {
-        Args: { bericht: string; weg: boolean };
-        Returns: undefined;
-      };
-      bericht_echt_wissen: {
-        Args: { bericht: string };
-        Returns: undefined;
-      };
-      paaltje_verbruik_tellen: {
-        Args: { bedrijf: string; invoer: number; uitvoer: number; extra_bericht?: number };
-        Returns: number;
-      };
-      duren_herberekenen: {
-        Args: { tarief: number; ook_zelf?: boolean };
-        Returns: Json;
-      };
-      duren_terugzetten: {
-        Args: { kenmerk: string };
-        Returns: number;
-      };
-      dag_ploegen_zetten: {
-        Args: { dag: string; ploegen: Json };
-        Returns: number;
-      };
-      dag_volgorde_zetten: {
-        Args: { dag: string; blokken: Json };
-        Returns: number;
-      };
-      aankondigingen_voor: {
-        Args: { vanaf: string; tot: string };
-        Returns: {
-          customer_id: string;
-          kanaal: string;
-          soort: string;
-          aangekondigd_voor: string;
-          tijdvak_van: string | null;
-          tijdvak_tot: string | null;
-          status: string;
-          bezorgstatus: string;
-          verstuurd_op: string;
-        }[];
-      };
-      wasdag_weghalen: {
-        Args: { dag: string; adressen?: string[] };
-        Returns: string | null;
-      };
-      wasdag_terugzetten: {
-        Args: { kenmerk: string };
-        Returns: number;
-      };
-      heeft_recht: {
-        Args: { recht: string };
-        Returns: boolean;
-      };
-      zet_adressen_inactief: {
-        Args: { adressen: string[]; reden: string; planning_weg: boolean; voor_bedrijf?: string };
-        Returns: Json;
-      };
-      zet_adressen_actief: {
-        Args: { adressen: string[]; voor_bedrijf?: string };
-        Returns: number;
-      };
-      stoppen_terugdraaien: {
-        Args: { uitkomst: Json; voor_bedrijf?: string };
-        Returns: number;
-      };
-      bekend_adres_overnemen: {
-        Args: { aanmelding: string; met_vorige_klant: boolean };
+      heeft_recht: { Args: { recht: string }; Returns: boolean };
+      is_eigenaar: { Args: never; Returns: boolean };
+      klant_van_bericht: {
+        Args: {
+          aan: Json;
+          bedrijf: string;
+          richting: string;
+          van_email: string;
+        };
         Returns: string;
       };
-      aanmelding_terugdraaien: {
-        Args: { aanmelding: string };
+      maak_standaard_categorieen: {
+        Args: { bedrijf: string };
         Returns: undefined;
       };
-      gebruiker_met_email: {
-        Args: { adres: string };
-        Returns: string | null;
+      maandwerk_extra_van: { Args: { werk: Json }; Returns: Json };
+      maandwerk_kern: { Args: { werk: Json }; Returns: Json };
+      maandwerk_met_ids: { Args: { werk: Json }; Returns: Json };
+      mail_tellingen: {
+        Args: never;
+        Returns: {
+          aantal: number;
+          map_id: string;
+        }[];
       };
+      mijn_geldloop: { Args: never; Returns: Json };
+      nieuw_aanmeld_token: { Args: never; Returns: string };
       openstaande_uitnodigingen: {
         Args: { bedrijf: string };
         Returns: {
-          id: string;
-          email: string;
-          uitgenodigd_op: string | null;
-          invited_at: string | null;
           created_at: string;
+          email: string;
+          id: string;
+          invited_at: string;
+          uitgenodigd_op: string;
         }[];
       };
-      zet_bericht_categorieen: {
-        Args: { bericht: string; categorieen: string[] };
-        Returns: undefined;
+      paaltje_verbruik_tellen: {
+        Args: {
+          bedrijf: string;
+          extra_bericht?: number | null;
+          invoer: number;
+          uitvoer: number;
+        };
+        Returns: number;
+      };
+      proefmail_vastleggen: {
+        Args: {
+          bedrijf: string;
+          dag: string;
+          door: string;
+          onderwerp: string;
+          tekst: string;
+        };
+        Returns: string;
       };
       richtprijs: {
         Args: { straat: string };
@@ -2574,16 +4066,18 @@ export type Database = {
           prijs: number;
         }[];
       };
-      mail_tellingen: {
+      standaard_sjablonen: { Args: { bedrijf: string }; Returns: undefined };
+      stoppen_terugdraaien: {
+        Args: { uitkomst: Json; voor_bedrijf?: string | null };
+        Returns: number;
+      };
+      telefoon_sleutel: { Args: { tekst: string }; Returns: string };
+      wa_toestemming_bestaande_klanten: {
         Args: never;
         Returns: {
           aantal: number;
-          map_id: string;
+          op: string;
         }[];
-      };
-      wa_toestemming_bestaande_klanten: {
-        Args: never;
-        Returns: { aantal: number; op: string }[];
       };
       wa_toestemming_bestaande_klanten_terug: {
         Args: { op: string };
@@ -2591,20 +4085,46 @@ export type Database = {
       };
       wa_toestemming_telling: {
         Args: never;
-        Returns: { zonder: number; met: number; afgemeld: number }[];
+        Returns: {
+          afgemeld: number;
+          met: number;
+          zonder: number;
+        }[];
+      };
+      wasdag_terugzetten: { Args: { kenmerk: string }; Returns: number };
+      wasdag_weghalen: {
+        Args: { adressen?: string[] | null; dag: string };
+        Returns: string;
       };
       whatsapp_gesprekken: {
-        Args: { ouder_dan?: string | null; aantal?: number };
+        Args: { aantal?: number | null; ouder_dan?: string | null };
         Returns: {
-          wa_telefoon: string;
-          laatste_op: string;
           fragment: string;
+          klant_id: string;
+          laatste_op: string;
+          naam: string;
+          ongelezen: number;
           richting: string;
           wa_status: string;
-          naam: string;
-          klant_id: string | null;
-          ongelezen: number;
+          wa_telefoon: string;
         }[];
+      };
+      zet_adressen_actief: {
+        Args: { adressen: string[]; voor_bedrijf?: string | null };
+        Returns: number;
+      };
+      zet_adressen_inactief: {
+        Args: {
+          adressen: string[];
+          planning_weg: boolean;
+          reden: string;
+          voor_bedrijf?: string | null;
+        };
+        Returns: Json;
+      };
+      zet_bericht_categorieen: {
+        Args: { bericht: string; categorieen: string[] };
+        Returns: undefined;
       };
     };
     Enums: {
