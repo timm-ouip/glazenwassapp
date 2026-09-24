@@ -1376,6 +1376,7 @@ export type Database = {
           bedrag: number;
           bedrag_excl: number;
           bedrag_incl: number | null;
+          bedrag_met_de_hand: boolean;
           btw_bedrag: number | null;
           btw_inclusief: boolean;
           btw_procent: number;
@@ -1398,6 +1399,7 @@ export type Database = {
           bedrag: number;
           bedrag_excl: number;
           bedrag_incl?: number | null;
+          bedrag_met_de_hand?: boolean;
           btw_bedrag?: number | null;
           btw_inclusief: boolean;
           btw_procent: number;
@@ -1420,6 +1422,7 @@ export type Database = {
           bedrag?: number;
           bedrag_excl?: number;
           bedrag_incl?: number | null;
+          bedrag_met_de_hand?: boolean;
           btw_bedrag?: number | null;
           btw_inclusief?: boolean;
           btw_procent?: number;
@@ -3710,6 +3713,7 @@ export type Database = {
         Args: { aanmelding: string };
         Returns: undefined;
       };
+      adres_heeft_prijs: { Args: { adres: string }; Returns: boolean };
       bekend_adres_overnemen: {
         Args: { aanmelding: string; met_vorige_klant: boolean };
         Returns: string;
@@ -3762,7 +3766,12 @@ export type Database = {
         Returns: string;
       };
       facturen_klaarzetten: { Args: { nu_ook?: boolean | null }; Returns: number };
+      facturen_klaarzetten_voor: {
+        Args: { bedrijf: string; nu_ook: boolean };
+        Returns: number;
+      };
       facturen_lijst: { Args: { tot?: string | null; vanaf?: string | null }; Returns: Json };
+      facturen_maandconcepten: { Args: never; Returns: number };
       facturen_vangnet: {
         Args: never;
         Returns: {
@@ -3808,7 +3817,7 @@ export type Database = {
         Returns: number;
       };
       factuur_opnieuw: {
-        Args: { factuur: string; keuzes: Json };
+        Args: { factuur: string; keuzes?: Json | null };
         Returns: number;
       };
       factuur_termijn: {
@@ -4037,6 +4046,11 @@ export type Database = {
         };
         Returns: string;
       };
+      klus_factuurregel_bijwerken: {
+        Args: { kl_id: string };
+        Returns: undefined;
+      };
+      lege_concepten_opruimen: { Args: { bedrijf: string }; Returns: undefined };
       maak_standaard_categorieen: {
         Args: { bedrijf: string };
         Returns: undefined;

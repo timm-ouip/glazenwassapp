@@ -725,6 +725,12 @@ function Dashboard() {
                 ) : undefined
               }
             >
+              {!kwartalen && !laadt && (
+                <p className="text-[12.5px] text-muted-foreground">
+                  Het btw-tarief of het klanttype kon niet opgehaald worden, dus hier zou een
+                  verkeerd bedrag staan. Ververs de pagina om het opnieuw te proberen.
+                </p>
+              )}
               {kwartalen && (
                 <>
                   <table className="w-full text-[13px]">
@@ -758,8 +764,10 @@ function Dashboard() {
                   </table>
                   <p className="text-[11.5px] opacity-70">
                     Hier staat altijd het hele bedrijf, ook als je bovenaan op contant of overmaken
-                    filtert. Bij een particulier zit de btw in de prijs, bij een bedrijf komt hij
-                    erbovenop.
+                    filtert: over contant werk draag je net zo goed btw af. Bij een particulier zit
+                    de btw in de prijs, bij een bedrijf komt hij erbovenop. Geteld uit het werk in
+                    de planning, met het klanttype zoals het nu staat — een hulpmiddel voor de
+                    aangifte, niet de optelsom van de verstuurde facturen.
                   </p>
                 </>
               )}

@@ -58,6 +58,9 @@ export interface Factuur {
   /** Waar hij heen gaat: het aparte factuuradres, anders het gewone. */
   mail: string;
   factuurdatum: string | null;
+  /** De dag waar hij bij hoort: de factuurdatum, of bij een concept de dag
+   *  waarop hij is aangemaakt. Altijd gevuld. */
+  datum: string;
   vervaldatum: string | null;
   te_laat: boolean;
   met_rust_tot: string | null;
@@ -408,18 +411,27 @@ export function wijkWaarschuwing(t: WijkTelling): string | null {
 // De por
 // ---------------------------------------------------------------------
 
-/** Na deze dag van de maand hoort er een por bij openstaande concepten. */
-export const POR_DAG = 5;
+/** Zoveel dagen mag een concept klaarstaan voordat de app er wat van zegt. */
+export const POR_DAGEN = 5;
 
 /**
- * Moet er een por bij?
+ * Hoe lang staat het oudste concept al te wachten? Leeg als er niets staat of
+ * als alles nog vers is.
  *
  * Een concept gaat niet vanzelf de deur uit — dat is met opzet, want er zit
  * een mail met een bedrag aan vast. Maar "ik doe het nog wel" wordt zo een
  * maand, en dan staat de omzet van september pas in november op de rekening.
- * De nacht van de 1e zet de concepten klaar; staan ze na de 5e nog steeds te
- * wachten, dan is het tijd om er wat van te zeggen.
+ *
+ * Op de ouderdom van het oudste concept, niet op de dag van de maand: een
+ * concept dat vanmiddag ontstond hoort niet te zeuren, en twintig concepten
+ * van vorige maand horen dat op de 3e wél te doen.
  */
-export function porNodig(concepten: number, vandaagIso: string): boolean {
-  return concepten > 0 && Number(vandaagIso.slice(8, 10)) > POR_DAG;
+export function porNodig(concepten: Pick<Factuur, "datum">[], vandaagIso: string): number | null {
+  const oudste = concepten
+    .map((f) => f.datum)
+    .filter(Boolean)
+    .sort()[0];
+  if (!oudste) return null;
+  const dagen = Math.round((Date.parse(vandaagIso) - Date.parse(oudste)) / 86_400_000);
+  return dagen > POR_DAGEN ? dagen : null;
 }

@@ -72,6 +72,8 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
   const lijst = useMemo(() => alles.filter((f) => past(f, filter)), [alles, filter]);
   const concepten = useMemo(() => alles.filter((f) => f.status === "concept"), [alles]);
   const teLaat = useMemo(() => alles.filter((f) => f.te_laat), [alles]);
+  /** Hoe lang het oudste concept al klaarstaat; leeg als er niets te zeggen is. */
+  const porDagen = porNodig(concepten, vandaag());
   const openTotaal = alles.reduce((t, f) => t + (f.status === "verstuurd" ? openBedrag(f) : 0), 0);
 
   function ververs() {
@@ -181,13 +183,14 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
 
       {/* De por. De concepten staan klaar, maar iemand moet op versturen
           drukken -- en dat is precies wat je vergeet. */}
-      {porNodig(concepten.length, vandaag()) && (
+      {porDagen !== null && (
         <section className="flex flex-wrap items-center gap-3 rounded-[20px] bg-tint-amber px-4 py-3 text-[13px] text-tint-amber-ink">
           <span className="min-w-0 flex-1">
-            Het is de {Number(vandaag().slice(8, 10))}e en er{" "}
-            {concepten.length === 1 ? "staat" : "staan"}{" "}
-            {concepten.length === 1 ? "nog 1 concept" : `nog ${concepten.length} concepten`} klaar
-            om te versturen. Hoe later ze weggaan, hoe later het geld binnenkomt.
+            {concepten.length === 1
+              ? "Er staat 1 concept"
+              : `Er staan ${concepten.length} concepten`}{" "}
+            klaar om te versturen; het oudste al {porDagen} dagen. Hoe later ze weggaan, hoe later
+            het geld binnenkomt.
           </span>
           <Button
             size="sm"

@@ -531,3 +531,115 @@ zonder klant, en voor Scheveningen 2 waarvan 1 zonder prijs. Dat klopt met
 **Niet aangeklikt:** de printknop zelf — die opent het printvenster van de Mac,
 en dat blokkeert de browser. De knoppen staan op `print:hidden` en `AppLayout`
 verbergt de zijbalk en de titelbalk al bij het printen.
+
+---
+
+# Fase 1 helemaal af: punt 6, punt 7 en de losse eindjes
+
+Zelfde dag, later. Hiermee is de fase-1-lijst leeg.
+
+## 6. De maandconcepten zetten zichzelf klaar
+
+`cron.schedule('facturen-maandconcepten', '0 2 1 * *', …)` roept
+`facturen_maandconcepten()` aan (migratie `20261012111000`). Die loopt over elk
+bedrijf met `factuur_start_op` gevuld. Omdat `current_company_id()` en
+`heeft_recht` er 's nachts niet zijn, zit het werk nu in
+`facturen_klaarzetten_voor(bedrijf, nu_ook)` en is `facturen_klaarzetten` een
+dunne schil met de rechtencontrole eromheen.
+
+**Versturen blijft met de hand.** Klaarzetten is veilig — een concept heeft
+geen nummer en gaat nergens heen — maar versturen stuurt een mail met een
+bedrag.
+
+### De por
+
+Staat er een concept langer dan vijf dagen klaar, dan zegt de app er wat van:
+een geel vak in de facturentab ("Er staan 3 concepten klaar om te versturen;
+het oudste al 9 dagen") met een knop "Allemaal kiezen", en de tegel Facturen op
+Overzicht leest "concept wacht al · versturen".
+
+Op de ouderdom van het oudste concept, niet op de dag van de maand. Dat was de
+eerste versie, en die zei op de 22e al "staat al te wachten" over een concept
+van diezelfde middag, terwijl hij op de 3e zweeg over twintig concepten van
+vorige maand. Daarvoor is `facturen_lijst` uitgebreid met `datum`: de
+factuurdatum, of bij een concept de dag waarop hij ontstond.
+
+## 7. Btw per kwartaal
+
+Een tabel onderaan het dashboard: kwartaal, periode, omzet, btw. Van het
+lopende jaar alleen de kwartalen die al begonnen zijn, en het kwartaal waar je
+in zit staat als "loopt nog".
+
+Met opzet gerekend uit de **ongefilterde** posten: zou hij de keuze
+contant/overmaken volgen, dan stond er een bedrag onder "btw" dat je zo over
+kunt nemen en dat niet klopt. Over contant werk draag je net zo goed btw af.
+Dat staat er ook onder, samen met waar het vandaan komt: uit het werk in de
+planning met het klanttype zoals het nu staat — een hulpmiddel voor de
+aangifte, niet de optelsom van de verstuurde facturen.
+
+## De losse eindjes
+
+`klus_factuurregel_bijwerken(klus)` is nu de enige plek die bepaalt of een
+klus een losse factuurregel hoort te hebben en met welk bedrag. Drie triggers
+komen daar langs: `klussen`, `klus_prijzen` en `wasdag_prijzen`.
+
+Wat daarmee opgelost is:
+
+| was | is |
+|---|---|
+| Weggegooide klus hield zijn factuurregel | regel gaat mee de prullenbak in, en komt terug als je de klus terughaalt |
+| Klus afvinken vóór de prijs gaf nooit een regel | de prijs erin zetten maakt hem alsnog |
+| Prijs achteraf aanpassen veranderde niets | het bedrag beweegt mee |
+| "Prijs deze dag" bij een wasbeurt idem | idem, en een prijs op een al afgemelde dag maakt de regel alsnog |
+
+Overal dezelfde grens: een regel op een **genummerde** factuur, een vervangen
+regel (van een creditnota) en een regel met een bedrag dat je met de hand koos
+blijven met rust.
+
+## Het euroteken
+
+Stond sinds 23-09 als open vraag. Uitgeprobeerd met een losse proef-PDF:
+pdf-lib zet zijn standaardletters neer met `/WinAnsiEncoding`, en daar zit de
+€ in als byte `0x80`. De PDF en de mail schrijven nu `€ 30,00`.
+
+## Wat er van getest is
+
+Op de database, met het factureren tijdelijk aan en een proefklus bij
+Fultonstraat 75:
+
+- afvinken zonder prijs → geen regel; prijs erin → regel met € 40 excl en
+  € 8,40 btw (bedrijf, dus exclusief); prijs naar 25 → volgt; omschrijving
+  aanpassen → volgt;
+- prullenbak → regel weg én het lege concept weg; terughalen → regel terug;
+  prijs 0 → weg; vinkje eruit → weg;
+- op een concept beweegt hij nog mee;
+- klus verhuisd naar Fultonstraat 77 (andere klant) → de regel verhuist mee
+  naar die klant en komt los te staan; het concept van de vorige klant wordt
+  opgeruimd;
+- een regel met `bedrag_met_de_hand` bleef op € 12 staan terwijl de klusprijs
+  naar 55 ging;
+- bij een wasbeurt: een prijs op een al afgemelde dag maakte de regel alsnog,
+  verdere wijzigingen volgden, prijs 0 haalde hem weg.
+
+In beeld: het btw-kwartaalpaneel (Q3 € 2.784 / € 483,72, en het blijft op het
+hele bedrijf staan als je bovenaan op overmaken drukt terwijl de tegel naar
+€ 3 zakt), het porvak met "Allemaal kiezen", en de tegel Facturen die
+"concept wacht al · versturen" leest.
+
+Daarna alles teruggezet: geen factuurregels, geen facturen, geen tellers,
+`factuur_start_op` leeg, geen proefklussen, en alleen Fultonstraat 75 staat
+weer op overmaken.
+
+## De review daarop
+
+Acht punten, alle acht opgelost. De drie die er het meest toe deden: een klus
+die je achteraf op het juiste adres zet hield zijn regel bij de vórige klant;
+een concept bleef als € 0,00 in de lijst staan als zijn laatste regel
+verdween; en de btw-tabel deed zich voor als de optelsom van de facturen
+terwijl hij uit de planning komt. De rest: `company_id` ontbrak op één join in
+een `security definer`-functie, een handmatig bedrag na crediteren werd
+overschreven, de por keek alleen naar de dag van de maand, en het btw-paneel
+bleef zonder uitleg leeg als het tarief niet op te halen was.
+
+De overdracht voor fase 2 staat in
+`overdracht-facturen-fase2-2026-09-24.md`.

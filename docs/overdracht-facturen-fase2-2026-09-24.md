@@ -39,6 +39,12 @@ klus houdt zijn factuurregel niet meer (migratie `…112000`).
 `exception` per bedrijf zodat er niet één de rest meeneemt. **Versturen blijft
 met de hand** — daar hangt een mail met een bedrag aan.
 
+Gaat het klaarzetten voor een bedrijf mis, dan staat dat alleen als
+waarschuwing in het logboek van de server. Dat is bewust genoeg: de losse
+regels blijven dan gewoon staan, en die laat het gele vakje in de facturentab
+al zien ("N te factureren regels staan nog los") met de knop ernaast. Er gaat
+dus niets stil verloren.
+
 Staan die concepten na de 5e nog te wachten, dan zegt de app er wat van:
 een geel vak in de facturentab met een knop "Allemaal kiezen", en de tegel
 "Facturen" op Overzicht leest dan "concept wacht al · versturen". Eén regel
@@ -83,6 +89,11 @@ testparagrafen in `test-facturen-2026-09-24.md`).
    keer mee: `select * from cron.job_run_details where jobname =
    'facturen-maandconcepten'`.
 5. **De printknop** bij de vangnetlijst opent het printvenster van de Mac.
+6. **Een bedrag dat met de hand gekozen is** (`factuurregels.bedrag_met_de_hand`,
+   gezet door `factuur_opnieuw` na een creditnota) blijft staan als de prijs
+   van de klus daarna verandert. Nagedaan door de vlag zelf te zetten; de weg
+   ernaartoe — crediteren en opnieuw factureren — vraagt een echt
+   factuurnummer en is dus niet doorlopen.
 
 ### Nog uit te rollen
 

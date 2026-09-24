@@ -84,7 +84,8 @@ export function Avondoverzicht({
     queryFn: () => fetchFacturen(factuurVanaf),
     enabled: Boolean(onFacturen),
   });
-  const concepten = (facturen.data ?? []).filter((f) => f.status === "concept").length;
+  const conceptLijst = (facturen.data ?? []).filter((f) => f.status === "concept");
+  const concepten = conceptLijst.length;
   const nietBinnen = (facturen.data ?? []).reduce(
     (t, f) => t + (f.status === "verstuurd" ? openBedrag(f) : 0),
     0,
@@ -472,7 +473,7 @@ export function Avondoverzicht({
                   ? `${formatPrice(nietBinnen)} nog niet binnen`
                   : // Na de 5e van de maand staan ze te lang te wachten; dan
                     // zegt de tegel dat in plaats van het bedrag.
-                    porNodig(concepten, vandaag())
+                    porNodig(conceptLijst, vandaag()) !== null
                     ? `${concepten === 1 ? "concept wacht" : "concepten wachten"} al · versturen`
                     : `${concepten === 1 ? "concept" : "concepten"} klaar · ${formatPrice(nietBinnen)} nog niet binnen`
                 : "\u00a0"}
