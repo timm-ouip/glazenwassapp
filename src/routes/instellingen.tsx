@@ -97,6 +97,7 @@ import { BerichtSjablonen } from "@/components/BerichtSjablonen";
 import { WhatsAppInstellingen } from "@/components/whatsapp/WhatsAppInstellingen";
 import { PaaltjeAfspraken, PaaltjeCategorieen } from "@/components/PaaltjeInstellingen";
 import { SchrijfstijlInstellingen } from "@/components/SchrijfstijlInstellingen";
+import { FactuurVormgeving } from "@/components/facturen/FactuurVormgeving";
 import { AppLayout } from "@/components/AppLayout";
 import { WijkToevoegenKnop } from "@/components/WijkKiezer";
 import { useBevestig } from "@/components/Bevestig";
@@ -115,7 +116,15 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { heeftRecht, useRecht } from "@/lib/rechten";
 
-const TABBLADEN = ["account", "team", "wijken", "aanmelden", "mail", "voorkeuren"] as const;
+const TABBLADEN = [
+  "account",
+  "team",
+  "wijken",
+  "aanmelden",
+  "mail",
+  "facturen",
+  "voorkeuren",
+] as const;
 type Tab = (typeof TABBLADEN)[number];
 
 /** De tabbladen van vroeger, die nu bij een ander horen. Een opgeslagen link
@@ -171,6 +180,7 @@ function Instellingen() {
     wijken: heeftRecht(employee, "planning"),
     aanmelden: heeftRecht(employee, "klanten_bewerken"),
     mail: heeftRecht(employee, "mail_lezen"),
+    facturen: heeftRecht(employee, "facturen"),
   };
 
   return (
@@ -269,6 +279,12 @@ function Instellingen() {
                 <PaaltjeAfspraken isEigenaar={isEigenaar} />
               </Kaart>
             </div>
+          </TabsContent>
+          {/* Hoe de factuur eruitziet. Kijken mag wie facturen mag versturen;
+              veranderen is voor de eigenaar, want het pad naar het briefpapier
+              staat op het bedrijf en daar komt alleen hij bij. */}
+          <TabsContent value="facturen">
+            <FactuurVormgeving mag={isEigenaar} />
           </TabsContent>
           {/* En hier alles wat je zelf inricht en daarna laat staan. Naast
               elkaar zodra er ruimte is: onder elkaar werd het een lange

@@ -18,15 +18,15 @@ Het goedgekeurde plan staat in
 
 Alle zeven punten van de fase-1-lijst staan erin:
 
-| # | wat | waar |
-|---|---|---|
-| 1 | Contant/overmaken op de startpagina | `home.tsx`, gedeeld rekenwerk in `lib/geldfilter.ts` |
-| 2 | Btw onder het omzetgetal | `dashboard.tsx`, `btwIn`/`fetchBtwProcent` in `lib/facturen.ts` |
-| 3 | Extra opdrachten bij "Dag klaar" | `components/DagKlaar.tsx` |
-| 4 | De verstuurde factuur in het klantdossier | `functions/facturen/index.ts` + `kopieInVerzonden` in `_gedeeld/verzenden.ts` |
-| 5 | De vangnetten | migraties `…109000` en `…110000`, `components/betalingen/Vangnet.tsx` |
-| 6 | Maandconcepten vanzelf, en de por | migratie `…111000`, `porNodig` in `lib/facturen.ts` |
-| 7 | Btw-kwartaaloverzicht | `dashboard.tsx`, paneel "Btw per kwartaal" |
+| #   | wat                                       | waar                                                                          |
+| --- | ----------------------------------------- | ----------------------------------------------------------------------------- |
+| 1   | Contant/overmaken op de startpagina       | `home.tsx`, gedeeld rekenwerk in `lib/geldfilter.ts`                          |
+| 2   | Btw onder het omzetgetal                  | `dashboard.tsx`, `btwIn`/`fetchBtwProcent` in `lib/facturen.ts`               |
+| 3   | Extra opdrachten bij "Dag klaar"          | `components/DagKlaar.tsx`                                                     |
+| 4   | De verstuurde factuur in het klantdossier | `functions/facturen/index.ts` + `kopieInVerzonden` in `_gedeeld/verzenden.ts` |
+| 5   | De vangnetten                             | migraties `…109000` en `…110000`, `components/betalingen/Vangnet.tsx`         |
+| 6   | Maandconcepten vanzelf, en de por         | migratie `…111000`, `porNodig` in `lib/facturen.ts`                           |
+| 7   | Btw-kwartaaloverzicht                     | `dashboard.tsx`, paneel "Btw per kwartaal"                                    |
 
 En het losse eind uit de eerste sessie: een weggegooide of achteraf geprijsde
 klus houdt zijn factuurregel niet meer (migratie `…112000`).
@@ -87,7 +87,7 @@ testparagrafen in `test-facturen-2026-09-24.md`).
 4. **De pg_cron-taak zelf.** De functie erachter is aangeklikt; dát de taak om
    twee uur 's nachts op de 1e afgaat, is niet af te wachten. Kijk de eerste
    keer mee: `select * from cron.job_run_details where jobname =
-   'facturen-maandconcepten'`.
+'facturen-maandconcepten'`.
 5. **De printknop** bij de vangnetlijst opent het printvenster van de Mac.
 6. **Een bedrag dat met de hand gekozen is** (`factuurregels.bedrag_met_de_hand`,
    gezet door `factuur_opnieuw` na een creditnota) blijft staan als de prijs
@@ -143,54 +143,100 @@ zien.
 
 ---
 
-## Fase 2: vormgeving en briefpapier
+## Fase 2 is af: het briefpapier
 
-### Wat er klaarligt
+Bijgewerkt op 24-09-2026, 's avonds.
 
-- `~/Documents/Documents - Mac/Ramensopperij/Ramensopperij Logos/` — Logo v5
-  als `Logo v5.ai`, plus PNG's: `Logo v5 Alpha.png`, `Logo v5 Black.png`,
-  `Logo v5 White.png`, `Logo v5 White Alpha.png`.
-- `~/Downloads/Factuur Papier.pdf` — het huidige briefpapier. A4
-  (595,44 × 842,16 pt), twee afbeeldingen, letters PP Charlevoix Bold en
-  Poppins Bold/Light.
+### Wat het doet
 
-### Waar het in de code landt
+De factuur-PDF krijgt het eigen briefpapier als **achterlaag**: eerst het
+papier, dan de tekst erop. Een PDF wordt met `embedPdf` + `drawPage` geplaatst
+en blijft dus scherp; een PNG of JPG wordt over de hele bladzijde uitgerekt.
+Het papier komt op **elke** bladzijde terug, ook op blad twee van een lange
+maandfactuur, met dezelfde marges en met de kolomkoppen opnieuw erboven.
 
-`supabase/functions/_gedeeld/factuurpdf.ts` (271 regels) tekent de factuur
-zelf met pdf-lib — bewust geen omzetdienst van buiten. De indeling houdt links
-en boven al ruimte vrij voor een achterlaag, dus het briefpapier kan er als
-achtergrond onder.
+Het venijn zit in de dubbeling: briefpapier draagt meestal zelf al een logo,
+een adres en een KvK-nummer. Zet je dat eronder nog eens neer, dan botst de
+tekst op het logo en staat het adres er twee keer. Daarom hoort bij het papier:
 
-Twee dingen om te weten:
+| knop                             | wat het doet                                                      |
+| -------------------------------- | ----------------------------------------------------------------- |
+| Bovenaan / onderaan vrij         | millimeters die de tekst vrijlaat voor het papier                 |
+| Naam en adres bovenaan           | onze eigen kop; uit zodra het papier hem al heeft                 |
+| KvK, btw-nummer en IBAN onderaan | idem voor de voetregel                                            |
+| Kleur                            | kop, lijnen en "Te betalen"; leeg is het zwart-grijs van hiervoor |
+| Koptekst / voettekst             | eigen zinnen boven de regels en onderaan                          |
 
-- **Het euroteken werkt.** Dat stond hier als open vraag; het is nu
-  uitgeprobeerd met een losse proef-PDF. pdf-lib zet zijn standaardletters
-  neer met `/WinAnsiEncoding`, en daar zit de € in als byte `0x80`. `euro()`
-  schrijft nu `€ 30,00` in plaats van `EUR 30,00`, op papier én in de mail.
-- **Eigen letters kosten wél werk.** PP Charlevoix en Poppins zijn geen
-  standaardletters van pdf-lib; die moeten als bestand mee (`embedFont` met
-  `fontkit`). Dat maakt de edge function zwaarder en de PDF groter. Weeg af of
-  het briefpapier als achterlaag niet al genoeg is.
+Millimeters en geen punten, met opzet: dit is wat je naast een uitdraai met een
+liniaal wilt kunnen nameten.
 
-### Waar te beginnen
+**Zonder briefpapier verandert er niets.** `STANDAARD_VORMGEVING` in
+`factuurpdf.ts` (20 mm boven en onder, eigen kop en voet aan) geeft dezelfde
+factuur als vóór fase 2. Nagekeken met een proef naast elkaar.
 
-1. Het briefpapier als PDF-pagina onder de factuur leggen
-   (`PDFDocument.load` + `embedPage` + `drawPage`), niet als afbeelding: dan
-   blijft de tekst scherp en het bestand klein.
-2. Een plek waar Timmie zijn briefpapier zelf kan uploaden (er is al een
-   opslagbak `facturen`; een bak `merk` of een kolom op `companies` ligt voor
-   de hand).
-3. Pas daarna de letters, als het dan nog nodig is.
+### Waar het staat
 
-### Daarna
+| onderdeel                                     | waar                                                             |
+| --------------------------------------------- | ---------------------------------------------------------------- |
+| Het tekenen                                   | `supabase/functions/_gedeeld/factuurpdf.ts`, `FactuurVormgeving` |
+| Ophalen van het papier + de actie `voorbeeld` | `supabase/functions/facturen/index.ts`                           |
+| De knoppen                                    | `src/components/facturen/FactuurVormgeving.tsx`                  |
+| Opslaan en uploaden                           | `src/lib/facturen.ts`, onderaan                                  |
+| Het tabblad                                   | `src/routes/instellingen.tsx`, tab `facturen`                    |
+| Kolommen en beleid                            | migraties `…117000` en `…118000`                                 |
 
-- **Fase 3: Mollie.** De betaallink is in de code al voorzien
-  (`facturen.mollie_link`, de knop "Direct betalen" in de mail en de regel op
-  de PDF). Via de **Payment Links API**, want die verloopt niet.
-- **Fase 4: herinneringen.** Een factuur die over de vervaldatum gaat, staat
-  al op "Te laat" in de lijst; er gaat alleen nog niets vanzelf de deur uit.
+Het briefpapier gaat in de bestaande bak `facturen`, maar in een eigen map:
+`<bedrijf>/merk/`. Alleen daar mag de browser schrijven, en alleen de eigenaar.
+De verstuurde facturen staan onder `<bedrijf>/<jaar>/` en blijven van de
+service role — dat papier ligt bij de klant en hoort van niemand meer te zijn.
 
----
+### Het voorbeeld is een echte factuur
+
+Het vak rechts in het scherm is geen tekening van een factuur maar een echte
+factuur-PDF, gemaakt door dezelfde edge function die ze verstuurt, met
+verzonnen gegevens. Dat is de hele reden dat er een actie `voorbeeld` bij is
+gekomen in plaats van een nabouwsel in de browser: een nabouwsel gaat op den
+duur afwijken van het papier dat de klant krijgt, en dan kijk je naar een
+leugen. Er komt **geen nummer** uit `factuur_tellers` aan te pas en er wordt
+niets bewaard, dus proeven is hier echt gratis.
+
+Het briefpapier in het voorbeeld komt altijd uit de opslagbak; de schuifjes en
+de teksten gaan mee zoals ze op dat moment op het scherm staan, ook als je nog
+niet hebt opgeslagen. Uploaden slaat meteen op — anders zou je een bestand
+hebben zonder dat de factuur er ooit naar kijkt.
+
+### Wat er voor De Ramensopperij klaarstaat
+
+`~/Downloads/Factuur Papier.pdf` is geüpload en ingesteld: 50 mm vrij bovenaan,
+20 mm onderaan, eigen kop en voet uit. Kop- en voettekst zijn leeg gelaten —
+dat zijn Timmies woorden, niet de mijne.
+
+### Wat bewust niet gedaan is
+
+- **Eigen letters.** PP Charlevoix en Poppins zijn geen standaardletters van
+  pdf-lib; die moeten als bestand mee (`embedFont` met `fontkit`), wat de edge
+  function zwaarder en de PDF groter maakt. Met het briefpapier eronder draagt
+  de bladzijde het merk al; de tekst in Helvetica valt niet op als vreemd.
+  Pak dit pas op als iemand erover begint.
+- **Keuze uit 2–3 modellen**, zoals het plan noemt. Met eigen briefpapier
+  bepaalt het papier de vorm en zou zo'n keuze vooral verwarren. Eén indeling
+  die goed werkt is hier meer waard dan drie die half passen.
+
+### Nog steeds open, en niet door fase 2 geraakt
+
+De app logt je uit zodra je op **Versturen** drukt. De oorzaak is inmiddels
+wél bekend gemaakt door de sessie die ernaar keek: het vernieuwen van het
+inlogtoken (`/auth/v1/token?grant_type=refresh_token`) antwoordt met
+_"Invalid Refresh Token: Refresh Token Not Found"_, waarna supabase-js de
+sessie weggooit en `useRequireAuth` je naar `/login` stuurt. Het is dus geen
+factuurprobleem — de edge function wordt niet eens bereikt. Het meekijk-haakje
+in `src/integrations/supabase/fout-melder.ts` blijft staan tot Timmie het één
+keer reproduceert met de console open.
+
+De edge function `facturen` is op 24-09 's avonds **wél uitgerold**: dat moest,
+anders bestond de actie `voorbeeld` niet op de server. Daarmee zijn ook de twee
+dingen live die er nog op wachtten — de kopie in Verzonden en het euroteken.
+Die zijn dus nog steeds niet in een echte verzending bewezen.
 
 ## Vallen waar anderen al in gelopen zijn
 
@@ -202,6 +248,10 @@ Twee dingen om te weten:
   `DENO_DIR=<scratchpad>/deno bunx deno check --no-config --node-modules-dir=none supabase/functions/<naam>/index.ts`.
   `_gedeeld/geheim.ts` en `_gedeeld/smtp.ts` geven al langer vier fouten die
   niet van jouw wijziging komen.
+- **Een `.select()` moet één letterlijke tekst zijn.** Twee stukken met `+`
+  aan elkaar geplakt leest supabase-js niet meer, en dan wordt het rijtype
+  `GenericStringError`: 57 typefouten over een regel die op zich prima werkt.
+  Dezelfde val als bij `KLANT_VELDEN` hieronder, maar dan in een edge function.
 - **Gebruik altijd `./scripts/types.sh`** voor `types.ts`, nooit
   `supabase gen types` los: de generator is strenger dan hoe de app geschreven
   is, en het script zet drie dingen terug.

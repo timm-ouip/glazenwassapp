@@ -26,13 +26,35 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { antwoord, CORS, inStukjes, perGroepje, stuurMail, veilig } from "../_gedeeld/mail.ts";
-import { euro, maakFactuurPdf, type FactuurRegel } from "../_gedeeld/factuurpdf.ts";
+import {
+  euro,
+  maakFactuurPdf,
+  STANDAARD_VORMGEVING,
+  type FactuurBriefpapier,
+  type FactuurRegel,
+  type FactuurVormgeving,
+} from "../_gedeeld/factuurpdf.ts";
 import { maakOp } from "../_gedeeld/opmaken.ts";
 import { kopieInVerzonden, mailboxVoorKopie, type KopieMail } from "../_gedeeld/verzenden.ts";
 
 interface Verzoek {
-  actie: "versturen";
-  ids: string[];
+  actie: "versturen" | "voorbeeld";
+  ids?: string[];
+  /**
+   * Alleen bij "voorbeeld": de vormgeving zoals hij op dit moment op het
+   * scherm staat, zodat een schuifje meteen te zien is zonder eerst op te
+   * slaan. Het briefpapier zelf zit hier niet bij -- dat komt altijd uit de
+   * opslagbak, en dat uploaden is al een bewuste stap.
+   */
+  vorm?: {
+    kaderBoven?: number;
+    kaderOnder?: number;
+    eigenKop?: boolean;
+    eigenVoet?: boolean;
+    kleur?: string;
+    koptekst?: string;
+    voettekst?: string;
+  };
 }
 
 /** Grote arrays breken String.fromCharCode(...); daarom in stukjes. */
@@ -54,12 +76,6 @@ Deno.serve(async (req) => {
   const brevo = Deno.env.get("BREVO_API_KEY") ?? "";
   if (!url || !anon || !service) {
     return antwoord({ fout: "De server is niet goed ingesteld." }, 500);
-  }
-  if (!brevo) {
-    return antwoord(
-      { fout: "De Brevo-sleutel ontbreekt op de server. Zet BREVO_API_KEY als secret." },
-      500,
-    );
   }
 
   const kop = req.headers.get("Authorization") ?? "";
@@ -89,11 +105,161 @@ Deno.serve(async (req) => {
   const { data: bedrijf } = await beheerder
     .from("companies")
     .select(
-      "id,name,adres,postcode,plaats,telefoon,email,kvk,btw,iban,mail_afzender_naam,mail_afzender_email",
+      // Eén letterlijke tekst laten, niet aan elkaar plakken: supabase-js leest
+      // deze regel om het rijtype af te leiden, en van een som maakt hij niets.
+      "id,name,adres,postcode,plaats,telefoon,email,kvk,btw,iban,mail_afzender_naam,mail_afzender_email,factuur_briefpapier_pad,factuur_kader_boven,factuur_kader_onder,factuur_eigen_kop,factuur_eigen_voet,factuur_kleur,factuur_koptekst,factuur_voettekst",
     )
     .eq("id", medewerker.company_id)
     .maybeSingle();
   if (!bedrijf) return antwoord({ fout: "Geen bedrijf gevonden." }, 403);
+
+  // Een eigen naam voor hetzelfde bedrijf: TypeScript houdt de controle op leeg
+  // hierboven niet vast binnen een functie die pas later wordt aangeroepen.
+  const bedr = bedrijf;
+
+  /**
+   * De vormgeving van dit bedrijf, met het briefpapier erbij.
+   *
+   * Het papier wordt één keer opgehaald en daarna hergebruikt: bij een bulk van
+   * vijfhonderd facturen zou dat anders vijfhonderd keer dezelfde download
+   * zijn, en dat is het traagste stukje van de hele rit.
+   */
+  let vormOnthouden: Partial<FactuurVormgeving> | undefined;
+  async function vormgeving(): Promise<Partial<FactuurVormgeving>> {
+    if (vormOnthouden) return vormOnthouden;
+    const pad = String(bedr.factuur_briefpapier_pad ?? "");
+    let papier: FactuurBriefpapier | undefined;
+    // Alleen uit de eigen merkmap. Dit haalt op met de service role en gaat
+    // dus langs de RLS heen; de map die het beleid afdwingt moet hier dan ook
+    // met de hand nagelopen worden.
+    if (pad.startsWith(`${bedr.id}/merk/`)) {
+      try {
+        const { data, error } = await beheerder.storage.from("facturen").download(pad);
+        if (error || !data) throw new Error(error?.message ?? "geen bestand");
+        const klein = pad.toLowerCase();
+        papier = {
+          bytes: new Uint8Array(await data.arrayBuffer()),
+          soort: klein.endsWith(".png") ? "png" : /\.jpe?g$/.test(klein) ? "jpg" : "pdf",
+        };
+      } catch (e) {
+        // Zonder papier is de factuur nog steeds een factuur.
+        console.error("Briefpapier niet op te halen:", e instanceof Error ? e.message : e);
+      }
+    }
+    vormOnthouden = {
+      kaderBoven: Number(bedr.factuur_kader_boven ?? STANDAARD_VORMGEVING.kaderBoven),
+      kaderOnder: Number(bedr.factuur_kader_onder ?? STANDAARD_VORMGEVING.kaderOnder),
+      eigenKop: bedr.factuur_eigen_kop !== false,
+      eigenVoet: bedr.factuur_eigen_voet !== false,
+      ...(papier ? { briefpapier: papier } : {}),
+      ...(bedr.factuur_kleur ? { kleur: String(bedr.factuur_kleur) } : {}),
+      ...(bedr.factuur_koptekst ? { koptekst: String(bedr.factuur_koptekst) } : {}),
+      ...(bedr.factuur_voettekst ? { voettekst: String(bedr.factuur_voettekst) } : {}),
+    };
+    return vormOnthouden;
+  }
+
+  let verzoek: Verzoek;
+  try {
+    verzoek = (await req.json()) as Verzoek;
+  } catch {
+    return antwoord({ fout: "Onleesbaar verzoek." }, 400);
+  }
+
+  // --- Een proef op de vormgeving -----------------------------------------
+  // Verzonnen gegevens, geen nummer uit de teller, niets dat bewaard wordt. Zo
+  // kun je aan het briefpapier en de marges schuiven zonder dat er ooit een
+  // echte factuur aan te pas komt.
+  if (verzoek.actie === "voorbeeld") {
+    const { data: mag } = await alsGebruiker.rpc("heeft_recht", { recht: "facturen" });
+    if (mag !== true) return antwoord({ fout: "Je mag geen facturen bekijken." }, 403);
+
+    const over = verzoek.vorm ?? {};
+    const maat = (n: unknown, terugval: number, max: number) =>
+      Number.isFinite(Number(n)) ? Math.min(Math.max(Math.round(Number(n)), 0), max) : terugval;
+    // Leeg is hier een keuze, geen "niets meegestuurd": wie de koptekst
+    // weghaalt of op zwart klikt, moet dat meteen in het voorbeeld zien.
+    const zin = (t: unknown, terugval: string | undefined) =>
+      typeof t === "string" ? t.slice(0, 600).trim() || undefined : terugval;
+    const basis = await vormgeving();
+    const kop = zin(over.koptekst, basis.koptekst);
+    const voet = zin(over.voettekst, basis.voettekst);
+    const kleur = zin(over.kleur, basis.kleur);
+
+    const vandaag = new Date();
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const proef = await maakFactuurPdf({
+      nummer: `${vandaag.getFullYear()}-0001`,
+      soort: "factuur",
+      factuurdatum: iso(vandaag),
+      vervaldatum: iso(new Date(vandaag.getTime() + 14 * 86400000)),
+      inclusief: false,
+      bedrijf: {
+        naam: String(bedrijf.name ?? ""),
+        adres: String(bedrijf.adres ?? ""),
+        postcode: String(bedrijf.postcode ?? ""),
+        plaats: String(bedrijf.plaats ?? ""),
+        telefoon: String(bedrijf.telefoon ?? ""),
+        email: String(bedrijf.email ?? ""),
+        kvk: String(bedrijf.kvk ?? ""),
+        btw: String(bedrijf.btw ?? ""),
+        iban: String(bedrijf.iban ?? ""),
+      },
+      klant: {
+        naam: "J. de Voorbeeld",
+        bedrijfsnaam: "Voorbeeld Beheer BV",
+        straat: "Voorbeeldstraat",
+        huisnummer: "12",
+        postcode: "1234 AB",
+        plaats: "Den Haag",
+      },
+      regels: [
+        {
+          datum: iso(vandaag),
+          omschrijving: "Glazenwassen Voorbeeldstraat 12",
+          notitie: "Zo ziet een notitie bij een beurt eruit.",
+          bedrag_excl: 24.79,
+          btw_bedrag: 5.21,
+          bedrag_incl: 30,
+          btw_procent: 21,
+        },
+        {
+          datum: iso(vandaag),
+          omschrijving: "Extra opdracht: dakrand",
+          notitie: "",
+          bedrag_excl: 45.45,
+          btw_bedrag: 9.55,
+          bedrag_incl: 55,
+          btw_procent: 21,
+        },
+      ],
+      vormgeving: {
+        ...basis,
+        kaderBoven: maat(over.kaderBoven, basis.kaderBoven ?? 20, 150),
+        kaderOnder: maat(over.kaderOnder, basis.kaderOnder ?? 20, 100),
+        eigenKop: typeof over.eigenKop === "boolean" ? over.eigenKop : basis.eigenKop === true,
+        eigenVoet: typeof over.eigenVoet === "boolean" ? over.eigenVoet : basis.eigenVoet === true,
+        koptekst: kop,
+        voettekst: voet,
+        kleur,
+      },
+    });
+    return antwoord({ pdf: naarBase64(proef) });
+  }
+
+  // --- Vanaf hier gaat het echt de deur uit -------------------------------
+  if (!Array.isArray(verzoek.ids) || verzoek.ids.length === 0) {
+    return antwoord({ fout: "Niets om te versturen." }, 400);
+  }
+  if (verzoek.ids.length > 500) {
+    return antwoord({ fout: "Maximaal 500 facturen tegelijk." }, 400);
+  }
+  if (!brevo) {
+    return antwoord(
+      { fout: "De Brevo-sleutel ontbreekt op de server. Zet BREVO_API_KEY als secret." },
+      500,
+    );
+  }
 
   const afzenderNaam =
     String(bedrijf.mail_afzender_naam ?? "").trim() || String(bedrijf.name ?? "");
@@ -113,19 +279,6 @@ Deno.serve(async (req) => {
     .select("adres")
     .eq("company_id", bedrijf.id)
     .maybeSingle();
-
-  let verzoek: Verzoek;
-  try {
-    verzoek = (await req.json()) as Verzoek;
-  } catch {
-    return antwoord({ fout: "Onleesbaar verzoek." }, 400);
-  }
-  if (verzoek.actie !== "versturen" || !Array.isArray(verzoek.ids) || verzoek.ids.length === 0) {
-    return antwoord({ fout: "Niets om te versturen." }, 400);
-  }
-  if (verzoek.ids.length > 500) {
-    return antwoord({ fout: "Maximaal 500 facturen tegelijk." }, 400);
-  }
 
   const mislukt: { id: string; reden: string }[] = [];
   let gelukt = 0;
@@ -230,6 +383,7 @@ Deno.serve(async (req) => {
         },
         regels: lijst,
         ...(f.mollie_link ? { betaallink: String(f.mollie_link) } : {}),
+        vormgeving: await vormgeving(),
       });
 
       const bestandsnaam = `Factuur ${kaart.nummer}.pdf`;
@@ -318,10 +472,17 @@ Deno.serve(async (req) => {
     }
   };
 
-  // Per stapel van vijftig: versturen, en daarna de kopieën in één IMAP-sessie
-  // wegschrijven. Zo staat er nooit meer dan vijftig PDF's in het geheugen, en
-  // hoeven we niet per factuur opnieuw in te loggen op de mailbox.
-  for (const stapel of inStukjes(ids, 50)) {
+  // Per stapel versturen, en daarna de kopieën in één IMAP-sessie wegschrijven.
+  // Zo hoeven we niet per factuur opnieuw in te loggen op de mailbox.
+  //
+  // Hoe groot die stapel mag zijn hangt aan het briefpapier: dat zit in elke
+  // PDF, en elke kopie houdt zijn PDF als tekst in het geheugen vast tot de
+  // stapel weggeschreven is. Met een lichte achtergrond kunnen er vijftig
+  // tegelijk; met een zwaardere zou dat de functie omver duwen -- en dan
+  // halverwege een maandrun, met de nummers al getrokken.
+  const papier = (await vormgeving()).briefpapier;
+  const perStapelAantal = (papier?.bytes.length ?? 0) > 500 * 1024 ? 10 : 50;
+  for (const stapel of inStukjes(ids, perStapelAantal)) {
     await perGroepje(stapel, 4, perStapel);
     await kopieenWegschrijven();
   }

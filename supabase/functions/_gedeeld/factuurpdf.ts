@@ -7,8 +7,11 @@
  * vorm, maar het resultaat is elke keer identiek en er kan niets tussenuit
  * vallen.
  *
- * Het ge-uploade briefpapier (fase 2) komt hier straks als achterlaag onder;
- * de indeling houdt daar links en boven alvast ruimte voor.
+ * Eigen briefpapier (fase 2) gaat er als achterlaag onder: eerst het papier,
+ * daarna de tekst erop. Dat papier heeft meestal zelf al een kop met naam,
+ * adres en logo, dus dan zetten wij die niet nog eens neer -- en houdt de
+ * tekst boven- en onderaan de ruimte vrij die `kaderBoven`/`kaderOnder`
+ * aangeven.
  */
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 
@@ -45,6 +48,37 @@ export interface FactuurRegel {
   btw_procent: number;
 }
 
+/** Het briefpapier zoals het uit de opslagbak komt. */
+export interface FactuurBriefpapier {
+  bytes: Uint8Array;
+  soort: "pdf" | "png" | "jpg";
+}
+
+export interface FactuurVormgeving {
+  briefpapier?: FactuurBriefpapier;
+  /** Millimeters die boven- en onderaan vrij blijven voor dat papier. */
+  kaderBoven: number;
+  kaderOnder: number;
+  /** Zelf een kop met naam en adres zetten. Uit als het papier die al heeft. */
+  eigenKop: boolean;
+  /** Zelf de regel met KvK, btw-nummer en IBAN onderaan zetten. */
+  eigenVoet: boolean;
+  /** Accentkleur als "#rrggbb"; leeg is het gewone zwart-grijs. */
+  kleur?: string;
+  /** Een zin boven de regels, bijvoorbeeld waar deze factuur over gaat. */
+  koptekst?: string;
+  /** Losse tekst onderaan, boven de KvK-regel. */
+  voettekst?: string;
+}
+
+/** Zonder briefpapier: de vorm zoals de facturen tot nu toe de deur uit gingen. */
+export const STANDAARD_VORMGEVING: FactuurVormgeving = {
+  kaderBoven: 20,
+  kaderOnder: 20,
+  eigenKop: true,
+  eigenVoet: true,
+};
+
 export interface FactuurGegevens {
   nummer: string;
   soort: "factuur" | "credit";
@@ -56,6 +90,7 @@ export interface FactuurGegevens {
   klant: FactuurKlant;
   regels: FactuurRegel[];
   betaallink?: string;
+  vormgeving?: Partial<FactuurVormgeving>;
 }
 
 /**
@@ -77,6 +112,8 @@ function alleenBekend(tekst: string): string {
 
 const A4 = { breedte: 595.28, hoogte: 841.89 };
 const KANTLIJN = 56;
+/** Eén millimeter in PDF-punten. */
+const MM = 72 / 25.4;
 
 /** "1.234,56" — Nederlands, met een euroteken ervoor. */
 export function euro(n: number): string {
@@ -99,15 +136,66 @@ export function datum(iso: string): string {
   return `${d}-${m}-${j}`;
 }
 
+/** "#1b6ac8" naar een pdf-lib-kleur; alles wat er niet op lijkt valt terug. */
+function kleurUit(hex: string | undefined, terugval: ReturnType<typeof rgb>) {
+  if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return terugval;
+  const n = parseInt(hex.slice(1), 16);
+  return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
+}
+
 export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
+  const v: FactuurVormgeving = { ...STANDAARD_VORMGEVING, ...f.vormgeving };
   const pdf = await PDFDocument.create();
   const gewoon = await pdf.embedFont(StandardFonts.Helvetica);
   const vet = await pdf.embedFont(StandardFonts.HelveticaBold);
   const zwart = rgb(0.1, 0.1, 0.12);
   const grijs = rgb(0.45, 0.45, 0.5);
+  const accent = kleurUit(v.kleur, zwart);
+  const lijnkleur = kleurUit(v.kleur, grijs);
+
+  // Het briefpapier één keer inladen. Gaat dat mis -- een beschadigd bestand,
+  // een PDF met een wachtwoord -- dan gaat de factuur gewoon zonder papier de
+  // deur uit. Hier stukgaan zou betekenen dat een factuur die net zijn nummer
+  // heeft getrokken geen PDF meer krijgt, en dat is veel erger dan een kale
+  // bladzijde.
+  let papier: Awaited<ReturnType<typeof pdf.embedPdf>>[number] | undefined;
+  let plaatje: Awaited<ReturnType<typeof pdf.embedPng>> | undefined;
+  if (v.briefpapier) {
+    try {
+      if (v.briefpapier.soort === "pdf") {
+        const bron = await PDFDocument.load(v.briefpapier.bytes, { ignoreEncryption: true });
+        [papier] = await pdf.embedPdf(bron, [0]);
+      } else if (v.briefpapier.soort === "png") {
+        plaatje = await pdf.embedPng(v.briefpapier.bytes);
+      } else {
+        plaatje = await pdf.embedJpg(v.briefpapier.bytes);
+      }
+    } catch (e) {
+      console.error("Briefpapier overgeslagen:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  // De grenzen van het tekstvlak. Buiten deze twee blijft het papier zelf aan
+  // het woord.
+  const boven = A4.hoogte - Math.max(v.kaderBoven, 0) * MM;
+  const onder = Math.max(v.kaderOnder, 0) * MM;
+  const rechts = A4.breedte - KANTLIJN;
 
   let blad = pdf.addPage([A4.breedte, A4.hoogte]);
-  let y = A4.hoogte - KANTLIJN;
+  let y = boven;
+
+  const achtergrond = () => {
+    if (papier) blad.drawPage(papier, { x: 0, y: 0, width: A4.breedte, height: A4.hoogte });
+    else if (plaatje) {
+      blad.drawImage(plaatje, { x: 0, y: 0, width: A4.breedte, height: A4.hoogte });
+    }
+  };
+  const nieuwBlad = () => {
+    blad = pdf.addPage([A4.breedte, A4.hoogte]);
+    y = boven;
+    achtergrond();
+  };
+  achtergrond();
 
   const schrijf = (
     tekst: string,
@@ -128,20 +216,57 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
     });
   };
 
+  /** Vrije tekst over meerdere regels verdelen, zodat niets de kantlijn uit loopt. */
+  const breek = (tekst: string, grootte: number, breedte: number): string[] => {
+    const uit: string[] = [];
+    const past = (t: string) => gewoon.widthOfTextAtSize(alleenBekend(t), grootte) <= breedte;
+    for (const stuk of tekst.replace(/\r/g, "").split("\n")) {
+      let regel = "";
+      for (let woord of stuk.split(/\s+/).filter(Boolean)) {
+        // Een woord dat in zijn eentje al te breed is -- een lang webadres in
+        // de voettekst -- knippen we hard door. Alleen tussen woorden knippen
+        // laat zo'n regel de bladzijde uit lopen, en dan valt het staartje
+        // gewoon van het papier.
+        while (!past(woord)) {
+          let hap = woord;
+          while (hap.length > 1 && !past(hap)) hap = hap.slice(0, -1);
+          if (regel) {
+            uit.push(regel);
+            regel = "";
+          }
+          uit.push(hap);
+          woord = woord.slice(hap.length);
+        }
+        if (!woord) continue;
+        const kandidaat = regel ? `${regel} ${woord}` : woord;
+        if (regel && !past(kandidaat)) {
+          uit.push(regel);
+          regel = woord;
+        } else {
+          regel = kandidaat;
+        }
+      }
+      uit.push(regel);
+    }
+    return uit;
+  };
+
   // --- Kop: wie stuurt dit ---------------------------------------------
-  schrijf(f.bedrijf.naam, KANTLIJN, y, { groot: 17, vet: true });
-  y -= 16;
-  for (const regel of [
-    [f.bedrijf.adres, `${f.bedrijf.postcode} ${f.bedrijf.plaats}`].filter(Boolean).join(", "),
-    [f.bedrijf.telefoon, f.bedrijf.email].filter(Boolean).join(" · "),
-  ]) {
-    if (!regel.trim()) continue;
-    schrijf(regel, KANTLIJN, y, { kleur: grijs });
-    y -= 12;
+  if (v.eigenKop) {
+    schrijf(f.bedrijf.naam, KANTLIJN, y, { groot: 17, vet: true, kleur: accent });
+    y -= 16;
+    for (const regel of [
+      [f.bedrijf.adres, `${f.bedrijf.postcode} ${f.bedrijf.plaats}`].filter(Boolean).join(", "),
+      [f.bedrijf.telefoon, f.bedrijf.email].filter(Boolean).join(" · "),
+    ]) {
+      if (!regel.trim()) continue;
+      schrijf(regel, KANTLIJN, y, { kleur: grijs });
+      y -= 12;
+    }
+    y -= 26;
   }
 
   // --- Aan wie ----------------------------------------------------------
-  y -= 26;
   const bovenkantBlok = y;
   schrijf("AAN", KANTLIJN, y, { groot: 8, vet: true, kleur: grijs });
   y -= 14;
@@ -157,12 +282,11 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
   }
 
   // --- Welke factuur ----------------------------------------------------
-  const rechts = A4.breedte - KANTLIJN;
   let yr = bovenkantBlok;
   schrijf(f.soort === "credit" ? "CREDITFACTUUR" : "FACTUUR", 0, yr, {
     groot: 8,
     vet: true,
-    kleur: grijs,
+    kleur: accent,
     rechts,
   });
   yr -= 16;
@@ -178,32 +302,44 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
 
   y = Math.min(y, yr) - 30;
 
+  // --- Waar deze factuur over gaat --------------------------------------
+  if (v.koptekst?.trim()) {
+    for (const regel of breek(v.koptekst.trim(), 9.5, rechts - KANTLIJN)) {
+      schrijf(regel, KANTLIJN, y);
+      y -= 13;
+    }
+    y -= 12;
+  }
+
   // --- De regels --------------------------------------------------------
   const kolomBedrag = rechts;
   const kolomBtw = rechts - 78;
   const kolomDatum = KANTLIJN;
   const kolomOmschrijving = KANTLIJN + 62;
 
-  schrijf("DATUM", kolomDatum, y, { groot: 8, vet: true, kleur: grijs });
-  schrijf("OMSCHRIJVING", kolomOmschrijving, y, { groot: 8, vet: true, kleur: grijs });
-  schrijf("BTW", 0, y, { groot: 8, vet: true, kleur: grijs, rechts: kolomBtw });
-  schrijf("BEDRAG", 0, y, { groot: 8, vet: true, kleur: grijs, rechts: kolomBedrag });
-  y -= 6;
-  blad.drawLine({
-    start: { x: KANTLIJN, y },
-    end: { x: rechts, y },
-    thickness: 0.6,
-    color: grijs,
-  });
-  y -= 15;
-
-  const nieuwBlad = () => {
-    blad = pdf.addPage([A4.breedte, A4.hoogte]);
-    y = A4.hoogte - KANTLIJN;
+  const kolomkoppen = () => {
+    schrijf("DATUM", kolomDatum, y, { groot: 8, vet: true, kleur: grijs });
+    schrijf("OMSCHRIJVING", kolomOmschrijving, y, { groot: 8, vet: true, kleur: grijs });
+    schrijf("BTW", 0, y, { groot: 8, vet: true, kleur: grijs, rechts: kolomBtw });
+    schrijf("BEDRAG", 0, y, { groot: 8, vet: true, kleur: grijs, rechts: kolomBedrag });
+    y -= 6;
+    blad.drawLine({
+      start: { x: KANTLIJN, y },
+      end: { x: rechts, y },
+      thickness: 0.6,
+      color: lijnkleur,
+    });
+    y -= 15;
   };
+  kolomkoppen();
 
   for (const r of f.regels) {
-    if (y < 150) nieuwBlad();
+    // Onder deze grens past de afsluiting (subtotaal, btw, te betalen en het
+    // betaalblok) er niet meer onder; dan liever een nieuw blad.
+    if (y < onder + 110) {
+      nieuwBlad();
+      kolomkoppen();
+    }
     schrijf(datum(r.datum), kolomDatum, y, { kleur: grijs });
     // Afkappen in plaats van door de kolom heen lopen: een lange VvE-naam
     // mag het bedrag niet overschrijven.
@@ -227,13 +363,13 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
   const btw = f.regels.reduce((t, r) => t + r.btw_bedrag, 0);
   const incl = f.regels.reduce((t, r) => t + r.bedrag_incl, 0);
 
-  if (y < 170) nieuwBlad();
+  if (y < onder + 130) nieuwBlad();
   y -= 8;
   blad.drawLine({
     start: { x: kolomBtw - 60, y },
     end: { x: rechts, y },
     thickness: 0.6,
-    color: grijs,
+    color: lijnkleur,
   });
   y -= 16;
   schrijf("Subtotaal", 0, y, { kleur: grijs, rechts: kolomBtw });
@@ -243,7 +379,7 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
   schrijf(euro(btw), 0, y, { rechts: kolomBedrag });
   y -= 18;
   schrijf("Te betalen", 0, y, { vet: true, groot: 11, rechts: kolomBtw });
-  schrijf(euro(incl), 0, y, { vet: true, groot: 11, rechts: kolomBedrag });
+  schrijf(euro(incl), 0, y, { vet: true, groot: 11, kleur: accent, rechts: kolomBedrag });
 
   // --- Hoe te betalen ---------------------------------------------------
   y -= 34;
@@ -261,15 +397,30 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
     y -= 12;
   }
 
+  // --- Eigen slotwoord --------------------------------------------------
+  if (v.voettekst?.trim()) {
+    y -= 14;
+    const regels = breek(v.voettekst.trim(), 8.5, rechts - KANTLIJN);
+    if (y - regels.length * 11 < onder) nieuwBlad();
+    for (const regel of regels) {
+      schrijf(regel, KANTLIJN, y, { groot: 8.5, kleur: grijs });
+      y -= 11;
+    }
+  }
+
   // --- Voet -------------------------------------------------------------
-  const voet = [
-    f.bedrijf.kvk && `KvK ${f.bedrijf.kvk}`,
-    f.bedrijf.btw && `Btw ${f.bedrijf.btw}`,
-    f.bedrijf.iban && `IBAN ${f.bedrijf.iban}`,
-  ]
-    .filter(Boolean)
-    .join("  ·  ");
-  if (voet) schrijf(voet, KANTLIJN, KANTLIJN - 16, { groot: 8, kleur: grijs });
+  // Net onder het tekstvlak: dit hóórt in de ondermarge, en staat die vol met
+  // briefpapier, dan zet je hem uit.
+  if (v.eigenVoet) {
+    const voet = [
+      f.bedrijf.kvk && `KvK ${f.bedrijf.kvk}`,
+      f.bedrijf.btw && `Btw ${f.bedrijf.btw}`,
+      f.bedrijf.iban && `IBAN ${f.bedrijf.iban}`,
+    ]
+      .filter(Boolean)
+      .join("  ·  ");
+    if (voet) schrijf(voet, KANTLIJN, Math.max(onder - 14, 14), { groot: 8, kleur: grijs });
+  }
 
   return await pdf.save();
 }

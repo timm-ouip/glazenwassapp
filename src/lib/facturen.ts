@@ -435,3 +435,149 @@ export function porNodig(concepten: Pick<Factuur, "datum">[], vandaagIso: string
   const dagen = Math.round((Date.parse(vandaagIso) - Date.parse(oudste)) / 86_400_000);
   return dagen > POR_DAGEN ? dagen : null;
 }
+
+// --------------------------------------------------------------- vormgeving
+
+/**
+ * Hoe de factuur eruitziet.
+ *
+ * Het tekenen zelf gebeurt op de server (`_gedeeld/factuurpdf.ts`), want daar
+ * wordt de PDF gemaakt die de klant krijgt. Hier staan alleen de knoppen: wat
+ * er in `companies` bewaard wordt, en hoe je er een proef van opvraagt.
+ *
+ * De maten zijn millimeters. Niet omdat een PDF daarin rekent -- die rekent in
+ * punten -- maar omdat je ze naast een uitdraai met een liniaal wilt kunnen
+ * nameten.
+ */
+export interface FactuurVorm {
+  briefpapier_pad: string | null;
+  kader_boven: number;
+  kader_onder: number;
+  eigen_kop: boolean;
+  eigen_voet: boolean;
+  /** Leeg is het gewone zwart-grijs. */
+  kleur: string;
+  koptekst: string;
+  voettekst: string;
+}
+
+export const STANDAARD_VORM: FactuurVorm = {
+  briefpapier_pad: null,
+  kader_boven: 20,
+  kader_onder: 20,
+  eigen_kop: true,
+  eigen_voet: true,
+  kleur: "",
+  koptekst: "",
+  voettekst: "",
+};
+
+/**
+ * Wat er als briefpapier mag, en tot welke omvang.
+ *
+ * Twee megabyte, en dat is ruim: dit bestand zit straks in *elke* factuur-PDF.
+ * Een ingescande briefkop van vijf megabyte maakt elke factuur vijf megabyte
+ * zwaar, en dan loopt een maandrun vast op de grens van de mailserver -- ná
+ * dat de facturen hun nummer al getrokken hebben. Een PDF van echt briefpapier
+ * blijft ver onder deze grens.
+ */
+export const BRIEFPAPIER_SOORTEN = ["application/pdf", "image/png", "image/jpeg"];
+const BRIEFPAPIER_MAX = 2 * 1024 * 1024;
+
+export async function fetchFactuurVorm(companyId: string): Promise<FactuurVorm> {
+  const { data, error } = await supabase
+    .from("companies")
+    .select(
+      "factuur_briefpapier_pad,factuur_kader_boven,factuur_kader_onder,factuur_eigen_kop,factuur_eigen_voet,factuur_kleur,factuur_koptekst,factuur_voettekst",
+    )
+    .eq("id", companyId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return STANDAARD_VORM;
+  return {
+    briefpapier_pad: data.factuur_briefpapier_pad,
+    kader_boven: data.factuur_kader_boven ?? STANDAARD_VORM.kader_boven,
+    kader_onder: data.factuur_kader_onder ?? STANDAARD_VORM.kader_onder,
+    eigen_kop: data.factuur_eigen_kop !== false,
+    eigen_voet: data.factuur_eigen_voet !== false,
+    kleur: data.factuur_kleur ?? "",
+    koptekst: data.factuur_koptekst ?? "",
+    voettekst: data.factuur_voettekst ?? "",
+  };
+}
+
+export async function bewaarFactuurVorm(companyId: string, v: FactuurVorm) {
+  const { error } = await supabase
+    .from("companies")
+    .update({
+      factuur_briefpapier_pad: v.briefpapier_pad,
+      factuur_kader_boven: v.kader_boven,
+      factuur_kader_onder: v.kader_onder,
+      factuur_eigen_kop: v.eigen_kop,
+      factuur_eigen_voet: v.eigen_voet,
+      // Leeg moet echt leeg zijn: de database laat alleen #rrggbb of niets toe.
+      factuur_kleur: /^#[0-9a-fA-F]{6}$/.test(v.kleur) ? v.kleur.toLowerCase() : null,
+      factuur_koptekst: v.koptekst.trim() || null,
+      factuur_voettekst: v.voettekst.trim() || null,
+    })
+    .eq("id", companyId);
+  if (error) throw error;
+}
+
+/**
+ * Het briefpapier in de opslagbak zetten, altijd onder <bedrijf>/merk/.
+ * Alleen dáár mag de browser schrijven; de verstuurde facturen staan onder
+ * <bedrijf>/<jaar>/ en blijven van de service role.
+ */
+export async function uploadBriefpapier(companyId: string, bestand: File): Promise<string> {
+  if (!BRIEFPAPIER_SOORTEN.includes(bestand.type)) {
+    throw new Error("Alleen een PDF, een PNG of een JPG.");
+  }
+  if (bestand.size > BRIEFPAPIER_MAX) {
+    throw new Error("Het bestand mag hooguit 2 MB zijn.");
+  }
+  const extensie =
+    bestand.type === "application/pdf" ? "pdf" : bestand.type === "image/png" ? "png" : "jpg";
+  const pad = `${companyId}/merk/briefpapier.${extensie}`;
+  const { error } = await supabase.storage
+    .from("facturen")
+    .upload(pad, bestand, { contentType: bestand.type, upsert: true });
+  if (error) throw error;
+  return pad;
+}
+
+export async function verwijderBriefpapier(pad: string) {
+  const { error } = await supabase.storage.from("facturen").remove([pad]);
+  if (error) throw error;
+}
+
+/**
+ * Een proef-PDF met verzonnen gegevens.
+ *
+ * Met opzet bij de server opgehaald en niet in de browser nagebouwd: dan zou
+ * je naar een tekening kijken die lijkt op de factuur in plaats van naar de
+ * factuur. Er komt geen nummer aan te pas en er wordt niets bewaard.
+ */
+export async function voorbeeldFactuur(v: FactuurVorm): Promise<Blob> {
+  const { data, error } = await supabase.functions.invoke("facturen", {
+    body: {
+      actie: "voorbeeld",
+      vorm: {
+        kaderBoven: v.kader_boven,
+        kaderOnder: v.kader_onder,
+        eigenKop: v.eigen_kop,
+        eigenVoet: v.eigen_voet,
+        kleur: v.kleur,
+        koptekst: v.koptekst,
+        voettekst: v.voettekst,
+      },
+    },
+  });
+  if (error) throw error;
+  const uit = data as { pdf?: string; fout?: string };
+  if (!uit.pdf) throw new Error(uit.fout ?? "Er kwam geen voorbeeld terug.");
+  const ruw = atob(uit.pdf);
+  const bytes = new Uint8Array(ruw.length);
+  for (let i = 0; i < ruw.length; i += 1) bytes[i] = ruw.charCodeAt(i);
+  return new Blob([bytes], { type: "application/pdf" });
+}
