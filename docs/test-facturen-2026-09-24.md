@@ -328,3 +328,42 @@ staan (de creditnota hoort meteen op "betaald" te komen en nooit in "Te laat").
 
 Ook nog niet aangeklikt, wel getypecheckt: de vraag "nog een keer versturen?"
 bij een factuur die al vastgezet was.
+
+## De derde review, en een fout die alleen bij het aanroepen bleek
+
+De reviewer vond vijf punten op het lijstje panden. Drie waren hinderlijk in
+het gebruik, twee waren ontbrekende sloten.
+
+**Vinkjes en bedragen sprongen stil terug.** Het vullen van de vinkjes en de
+bedragen hing aan de opgehaalde regels, en die worden opnieuw opgehaald zodra
+je terugkomt in het tabblad. Je vinkte een pand uit, zette een bedrag op 7,50,
+keek even in je mail, kwam terug — en alles stond weer aan met de oude
+bedragen, zonder dat je dat op het scherm zag. Drukte je dan op de knop, dan
+factureerde je het volle bedrag. Nu wordt er één keer per factuur gevuld.
+Nagetest: bedrag op 9,25 gezet, naar een ander tabblad en terug, en het stond
+nog op 9,25.
+
+**Een leeg bedrag betekende stil "het oude bedrag".** Leeg werd 0, en 0 las de
+database als "laat het oorspronkelijke bedrag staan". Nu blokkeert de knop en
+staat er "Vul bij elk aangevinkt pand een bedrag in."
+
+**Twee keer klikken was niet afgeschermd.** De knop gaat nu op "Bezig…" en de
+database ontdubbelt de lijst. Nagetest: een tweede keer drukken geeft "Dit
+werk stond al klaar om opnieuw gefactureerd te worden" en er komt geen tweede
+regel bij.
+
+De twee sloten: een creditnota is nu ook in de database niet te crediteren (dat
+stond alleen in het scherm), en het opnieuw aanmelden slaat een adres of klant
+over die in de prullenbak ligt — net als bij het afmelden van een dag.
+
+### En toen ging het alsnog mis
+
+Mijn ontdubbeling gebruikte `with ordinality` samen met een kolomlijst. Postgres
+maakt de functie dan wél aan — de body wordt niet zo diep nagekeken — maar bij
+het aanroepen kwam er "WITH ORDINALITY cannot be used with a column definition
+list" uit. Dat stond letterlijk in het scherm toen ik op de knop drukte.
+
+Dat is precies waarom dit soort werk aangeklikt moet worden en niet alleen
+doorgezet: `supabase db push` zei drie keer "Finished" over een functie die bij
+de eerste aanroep klapte. Nu via `jsonb_array_elements`, en daarna werkt het:
+€ 9,25 werd € 9,25 excl met € 1,94 btw (€ 11,19).

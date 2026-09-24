@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconArrowLeft as ArrowLeft, IconSend as Send } from "@tabler/icons-react";
 import { toast } from "sonner";
@@ -282,23 +282,34 @@ function FactuurRegel({
 
   // Standaard staat alles aan: meestal moet bijna al het werk opnieuw op de
   // factuur en vink je alleen het pand uit dat niet gedaan is.
+  //
+  // Eén keer vullen, en daarna niet meer. De regels worden namelijk opnieuw
+  // opgehaald zodra je terugkomt in het tabblad, en dan zou je uitgevinkte
+  // pand en je aangepaste bedrag stil terugspringen naar de standaard --
+  // zonder dat er iets op het scherm verandert wat dat verraadt.
+  const gevuld = useRef<string | null>(null);
   useEffect(() => {
-    if (!gecrediteerd || !regels.data) return;
+    if (!gecrediteerd || !regels.data || gevuld.current === f.id) return;
+    gevuld.current = f.id;
     setOpnieuwGekozen(regels.data.map((r) => r.id));
     setOpnieuwBedrag(Object.fromEntries(regels.data.map((r) => [r.id, String(r.bedrag)])));
-  }, [gecrediteerd, regels.data]);
+  }, [gecrediteerd, regels.data, f.id]);
+
+  /** Bij elk aangevinkt pand hoort een bedrag boven nul. */
+  const bedragenKloppen = opnieuwGekozen.every((id) => Number(opnieuwBedrag[id]) > 0);
 
   /**
    * Het aangevinkte werk van deze gecrediteerde factuur opnieuw aanmelden. Het
    * komt dan als los werk terug, waar je met "Concepten klaarzetten" een
    * aangepaste factuur van maakt.
    */
-  async function opnieuwFactureren() {
-    try {
-      const n = await factuurOpnieuw(
+  const opnieuwZetten = useMutation({
+    mutationFn: () =>
+      factuurOpnieuw(
         f.id,
-        opnieuwGekozen.map((id) => ({ id, bedrag: Number(opnieuwBedrag[id]) || 0 })),
-      );
+        opnieuwGekozen.map((id) => ({ id, bedrag: Number(opnieuwBedrag[id]) })),
+      ),
+    onSuccess: (n) => {
       onVeranderd();
       if (n === 0) {
         toast.info("Dit werk stond al klaar om opnieuw gefactureerd te worden.");
@@ -307,10 +318,9 @@ function FactuurRegel({
           description: "Druk op “Concepten klaarzetten” voor de aangepaste factuur.",
         });
       }
-    } catch (e) {
-      toast.error("Niet gelukt: " + (e as Error).message);
-    }
-  }
+    },
+    onError: (e: Error) => toast.error("Niet gelukt: " + e.message),
+  });
 
   async function afvinken() {
     try {
@@ -481,16 +491,27 @@ function FactuurRegel({
 
           <div className="flex flex-wrap gap-2">
             {gecrediteerd && (
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={opnieuwGekozen.length === 0}
-                onClick={() => void opnieuwFactureren()}
-              >
-                {opnieuwGekozen.length === 1
-                  ? "1 pand opnieuw factureren"
-                  : `${opnieuwGekozen.length} panden opnieuw factureren`}
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={
+                    opnieuwGekozen.length === 0 || !bedragenKloppen || opnieuwZetten.isPending
+                  }
+                  onClick={() => opnieuwZetten.mutate()}
+                >
+                  {opnieuwZetten.isPending
+                    ? "Bezig…"
+                    : opnieuwGekozen.length === 1
+                      ? "1 pand opnieuw factureren"
+                      : `${opnieuwGekozen.length} panden opnieuw factureren`}
+                </Button>
+                {opnieuwGekozen.length > 0 && !bedragenKloppen && (
+                  <span className="self-center text-[12.5px] text-tint-rood-ink">
+                    Vul bij elk aangevinkt pand een bedrag in.
+                  </span>
+                )}
+              </>
             )}
             {concept && !f.nummer && (
               <Button size="sm" variant="ghost" onClick={() => void weggooien()}>
