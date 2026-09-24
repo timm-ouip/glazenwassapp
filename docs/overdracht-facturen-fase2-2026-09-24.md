@@ -304,6 +304,16 @@ verzonnen sleutel -- die komt netjes terug als _"Mollie herkent deze sleutel
 niet: Invalid Authorization header"_. De weg app → edge function → Mollie →
 terug werkt dus, inclusief de Nederlandse melding.
 
+### Uitproberen zonder een factuurnummer te verbranden
+
+In de Mollie-kaart zit de knop **Betaallink uitproberen**. Die maakt een echte
+betaallink van één cent bij Mollie, zonder factuur eraan, en bewaart niets. Met
+de testsleutel kun je hem openen en met Mollie's proefbank betalen.
+
+Dat is er met opzet in gekomen: anders was de enige manier om te zien dat
+Mollie werkt het versturen van een echte factuur, en daar hangt een
+factuurnummer aan dat je nooit meer weg krijgt.
+
 **Niet gelopen, want daar is een echte sleutel voor nodig:** het aanmaken van
 een betaallink, de knop in de mail, de melding van Mollie en het afvinken.
 Timmie moet in zijn Mollie-dashboard een **testsleutel** maken (Ontwikkelaars →

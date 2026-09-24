@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { IconAlertTriangle as Waarschuwing, IconCheck as Check } from "@tabler/icons-react";
 import { toast } from "sonner";
 
-import { fetchMollieModus, koppelMollie, ontkoppelMollie } from "@/lib/mollie";
+import { fetchMollieModus, koppelMollie, ontkoppelMollie, proefBetaallink } from "@/lib/mollie";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +23,7 @@ export function MollieInstellingen({ mag }: { mag: boolean }) {
   const modus = useQuery({ queryKey: ["mollie-modus"], queryFn: fetchMollieModus });
   const [sleutel, setSleutel] = useState("");
   const [bezig, setBezig] = useState(false);
+  const [proef, setProef] = useState("");
 
   async function koppel() {
     if (!sleutel.trim()) return;
@@ -32,6 +33,18 @@ export function MollieInstellingen({ mag }: { mag: boolean }) {
       setSleutel("");
       await modus.refetch();
       toast.success("Mollie is gekoppeld.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  async function proefLink() {
+    setBezig(true);
+    setProef("");
+    try {
+      setProef(await proefBetaallink());
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -84,15 +97,48 @@ export function MollieInstellingen({ mag }: { mag: boolean }) {
             )}
           </div>
           {mag && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="rounded-full text-muted-foreground"
-              disabled={bezig}
-              onClick={() => void ontkoppel()}
-            >
-              Loskoppelen
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                disabled={bezig}
+                onClick={() => void proefLink()}
+              >
+                Betaallink uitproberen
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="rounded-full text-muted-foreground"
+                disabled={bezig}
+                onClick={() => void ontkoppel()}
+              >
+                Loskoppelen
+              </Button>
+            </div>
+          )}
+          {proef && (
+            <div className="space-y-1 rounded-[10px] border border-border p-3">
+              <p className="text-[12.5px]">
+                Er staat een betaallink van <strong>&euro; 0,01</strong> klaar bij Mollie
+                {nu === "test"
+                  ? ". Open hem en betaal met de proefbank — er gaat geen geld overheen."
+                  : ". Let op: dit is je echte sleutel, dus dit is een echte betaling van één cent."}
+              </p>
+              <a
+                href={proef}
+                target="_blank"
+                rel="noreferrer"
+                className="block break-all text-[12.5px] underline"
+              >
+                {proef}
+              </a>
+              <p className="text-[12px] text-muted-foreground">
+                Deze link hoort bij geen enkele factuur en wordt nergens bewaard. Zo kun je zien dat
+                Mollie werkt zonder een echt factuurnummer te gebruiken.
+              </p>
+            </div>
           )}
           <p className="text-[12px] text-muted-foreground">
             Losmaken haalt alleen de sleutel weg. Betaallinks die al bij klanten liggen blijven

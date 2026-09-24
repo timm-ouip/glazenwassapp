@@ -142,7 +142,10 @@ export async function maakBetaallink(
       amount: { currency: "EUR", value: bedragUit(gegevens.bedrag) },
       // Mollie kapt af op 255 tekens en zet dit op het bankafschrift.
       description: gegevens.omschrijving.slice(0, 255),
-      webhookUrl: gegevens.meldingUrl,
+      // Leeg bij een proef: dan hoort de link bij geen enkele factuur en valt
+      // er dus ook niets te melden. Mollie weigert een lege webhookUrl, dus
+      // die laten we er dan helemaal uit.
+      ...(gegevens.meldingUrl ? { webhookUrl: gegevens.meldingUrl } : {}),
     },
   });
   const id = String(uit.id ?? "");

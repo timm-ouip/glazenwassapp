@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type MollieModus = "test" | "live" | null;
 
-async function roep(body: Record<string, unknown>): Promise<MollieModus> {
+async function roep<T = { modus?: MollieModus }>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("mollie", { body });
   if (error) {
     // supabase-js maakt van elke foutcode "Edge Function returned a non-2xx
@@ -27,19 +27,38 @@ async function roep(body: Record<string, unknown>): Promise<MollieModus> {
     }
     throw new Error(uitleg || error.message);
   }
-  const uit = data as { modus?: MollieModus; fout?: string };
+  const uit = data as { fout?: string } & T;
   if (uit?.fout) throw new Error(uit.fout);
+  return uit;
+}
+
+async function modusVan(body: Record<string, unknown>): Promise<MollieModus> {
+  const uit = await roep<{ modus?: MollieModus }>(body);
   return uit?.modus ?? null;
 }
 
 export function fetchMollieModus(): Promise<MollieModus> {
-  return roep({ actie: "nakijken" });
+  return modusVan({ actie: "nakijken" });
 }
 
 export function koppelMollie(sleutel: string): Promise<MollieModus> {
-  return roep({ actie: "koppelen", sleutel });
+  return modusVan({ actie: "koppelen", sleutel });
 }
 
 export function ontkoppelMollie(): Promise<MollieModus> {
-  return roep({ actie: "ontkoppelen" });
+  return modusVan({ actie: "ontkoppelen" });
+}
+
+/**
+ * Een echte betaallink van één cent, zonder factuur eraan.
+ *
+ * De enige andere manier om te zien dat Mollie werkt, is een echte factuur
+ * versturen -- en daar hangt een factuurnummer aan dat je nooit meer weg
+ * krijgt. Hiermee loop je de hele weg naar Mollie een keer zonder dat er iets
+ * vast komt te liggen. Er wordt niets bewaard.
+ */
+export async function proefBetaallink(): Promise<string> {
+  const uit = await roep<{ url?: string }>({ actie: "proef" });
+  if (!uit?.url) throw new Error("Mollie gaf geen link terug.");
+  return uit.url;
 }

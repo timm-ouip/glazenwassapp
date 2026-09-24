@@ -12,10 +12,10 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { antwoord, CORS } from "../_gedeeld/mail.ts";
 import { versleutel } from "../_gedeeld/geheim.ts";
-import { mollieWerkt } from "../_gedeeld/mollie.ts";
+import { maakBetaallink, mollieSleutel, mollieWerkt } from "../_gedeeld/mollie.ts";
 
 interface Verzoek {
-  actie: "koppelen" | "ontkoppelen" | "nakijken";
+  actie: "koppelen" | "ontkoppelen" | "nakijken" | "proef";
   sleutel?: string;
 }
 
@@ -65,6 +65,30 @@ Deno.serve(async (req) => {
   // bedrijf, en alleen hij komt bij de bedrijfsgegevens.
   if (verzoek.actie !== "nakijken" && !isEigenaar) {
     return antwoord({ fout: "Alleen de eigenaar kan Mollie koppelen." }, 403);
+  }
+
+  // Een echte betaallink van één cent, zonder factuur eraan.
+  //
+  // Anders zou de enige manier om te zien dat Mollie werkt het versturen van
+  // een echte factuur zijn -- en daar hangt een factuurnummer aan dat je nooit
+  // meer weg krijgt. Nu kun je met de testsleutel de hele weg naar Mollie een
+  // keer lopen en de betaalpagina openen zonder dat er iets vast komt te
+  // liggen. Er wordt niets bewaard: de link staat alleen bij Mollie en hoort
+  // bij geen enkele factuur.
+  if (verzoek.actie === "proef") {
+    const sleutel = await mollieSleutel(beheerder, bedrijfId);
+    if (!sleutel) return antwoord({ fout: "Er is nog geen Mollie-sleutel gekoppeld." }, 400);
+    try {
+      const link = await maakBetaallink(sleutel, {
+        bedrag: 0.01,
+        omschrijving: "Proef vanuit Paaltje Systems",
+        // Geen factuur om te melden, dus ook geen meldings-URL.
+        meldingUrl: "",
+      });
+      return antwoord({ url: link.url });
+    } catch (e) {
+      return antwoord({ fout: e instanceof Error ? e.message : String(e) }, 400);
+    }
   }
 
   if (verzoek.actie === "ontkoppelen") {
