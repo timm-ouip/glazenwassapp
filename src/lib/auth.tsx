@@ -196,7 +196,10 @@ export function useAuth() {
 
 export async function signOut() {
   vergeetTellers();
-  await supabase.auth.signOut();
+  // Alleen hier uitloggen. Zonder bereik kiest supabase "global", en dan
+  // trekt het je sessies op álle apparaten in: uitloggen op je telefoon
+  // gooide je ook van je laptop.
+  await supabase.auth.signOut({ scope: "local" });
 }
 
 /**
