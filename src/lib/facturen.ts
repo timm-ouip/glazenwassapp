@@ -287,3 +287,119 @@ export async function fetchKlanttypen(): Promise<Map<string, Klanttype>> {
     ]),
   );
 }
+
+// ---------------------------------------------------------------------
+// Vangnetten
+// ---------------------------------------------------------------------
+
+/**
+ * Waarom een adres op "overmaken" geen factuur oplevert. Drie manieren, en
+ * alle drie gebeuren ze zonder dat je er iets van merkt: er staat gewoon geen
+ * factuur.
+ */
+export type VangnetSoort = "zonder_klant" | "zonder_prijs" | "zonder_mail" | "zonder_klusprijs";
+
+export interface VangnetRij {
+  soort: VangnetSoort;
+  customer_id: string;
+  klant_id: string | null;
+  /** "Markgraaf A 138", met de officiële straatnaam. */
+  adres: string;
+  wijk: string;
+  naam: string;
+}
+
+export const VANGNET: {
+  soort: VangnetSoort;
+  kop: string;
+  uitleg: string;
+}[] = [
+  {
+    soort: "zonder_klant",
+    kop: "Geen klant aan het adres",
+    uitleg:
+      "Een factuur gaat naar een klant, niet naar een adres. Hangt er geen klant aan, dan ontstaat er niets — ook niet als de dag netjes is afgemeld.",
+  },
+  {
+    soort: "zonder_prijs",
+    kop: "Geen prijs",
+    uitleg: "Zonder prijs valt er niets te factureren; deze beurten slaat de app over.",
+  },
+  {
+    soort: "zonder_mail",
+    kop: "Geen e-mailadres",
+    uitleg:
+      "De factuur wordt wel gemaakt, maar blijft als concept staan: er is geen adres om hem heen te sturen.",
+  },
+  {
+    soort: "zonder_klusprijs",
+    kop: "Extra opdracht zonder prijs",
+    uitleg:
+      "Het adres zelf is in orde, maar hier staat een extra opdracht open waar geen prijs bij hoort. Vink je die af, dan telt hij nergens mee.",
+  },
+];
+
+/**
+ * De adressen die het laten afweten. Leeg zolang het factureren uitstaat —
+ * dan valt er ook niets te missen.
+ */
+export async function fetchVangnet(): Promise<VangnetRij[]> {
+  const { data, error } = await supabase.rpc("facturen_vangnet");
+  if (error) throw error;
+  return (data ?? []) as VangnetRij[];
+}
+
+/** Wat er verandert als een hele wijk op overmaken gaat. */
+export interface WijkTelling {
+  /** Adressen die de wijk volgen; wie het zelf ingesteld heeft, verandert niet. */
+  adressen: number;
+  zonder_klant: number;
+  zonder_prijs: number;
+  zonder_mail: number;
+}
+
+export async function fetchWijkTelling(wijk: string): Promise<WijkTelling> {
+  const { data, error } = await supabase.rpc("wijk_overmaken_telling", { wijk });
+  if (error) throw error;
+  const x = (data ?? {}) as Partial<WijkTelling>;
+  return {
+    adressen: Number(x.adressen ?? 0),
+    zonder_klant: Number(x.zonder_klant ?? 0),
+    zonder_prijs: Number(x.zonder_prijs ?? 0),
+    zonder_mail: Number(x.zonder_mail ?? 0),
+  };
+}
+
+/** "80 zonder klant, 5 zonder prijs en 2 zonder e-mailadres". */
+function opsomming(delen: string[]): string {
+  if (delen.length <= 1) return delen[0] ?? "";
+  return `${delen.slice(0, -1).join(", ")} en ${delen[delen.length - 1]}`;
+}
+
+/**
+ * Wat er te zeggen valt voordat een hele wijk op overmaken gaat. Eén klik zet
+ * soms honderden adressen om, en van de adressen die het daarna laten afweten
+ * hoor je niets meer — dus die telling hoort ervóór.
+ *
+ * Leeg als er niets te melden is: geen enkel adres volgt de wijk.
+ */
+export function wijkWaarschuwing(t: WijkTelling): string | null {
+  if (t.adressen === 0) return null;
+  const kop =
+    t.adressen === 1
+      ? "1 adres volgt de wijk en gaat dus mee naar overmaken: dat krijgt voortaan een factuur in plaats van contant."
+      : `${t.adressen} adressen volgen de wijk en gaan dus mee naar overmaken: die krijgen voortaan een factuur in plaats van contant.`;
+  const stuk = opsomming(
+    [
+      t.zonder_klant > 0 ? `${t.zonder_klant} zonder klant` : "",
+      t.zonder_prijs > 0 ? `${t.zonder_prijs} zonder prijs` : "",
+      t.zonder_mail > 0 ? `${t.zonder_mail} zonder e-mailadres` : "",
+    ].filter(Boolean),
+  );
+  if (!stuk) return kop;
+  const mis = t.zonder_klant + t.zonder_prijs + t.zonder_mail;
+  return (
+    `${kop} Bij ${mis === 1 ? "één daarvan" : `${mis} daarvan`} komt er geen factuur de deur uit: ` +
+    `${stuk}. Dat merk je verder nergens aan — er staat dan gewoon geen factuur.`
+  );
+}

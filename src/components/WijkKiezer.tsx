@@ -53,6 +53,7 @@ import { useBevestig } from "@/components/Bevestig";
 import { BetaalwijzeKiezer } from "@/components/betalingen/BetaalwijzeKiezer";
 import { useAuth } from "@/lib/auth";
 import { zetWijkBetaalmethode, type Betaalmethode } from "@/lib/betalingen";
+import { fetchWijkTelling, wijkWaarschuwing } from "@/lib/facturen";
 import { opslaanBijEnter } from "@/lib/dialoog";
 
 interface Props {
@@ -244,6 +245,7 @@ function WijkDialoog({
   const [plaatsSuggesties, setPlaatsSuggesties] = useState<string[]>([]);
   const [methode, setMethode] = useState<Betaalmethode>("contant");
   const [bezig, setBezig] = useState(false);
+  const bevestig = useBevestig();
   const nieuw = wijk === null;
   // De betaalmethode en de beginstand zijn van de eigenaar; wie plant mag
   // een wijk wel hernoemen.
@@ -288,6 +290,33 @@ function WijkDialoog({
         onOpgeslagen(gemaakt.id);
         toast.success("Wijk toegevoegd");
       } else {
+        // Naar overmaken is geen kleine knop: alle adressen die de wijk volgen
+        // gaan mee, en wat daarvan geen factuur kan opleveren zie je daarna
+        // nergens meer. Dus eerst tellen, dan vragen.
+        if (isEigenaar && methode === "overmaken" && wijk.betaalmethode !== "overmaken") {
+          // Lukt het tellen niet, dan gaat het opslaan gewoon door: anders zou
+          // een hapering bij deze waarschuwing ook de naam en de plaats die je
+          // net aanpaste laten sneuvelen.
+          let tekst: string | null = null;
+          try {
+            tekst = wijkWaarschuwing(await fetchWijkTelling(wijk.id));
+          } catch (e) {
+            console.error("wijktelling:", e);
+          }
+          if (tekst) {
+            const ja = await bevestig({
+              titel: `${naam.trim() || wijk.name} op overmaken?`,
+              tekst,
+              bevestigLabel: "Op overmaken zetten",
+            });
+            if (!ja) {
+              // De keuze terug op wat er echt staat, anders lijkt het alsof de
+              // wijk toch op overmaken staat.
+              setMethode(wijk.betaalmethode);
+              return;
+            }
+          }
+        }
         await renameDistrict(wijk.id, naam.trim(), plaats);
         if (isEigenaar && methode !== wijk.betaalmethode) {
           await zetWijkBetaalmethode(wijk.id, methode);

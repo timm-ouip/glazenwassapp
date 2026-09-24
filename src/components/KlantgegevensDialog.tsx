@@ -751,6 +751,15 @@ export function KlantgegevensDialog({
                   />
                 </PopupVeld>
               </PopupPaar>
+              {/* Bij de velden zelf, en voor elke klant: ook een particulier
+                  kan overmaken. Zonder adres blijft een factuur als concept
+                  liggen, en dat merk je pas als je op Versturen drukt. */}
+              {!velden.email.trim() && !velden.email2.trim() && !velden.factuur_email.trim() && (
+                <p className="rounded-[14px] bg-tint-geel px-3 py-2 text-[12.5px] text-tint-geel-ink">
+                  Deze klant heeft nergens een e-mailadres staan: er kan geen aankondiging naartoe,
+                  en een factuur blijft als concept liggen.
+                </p>
+              )}
             </PopupBlok>
 
             <PopupBlok>

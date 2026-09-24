@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useBevestig } from "@/components/Bevestig";
+import { VangnetLijst, VangnetVak } from "@/components/betalingen/Vangnet";
 import { formatPrice } from "@/lib/klanten";
 import { datumSleutel, toonDatum } from "@/lib/wasdag";
 import {
@@ -21,6 +22,7 @@ import {
   fetchFacturen,
   fetchFactuurregels,
   fetchLosseRegels,
+  fetchVangnet,
   openBedrag,
   type Factuur,
 } from "@/lib/facturen";
@@ -57,9 +59,13 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
   const [filter, setFilter] = useState<Filter>("concept");
   const [gekozen, setGekozen] = useState<string[]>([]);
   const [open, setOpen] = useState<string | null>(null);
+  /** Staat de lijst met adressen die geen factuur opleveren open? */
+  const [vangnetOpen, setVangnetOpen] = useState(false);
 
   const facturen = useQuery({ queryKey: ["facturen"], queryFn: () => fetchFacturen() });
   const los = useQuery({ queryKey: ["factuurregels-los"], queryFn: fetchLosseRegels });
+  // Adressen op overmaken waar nooit een factuur van komt; zie Vangnet.tsx.
+  const vangnet = useQuery({ queryKey: ["facturen-vangnet"], queryFn: fetchVangnet });
 
   const alles = useMemo(() => facturen.data ?? [], [facturen.data]);
   const lijst = useMemo(() => alles.filter((f) => past(f, filter)), [alles, filter]);
@@ -130,6 +136,12 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
     versturen.mutate(teVersturen);
   }
 
+  // Een eigen blad, want er hoort een printknop bij en dan mag de rest van de
+  // tab niet mee op papier.
+  if (vangnetOpen) {
+    return <VangnetLijst rijen={vangnet.data ?? []} onTerug={() => setVangnetOpen(false)} />;
+  }
+
   return (
     <div className="space-y-3 pb-24">
       <div className="flex flex-wrap items-center gap-1.5">
@@ -165,6 +177,19 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
           nog niet binnen
         </span>
       </div>
+
+      {/* Wat er stilzwijgend niet gefactureerd wordt. Boven het gele vakje:
+          hier gebeurt niets vanzelf, en dat is het vervelendste soort stilte. */}
+      {vangnet.isError ? (
+        // Juist hier niet stil zijn: deze controle bestaat om te vertellen dat
+        // er iets ontbreekt, en dan is "niets te zien" het verkeerde antwoord.
+        <p className="rounded-[20px] bg-tint-rood px-4 py-3 text-[13px] text-tint-rood-ink">
+          De controle op adressen zonder factuur kon niet opgehaald worden. Er kunnen dus adressen
+          zijn die stilzwijgend niets opleveren; ververs de pagina om het opnieuw te proberen.
+        </p>
+      ) : (
+        <VangnetVak rijen={vangnet.data ?? []} onBekijk={() => setVangnetOpen(true)} />
+      )}
 
       {/* Regels die nog op geen enkele factuur staan. Geel, met een knop:
           automatisch mag, maar je ziet het en je drukt zelf. */}

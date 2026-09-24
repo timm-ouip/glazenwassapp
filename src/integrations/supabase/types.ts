@@ -3763,6 +3763,17 @@ export type Database = {
       };
       facturen_klaarzetten: { Args: { nu_ook?: boolean | null }; Returns: number };
       facturen_lijst: { Args: { tot?: string | null; vanaf?: string | null }; Returns: Json };
+      facturen_vangnet: {
+        Args: never;
+        Returns: {
+          adres: string;
+          customer_id: string;
+          klant_id: string;
+          naam: string;
+          soort: string;
+          wijk: string;
+        }[];
+      };
       factuur_adres_tekst: { Args: { adres: string }; Returns: string };
       factuur_betaald: {
         Args: { bedrag: number; factuur: string; op?: string | null };
@@ -4123,6 +4134,7 @@ export type Database = {
           wa_telefoon: string;
         }[];
       };
+      wijk_overmaken_telling: { Args: { wijk: string }; Returns: Json };
       zet_adressen_actief: {
         Args: { adressen: string[]; voor_bedrijf?: string | null };
         Returns: number;
