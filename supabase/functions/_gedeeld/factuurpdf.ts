@@ -86,7 +86,11 @@ export function euro(n: number): string {
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   const rest = (centen % 100).toString().padStart(2, "0");
-  return `${negatief ? "-" : ""}EUR ${heel},${rest}`;
+  // Het euroteken zelf, niet "EUR": pdf-lib zet zijn standaardletters neer met
+  // /WinAnsiEncoding, en daar zit de € gewoon in (byte 0x80). Los uitgeprobeerd
+  // met een proef-PDF, want een fout hierin komt pas naar boven als er al een
+  // factuurnummer getrokken is.
+  return `${negatief ? "-" : ""}€ ${heel},${rest}`;
 }
 
 /** "28-03-2026" */

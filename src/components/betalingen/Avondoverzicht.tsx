@@ -29,7 +29,7 @@ import {
   wijzigingTekst,
 } from "@/lib/geldlopen";
 import { fetchDistricts, fetchStreets, formatPrice } from "@/lib/klanten";
-import { fetchFacturen, openBedrag } from "@/lib/facturen";
+import { fetchFacturen, openBedrag, porNodig } from "@/lib/facturen";
 import { zetKlachtStatus } from "@/lib/klachten";
 import { fetchAvond, fetchPof, perLoper, soortLabel, type Gebeurtenis } from "@/lib/overzichten";
 import { cn } from "@/lib/utils";
@@ -470,7 +470,11 @@ export function Avondoverzicht({
               {facturen.data
                 ? concepten === 0
                   ? `${formatPrice(nietBinnen)} nog niet binnen`
-                  : `${concepten === 1 ? "concept" : "concepten"} klaar · ${formatPrice(nietBinnen)} nog niet binnen`
+                  : // Na de 5e van de maand staan ze te lang te wachten; dan
+                    // zegt de tegel dat in plaats van het bedrag.
+                    porNodig(concepten, vandaag())
+                    ? `${concepten === 1 ? "concept wacht" : "concepten wachten"} al · versturen`
+                    : `${concepten === 1 ? "concept" : "concepten"} klaar · ${formatPrice(nietBinnen)} nog niet binnen`
                 : "\u00a0"}
             </TegelOnder>
           </button>

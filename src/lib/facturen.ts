@@ -403,3 +403,23 @@ export function wijkWaarschuwing(t: WijkTelling): string | null {
     `${stuk}. Dat merk je verder nergens aan — er staat dan gewoon geen factuur.`
   );
 }
+
+// ---------------------------------------------------------------------
+// De por
+// ---------------------------------------------------------------------
+
+/** Na deze dag van de maand hoort er een por bij openstaande concepten. */
+export const POR_DAG = 5;
+
+/**
+ * Moet er een por bij?
+ *
+ * Een concept gaat niet vanzelf de deur uit — dat is met opzet, want er zit
+ * een mail met een bedrag aan vast. Maar "ik doe het nog wel" wordt zo een
+ * maand, en dan staat de omzet van september pas in november op de rekening.
+ * De nacht van de 1e zet de concepten klaar; staan ze na de 5e nog steeds te
+ * wachten, dan is het tijd om er wat van te zeggen.
+ */
+export function porNodig(concepten: number, vandaagIso: string): boolean {
+  return concepten > 0 && Number(vandaagIso.slice(8, 10)) > POR_DAG;
+}

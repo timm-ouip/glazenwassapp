@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useBevestig } from "@/components/Bevestig";
 import { VangnetLijst, VangnetVak } from "@/components/betalingen/Vangnet";
 import { formatPrice } from "@/lib/klanten";
-import { datumSleutel, toonDatum } from "@/lib/wasdag";
+import { datumSleutel, toonDatum, vandaag } from "@/lib/wasdag";
 import {
   facturenKlaarzetten,
   facturenVersturen,
@@ -24,6 +24,7 @@ import {
   fetchLosseRegels,
   fetchVangnet,
   openBedrag,
+  porNodig,
   type Factuur,
 } from "@/lib/facturen";
 
@@ -177,6 +178,30 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
           nog niet binnen
         </span>
       </div>
+
+      {/* De por. De concepten staan klaar, maar iemand moet op versturen
+          drukken -- en dat is precies wat je vergeet. */}
+      {porNodig(concepten.length, vandaag()) && (
+        <section className="flex flex-wrap items-center gap-3 rounded-[20px] bg-tint-amber px-4 py-3 text-[13px] text-tint-amber-ink">
+          <span className="min-w-0 flex-1">
+            Het is de {Number(vandaag().slice(8, 10))}e en er{" "}
+            {concepten.length === 1 ? "staat" : "staan"}{" "}
+            {concepten.length === 1 ? "nog 1 concept" : `nog ${concepten.length} concepten`} klaar
+            om te versturen. Hoe later ze weggaan, hoe later het geld binnenkomt.
+          </span>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="rounded-full"
+            onClick={() => {
+              setFilter("concept");
+              setGekozen(concepten.map((f) => f.id));
+            }}
+          >
+            Allemaal kiezen
+          </Button>
+        </section>
+      )}
 
       {/* Wat er stilzwijgend niet gefactureerd wordt. Boven het gele vakje:
           hier gebeurt niets vanzelf, en dat is het vervelendste soort stilte. */}

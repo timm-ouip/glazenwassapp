@@ -339,6 +339,43 @@ function Dashboard() {
     btwQuery.isSuccess,
   ]);
 
+  /**
+   * Btw per kwartaal, voor de aangifte.
+   *
+   * Met opzet uit `posten` en niet uit `zichtbaar`: dit is het hele bedrijf.
+   * Zou hij de keuze contant/overmaken volgen, dan stond er een bedrag onder
+   * "btw" dat je zo over kunt nemen en dat niet klopt.
+   */
+  const kwartalen = useMemo(() => {
+    if (!posten || !inclusiefVan || !btwQuery.isSuccess) return null;
+    const omzet = [0, 0, 0, 0];
+    const btw = [0, 0, 0, 0];
+    for (const p of posten) {
+      const k = Math.floor((Number(p.datum.slice(5, 7)) - 1) / 3);
+      if (k < 0 || k > 3) continue;
+      omzet[k] = (omzet[k] ?? 0) + p.prijs;
+      btw[k] =
+        (btw[k] ?? 0) +
+        btwIn(
+          p.prijs,
+          (p.customer_id ? inclusiefVan.get(p.customer_id) : undefined) ?? true,
+          btwProcent,
+        );
+    }
+    // Van het lopende jaar alleen de kwartalen die al begonnen zijn; een leeg
+    // Q4 in maart zegt niets en leest als "nog niets verdiend".
+    return [0, 1, 2, 3]
+      .filter((k) => k * 3 < aantalMaanden)
+      .map((k) => ({
+        nr: k + 1,
+        periode: `${MAANDEN[k * 3]?.[0]} t/m ${MAANDEN[k * 3 + 2]?.[0]}`,
+        omzet: omzet[k] ?? 0,
+        btw: btw[k] ?? 0,
+        // Het kwartaal waar we nu in zitten is nog niet af.
+        lopend: lopend && k === Math.floor((aantalMaanden - 1) / 3),
+      }));
+  }, [posten, inclusiefVan, btwProcent, btwQuery.isSuccess, aantalMaanden, lopend]);
+
   const pof = useMemo(() => {
     const open = (pofQuery.data ?? []).filter((r) => r.open > 0.005);
     return pofQuery.data
@@ -673,6 +710,58 @@ function Dashboard() {
                     })
                     .join(", ")}`}
                 />
+              )}
+            </Paneel>
+
+            <Paneel
+              titel="Btw per kwartaal"
+              className="md:col-span-12"
+              extra={
+                kwartalen ? (
+                  <PaneelExtra>
+                    {euro(kwartalen.reduce((t, k) => t + k.btw, 0))} over{" "}
+                    {lopend ? "dit jaar" : jaar}
+                  </PaneelExtra>
+                ) : undefined
+              }
+            >
+              {kwartalen && (
+                <>
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="text-left text-[12px] text-muted-foreground">
+                        <th className="pb-1 font-medium">Kwartaal</th>
+                        <th className="pb-1 font-medium">Periode</th>
+                        <th className="pb-1 text-right font-medium">Omzet</th>
+                        <th className="pb-1 text-right font-medium">Btw</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {kwartalen.map((k) => (
+                        <tr key={k.nr} className="border-t border-border/60">
+                          <td className="py-1.5 font-medium">
+                            Q{k.nr}
+                            {k.lopend && (
+                              <span className="ml-1.5 text-[11.5px] font-normal text-muted-foreground">
+                                loopt nog
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-1.5 text-muted-foreground">{k.periode}</td>
+                          <td className="py-1.5 text-right tabular-nums">{euro(k.omzet)}</td>
+                          <td className="py-1.5 text-right font-semibold tabular-nums">
+                            {euro(k.btw)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="text-[11.5px] opacity-70">
+                    Hier staat altijd het hele bedrijf, ook als je bovenaan op contant of overmaken
+                    filtert. Bij een particulier zit de btw in de prijs, bij een bedrijf komt hij
+                    erbovenop.
+                  </p>
+                </>
               )}
             </Paneel>
 
