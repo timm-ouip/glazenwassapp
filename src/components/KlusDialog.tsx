@@ -161,6 +161,15 @@ export function KlusDialog({ open, onOpenChange, customer, klus, onOpslaan }: Pr
                       onChange={(e) => setZoek(e.target.value)}
                     />
                   </PopupVeld>
+                  {/* De adressenlijst wordt gedeeld met de rest van de app, maar
+                      niet elke pagina heeft hem al staan. Zonder dit regeltje
+                      lijkt het bij het eerste zoeken alsof het adres niet
+                      bestaat, terwijl de lijst nog onderweg is. */}
+                  {zoek.trim().length > 0 && customersQuery.isLoading && (
+                    <p className="px-1 text-[12.5px] text-muted-foreground">
+                      Even de adressen ophalen…
+                    </p>
+                  )}
                   {treffers.length > 0 && (
                     <ul className="max-h-40 divide-y divide-border/60 overflow-y-auto rounded-xl border border-input">
                       {treffers.map((t) => (

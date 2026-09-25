@@ -1661,9 +1661,13 @@ function WijkenTab() {
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     return { vanaf: dag(van), tot: dag(nu) };
   }, []);
+  // Dezelfde sleutel als de planningspagina, met dezelfde begin- en einddatum:
+  // anders wordt hetzelfde halve jaar planning twee keer opgehaald als je
+  // beide pagina's bezoekt.
   const wasdagenQuery = useQuery({
-    queryKey: ["wasdagen", halfJaar.vanaf, halfJaar.tot],
+    queryKey: ["wasdagen-historie", halfJaar.vanaf, halfJaar.tot],
     queryFn: () => fetchWasdagen(halfJaar.vanaf, halfJaar.tot),
+    staleTime: 30 * 60_000,
   });
 
   const districts = volgorde ?? districtsQuery.data ?? [];

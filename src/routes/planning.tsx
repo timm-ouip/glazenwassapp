@@ -67,7 +67,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { laatsteUndo, pushUndo, undoKnop, undoMetMelding, useLaatsteUndoLabel } from "@/lib/undo";
 import {
   aanDeBeurt,
-  fetchCustomers,
   fetchCustomersMetInactief,
   fetchDistricts,
   fetchStreets,
@@ -413,17 +412,38 @@ function Planning() {
   }, [afmeldQuery.data]);
   // Deze twee staan meestal al in de cache van de wijkenpagina; ze zijn hier
   // alleen nodig om te laten zien wélke straten er op een dag staan.
-  const customersQuery = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
-  // Voor wat er al op een dag staat of gedaan is: ook gestopte en verhuisde
-  // adressen, anders vallen hun regels uit de wijken, de bedragen en het
-  // tempo. Nieuw werk kiezen (voorstel, wijk inplannen) blijft op de actieve
-  // lijst hierboven.
+  // Alle adressen, ook de gestopte en verhuisde: anders vallen hun regels uit
+  // de wijken, de bedragen en het tempo van wat al gebeurd is.
+  //
+  // Eén keer ophalen, niet twee. De actieve lijst is precies deze lijst zonder
+  // de gestopte -- dezelfde kolommen, dezelfde volgorde -- en apart ophalen
+  // betekende de hele klantentabel twee keer downloaden: samen 2,8 van de
+  // 2,9 MB die een bezoek aan deze pagina kostte.
+  //
+  // `staleTime` mag ruim: elke plek die een adres verandert maakt "customers"
+  // ongeldig (zesentwintig plekken doen dat), dus een wijziging is meteen te
+  // zien. Zonder dat getal haalde de pagina alles opnieuw op, ook als je er
+  // net was.
   const adressenQuery = useQuery({
     queryKey: ["customers", "met-inactief"],
     queryFn: fetchCustomersMetInactief,
+    staleTime: 5 * 60_000,
   });
-  const streetsQuery = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
-  const districtsQuery = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
+  /** Nieuw werk kies je uit de actieve adressen (voorstel, wijk inplannen). */
+  const actieveAdressen = useMemo(
+    () => (adressenQuery.data ?? []).filter((c) => !c.inactief_op),
+    [adressenQuery.data],
+  );
+  const streetsQuery = useQuery({
+    queryKey: ["streets"],
+    queryFn: fetchStreets,
+    staleTime: 5 * 60_000,
+  });
+  const districtsQuery = useQuery({
+    queryKey: ["districts"],
+    queryFn: fetchDistricts,
+    staleTime: 5 * 60_000,
+  });
 
   const regels = useMemo(() => wasdagenQuery.data ?? [], [wasdagenQuery.data]);
 
@@ -533,9 +553,14 @@ function Planning() {
     const n = new Date();
     return { vanaf: sleutel(new Date(n.getFullYear(), n.getMonth() - 6, 1)), tot: sleutel(n) };
   }, []);
+  // Een eigen sleutel, niet onder "wasdagen": elke wijziging in de planning
+  // maakt die sleutel ongeldig, en dan werd er een half jaar planning opnieuw
+  // opgehaald om een tempo bij te stellen dat over maanden gaat. Eén dag
+  // verzetten verandert een mediaan over zes maanden niet merkbaar.
   const historieQuery = useQuery({
-    queryKey: ["wasdagen", halfJaar.vanaf, halfJaar.tot],
+    queryKey: ["wasdagen-historie", halfJaar.vanaf, halfJaar.tot],
     queryFn: () => fetchWasdagen(halfJaar.vanaf, halfJaar.tot),
+    staleTime: 30 * 60_000,
   });
 
   /** Op welke dagen van de week je werkt (Instellingen → Wijken). */
@@ -544,7 +569,7 @@ function Planning() {
   const voorstel = useMemo(() => {
     const districts = districtsQuery.data ?? [];
     const streets = streetsQuery.data ?? [];
-    const customers = customersQuery.data ?? [];
+    const customers = actieveAdressen;
     if (districts.length === 0 || customers.length === 0) return new Map<string, Voorstel>();
 
     // Alleen vooruitkijken: een voorstel voor een maand die geweest is zegt
@@ -573,7 +598,7 @@ function Planning() {
   }, [
     districtsQuery.data,
     streetsQuery.data,
-    customersQuery.data,
+    actieveAdressen,
     adressenQuery.data,
     regels,
     historieQuery.data,
@@ -629,12 +654,20 @@ function Planning() {
   const magPlannen = useRecht("planning");
   const magVersturen = useRecht("mail_versturen");
   const instellingen = usePlanningInstellingen();
-  const teamledenQuery = useQuery({ queryKey: ["teamleden"], queryFn: fetchTeamleden });
+  const teamledenQuery = useQuery({
+    queryKey: ["teamleden"],
+    queryFn: fetchTeamleden,
+    staleTime: 5 * 60_000,
+  });
   const ploegenQuery = useQuery({
     queryKey: ["dag-ploegen", sleutel(van), sleutel(tot)],
     queryFn: () => fetchDagPloegen(sleutel(van), sleutel(tot)),
   });
-  const klantenQuery = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten });
+  const klantenQuery = useQuery({
+    queryKey: ["klanten"],
+    queryFn: fetchKlanten,
+    staleTime: 5 * 60_000,
+  });
   // Ook in de maand: het paneel rechts biedt "Wijzigingen sturen" voor de dag.
   const aankondigingenQuery = useAankondigingen(sleutel(van), sleutel(tot));
   /** Voor welke dag je de ploegen indeelt; leeg = dicht. */
@@ -1846,12 +1879,19 @@ function Planning() {
    * dat om de drie maanden gaat hoort er in de tussenmaanden niet bij.
    */
   async function planWijk(datum: string, wijk: District) {
+    // Vlak voor het wegschrijven nog één keer navragen. De pagina houdt de
+    // adressen vijf minuten vast, en dat is prima om naar te kijken -- maar
+    // hier worden dagregels aangemaakt met de prijs van dat moment, en dat is
+    // de regel waar straks de factuur op staat. Stopte een collega net een
+    // adres of veranderde hij een prijs, dan hoort dat mee te tellen.
+    const vers = await adressenQuery.refetch();
+    const alleAdressen = vers.data ?? adressenQuery.data ?? [];
     const straten = new Set(
       (streetsQuery.data ?? []).filter((s) => s.district_id === wijk.id).map((s) => s.id),
     );
     const maandVanDag = datum.slice(0, 7);
-    const kandidaten = (customersQuery.data ?? []).filter(
-      (c) => straten.has(c.street_id) && aanDeBeurt(c, maandVanDag),
+    const kandidaten = alleAdressen.filter(
+      (c) => !c.inactief_op && straten.has(c.street_id) && aanDeBeurt(c, maandVanDag),
     );
 
     let alErop: Set<string>;
@@ -2478,7 +2518,7 @@ function Planning() {
   async function zetStraatOpDag(adressen: string[], datum: string, ploegNr: number | null) {
     const maandNu = maandVan(datum);
     const regelsErbij = adressen
-      .map((id) => (customersQuery.data ?? []).find((c) => c.id === id))
+      .map((id) => actieveAdressen.find((c) => c.id === id))
       .filter((c): c is Customer => !!c)
       .map((c) => ({ customer_id: c.id, prijs: prijsVoorMaand(c, maandNu) }));
     if (regelsErbij.length === 0) return;

@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { haalAllePaginas } from "@/lib/pagineren";
@@ -595,6 +596,13 @@ function nakijkpunten(
 function ImportPagina() {
   useRequireAuth();
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  /** Alles wat over adressen gaat opnieuw laten ophalen. */
+  function versAdressen() {
+    for (const sleutel of ["customers", "streets", "districts", "klanten"]) {
+      void qc.invalidateQueries({ queryKey: [sleutel] });
+    }
+  }
   const [rijen, setRijen] = useState<RijPreview[]>([]);
   const [lijst, setLijst] = useState<ImportRij[]>([]);
   const [bestandsnaam, setBestandsnaam] = useState("");
@@ -1378,6 +1386,12 @@ function ImportPagina() {
             : ""),
       );
 
+      // Wat er nu in de app staat klopt niet meer: er zijn adressen bij
+      // gekomen, en misschien straten en wijken. Zonder dit bleef een pagina
+      // die zijn lijst even vasthoudt de nieuwe adressen missen -- "hele wijk
+      // inplannen" sloeg ze dan stil over.
+      versAdressen();
+
       if (!werkPlaats) {
         // Zonder plaats valt er niets op te zoeken; dan is het klaar.
         navigate({ to: "/" });
@@ -1387,6 +1401,7 @@ function ImportPagina() {
       // Zei de melding "Importeren mislukt", dan probeerde je opnieuw.
       try {
         await vulAan(districtId, werkPlaats, bewustLeeg);
+        versAdressen();
       } catch (e) {
         toast.error(
           "De adressen zijn geïmporteerd, maar straatnamen en postcodes aanvullen lukte niet: " +
