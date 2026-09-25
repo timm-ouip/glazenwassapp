@@ -878,15 +878,21 @@ function PrintPagina() {
     pushUndo({
       label: "Straatvolgorde",
       undo: async () => {
-        await Promise.all([
-          persistStreetOrder(vorige),
-          persistKolomStart(
-            vlagWijzigingen.map((v) => ({
-              id: v.id,
-              kolom_start: vorige.find((s) => s.id === v.id)?.kolom_start ?? false,
-            })),
-          ),
-        ]);
+        try {
+          await Promise.all([
+            persistStreetOrder(vorige),
+            persistKolomStart(
+              vlagWijzigingen.map((v) => ({
+                id: v.id,
+                kolom_start: vorige.find((s) => s.id === v.id)?.kolom_start ?? false,
+              })),
+            ),
+          ]);
+        } catch (e) {
+          // Terugdraaien dat stil mislukt is het ergste: je denkt dat het
+          // terugstaat en het staat er niet.
+          toast.error("Terugdraaien mislukt: " + (e as Error).message);
+        }
         qc.invalidateQueries({ queryKey: ["streets"] });
       },
     });

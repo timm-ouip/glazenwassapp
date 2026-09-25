@@ -1517,15 +1517,28 @@ export async function persistCustomerOrder(
   );
 }
 
+/**
+ * De volgorde van de straten vastleggen.
+ *
+ * In één opdracht, en niet één per straat: één straat verslepen stuurde
+ * anders tientallen losse opdrachten tegelijk de deur uit. Dat is traag en het
+ * kan halverwege blijven steken -- half oud, half nieuw, zonder dat iemand het
+ * merkt.
+ *
+ * De database schrijft alleen wat echt verandert. Dat scheelt vooral in de
+ * eerste wijk, waar de nummers 1, 2, 3… zijn: daar raakt één plek opschuiven
+ * twee straten. In een volgende wijk beginnen de nummers hoger (de printlijst
+ * nummert alle straten van het bedrijf door), en dan krijgt zo'n hele wijk
+ * alsnog nieuwe nummers. Reken er dus niet op dat het werk van een collega
+ * altijd blijft staan.
+ *
+ * Gooit een fout als het niet lukte, en ook als de lijst niet meer actueel is
+ * (een straat die inmiddels weg is). Stilzwijgend mislukken is hier het ergste
+ * wat er kan gebeuren, want op het scherm staat de nieuwe volgorde al.
+ */
 export async function persistStreetOrder(streets: Street[]) {
-  await Promise.all(
-    streets.map((s, i) =>
-      supabase
-        .from("streets")
-        .update({ sort_order: i + 1 })
-        .eq("id", s.id),
-    ),
-  );
+  const { error } = await supabase.rpc("straten_volgorde", { ids: streets.map((s) => s.id) });
+  if (error) throw error;
 }
 
 // --- Markeringen (kleuren op de printlijst) ------------------------------
@@ -1661,13 +1674,21 @@ export async function persistDistrictOrder(districts: District[]) {
   );
 }
 
-/** Legt vast welke straten bovenaan een printkolom beginnen. */
+/**
+ * Legt vast welke straten bovenaan een printkolom beginnen.
+ *
+ * Gooit een fout als het niet lukte, net als `persistStreetOrder`: stil
+ * mislukken is hier het ergste, want op het scherm staan de kolomkoppen al
+ * waar je ze neerzette.
+ */
 export async function persistKolomStart(vlaggen: { id: string; kolom_start: boolean }[]) {
-  await Promise.all(
+  const uitkomsten = await Promise.all(
     vlaggen.map((v) =>
       supabase.from("streets").update({ kolom_start: v.kolom_start }).eq("id", v.id),
     ),
   );
+  const mis = uitkomsten.find((u) => u.error);
+  if (mis?.error) throw mis.error;
 }
 
 export async function setStreetSortDesc(id: string, desc: boolean) {

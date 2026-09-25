@@ -4251,6 +4251,7 @@ export type Database = {
         Args: { uitkomst: Json; voor_bedrijf?: string | null };
         Returns: number;
       };
+      straten_volgorde: { Args: { ids: string[] }; Returns: number };
       telefoon_sleutel: { Args: { tekst: string }; Returns: string };
       wa_toestemming_bestaande_klanten: {
         Args: never;

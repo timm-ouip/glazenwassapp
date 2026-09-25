@@ -273,6 +273,23 @@ const WIJK_SNELTOETSEN: [string, string][] = [
   ["?", "Dit overzicht"],
 ];
 
+/**
+ * De straatvolgorde opslaan en het zeggen als het misgaat.
+ *
+ * Op het scherm staat de nieuwe volgorde al; blijft een mislukking stil, dan
+ * denk je dat het gelukt is en staat het er na de volgende keer laden weer
+ * anders. Geeft terug of het gelukt is.
+ */
+async function volgordeOpslaan(lijst: Street[]): Promise<boolean> {
+  try {
+    await persistStreetOrder(lijst);
+    return true;
+  } catch (e) {
+    toast.error("Volgorde opslaan mislukt: " + (e as Error).message);
+    return false;
+  }
+}
+
 function Index() {
   useRequireAuth();
   const qc = useQueryClient();
@@ -1652,7 +1669,13 @@ function Index() {
     const plek = streets.findIndex((s) => s.id === bron.id);
     const volgorde = [...streets];
     volgorde.splice(plek < 0 ? streets.length : plek + 1, 0, nieuweStraat);
-    await persistStreetOrder(volgorde);
+    // Mislukt dit, dan hoort de rest niet door te lopen: dan zou er een
+    // "ongedaan maken" bij komen voor iets wat nooit is opgeslagen, en een
+    // geslaagd-melding boven op de foutmelding.
+    if (!(await volgordeOpslaan(volgorde))) {
+      herlaad();
+      return;
+    }
 
     pushUndo({
       label: `Splitsen ${bron.name}`,
@@ -1676,7 +1699,7 @@ function Index() {
             `De adressen staan terug, maar "${naam}" kon niet weg. Gooi hem zelf weg als hij leeg is.`,
           );
         }
-        await persistStreetOrder(vorigeVolgorde);
+        await volgordeOpslaan(vorigeVolgorde);
         herlaad();
       },
     });
@@ -2066,12 +2089,15 @@ function Index() {
         ["streets"],
         next.map((s, i) => ({ ...s, sort_order: i + 1 })),
       );
-      await persistStreetOrder(next);
+      if (!(await volgordeOpslaan(next))) {
+        herlaad();
+        return;
+      }
       if (verhuist) await zetStratenInGroep([bron.id], doelGroep);
       pushUndo({
         label: verhuist ? `Straat ${bron.name} verplaatst` : "Straatvolgorde",
         undo: async () => {
-          await persistStreetOrder(vorigeVolgorde);
+          await volgordeOpslaan(vorigeVolgorde);
           if (verhuist) await zetStratenInGroep([bron.id], vorigeGroep);
           herlaad();
         },
