@@ -332,33 +332,72 @@ Deno.serve(async (req) => {
         vervaldatum: string;
       };
 
-      const { data: f } = await beheerder
+      const { data: f, error: fFout } = await beheerder
         .from("facturen")
-        .select("id,soort,klantgegevens,klant_id,mollie_link")
+        .select("id,soort,klantgegevens,klant_id,mollie_link,onderwerp,kenmerk,opmerking")
         .eq("id", id)
         .eq("company_id", bedrijf.id)
         .maybeSingle();
+      // De echte melding doorgeven: het nummer is hierboven al getrokken, en
+      // "bestaat niet" zet je dan op het verkeerde been.
+      if (fFout) throw new Error(fFout.message);
       if (!f) throw new Error("Die factuur bestaat niet.");
 
       const kg = (f.klantgegevens ?? {}) as Record<string, string | number>;
       const naar = String(kg.email ?? "").trim();
       if (!naar) throw new Error("Deze klant heeft geen e-mailadres.");
 
-      const { data: regels } = await beheerder
+      const { data: regels, error: regelFout } = await beheerder
         .from("factuurregels")
-        .select("datum,omschrijving,notitie,bedrag_excl,btw_bedrag,bedrag_incl,btw_procent")
+        .select(
+          "datum,omschrijving,notitie,bedrag,bedrag_excl,btw_bedrag,bedrag_incl,btw_procent,btw_inclusief,aantal,eenheid,stukprijs",
+        )
         .eq("factuur_id", id)
         .is("deleted_at", null)
-        .order("datum");
-      const lijst = (regels ?? []).map((r) => ({
-        datum: String(r.datum),
-        omschrijving: String(r.omschrijving ?? ""),
-        notitie: String(r.notitie ?? ""),
-        bedrag_excl: Number(r.bedrag_excl),
-        btw_bedrag: Number(r.btw_bedrag),
-        bedrag_incl: Number(r.bedrag_incl),
-        btw_procent: Number(r.btw_procent),
-      })) as FactuurRegel[];
+        .order("datum")
+        .order("created_at");
+      if (regelFout) throw new Error(regelFout.message);
+      // Een particulier ziet bedragen inclusief btw, een bedrijf of VvE
+      // exclusief met de btw eronder. Een losse factuur volgt wat je bij het
+      // maken koos, zodat de prijzen op papier dezelfde zijn als die je typte.
+      const losseModi = new Set(
+        (regels ?? []).filter((r) => r.stukprijs !== null).map((r) => Boolean(r.btw_inclusief)),
+      );
+      const inclusief =
+        losseModi.size === 1
+          ? [...losseModi][0]!
+          : String(kg.klanttype ?? "particulier") === "particulier";
+      const lijst = (regels ?? []).map((r) => {
+        const aantal = Number(r.aantal ?? 1) || 1;
+        const regel: FactuurRegel = {
+          datum: String(r.datum),
+          omschrijving: String(r.omschrijving ?? ""),
+          notitie: String(r.notitie ?? ""),
+          bedrag_excl: Number(r.bedrag_excl),
+          btw_bedrag: Number(r.btw_bedrag),
+          bedrag_incl: Number(r.bedrag_incl),
+          btw_procent: Number(r.btw_procent),
+        };
+        // Aantal en prijs alleen op papier als aantal x prijs precies het
+        // regelbedrag is. Is het bedrag later met de hand veranderd ("maar een
+        // deel gedaan"), of scheelt de btw-afronding een cent, dan liever
+        // alleen het totaal dan een som die niet klopt.
+        if (r.stukprijs !== null && r.stukprijs !== undefined) {
+          const regelbedrag = inclusief ? regel.bedrag_incl : regel.bedrag_excl;
+          const centen = (n: number) => Math.round(n * 100);
+          const opgegeven = Number(r.stukprijs);
+          const teruggerekend = Math.round((regelbedrag / aantal) * 100) / 100;
+          const stuk = [opgegeven, teruggerekend].find(
+            (p) => centen(aantal * p) === centen(regelbedrag),
+          );
+          if (stuk !== undefined) {
+            regel.aantal = aantal;
+            regel.eenheid = String(r.eenheid ?? "");
+            regel.stukprijs = stuk;
+          }
+        }
+        return regel;
+      });
       if (lijst.length === 0) throw new Error("Deze factuur heeft geen regels.");
       const totaal = lijst.reduce((t, r) => t + r.bedrag_incl, 0);
 
@@ -414,9 +453,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      // 2. Het papier. Een particulier ziet bedragen inclusief btw, een
-      //    bedrijf of VvE exclusief met de btw eronder.
-      const inclusief = String(kg.klanttype ?? "particulier") === "particulier";
+      // 2. Het papier.
       const pdf = await maakFactuurPdf({
         nummer: kaart.nummer,
         soort: f.soort === "credit" ? "credit" : "factuur",
@@ -441,8 +478,13 @@ Deno.serve(async (req) => {
           huisnummer: String(kg.huisnummer ?? ""),
           postcode: String(kg.postcode ?? ""),
           plaats: String(kg.plaats ?? ""),
+          kvk: String(kg.kvk ?? ""),
+          btw_nummer: String(kg.btw_nummer ?? ""),
         },
         regels: lijst,
+        onderwerp: String(f.onderwerp ?? ""),
+        kenmerk: String(f.kenmerk ?? ""),
+        opmerking: String(f.opmerking ?? ""),
         ...(betaallink ? { betaallink } : {}),
         vormgeving: await vormgeving(),
       });

@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconArrowLeft as ArrowLeft, IconSend as Send } from "@tabler/icons-react";
+import {
+  IconArrowLeft as ArrowLeft,
+  IconReceipt as Bon,
+  IconSend as Send,
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useBevestig } from "@/components/Bevestig";
 import { VangnetLijst, VangnetVak } from "@/components/betalingen/Vangnet";
+import { LosseFactuurDialog } from "@/components/facturen/LosseFactuurDialog";
 import { formatPrice } from "@/lib/klanten";
 import { datumSleutel, toonDatum, vandaag } from "@/lib/wasdag";
 import {
@@ -74,6 +79,7 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
     queryFn: fetchHerinneringenStraks,
   });
   const [straksOpen, setStraksOpen] = useState(false);
+  const [losOpen, setLosOpen] = useState(false);
 
   const alles = useMemo(() => facturen.data ?? [], [facturen.data]);
   const lijst = useMemo(() => alles.filter((f) => past(f, filter)), [alles, filter]);
@@ -203,7 +209,16 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
             {f.waarde === "telaat" && teLaat.length > 0 && ` (${teLaat.length})`}
           </button>
         ))}
-        <span className="ml-auto text-[13px] text-muted-foreground">
+        {/* Een factuur die niet uit de planning komt: een offerte die doorgaat,
+            een eenmalige klus, iets wat je achteraf alsnog moet sturen. */}
+        <button
+          type="button"
+          onClick={() => setLosOpen(true)}
+          className="ml-auto flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-[13px] font-medium text-muted-foreground shadow-card hover:text-foreground"
+        >
+          <Bon className="size-4" /> Losse factuur
+        </button>
+        <span className="text-[13px] text-muted-foreground">
           <span className="font-medium text-foreground tabular-nums">
             {formatPrice(openTotaal)}
           </span>{" "}
@@ -318,6 +333,15 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
           </Button>
         </section>
       )}
+
+      <LosseFactuurDialog
+        open={losOpen}
+        onOpenChange={setLosOpen}
+        onKlaar={() => {
+          ververs();
+          setFilter("concept");
+        }}
+      />
 
       {facturen.isLoading && <p className="text-[13px] text-muted-foreground">Laden…</p>}
 
@@ -576,6 +600,12 @@ function FactuurRegel({
                     {toonDatum(r.datum)}
                   </span>
                   <span className="min-w-0 flex-1">
+                    {(r.aantal !== 1 || r.eenheid) && (
+                      <span className="tabular-nums text-muted-foreground">
+                        {String(r.aantal).replace(".", ",")}
+                        {r.eenheid ? ` ${r.eenheid}` : " x"}{" "}
+                      </span>
+                    )}
                     {r.omschrijving}
                     {r.notitie && <span className="text-muted-foreground"> · {r.notitie}</span>}
                   </span>

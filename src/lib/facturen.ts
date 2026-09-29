@@ -129,10 +129,13 @@ export async function fetchFacturen(vanaf?: string, tot?: string): Promise<Factu
 /** Eén regel op een factuur, zoals hij bij de klant op papier komt. */
 export interface Factuurregel {
   id: string;
-  soort: "wasbeurt" | "klus";
+  soort: "wasbeurt" | "klus" | "los";
   datum: string;
   omschrijving: string;
   notitie: string;
+  /** "3" en "x": alleen een losse factuur zet hier iets anders dan 1 en leeg. */
+  aantal: number;
+  eenheid: string;
   /** De prijs zoals ingevoerd: bij een particulier inclusief btw, bij een
    *  bedrijf exclusief. Wat je aanpast als er maar een deel gedaan is. */
   bedrag: number;
@@ -147,15 +150,18 @@ export async function fetchFactuurregels(factuurId: string): Promise<Factuurrege
   const { data, error } = await supabase
     .from("factuurregels")
     .select(
-      "id,soort,datum,omschrijving,notitie,bedrag,bedrag_excl,btw_bedrag,bedrag_incl,btw_procent,factuur_id",
+      "id,soort,datum,omschrijving,notitie,aantal,eenheid,bedrag,bedrag_excl,btw_bedrag,bedrag_incl,btw_procent,factuur_id",
     )
     .eq("factuur_id", factuurId)
     .is("deleted_at", null)
-    .order("datum");
+    .order("datum")
+    .order("created_at");
   if (error) throw error;
   return (data ?? []).map((r) => ({
     ...r,
-    soort: r.soort as "wasbeurt" | "klus",
+    soort: r.soort as Factuurregel["soort"],
+    aantal: Number(r.aantal ?? 1),
+    eenheid: r.eenheid ?? "",
     bedrag: Number(r.bedrag ?? 0),
     bedrag_excl: Number(r.bedrag_excl ?? 0),
     btw_bedrag: Number(r.btw_bedrag ?? 0),
@@ -256,6 +262,21 @@ export async function fetchBtwProcent(): Promise<number> {
   const { data, error } = await supabase.from("companies").select("btw_procent").limit(1).single();
   if (error) throw error;
   return Number(data.btw_procent ?? 21) || 21;
+}
+
+/** Het btw-tarief en de betaaltermijn van het bedrijf: de standaard voor
+ *  een losse factuur zolang je niets anders kiest. */
+export async function fetchFactuurStandaard(): Promise<{ btwProcent: number; termijn: number }> {
+  const { data, error } = await supabase
+    .from("companies")
+    .select("btw_procent,factuur_termijn_dagen")
+    .limit(1)
+    .single();
+  if (error) throw error;
+  return {
+    btwProcent: Number(data.btw_procent ?? 21),
+    termijn: Number(data.factuur_termijn_dagen ?? 14),
+  };
 }
 
 /**
@@ -668,4 +689,107 @@ export async function fetchHerinneringenStraks(): Promise<HerinneringStraks[]> {
   const { data, error } = await supabase.rpc("facturen_herinneringen_straks");
   if (error) throw error;
   return (data ?? []) as unknown as HerinneringStraks[];
+}
+
+// ------------------------------------------------------------ losse factuur
+
+/** De eenheden waaruit je bij een regel kiest. Leeg is gewoon een bedrag. */
+export const EENHEDEN = ["x", "uur", "stuks", "m²", "m"] as const;
+
+/** De btw-tarieven die je per regel kunt kiezen. */
+export const BTW_TARIEVEN = [21, 9, 0] as const;
+
+/** Eén regel op een factuur die je zelf intypt. */
+export interface LosseRegel {
+  datum: string;
+  omschrijving: string;
+  notitie: string;
+  aantal: number;
+  eenheid: string;
+  /** Prijs per eenheid, inclusief of exclusief btw zoals de factuur telt.
+   *  Het totaal van de regel (aantal x stukprijs) rekent de database uit. */
+  stukprijs: number;
+  btw_procent: number;
+}
+
+/** Wat er boven en onder de regels staat, en hoe de bedragen tellen. */
+export interface LosseFactuurGegevens {
+  /** Zijn de stukprijzen inclusief btw ingetypt? */
+  inclusief: boolean;
+  onderwerp: string;
+  kenmerk: string;
+  opmerking: string;
+  /** Eigen betaaltermijn in dagen; null = die van de klant of het bedrijf. */
+  termijn: number | null;
+}
+
+/**
+ * Een factuur met de hand, buiten de planning om.
+ *
+ * Niet alles wat je in rekening brengt loopt via een wasdag: een offerte die
+ * doorgaat, een eenmalige klus, iets wat je achteraf alsnog moet factureren.
+ * Wat hier ontstaat is een gewoon concept -- zelfde nummering, zelfde PDF met
+ * je briefpapier, zelfde betaallink en herinneringen -- alleen de herkomst is
+ * anders.
+ */
+export async function maakLosseFactuur(
+  klantId: string,
+  regels: LosseRegel[],
+  gegevens: LosseFactuurGegevens,
+): Promise<string> {
+  const { data, error } = await supabase.rpc("factuur_los_maken", {
+    klant: klantId,
+    regels: regels.map((r) => ({
+      datum: r.datum,
+      omschrijving: r.omschrijving.trim(),
+      notitie: r.notitie.trim(),
+      aantal: r.aantal,
+      eenheid: r.eenheid,
+      stukprijs: r.stukprijs,
+      btw_procent: r.btw_procent,
+    })),
+    gegevens: {
+      inclusief: gegevens.inclusief,
+      onderwerp: gegevens.onderwerp.trim(),
+      kenmerk: gegevens.kenmerk.trim(),
+      opmerking: gegevens.opmerking.trim(),
+      termijn: gegevens.termijn,
+    },
+  });
+  if (error) throw error;
+  return String(data);
+}
+
+/**
+ * Per klant de wasadressen als leesbare tekst ("Laan van Meerdervoort 112"),
+ * zodat je een klant ook op zijn adres kunt vinden. Het adres staat bij het
+ * wasadres, niet altijd bij de klant zelf.
+ */
+export async function fetchKlantAdressen(): Promise<Map<string, string[]>> {
+  const rijen = await haalAllePaginas((van, tot) =>
+    supabase
+      .from("customers")
+      .select("id,klant_id,house_number,addition,postcode,streets(name,volledige_naam)")
+      .not("klant_id", "is", null)
+      .is("deleted_at", null)
+      .order("id", { ascending: true })
+      .range(van, tot),
+  );
+  const uit = new Map<string, string[]>();
+  for (const r of rijen as unknown as {
+    klant_id: string;
+    house_number: number;
+    addition: string | null;
+    postcode: string | null;
+    streets: { name: string; volledige_naam: string | null } | null;
+  }[]) {
+    const straat = r.streets?.volledige_naam?.trim() || r.streets?.name || "";
+    const adres = [straat, `${r.house_number}${r.addition ?? ""}`, r.postcode ?? ""]
+      .filter((d) => d && String(d).trim())
+      .join(" ");
+    const lijst = uit.get(r.klant_id) ?? [];
+    lijst.push(adres);
+    uit.set(r.klant_id, lijst);
+  }
+  return uit;
 }

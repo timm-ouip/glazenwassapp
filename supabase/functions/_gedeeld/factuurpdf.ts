@@ -46,6 +46,12 @@ export interface FactuurRegel {
   btw_bedrag: number;
   bedrag_incl: number;
   btw_procent: number;
+  /** Hoeveel keer, met waarvan en de prijs per stuk. Alleen als er echt een
+   *  aantal is (niet 1 zonder eenheid) komt het op het papier. */
+  aantal?: number;
+  eenheid?: string;
+  /** Prijs per stuk, al omgerekend naar hoe dit papier telt (incl of excl). */
+  stukprijs?: number;
 }
 
 /** Het briefpapier zoals het uit de opslagbak komt. */
@@ -89,6 +95,12 @@ export interface FactuurGegevens {
   bedrijf: FactuurBedrijf;
   klant: FactuurKlant;
   regels: FactuurRegel[];
+  /** Betreft: waar deze factuur over gaat. */
+  onderwerp?: string;
+  /** Het kenmerk van de klant, bijvoorbeeld een inkoopnummer. */
+  kenmerk?: string;
+  /** Vrije tekst onder de regels, alleen voor deze factuur. */
+  opmerking?: string;
   betaallink?: string;
   vormgeving?: Partial<FactuurVormgeving>;
 }
@@ -114,6 +126,11 @@ const A4 = { breedte: 595.28, hoogte: 841.89 };
 const KANTLIJN = 56;
 /** Eén millimeter in PDF-punten. */
 const MM = 72 / 25.4;
+
+/** "3", "1,5" of "0,25": een aantal zonder overbodige nullen. */
+function aantalTekst(n: number): string {
+  return (Math.round(n * 100) / 100).toString().replace(".", ",");
+}
 
 /** "1.234,56" — Nederlands, met een euroteken ervoor. */
 export function euro(n: number): string {
@@ -275,6 +292,10 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
     f.klant.bedrijfsnaam?.trim() ? f.klant.naam : "",
     [f.klant.straat, f.klant.huisnummer].filter(Boolean).join(" "),
     [f.klant.postcode, f.klant.plaats].filter(Boolean).join("  "),
+    // Een bedrijf wil zijn eigen nummers terugzien; bij 0% btw hoort het
+    // btw-nummer van de afnemer er zelfs op.
+    f.klant.kvk?.trim() ? `KvK ${f.klant.kvk.trim()}` : "",
+    f.klant.btw_nummer?.trim() ? `Btw ${f.klant.btw_nummer.trim()}` : "",
   ].filter((r) => r && r.trim());
   for (const regel of klantregels) {
     schrijf(regel, KANTLIJN, y);
@@ -282,6 +303,10 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
   }
 
   // --- Welke factuur ----------------------------------------------------
+  // Een kort kenmerk staat bij het nummer; een lang inkoopnummer past daar
+  // niet en krijgt een eigen regel onder "Betreft".
+  const kenmerk = f.kenmerk?.trim() ?? "";
+  const kenmerkInBlok = !!kenmerk && vet.widthOfTextAtSize(alleenBekend(kenmerk), 9.5) <= 84;
   let yr = bovenkantBlok;
   schrijf(f.soort === "credit" ? "CREDITFACTUUR" : "FACTUUR", 0, yr, {
     groot: 8,
@@ -294,6 +319,7 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
     ["Nummer", f.nummer],
     ["Datum", datum(f.factuurdatum)],
     ["Vervaldatum", datum(f.vervaldatum)],
+    ...(kenmerkInBlok ? [["Uw kenmerk", kenmerk]] : []),
   ]) {
     schrijf(label, 0, yr, { kleur: grijs, rechts: rechts - 90 });
     schrijf(waarde, 0, yr, { vet: true, rechts });
@@ -303,6 +329,21 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
   y = Math.min(y, yr) - 30;
 
   // --- Waar deze factuur over gaat --------------------------------------
+  if (f.onderwerp?.trim()) {
+    const regels = breek(`Betreft: ${f.onderwerp.trim()}`, 10.5, rechts - KANTLIJN);
+    for (const regel of regels) {
+      schrijf(regel, KANTLIJN, y, { vet: true, groot: 10.5 });
+      y -= 14;
+    }
+    y -= 8;
+  }
+  if (kenmerk && !kenmerkInBlok) {
+    for (const regel of breek(`Uw kenmerk: ${kenmerk}`, 9.5, rechts - KANTLIJN)) {
+      schrijf(regel, KANTLIJN, y, { kleur: grijs });
+      y -= 13;
+    }
+    y -= 8;
+  }
   if (v.koptekst?.trim()) {
     for (const regel of breek(v.koptekst.trim(), 9.5, rechts - KANTLIJN)) {
       schrijf(regel, KANTLIJN, y);
@@ -316,10 +357,21 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
   const kolomBtw = rechts - 78;
   const kolomDatum = KANTLIJN;
   const kolomOmschrijving = KANTLIJN + 62;
+  // Aantal en stukprijs krijgen alleen een kolom als er een regel is die ze
+  // echt heeft; een gewone factuur uit de planning blijft zoals hij was.
+  const heeftAantal = (r: FactuurRegel) =>
+    r.stukprijs !== undefined && (r.aantal !== 1 || !!r.eenheid?.trim());
+  const metAantal = f.regels.some(heeftAantal);
+  const kolomPrijs = kolomBtw - 44;
+  const kolomAantal = kolomPrijs - 70;
 
   const kolomkoppen = () => {
     schrijf("DATUM", kolomDatum, y, { groot: 8, vet: true, kleur: grijs });
     schrijf("OMSCHRIJVING", kolomOmschrijving, y, { groot: 8, vet: true, kleur: grijs });
+    if (metAantal) {
+      schrijf("AANTAL", 0, y, { groot: 8, vet: true, kleur: grijs, rechts: kolomAantal });
+      schrijf("PRIJS", 0, y, { groot: 8, vet: true, kleur: grijs, rechts: kolomPrijs });
+    }
     schrijf("BTW", 0, y, { groot: 8, vet: true, kleur: grijs, rechts: kolomBtw });
     schrijf("BEDRAG", 0, y, { groot: 8, vet: true, kleur: grijs, rechts: kolomBedrag });
     y -= 6;
@@ -341,17 +393,32 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
       kolomkoppen();
     }
     schrijf(datum(r.datum), kolomDatum, y, { kleur: grijs });
-    // Afkappen in plaats van door de kolom heen lopen: een lange VvE-naam
-    // mag het bedrag niet overschrijven.
-    let tekst = r.omschrijving;
-    const ruimte = kolomBtw - kolomOmschrijving - 10;
-    while (gewoon.widthOfTextAtSize(tekst, 9.5) > ruimte && tekst.length > 4) {
-      tekst = tekst.slice(0, -2);
+    // Over hooguit drie regels verdelen, en wat daarna nog over is afkappen:
+    // een lange omschrijving mag het aantal of het bedrag niet overschrijven.
+    const ruimte = (metAantal ? kolomAantal - 50 : kolomBtw) - kolomOmschrijving - 10;
+    const stukken = breek(r.omschrijving, 9.5, ruimte);
+    if (stukken.length > 3) {
+      let laatste = stukken[2];
+      while (gewoon.widthOfTextAtSize(laatste + "…", 9.5) > ruimte && laatste.length > 4) {
+        laatste = laatste.slice(0, -2);
+      }
+      stukken.splice(2, stukken.length - 2, laatste + "…");
     }
-    schrijf(tekst === r.omschrijving ? tekst : tekst + "…", kolomOmschrijving, y);
+    schrijf(stukken[0] ?? "", kolomOmschrijving, y);
+    if (heeftAantal(r)) {
+      const hoeveel = aantalTekst(r.aantal ?? 1);
+      schrijf(r.eenheid?.trim() ? `${hoeveel} ${r.eenheid.trim()}` : hoeveel, 0, y, {
+        rechts: kolomAantal,
+      });
+      schrijf(euro(r.stukprijs ?? 0), 0, y, { kleur: grijs, rechts: kolomPrijs });
+    }
     schrijf(`${r.btw_procent}%`, 0, y, { kleur: grijs, rechts: kolomBtw });
     schrijf(euro(f.inclusief ? r.bedrag_incl : r.bedrag_excl), 0, y, { rechts: kolomBedrag });
     y -= 13;
+    for (const vervolg of stukken.slice(1)) {
+      schrijf(vervolg, kolomOmschrijving, y);
+      y -= 12;
+    }
     if (r.notitie.trim()) {
       schrijf(r.notitie, kolomOmschrijving, y, { groot: 8.5, kleur: grijs });
       y -= 12;
@@ -363,7 +430,10 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
   const btw = f.regels.reduce((t, r) => t + r.btw_bedrag, 0);
   const incl = f.regels.reduce((t, r) => t + r.bedrag_incl, 0);
 
-  if (y < onder + 130) nieuwBlad();
+  // Het slot (subtotaal, een btw-regel per tarief, te betalen en het
+  // betaalblok) moet in zijn geheel op het blad passen.
+  const aantalTarieven = new Set(f.regels.map((r) => r.btw_procent)).size;
+  if (y < onder + 130 + 14 * Math.max(0, aantalTarieven - 1)) nieuwBlad();
   y -= 8;
   blad.drawLine({
     start: { x: kolomBtw - 60, y },
@@ -375,11 +445,40 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
   schrijf("Subtotaal", 0, y, { kleur: grijs, rechts: kolomBtw });
   schrijf(euro(excl), 0, y, { rechts: kolomBedrag });
   y -= 14;
-  schrijf("Btw", 0, y, { kleur: grijs, rechts: kolomBtw });
-  schrijf(euro(btw), 0, y, { rechts: kolomBedrag });
-  y -= 18;
+  // Per tarief een eigen regel: zo hoort het op een factuur zodra er meer
+  // dan één tarief op staat, en bij één tarief zie je meteen welk.
+  const tarieven = new Map<number, { over: number; btw: number }>();
+  for (const r of f.regels) {
+    const t = tarieven.get(r.btw_procent) ?? { over: 0, btw: 0 };
+    t.over += r.bedrag_excl;
+    t.btw += r.btw_bedrag;
+    tarieven.set(r.btw_procent, t);
+  }
+  const perTarief = [...tarieven.entries()].sort((a, b) => b[0] - a[0]);
+  if (perTarief.length === 0) perTarief.push([0, { over: 0, btw }]);
+  for (const [procent, t] of perTarief) {
+    const label =
+      perTarief.length > 1 ? `Btw ${procent}% over ${euro(t.over)}` : `Btw ${procent}%`;
+    schrijf(label, 0, y, { kleur: grijs, rechts: kolomBtw });
+    schrijf(euro(t.btw), 0, y, { rechts: kolomBedrag });
+    y -= 14;
+  }
+  y -= 4;
   schrijf("Te betalen", 0, y, { vet: true, groot: 11, rechts: kolomBtw });
   schrijf(euro(incl), 0, y, { vet: true, groot: 11, kleur: accent, rechts: kolomBedrag });
+
+  // --- Een opmerking bij alleen deze factuur -----------------------------
+  if (f.opmerking?.trim()) {
+    y -= 30;
+    const regels = breek(f.opmerking.trim(), 9.5, rechts - KANTLIJN);
+    // Het betaalblok komt er nog onder: samen moeten ze passen.
+    if (y - regels.length * 13 < onder + 80) nieuwBlad();
+    for (const regel of regels) {
+      schrijf(regel, KANTLIJN, y);
+      y -= 13;
+    }
+    y += 13;
+  }
 
   // --- Hoe te betalen ---------------------------------------------------
   y -= 34;

@@ -1274,14 +1274,18 @@ export type Database = {
           jaar: number | null;
           klant_id: string;
           klantgegevens: Json | null;
+          kenmerk: string;
           met_rust_tot: string | null;
           mollie_betaald: number;
           mollie_id: string | null;
           mollie_link: string | null;
           nummer: string | null;
+          onderwerp: string;
+          opmerking: string;
           pdf_pad: string | null;
           soort: string;
           status: string;
+          termijn_dagen: number | null;
           verstuurd_naar: string;
           verstuurd_op: string | null;
           verstuurd_via: string | null;
@@ -1302,14 +1306,18 @@ export type Database = {
           jaar?: number | null;
           klant_id: string;
           klantgegevens?: Json | null;
+          kenmerk?: string;
           met_rust_tot?: string | null;
           mollie_betaald?: number;
           mollie_id?: string | null;
           mollie_link?: string | null;
           nummer?: string | null;
+          onderwerp?: string;
+          opmerking?: string;
           pdf_pad?: string | null;
           soort?: string;
           status?: string;
+          termijn_dagen?: number | null;
           verstuurd_naar?: string;
           verstuurd_op?: string | null;
           verstuurd_via?: string | null;
@@ -1330,14 +1338,18 @@ export type Database = {
           jaar?: number | null;
           klant_id?: string;
           klantgegevens?: Json | null;
+          kenmerk?: string;
           met_rust_tot?: string | null;
           mollie_betaald?: number;
           mollie_id?: string | null;
           mollie_link?: string | null;
           nummer?: string | null;
+          onderwerp?: string;
+          opmerking?: string;
           pdf_pad?: string | null;
           soort?: string;
           status?: string;
+          termijn_dagen?: number | null;
           verstuurd_naar?: string;
           verstuurd_op?: string | null;
           verstuurd_via?: string | null;
@@ -1444,6 +1456,7 @@ export type Database = {
       };
       factuurregels: {
         Row: {
+          aantal: number;
           bedrag: number;
           bedrag_excl: number;
           bedrag_incl: number | null;
@@ -1456,6 +1469,7 @@ export type Database = {
           customer_id: string | null;
           datum: string;
           deleted_at: string | null;
+          eenheid: string;
           factuur_id: string | null;
           id: string;
           klant_id: string;
@@ -1463,10 +1477,12 @@ export type Database = {
           notitie: string;
           omschrijving: string;
           soort: string;
+          stukprijs: number | null;
           vervangen_op: string | null;
           wasdag_regel_id: string | null;
         };
         Insert: {
+          aantal?: number;
           bedrag: number;
           bedrag_excl: number;
           bedrag_incl?: number | null;
@@ -1479,6 +1495,7 @@ export type Database = {
           customer_id?: string | null;
           datum: string;
           deleted_at?: string | null;
+          eenheid?: string;
           factuur_id?: string | null;
           id?: string;
           klant_id: string;
@@ -1486,10 +1503,12 @@ export type Database = {
           notitie?: string;
           omschrijving?: string;
           soort: string;
+          stukprijs?: number | null;
           vervangen_op?: string | null;
           wasdag_regel_id?: string | null;
         };
         Update: {
+          aantal?: number;
           bedrag?: number;
           bedrag_excl?: number;
           bedrag_incl?: number | null;
@@ -1502,6 +1521,7 @@ export type Database = {
           customer_id?: string | null;
           datum?: string;
           deleted_at?: string | null;
+          eenheid?: string;
           factuur_id?: string | null;
           id?: string;
           klant_id?: string;
@@ -1509,6 +1529,7 @@ export type Database = {
           notitie?: string;
           omschrijving?: string;
           soort?: string;
+          stukprijs?: number | null;
           vervangen_op?: string | null;
           wasdag_regel_id?: string | null;
         };
@@ -3924,6 +3945,10 @@ export type Database = {
           trap: number;
           vervaldatum: string;
         }[];
+      };
+      factuur_los_maken: {
+        Args: { gegevens?: Json; klant: string; regels: Json };
+        Returns: string;
       };
       factuur_mailadres: {
         Args: { k: Database["public"]["Tables"]["klanten"]["Row"] };
