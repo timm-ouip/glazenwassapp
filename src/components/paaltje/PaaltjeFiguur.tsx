@@ -1,6 +1,6 @@
 /**
  * Paaltje als Haagse paal: groen gietijzer, rond kopje met kraag en de
- * ooievaar als reliëf, op een stoep van klinkers.
+ * ooievaar als reliëf, op een van de merkplaten (zie `GROND`).
  *
  * Met `beweegt` wiebelt hij licht op zijn voet en wisselt hij om de paar
  * seconden willekeurig van gezicht; elk gezicht heeft zijn eigen beweging.
@@ -10,8 +10,25 @@
  * Dit bestand wordt pas opgehaald nadat het scherm geladen is — zie
  * `PaaltjeLui.tsx` — dus alles, ook de animaties, zit hier bij elkaar.
  */
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
+import { MERKPLATEN } from "@/lib/merk";
 import { cn } from "@/lib/utils";
+
+/**
+ * Waar Paaltje in staat: een van de drie merkplaten van het inlogscherm, of
+ * aqua met één oranje streep zoals het app-icoon. Net als het inlogscherm
+ * elke keer dat je de app opent een andere, en daarna vast: de knop en de kop
+ * van het paneel houden dezelfde, en tijdens het werken wisselt er niets.
+ *
+ * Kiezen bij het inladen mag hier: dit bestand komt pas binnen als de pagina
+ * al in de browser staat (zie `PaaltjeLui.tsx`), dus de server tekent nooit
+ * een andere dan de browser.
+ */
+const GRONDEN: { kleur: string; plaat?: string }[] = [
+  ...MERKPLATEN.map((p) => ({ kleur: p.grond, plaat: p.plaat })),
+  { kleur: "#b4dcdd" },
+];
+const GROND = GRONDEN[Math.floor(Math.random() * GRONDEN.length)] ?? GRONDEN[0]!;
 
 const G = {
   groen: "#2f6b56",
@@ -219,7 +236,6 @@ export default function PaaltjeFiguur({
   className?: string;
 }) {
   const gezicht = useWisselendGezicht(beweegt);
-  const patroon = `klinker-${useId().replace(/:/g, "")}`;
 
   return (
     <svg
@@ -228,14 +244,22 @@ export default function PaaltjeFiguur({
       aria-hidden="true"
     >
       {beweegt && <style>{STIJL}</style>}
-      <defs>
-        <pattern id={patroon} width="12" height="12" patternUnits="userSpaceOnUse">
-          <rect width="12" height="12" fill="#bdb7ad" />
-          <path d="M0 .5h12M0 6.5h12M.5 0v6M6.5 6v6" stroke="#a59f95" strokeWidth="1" />
-        </pattern>
-      </defs>
-      <rect width="120" height="120" fill={`url(#${patroon})`} />
-      <rect width="120" height="120" fill="#f3ead2" opacity=".35" />
+      {/* Eerst de effen kleur, zodat het vlak al klopt voordat de plaat binnen is. */}
+      <rect width="120" height="120" fill={GROND.kleur} />
+      {GROND.plaat ? (
+        // Een vierkant uit de 4:3-plaat, iets links van het midden: daar
+        // kruisen de strepen elkaar, zodat er ook op 64 pixels iets te zien is.
+        <image href={GROND.plaat} x="-15" y="0" width="160" height="120" />
+      ) : (
+        <rect
+          x="-36"
+          y="52.8"
+          width="192"
+          height="28.8"
+          fill="#ff6723"
+          transform="rotate(-38 60 67.2)"
+        />
+      )}
       <g transform="translate(-21 -26) scale(1.35)">
         <g className="pf-paal">
           <path d="M45 50l-6 58h42l-6-58z" fill={G.groen} />

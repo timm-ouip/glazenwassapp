@@ -4,7 +4,9 @@
  * De tekening en de animaties zitten in een apart stukje code
  * (`PaaltjeFiguur.tsx`). Dat halen we pas op als de pagina klaar is met laden
  * en de browser even niets te doen heeft, zodat Paaltje het openen van een
- * scherm nooit vertraagt. Tot die tijd staat er een rustig groen vlak.
+ * scherm nooit vertraagt. Tot die tijd staat er een rustig aqua vlak, de
+ * grondkleur van het merk: welke plaat Paaltje krijgt valt pas in de tekening
+ * zelf.
  */
 import { lazy, Suspense, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -53,7 +55,7 @@ export function PaaltjeLui({
   className?: string;
 }) {
   const klaar = useNaHetLaden();
-  const vlak = <span className={cn("block bg-[#2f6b56]", className)} aria-hidden="true" />;
+  const vlak = <span className={cn("block bg-[#b4dcdd]", className)} aria-hidden="true" />;
   if (!klaar) return vlak;
   return (
     <Suspense fallback={vlak}>
