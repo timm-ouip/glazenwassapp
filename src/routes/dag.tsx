@@ -5,6 +5,7 @@ import {
   IconArrowRight as ArrowRight,
   IconCalendar as CalendarDays,
   IconSquareCheck as CheckSquare,
+  IconCornerDownRight as CornerDownRight,
   IconChevronLeft as ChevronLeft,
   IconChevronRight as ChevronRight,
   IconFolder as Folder,
@@ -38,9 +39,11 @@ import {
   fetchStreets,
   formatNumber,
   formatPrice,
+  isHoekadres,
   noteVoorMaand,
   prijsVoorMaand,
   sortCustomers,
+  splitEvenOdd,
   wijkKleur,
   type Customer,
 } from "@/lib/klanten";
@@ -138,6 +141,9 @@ function vulStijl(erop: number, totaal: number) {
     : undefined;
 }
 
+/** Waar de keuze tussen "Lijst" en "Beide kanten" onthouden wordt. */
+const WEERGAVE_OPSLAG = "paaltje.dag-weergave";
+
 interface Straat {
   id: string;
   naam: string;
@@ -146,6 +152,8 @@ interface Straat {
   klantIds: string[];
   /** Waar deze straat in de rij staat volgens de dagweergave; leeg = achteraan. */
   volgorde?: number;
+  /** De twee kanten van de straat, voor de weergave "Beide kanten". */
+  kanten?: { even: Customer[]; oneven: Customer[]; doorlopend: boolean };
 }
 
 /** Wat er op de regel van deze dag staat: het bedrag en wat er anders ging. */
@@ -199,6 +207,28 @@ function DagPagina() {
   // Alleen om ⏰ te kunnen tonen bij een pand dat een tijdvak beloofd kreeg.
   const beloofdQuery = useAankondigingen(datum, datum);
   const [alleenEigen, setAlleenEigen] = useState(true);
+  /**
+   * Eén lijst per straat, of de even en de oneven kant naast elkaar — net als
+   * in de geldloop. Onthouden op dit toestel: wie op de telefoon de straat
+   * overzigzagt, wil dat morgen weer zo zien. Pas na het laden lezen: de
+   * server kent de opslag van de telefoon niet.
+   */
+  const [kanten, setKanten] = useState(false);
+  useEffect(() => {
+    try {
+      setKanten(localStorage.getItem(WEERGAVE_OPSLAG) === "kanten");
+    } catch {
+      // Geen opslag (privévenster): dan gewoon de lijst.
+    }
+  }, []);
+  function kiesKanten(aan: boolean) {
+    setKanten(aan);
+    try {
+      localStorage.setItem(WEERGAVE_OPSLAG, aan ? "kanten" : "lijst");
+    } catch {
+      // Niet te onthouden; voor nu staat hij wel goed.
+    }
+  }
   /** De adressen waarvoor je een "we komen later"-bericht opstelt. */
   const [wijziging, setWijziging] = useState<string[] | null>(null);
   const magVersturen = useRecht("mail_versturen");
@@ -477,7 +507,14 @@ function DagPagina() {
             const klanten = sortCustomers(s.klanten);
             const klantIds = klanten.map((c) => c.id);
             idsVan.set(`s:${s.id}`, klantIds);
-            return { ...s, klanten, klantIds };
+            // Ook de twee kanten, in de looprichting van de wijklijst.
+            const st = straat.get(s.id);
+            const doorlopend = st?.doorlopend ?? false;
+            const kanten = {
+              ...splitEvenOdd(s.klanten, st?.sort_desc ? "desc" : "asc", doorlopend),
+              doorlopend,
+            };
+            return { ...s, klanten, klantIds, kanten };
           });
 
         // Welke subgroepen staan er die dag compleet op? Alleen die krijgen
@@ -1060,6 +1097,25 @@ function DagPagina() {
             </span>
           )}
 
+          {/* Eén lijst, of de twee kanten van de straat naast elkaar. */}
+          <span className="flex items-center gap-0.5 rounded-full border border-border bg-card p-1">
+            {[false, true].map((aan) => (
+              <button
+                key={String(aan)}
+                type="button"
+                aria-pressed={kanten === aan}
+                onClick={() => kiesKanten(aan)}
+                className={`rounded-full px-3 py-1 text-[12.5px] font-medium transition-colors ${
+                  kanten === aan
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:bg-surface hover:text-foreground"
+                }`}
+              >
+                {aan ? "Beide kanten" : "Lijst"}
+              </button>
+            ))}
+          </span>
+
           {selecteren && (
             <>
               <Button
@@ -1217,6 +1273,7 @@ function DagPagina() {
                             vakKnop={vakKnop}
                             onAdres={setBewerkt}
                             beloofd={beloofdTijdvak}
+                            kanten={kanten}
                           />
                         ))}
                       </div>
@@ -1231,6 +1288,7 @@ function DagPagina() {
                         vakKnop={vakKnop}
                         onAdres={setBewerkt}
                         beloofd={beloofdTijdvak}
+                        kanten={kanten}
                       />
                     ),
                   )}
@@ -1485,6 +1543,7 @@ function StraatRij({
   vakKnop,
   onAdres,
   beloofd,
+  kanten,
 }: {
   straat: Straat;
   maand: string;
@@ -1496,11 +1555,180 @@ function StraatRij({
   onAdres: (keuze: { customer: Customer; straat: string }) => void;
   /** Het tijdvak dat een adres beloofd kreeg ("10:00–12:00"). */
   beloofd: Map<string, string>;
+  /** De even en de oneven kant naast elkaar, in plaats van één lijst. */
+  kanten: boolean;
 }) {
   const prijzenZien = useRecht("prijzen_zien");
   const klachtenBij = useKlachtenBijAdres();
   const erop = straat.klantIds.filter((id) => keuze.has(id)).length;
   const { className: kopKnop, ...kopRest } = vakKnop(`s:${straat.id}`);
+
+  /**
+   * Eén huisnummer. `smal` is de vorm voor twee kolommen naast elkaar: op de
+   * telefoon is er dan zo'n 170 px per kant, dus staan het nummer en het
+   * bedrag bovenaan en de rest er klein onder.
+   */
+  function regel(c: Customer, smal: boolean) {
+    // De notitie zoals hij die maand geldt, dus inclusief het werk dat er
+    // alleen in bepaalde maanden bij komt.
+    const notitie = noteVoorMaand(c, maand);
+    const r = regelVan.get(c.id);
+    // Wat er die dag anders ging gaat vóór de vaste notitie: dát is wat
+    // je onderweg moet weten, en het bedrag ernaast hoort erbij.
+    const anders = r?.notitie?.trim() ?? "";
+    const nietGewassen = r?.nietGewassen ?? false;
+    const aangepast =
+      !nietGewassen && (anders !== "" || (r && r.prijs !== prijsVoorMaand(c, maand)));
+    const gekozen = keuze.has(c.id);
+    const klachten = klachtenBij(c);
+    const tijdvak = beloofd.get(c.id);
+    const { className: rijKnop, ...rijRest } = selecteren
+      ? vakKnop(`c:${c.id}`)
+      : {
+          onClick: () => onAdres({ customer: c, straat: straat.naam }),
+          className: "cursor-pointer hover:bg-card-header",
+        };
+    const kleur = gekozen
+      ? "bg-accent text-accent-foreground"
+      : nietGewassen
+        ? "bg-tint-rood text-tint-rood-ink"
+        : anders
+          ? "bg-tint-oranje text-tint-oranje-ink"
+          : "";
+
+    const vinkje = selecteren && (
+      <Checkbox
+        className="pointer-events-none size-3.5 shrink-0"
+        checked={gekozen}
+        tabIndex={-1}
+        aria-label={`${straat.naam} ${formatNumber(c)}`}
+      />
+    );
+    // Het hoekpijltje: dit nummer hoort eigenlijk bij een andere straat, of
+    // staat aan de andere kant dan zijn nummer zegt. Zelfde teken als op de
+    // wijkenpagina en de printlijst.
+    const nummer = (
+      <span
+        className={`flex shrink-0 items-center gap-px font-medium tabular-nums ${smal ? "" : "w-11"}`}
+      >
+        {isHoekadres(c) && (
+          <CornerDownRight
+            className="size-2.5 shrink-0 opacity-60"
+            aria-label={c.hoek_straat ? `hoek ${c.hoek_straat}` : "hoekadres"}
+          />
+        )}
+        {formatNumber(c)}
+      </span>
+    );
+    const hoekStraat = c.hoek_straat && (
+      <span
+        className="shrink-0 text-[10px] uppercase opacity-70"
+        title={`Hoort bij ${c.hoek_straat}`}
+      >
+        {c.hoek_straat}
+      </span>
+    );
+    // Een open klacht: extra opletten bij dit adres.
+    const klacht = klachten.length > 0 && (
+      <span
+        role="img"
+        aria-label={`Open klacht: ${klachten.map((k) => k.omschrijving).join("; ")}`}
+        title={`Open klacht: ${klachten.map((k) => k.omschrijving).join("\n")}`}
+        className="size-2 shrink-0 rounded-full bg-tint-rood-ink"
+      />
+    );
+    // Gestopt of verhuisd na het inplannen: de regel staat er nog, maar je
+    // moet het wel zien voor je aanbelt.
+    const inactief = c.inactief_op && (
+      <span className="shrink-0 rounded-full bg-surface px-2 py-[1px] text-[10.5px] text-muted-foreground">
+        {redenLabel(c.inactief_reden)}
+      </span>
+    );
+    // Een pand dat een tijdvak beloofd kreeg: dat moet je weten voordat je de
+    // volgorde omgooit.
+    const beloofdLabel = tijdvak && (
+      <span
+        className="shrink-0 rounded-full bg-tint-blauw px-2 py-[1px] text-[10.5px] font-medium text-tint-blauw-ink"
+        title={`De klant kreeg te horen dat we tussen ${tijdvak} komen`}
+      >
+        ⏰ {tijdvak}
+      </span>
+    );
+    // Teruggemeld aan de deur: hier is deze maand niet gewassen. De beurt
+    // blijft staan, maar hij is niet gedaan en kost niets.
+    const nietGewassenLabel = nietGewassen && (
+      <span
+        className="shrink-0 rounded-full bg-tint-rood-ink px-2 py-[1px] text-[10.5px] font-medium text-tint-rood"
+        title={
+          r?.nietGewassenDoor
+            ? `${r.nietGewassenDoor} hoorde aan de deur dat hier niet gewassen is`
+            : "Aan de deur teruggemeld: hier is niet gewassen"
+        }
+      >
+        niet gewassen
+      </span>
+    );
+    const tekst = anders || notitie;
+    const tekstKlas = anders ? "italic" : gekozen || nietGewassen ? "" : "text-muted-foreground";
+    const prijs = prijzenZien && (
+      <span className={`shrink-0 tabular-nums ${aangepast ? "font-medium" : ""}`}>
+        {nietGewassen ? (
+          <span className="line-through opacity-70">
+            {formatPrice(r?.prijsVervallen ?? c.price)}
+          </span>
+        ) : (
+          formatPrice(r?.prijs ?? c.price)
+        )}
+      </span>
+    );
+
+    if (smal) {
+      const onder = hoekStraat || inactief || beloofdLabel || nietGewassenLabel || tekst;
+      return (
+        <li
+          key={c.id}
+          {...rijRest}
+          className={`flex flex-col gap-0.5 rounded-[9px] px-2 py-1 text-[12.5px] ${rijKnop ?? ""} ${kleur}`}
+        >
+          <span className="flex items-center gap-1.5">
+            {vinkje}
+            {nummer}
+            {klacht}
+            <span className="flex-1" />
+            {prijs}
+          </span>
+          {onder && (
+            <span className="flex min-w-0 flex-wrap items-center gap-1 text-[11px]">
+              {hoekStraat}
+              {inactief}
+              {beloofdLabel}
+              {nietGewassenLabel}
+              {tekst && <span className={`min-w-0 flex-1 truncate ${tekstKlas}`}>{tekst}</span>}
+            </span>
+          )}
+        </li>
+      );
+    }
+
+    return (
+      <li
+        key={c.id}
+        {...rijRest}
+        className={`flex items-center gap-2 rounded-[9px] px-2.5 py-[3px] text-[12.5px] ${rijKnop ?? ""} ${kleur}`}
+      >
+        {vinkje}
+        {nummer}
+        {hoekStraat}
+        {klacht}
+        {inactief}
+        {beloofdLabel}
+        {nietGewassenLabel}
+        <span className={`min-w-0 flex-1 truncate ${tekstKlas}`}>{tekst}</span>
+        {prijs}
+      </li>
+    );
+  }
+
   return (
     <div>
       {/* De straatnaam ligt als een strookje in de kaart: hij hoort erbij,
@@ -1528,111 +1756,33 @@ function StraatRij({
           </span>
         )}
       </div>
-      <ul className="mt-0.5">
-        {straat.klanten.map((c) => {
-          // De notitie zoals hij die maand geldt, dus inclusief het werk dat er
-          // alleen in bepaalde maanden bij komt.
-          const notitie = noteVoorMaand(c, maand);
-          const regel = regelVan.get(c.id);
-          // Wat er die dag anders ging gaat vóór de vaste notitie: dát is wat
-          // je onderweg moet weten, en het bedrag ernaast hoort erbij.
-          const anders = regel?.notitie?.trim() ?? "";
-          const nietGewassen = regel?.nietGewassen ?? false;
-          const aangepast =
-            !nietGewassen && (anders !== "" || (regel && regel.prijs !== prijsVoorMaand(c, maand)));
-          const gekozen = keuze.has(c.id);
-          const klachten = klachtenBij(c);
-          const { className: rijKnop, ...rijRest } = selecteren
-            ? vakKnop(`c:${c.id}`)
-            : {
-                onClick: () => onAdres({ customer: c, straat: straat.naam }),
-                className: "cursor-pointer hover:bg-card-header",
-              };
-          return (
-            <li
-              key={c.id}
-              {...rijRest}
-              className={`flex items-center gap-2 rounded-[9px] px-2.5 py-[3px] text-[12.5px] ${rijKnop ?? ""} ${
-                gekozen
-                  ? "bg-accent text-accent-foreground"
-                  : nietGewassen
-                    ? "bg-tint-rood text-tint-rood-ink"
-                    : anders
-                      ? "bg-tint-oranje text-tint-oranje-ink"
-                      : ""
-              }`}
-            >
-              {selecteren && (
-                <Checkbox
-                  className="pointer-events-none size-3.5 shrink-0"
-                  checked={gekozen}
-                  tabIndex={-1}
-                  aria-label={`${straat.naam} ${formatNumber(c)}`}
-                />
+      {kanten && straat.kanten ? (
+        // Even links, oneven rechts, en een hoekhuis in de kolom die de
+        // wijklijst hem gaf — dezelfde verdeling als de printlijst en de
+        // geldloop. Loopt de straat per 1 op, dan is er geen overkant en
+        // knippen we de lijst doormidden.
+        <div className="mt-0.5 grid grid-cols-2 gap-1.5">
+          {(
+            [
+              [straat.kanten.doorlopend ? "eerste helft" : "even", straat.kanten.even],
+              [straat.kanten.doorlopend ? "tweede helft" : "oneven", straat.kanten.oneven],
+            ] as const
+          ).map(([naam, lijst]) => (
+            <div key={naam} className="min-w-0">
+              <p className="px-2 pb-0.5 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+                {naam}
+              </p>
+              {lijst.length === 0 ? (
+                <p className="px-2 text-[12px] text-muted-foreground">—</p>
+              ) : (
+                <ul className="space-y-0.5">{lijst.map((c) => regel(c, true))}</ul>
               )}
-              <span className="w-9 shrink-0 font-medium tabular-nums">{formatNumber(c)}</span>
-              {/* Een open klacht: extra opletten bij dit adres. */}
-              {klachten.length > 0 && (
-                <span
-                  role="img"
-                  aria-label={`Open klacht: ${klachten.map((k) => k.omschrijving).join("; ")}`}
-                  title={`Open klacht: ${klachten.map((k) => k.omschrijving).join("\n")}`}
-                  className="size-2 shrink-0 rounded-full bg-tint-rood-ink"
-                />
-              )}
-              {/* Gestopt of verhuisd na het inplannen: de regel staat er nog,
-                  maar je moet het wel zien voor je aanbelt. */}
-              {c.inactief_op && (
-                <span className="shrink-0 rounded-full bg-surface px-2 py-[1px] text-[10.5px] text-muted-foreground">
-                  {redenLabel(c.inactief_reden)}
-                </span>
-              )}
-              {/* Een pand dat een tijdvak beloofd kreeg: dat moet je weten
-                  voordat je de volgorde omgooit. */}
-              {beloofd.get(c.id) && (
-                <span
-                  className="shrink-0 rounded-full bg-tint-blauw px-2 py-[1px] text-[10.5px] font-medium text-tint-blauw-ink"
-                  title={`De klant kreeg te horen dat we tussen ${beloofd.get(c.id)} komen`}
-                >
-                  ⏰ {beloofd.get(c.id)}
-                </span>
-              )}
-              {/* Teruggemeld aan de deur: hier is deze maand niet gewassen.
-                  De beurt blijft staan, maar hij is niet gedaan en kost niets. */}
-              {nietGewassen && (
-                <span
-                  className="shrink-0 rounded-full bg-tint-rood-ink px-2 py-[1px] text-[10.5px] font-medium text-tint-rood"
-                  title={
-                    regel?.nietGewassenDoor
-                      ? `${regel.nietGewassenDoor} hoorde aan de deur dat hier niet gewassen is`
-                      : "Aan de deur teruggemeld: hier is niet gewassen"
-                  }
-                >
-                  niet gewassen
-                </span>
-              )}
-              <span
-                className={`min-w-0 flex-1 truncate ${
-                  anders ? "italic" : gekozen || nietGewassen ? "" : "text-muted-foreground"
-                }`}
-              >
-                {anders || notitie}
-              </span>
-              {prijzenZien && (
-                <span className={`shrink-0 tabular-nums ${aangepast ? "font-medium" : ""}`}>
-                  {nietGewassen ? (
-                    <span className="line-through opacity-70">
-                      {formatPrice(regel?.prijsVervallen ?? c.price)}
-                    </span>
-                  ) : (
-                    formatPrice(regel?.prijs ?? c.price)
-                  )}
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <ul className="mt-0.5">{straat.klanten.map((c) => regel(c, false))}</ul>
+      )}
     </div>
   );
 }

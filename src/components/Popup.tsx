@@ -3,6 +3,7 @@ import { IconInfoCircle as Info } from "@tabler/icons-react";
 
 import { cn } from "@/lib/utils";
 import { DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useSleepBlad } from "@/components/use-sleep-blad";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
@@ -18,24 +19,73 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
  * dan de rest.
  */
 
+/** Het schermpje als blad dat van onderen omhoog schuift, zoals op de telefoon
+ *  hoort; dezelfde vorm als het klantblad (KlantgegevensDialog). */
+const BLAD =
+  "bottom-0 left-0 top-auto max-h-[90dvh] max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] sm:max-w-none sm:rounded-b-none sm:rounded-t-[24px] data-[state=open]:slide-in-from-bottom-10 data-[state=open]:zoom-in-100 data-[state=closed]:slide-out-to-bottom data-[state=closed]:zoom-out-100";
+
 /** De buitenkant. Vervangt DialogContent: geen eigen vulling en geen rand,
- *  want de kop en de voet lopen tot aan de zijkant door. */
+ *  want de kop en de voet lopen tot aan de zijkant door.
+ *
+ *  Met `blad` (geef daar `useIsMobile()` aan) schuift hij van onderen omhoog
+ *  in plaats van midden in beeld te zweven, en veeg je hem aan de kop omlaag
+ *  weg — in plaats van hem als een computerpopup over het scherm te slepen. */
 export function PopupKader({
   className,
   children,
+  blad = false,
+  onSluit,
   ...rest
 }: {
   className?: string;
   children: ReactNode;
+  blad?: boolean;
+  /** Wat omlaag vegen doet; nodig bij `blad`. */
+  onSluit?: () => void;
 } & React.ComponentPropsWithoutRef<typeof DialogContent>) {
+  const veeg = useSleepBlad({ onOmlaag: () => onSluit?.() });
+  const bladHandlers = blad
+    ? {
+        onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+          rest.onPointerDown?.(e);
+          const doel = e.target as HTMLElement;
+          if (!doel.closest("[data-sleepgreep]") || doel.closest("button, a, input, textarea"))
+            return;
+          // Zo begint DialogContent er niet ook nog een gewone sleep mee.
+          e.preventDefault();
+          veeg.onPointerDown(e);
+        },
+        onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => {
+          rest.onPointerMove?.(e);
+          veeg.onPointerMove(e);
+        },
+        onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => {
+          rest.onPointerUp?.(e);
+          veeg.onPointerUp(e);
+        },
+        onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => {
+          rest.onPointerCancel?.(e);
+          veeg.onPointerCancel();
+        },
+      }
+    : {};
   return (
     <DialogContent
       className={cn(
         "max-h-[90vh] gap-0 overflow-hidden border-0 bg-card p-0 shadow-[0_2px_6px_oklch(0.4_0.02_70/6%),0_24px_60px_oklch(0.35_0.02_70/14%)] sm:max-w-md sm:rounded-[22px]",
+        blad && BLAD,
         className,
       )}
       {...rest}
+      {...bladHandlers}
     >
+      {/* Het greepje: zo zie je dat je hem omlaag kunt vegen. */}
+      {blad && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-2 z-10 h-1 w-9 -translate-x-1/2 rounded-full bg-current opacity-25"
+        />
+      )}
       {children}
     </DialogContent>
   );

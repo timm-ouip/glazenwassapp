@@ -9,6 +9,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { PopupBody, PopupKader, PopupKop, PopupVoet } from "@/components/Popup";
 import { useAuth } from "@/lib/auth";
 import { useRecht } from "@/lib/rechten";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   afgemeldTekst,
   dagAfmelden,
@@ -221,6 +222,8 @@ function DagKlaarDialog({
   onKlaar: () => void;
 }) {
   const qc = useQueryClient();
+  // Op de telefoon een blad van onderen, net als de adrespopup van de dag.
+  const mobiel = useIsMobile();
   /** Wat niet gedaan is, en waar het heen gaat. Leeg = alles gedaan. */
   const [nietGedaan, setNietGedaan] = useState<Map<string, Keuze>>(new Map());
   /** Welke extra opdrachten gedaan zijn; net als de adressen staat alles aan. */
@@ -356,7 +359,7 @@ function DagKlaarDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onSluit()}>
-      <PopupKader className="sm:max-w-lg">
+      <PopupKader blad={mobiel} onSluit={onSluit} className={mobiel ? "" : "sm:max-w-lg"}>
         <PopupKop
           kleur="groen"
           icoon={<FlagCheck className="size-[22px]" />}

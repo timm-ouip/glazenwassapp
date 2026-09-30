@@ -31,6 +31,7 @@ import {
 import { toonDatum, vandaag } from "@/lib/wasdag";
 import { DagContant } from "@/components/betalingen/DagContant";
 import { useRecht } from "@/lib/rechten";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Props {
   open: boolean;
@@ -76,6 +77,8 @@ export function DagAdresDialog({
   const [bedrag, setBedrag] = useState("");
   const [tekst, setTekst] = useState("");
   const prijzenZien = useRecht("prijzen_zien");
+  // Op de telefoon schuift hij van onderen omhoog, zoals het betaalpaneel.
+  const mobiel = useIsMobile();
 
   // Overnemen wat er in de database staat, elke keer als het schermpje
   // opengaat. Niet bij elke hervalidatie van de lijst: dan zou wat je net
@@ -102,7 +105,11 @@ export function DagAdresDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <PopupKader onKeyDown={opslaanBijEnter(bewaar)}>
+      <PopupKader
+        blad={mobiel}
+        onSluit={() => onOpenChange(false)}
+        onKeyDown={opslaanBijEnter(bewaar)}
+      >
         <PopupKop
           // Groen: dit gaat over het bedrag van één dag.
           kleur="groen"
