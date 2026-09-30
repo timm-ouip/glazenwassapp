@@ -240,9 +240,21 @@ export interface Klant {
   /** Vaste regel op elke factuur, bv. "Glasbewassing conform overeenkomst".
    *  Leeg = per beurt het adres en de datum. */
   factuur_omschrijving: string;
-  /** Elke beurt een factuur, of alles van een maand op één factuur. */
-  factuur_per: "beurt" | "maand";
+  /** Elke beurt een factuur, of alles van een maand, kwartaal, half jaar of
+   *  jaar op één factuur. Dat zijn vaste kalenderperiodes (jan–mrt enz.). */
+  factuur_per: FactuurPer;
 }
+
+export type FactuurPer = "beurt" | "maand" | "kwartaal" | "halfjaar" | "jaar";
+
+/** Hoe vaak een klant een factuur krijgt, in de volgorde van de keuzepillen. */
+export const FACTUUR_PER: { waarde: FactuurPer; label: string }[] = [
+  { waarde: "beurt", label: "Per beurt" },
+  { waarde: "maand", label: "Per maand" },
+  { waarde: "kwartaal", label: "Per kwartaal" },
+  { waarde: "halfjaar", label: "Per half jaar" },
+  { waarde: "jaar", label: "Per jaar" },
+];
 
 /** De velden die je in de klantendialog invult — id en company_id niet. */
 export type KlantVelden = Omit<Klant, "id">;

@@ -111,6 +111,7 @@ import {
   type QuickNote,
   type Street,
   LEEG_KLANT,
+  FACTUUR_PER,
 } from "@/lib/klanten";
 import { zoekAdres, zoekStraten } from "@/lib/postcode";
 import { opslaanBijEnter } from "@/lib/dialoog";
@@ -994,10 +995,7 @@ export function KlantgegevensDialog({
                   </PopupVeld>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                     <Pillen
-                      keuzes={[
-                        { waarde: "beurt" as const, label: "Factuur per beurt" },
-                        { waarde: "maand" as const, label: "Verzamelen per maand" },
-                      ]}
+                      keuzes={FACTUUR_PER}
                       waarde={velden.factuur_per}
                       onChange={(w) => zet({ factuur_per: w })}
                       disabled={!magBewerken}

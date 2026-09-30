@@ -5,7 +5,8 @@
  *
  *   1. Een dag wordt helemaal afgemeld → de database maakt *te factureren
  *      regels*. Geen nummer, niets naar buiten.
- *   2. Die regels worden een concept (per beurt, of verzameld per maand).
+ *   2. Die regels worden een concept (per beurt, of verzameld per maand,
+ *      kwartaal, half jaar of jaar).
  *   3. Bij het versturen trekt de factuur zijn nummer en bevriest hij de
  *      klantgegevens. Vanaf dat moment is er niets meer aan te veranderen:
  *      de klant heeft dat papier al. Rechtzetten gaat met een creditfactuur.
@@ -181,7 +182,7 @@ export async function fetchLosseRegels(): Promise<number> {
   return count ?? 0;
 }
 
-/** Losse regels bundelen tot concepten. `nuOok` pakt ook de lopende maand mee. */
+/** Losse regels bundelen tot concepten. `nuOok` pakt ook de lopende periode mee. */
 export async function facturenKlaarzetten(nuOok = false): Promise<number> {
   const { data, error } = await supabase.rpc("facturen_klaarzetten", { nu_ook: nuOok });
   if (error) throw error;

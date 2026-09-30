@@ -99,7 +99,7 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
   }
 
   const klaarzetten = useMutation({
-    mutationFn: () => facturenKlaarzetten(false),
+    mutationFn: (nuOok: boolean) => facturenKlaarzetten(nuOok),
     onSuccess: (n) => {
       ververs();
       toast.success(
@@ -320,16 +320,39 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
             {los.data === 1
               ? "1 te factureren regel staat nog los."
               : `${los.data} te factureren regels staan nog los.`}{" "}
-            Klanten met &ldquo;verzamelen per maand&rdquo; wachten tot de maand voorbij is.
+            Klanten die per maand, kwartaal, half jaar of jaar een factuur krijgen, wachten tot die
+            periode voorbij is.
           </span>
           <Button
             size="sm"
             variant="secondary"
             className="rounded-full"
             disabled={klaarzetten.isPending}
-            onClick={() => klaarzetten.mutate()}
+            onClick={() => klaarzetten.mutate(false)}
           >
             {klaarzetten.isPending ? "Bezig…" : "Concepten klaarzetten"}
+          </Button>
+          {/* Voor als je niet wilt wachten, bv. een jaarklant die in maart
+              stopt. Terug te draaien: een concept weggooien zet de regels
+              weer los. */}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="rounded-full text-tint-amber-ink"
+            disabled={klaarzetten.isPending}
+            onClick={async () => {
+              const ja = await bevestig({
+                titel: "Ook wat nog wacht klaarzetten?",
+                tekst:
+                  "Klanten die per maand, kwartaal, half jaar of jaar een factuur krijgen, krijgen nu al een" +
+                  " concept met wat er tot nu toe gedaan is. Wil je dat voor een klant toch niet, gooi dat" +
+                  " concept dan weg: de regels wachten dan gewoon weer op het eind van de periode.",
+                bevestigLabel: "Toch nu klaarzetten",
+              });
+              if (ja) klaarzetten.mutate(true);
+            }}
+          >
+            Toch nu
           </Button>
         </section>
       )}

@@ -2,7 +2,7 @@
  * Een rijtje pillen waarvan er één (of meer) aan staat.
  *
  * Stond eerst alleen in BetaalwijzeKiezer; sindsdien kiest de app op meer
- * plekken zo: het klanttype, per beurt of per maand, en contant/overmaken op
+ * plekken zo: het klanttype, hoe vaak een klant een factuur krijgt, en contant/overmaken op
  * het dashboard. Eén vorm, zodat het overal hetzelfde aanvoelt.
  */
 export function Pillen<T>({
