@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconArrowRight as ArrowRight,
-  IconCalendar as CalendarDays,
   IconCalendarPlus as CalendarPlus,
   IconSquareCheck as CheckSquare,
   IconCornerDownRight as CornerDownRight,
@@ -12,6 +11,8 @@ import {
   IconFolder as Folder,
   IconCurrencyEuro as Euro,
   IconHammer as Hammer,
+  IconLayoutColumns as LayoutColumns,
+  IconList as List,
   IconLock as Lock,
   IconLockOpen as LockOpen,
   IconMapPin as MapPin,
@@ -32,6 +33,7 @@ import { VerplaatsNaarKnop } from "@/components/VerplaatsNaarKnop";
 import { OverslaanKnop } from "@/components/OverslaanKnop";
 import { DagAdresDialog } from "@/components/DagAdresDialog";
 import { DagKlaar } from "@/components/DagKlaar";
+import { Verdeling } from "@/components/Verdeling";
 import {
   fetchCustomers,
   fetchCustomersMetInactief,
@@ -83,6 +85,11 @@ import { rondeVanDag } from "@/lib/dagbouwstenen";
 interface DagSearch {
   datum?: string;
 }
+
+/** Op de telefoon een rond knopje met alleen het icoon. */
+const KNOP_TEL = "max-md:size-9 max-md:px-0";
+/** Het woord in zo'n knop: op de telefoon alleen voor de schermlezer. */
+const WOORD = "max-md:sr-only";
 
 export const Route = createFileRoute("/dag")({
   beforeLoad: async () => {
@@ -922,10 +929,21 @@ function DagPagina() {
     const top = gesorteerd.slice(0, 5);
     const rest = gesorteerd.slice(5).reduce((sum, g) => sum + g.bedrag, 0);
     if (rest > 0) top.push({ naam: "overige straten", bedrag: rest });
-    return top.map((g, i) => ({
-      ...g,
-      kleur: g.naam === "Extra opdrachten" ? "bg-tint-geel-ink/60" : (GELDKLEUREN[i] ?? "bg-muted"),
-    }));
+    return top.map((g, i) => {
+      const extra = g.naam === "Extra opdrachten";
+      const kleur = GELDKLEUREN[i] ?? "bg-muted";
+      return {
+        ...g,
+        kleur: extra ? "bg-tint-geel-ink/60" : kleur,
+        // Dezelfde kleur als waarde, voor de donut (een conic-gradient kent
+        // geen Tailwind-klassen): "bg-tint-paars-mid" → var(--tint-paars-mid).
+        vul: extra
+          ? "color-mix(in oklab, var(--tint-geel-ink) 60%, transparent)"
+          : kleur === "bg-muted"
+            ? "var(--muted)"
+            : `var(--${kleur.slice(3)})`,
+      };
+    });
   }, [perWijk.wijken, klussen]);
 
   /**
@@ -1030,12 +1048,13 @@ function DagPagina() {
               erachter. */}
           <span className="flex flex-wrap items-center gap-2">
             {/* Dezelfde knoppen als op de wijken en de kalender: een pil met
-                een woord erbij, zodat je niet hoeft te raden wat een rondje
-                doet. */}
+                een woord erbij. Op de telefoon alleen het icoontje (`KNOP_TEL`
+                en `WOORD`), anders nemen ze twee regels in; het woord blijft
+                dan voor de schermlezer. De kalender zit al onderin het menu. */}
             <Button
               size="sm"
               variant={vast ? "default" : "outline"}
-              className="rounded-full"
+              className={`rounded-full ${KNOP_TEL}`}
               onClick={wisselVast}
               title={
                 vast
@@ -1044,12 +1063,12 @@ function DagPagina() {
               }
             >
               {vast ? <Lock className="size-4" /> : <LockOpen className="size-4" />}
-              {vast ? "Vastgezet" : "Vastzetten"}
+              <span className={WOORD}>{vast ? "Vastgezet" : "Vastzetten"}</span>
             </Button>
             <Button
               size="sm"
               variant={selecteren ? "default" : "outline"}
-              className="rounded-full"
+              className={`rounded-full ${KNOP_TEL}`}
               aria-pressed={selecteren}
               // Staat hij aan, dan moet je er altijd weer uit kunnen, ook als
               // er intussen niets meer aan te vinken is.
@@ -1061,26 +1080,21 @@ function DagPagina() {
               }}
               title="Aanvinken wat er niet af gekomen is"
             >
-              <CheckSquare className="size-4" /> Selecteren
+              <CheckSquare className="size-4" /> <span className={WOORD}>Selecteren</span>
             </Button>
             <Button
               size="sm"
               variant="outline"
-              className="rounded-full"
+              className={`rounded-full ${KNOP_TEL}`}
               disabled={!undoLabel}
               onClick={() => void doeUndo()}
               title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
             >
-              <Undo2 className="size-4" /> Ongedaan
+              <Undo2 className="size-4" /> <span className={WOORD}>Ongedaan</span>
             </Button>
-            <Button size="sm" variant="outline" className="rounded-full" asChild>
-              <Link to="/planning" search={{ dag: datum }} title="Deze dag op de kalender">
-                <CalendarDays className="size-4" /> Kalender
-              </Link>
-            </Button>
-            <Button size="sm" variant="outline" className="rounded-full" asChild>
+            <Button size="sm" variant="outline" className={`rounded-full ${KNOP_TEL}`} asChild>
               <Link to="/" search={{ dag: datum }} title="Werk op deze dag inplannen">
-                <CalendarPlus className="size-4" /> Inplannen
+                <CalendarPlus className="size-4" /> <span className={WOORD}>Inplannen</span>
               </Link>
             </Button>
             {regels.length === 0 ? (
@@ -1141,13 +1155,19 @@ function DagPagina() {
                 type="button"
                 aria-pressed={kanten === aan}
                 onClick={() => kiesKanten(aan)}
-                className={`rounded-full px-3 py-1 text-[12.5px] font-medium transition-colors ${
+                title={aan ? "Even en oneven naast elkaar" : "Eén lijst"}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[12.5px] font-medium transition-colors max-md:px-2.5 ${
                   kanten === aan
                     ? "bg-foreground text-background"
                     : "text-muted-foreground hover:bg-surface hover:text-foreground"
                 }`}
               >
-                {aan ? "Beide kanten" : "Lijst"}
+                {aan ? (
+                  <LayoutColumns className="size-4 shrink-0" />
+                ) : (
+                  <List className="size-4 shrink-0" />
+                )}
+                <span className={WOORD}>{aan ? "Beide kanten" : "Lijst"}</span>
               </button>
             ))}
           </span>
@@ -1412,33 +1432,12 @@ function DagPagina() {
               </section>
             )}
 
-            {/* Waar het geld van de dag zit. Twee straten kunnen evenveel
-                adressen hebben en toch het dubbele opleveren; dat zie je aan
-                een lijst met bedragen niet, en aan een balk wel. */}
-            {prijzenZien && geldVerdeling.length > 1 && (
-              <section className="rounded-[18px] border border-border bg-card p-3 shadow-card">
-                <h2 className="mb-2 font-display text-[14px] font-semibold">Waar het geld zit</h2>
-                <span className="flex h-1.5 overflow-hidden rounded-full bg-surface">
-                  {geldVerdeling.map((g) => (
-                    <span
-                      key={g.naam}
-                      className={g.kleur}
-                      style={{ width: `${(g.bedrag / bedrag) * 100}%` }}
-                    />
-                  ))}
-                </span>
-                <ul className="mt-2 space-y-0.5">
-                  {geldVerdeling.map((g) => (
-                    <li key={g.naam} className="flex items-center gap-2 text-[12px]">
-                      <span className={`size-2 shrink-0 rounded-[3px] ${g.kleur}`} />
-                      <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                        {g.naam}
-                      </span>
-                      <span className="tabular-nums">{formatPrice(g.bedrag)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
+            {/* De verdeling van het geld over de straten. Twee straten kunnen
+                evenveel adressen hebben en toch het dubbele opleveren; dat zie
+                je aan een lijst met bedragen niet, aan een grafiek wel. */}
+            {/* Pas als er echt geld te verdelen is: alles op € 0 zegt niets. */}
+            {prijzenZien && geldVerdeling.length > 1 && geldVerdeling.some((g) => g.bedrag > 0) && (
+              <Verdeling delen={geldVerdeling} />
             )}
 
             {/* Wat je hier komt doen als de dag niet af kwam. Staat er alleen

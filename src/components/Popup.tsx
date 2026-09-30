@@ -22,11 +22,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 /** Het schermpje als blad dat van onderen omhoog schuift, zoals op de telefoon
  *  hoort; dezelfde vorm als het klantblad (KlantgegevensDialog).
  *
- *  `grid-cols-[minmax(0,1fr)]`: zonder dat maakt de breedste regel (meestal
- *  de voet met drie knoppen) het blad breder dan het scherm, en vallen rechts
- *  het kruisje en de knop Opslaan eraf. */
+ *  De breedte volgt het scherm (PopupKader is een kolom); de voet slaat om als
+ *  de knoppen niet naast elkaar passen, zodat rechts niets meer wegvalt. */
 const BLAD =
-  "grid-cols-[minmax(0,1fr)] bottom-0 left-0 top-auto max-h-[90dvh] max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] sm:max-w-none sm:rounded-b-none sm:rounded-t-[24px] data-[state=open]:slide-in-from-bottom-10 data-[state=open]:zoom-in-100 data-[state=closed]:slide-out-to-bottom data-[state=closed]:zoom-out-100";
+  "focus:outline-none bottom-0 left-0 top-auto max-h-[90dvh] max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] sm:max-w-none sm:rounded-b-none sm:rounded-t-[24px] data-[state=open]:slide-in-from-bottom-10 data-[state=open]:zoom-in-100 data-[state=closed]:slide-out-to-bottom data-[state=closed]:zoom-out-100";
 
 /** De buitenkant. Vervangt DialogContent: geen eigen vulling en geen rand,
  *  want de kop en de voet lopen tot aan de zijkant door.
@@ -76,12 +75,31 @@ export function PopupKader({
   return (
     <DialogContent
       className={cn(
-        "max-h-[90vh] gap-0 overflow-hidden border-0 bg-card p-0 shadow-[0_2px_6px_oklch(0.4_0.02_70/6%),0_24px_60px_oklch(0.35_0.02_70/14%)] sm:max-w-md sm:rounded-[22px]",
+        // Een kolom en geen raster: dan blijven kop en voet staan en scrolt
+        // het middenstuk (PopupBody, min-h-0). In een raster groeide dat
+        // middenstuk mee met de inhoud en werd alles eronder afgeknipt; een
+        // lange "Dag klaar" kon je daardoor niet scrollen.
+        "flex max-h-[90vh] flex-col gap-0 overflow-hidden border-0 bg-card p-0 shadow-[0_2px_6px_oklch(0.4_0.02_70/6%),0_24px_60px_oklch(0.35_0.02_70/14%)] sm:max-w-md sm:rounded-[22px]",
         blad && BLAD,
         className,
       )}
       {...rest}
       {...bladHandlers}
+      // Op de telefoon niet meteen in het eerste vak gaan staan: dan schuift
+      // het toetsenbord omhoog over de helft van het blad, nog voor je gezien
+      // hebt wat erin staat. Tik je zelf in een vak, dan komt het gewoon.
+      {...(blad
+        ? {
+            onOpenAutoFocus: (e: Event) => {
+              rest.onOpenAutoFocus?.(e);
+              if (e.defaultPrevented) return;
+              e.preventDefault();
+              // Wel het blad zelf: zo weet een schermlezer dat het open is,
+              // en blijft Tab erbinnen. Het toetsenbord komt daar niet van.
+              (e.currentTarget as HTMLElement | null)?.focus();
+            },
+          }
+        : {})}
     >
       {/* Het greepje: zo zie je dat je hem omlaag kunt vegen. */}
       {blad && (
@@ -234,7 +252,12 @@ export function PopupTab({
 /** De inhoud onder de kop. Scrollt als er meer in staat dan er past. */
 export function PopupBody({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn("flex flex-col gap-[18px] overflow-y-auto px-6 pb-6 pt-[22px]", className)}>
+    <div
+      className={cn(
+        "flex min-h-0 flex-col gap-[18px] overflow-y-auto px-6 pb-6 pt-[22px]",
+        className,
+      )}
+    >
       {children}
     </div>
   );
