@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconArrowRight as ArrowRight,
   IconCalendar as CalendarDays,
+  IconCalendarPlus as CalendarPlus,
   IconSquareCheck as CheckSquare,
   IconCornerDownRight as CornerDownRight,
   IconChevronLeft as ChevronLeft,
@@ -77,6 +78,7 @@ import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze"
 import { redenLabel } from "@/lib/stoppen";
 import { verplaatsWasdag } from "@/lib/wasdag";
 import { zetWasdagTerug } from "@/lib/wasdag";
+import { rondeVanDag } from "@/lib/dagbouwstenen";
 
 interface DagSearch {
   datum?: string;
@@ -270,7 +272,12 @@ function DagPagina() {
     },
   });
 
-  const maand = datum.slice(0, 7);
+  // De ronde van de dag, niet per se zijn kalendermaand: loopt september uit
+  // tot 1 oktober, dan gelden hier het extra werk en de prijzen van september.
+  const maand = rondeVanDag(
+    (wasdagQuery.data ?? []).map((r) => ({ datum, ronde: r.ronde })),
+    datum,
+  );
 
   /**
    * De selecteermodus. Uit is de pagina een lijst om af te lezen en te printen;
@@ -1021,54 +1028,83 @@ function DagPagina() {
               elkaar staat: ronde knoppen en één donkere pil, want printen is
               wat je hier komt doen. Wat de selecteerstand erbij zet, komt
               erachter. */}
-          <span className="flex items-center gap-2">
-            <RondeKnop
-              actief={vast}
-              label={
+          <span className="flex flex-wrap items-center gap-2">
+            {/* Dezelfde knoppen als op de wijken en de kalender: een pil met
+                een woord erbij, zodat je niet hoeft te raden wat een rondje
+                doet. */}
+            <Button
+              size="sm"
+              variant={vast ? "default" : "outline"}
+              className="rounded-full"
+              onClick={wisselVast}
+              title={
                 vast
                   ? "Vastgezet: de app opent hier op vandaag. Tik om los te maken."
                   : "Vastzetten: de app opent op deze telefoon voortaan op vandaag"
               }
-              onClick={wisselVast}
             >
               {vast ? <Lock className="size-4" /> : <LockOpen className="size-4" />}
-            </RondeKnop>
-            <RondeKnop
-              actief={selecteren}
-              label="Aanvinken wat er niet af gekomen is"
+              {vast ? "Vastgezet" : "Vastzetten"}
+            </Button>
+            <Button
+              size="sm"
+              variant={selecteren ? "default" : "outline"}
+              className="rounded-full"
+              aria-pressed={selecteren}
+              // Staat hij aan, dan moet je er altijd weer uit kunnen, ook als
+              // er intussen niets meer aan te vinken is.
+              disabled={teKiezen === 0 && !selecteren}
               onClick={() => {
                 setSelecteren((v) => !v);
                 setKeuze(new Set());
                 setKlusKeuze(new Set());
               }}
-              uit={teKiezen === 0}
+              title="Aanvinken wat er niet af gekomen is"
             >
-              <CheckSquare className="size-4" />
-            </RondeKnop>
-            <RondeKnop label="Ongedaan maken" onClick={() => void doeUndo()} uit={!undoLabel}>
-              <Undo2 className="size-4" />
-            </RondeKnop>
-            <RondeKnop label="Naar de kalender" naar={{ to: "/planning", search: { dag: datum } }}>
-              <CalendarDays className="size-4" />
-            </RondeKnop>
-            <RondeKnop label="Werk inplannen" naar={{ to: "/", search: { dag: datum } }}>
-              <Euro className="size-4" />
-            </RondeKnop>
-            <Button size="sm" className="rounded-full" asChild disabled={regels.length === 0}>
-              <Link
-                to="/printen"
-                search={{
-                  wijk: "",
-                  maand,
-                  prijzen: false,
-                  liggend: true,
-                  dag: datum,
-                  ...(dagPloegen.length > 0 ? { perPloeg: true } : {}),
-                }}
-              >
-                <Printer className="size-4" /> Printlijst
+              <CheckSquare className="size-4" /> Selecteren
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-full"
+              disabled={!undoLabel}
+              onClick={() => void doeUndo()}
+              title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
+            >
+              <Undo2 className="size-4" /> Ongedaan
+            </Button>
+            <Button size="sm" variant="outline" className="rounded-full" asChild>
+              <Link to="/planning" search={{ dag: datum }} title="Deze dag op de kalender">
+                <CalendarDays className="size-4" /> Kalender
               </Link>
             </Button>
+            <Button size="sm" variant="outline" className="rounded-full" asChild>
+              <Link to="/" search={{ dag: datum }} title="Werk op deze dag inplannen">
+                <CalendarPlus className="size-4" /> Inplannen
+              </Link>
+            </Button>
+            {regels.length === 0 ? (
+              // Een link kan niet uit staan: op een lege dag een gewone knop.
+              <Button size="sm" className="rounded-full" disabled>
+                <Printer className="size-4" /> Printlijst
+              </Button>
+            ) : (
+              <Button size="sm" className="rounded-full" asChild>
+                <Link
+                  to="/printen"
+                  search={{
+                    wijk: "",
+                    maand,
+                    prijzen: false,
+                    liggend: true,
+                    dag: datum,
+                    ...(dagPloegen.length > 0 ? { perPloeg: true } : {}),
+                  }}
+                >
+                  <Printer className="size-4" /> Printlijst
+                </Link>
+              </Button>
+            )}
           </span>
 
           {/* Werk je die dag in ploegen, dan zie je standaard je eigen route.
@@ -1434,6 +1470,9 @@ function DagPagina() {
             customer={bewerkt?.customer ?? null}
             straat={bewerkt?.straat ?? ""}
             datum={datum}
+            ronde={
+              (wasdagQuery.data ?? []).find((r) => r.customer_id === bewerkt?.customer?.id)?.ronde
+            }
             prijs={bewerkt ? (perWijk.regelVan.get(bewerkt.customer.id)?.prijs ?? 0) : 0}
             notitie={bewerkt ? (perWijk.regelVan.get(bewerkt.customer.id)?.notitie ?? null) : null}
             onOpslaan={(prijs, notitie) => {
@@ -1452,47 +1491,6 @@ function DagPagina() {
         </div>
       )}
     </AppLayout>
-  );
-}
-
-/**
- * Een ronde knop met alleen een icoon. Rechtsboven staan er een paar naast
- * elkaar; met tekst erbij zou die balk twee regels lang worden en zou niets er
- * meer uitspringen. De naam zit in `aria-label` en in de tooltip, dus hij is
- * te vinden voor wie hem niet herkent.
- */
-function RondeKnop({
-  label,
-  onClick,
-  naar,
-  actief = false,
-  uit = false,
-  children,
-}: {
-  label: string;
-  onClick?: () => void;
-  /** Een link in plaats van een knop, bijvoorbeeld naar de kalender. */
-  naar?: { to: string; search: Record<string, unknown> };
-  actief?: boolean;
-  uit?: boolean;
-  children: ReactNode;
-}) {
-  const klassen = `flex size-9 items-center justify-center rounded-full border transition-colors ${
-    actief
-      ? "border-primary bg-primary text-primary-foreground"
-      : "border-border bg-card text-muted-foreground hover:text-foreground"
-  } ${uit ? "pointer-events-none opacity-40" : ""}`;
-  if (naar) {
-    return (
-      <Link to={naar.to} search={naar.search} className={klassen} title={label} aria-label={label}>
-        {children}
-      </Link>
-    );
-  }
-  return (
-    <button type="button" onClick={onClick} className={klassen} title={label} aria-label={label}>
-      {children}
-    </button>
   );
 }
 

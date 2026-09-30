@@ -18,7 +18,9 @@ import {
 import { toast } from "sonner";
 import {
   IconAlertTriangle as AlertTriangle,
+  IconArrowDown as ArrowDown,
   IconArrowLeft as ArrowLeft,
+  IconArrowUp as ArrowUp,
   IconCheck as Check,
   IconEye as Eye,
   IconFileSpreadsheet as FileSpreadsheet,
@@ -697,6 +699,50 @@ function ImportPagina() {
    * beide iets, dan valt er ook niets na te kijken.
    */
   const samengevoegd = useMemo(() => lijst.filter(uitTweeMaanden).length, [lijst]);
+
+  /**
+   * Hoe je de lijst bekijkt, om hem naast de Excel-tabbladen te leggen: op
+   * straat, frequentie of prijs gesorteerd, en alleen wat in een even of
+   * oneven maand meegaat. Het is alleen kijken: importeren doet altijd alles.
+   */
+  const [sorteer, setSorteer] = useState<{
+    op: "bestand" | "straat" | "frequentie" | "prijs";
+    omgekeerd: boolean;
+  }>({ op: "bestand", omgekeerd: false });
+  const [maandFilter, setMaandFilter] = useState<"alles" | "even" | "oneven">("alles");
+  function sorteerOp(op: "straat" | "frequentie" | "prijs") {
+    // Nog een keer op dezelfde kop: andersom. Een derde keer: weer zoals in
+    // het bestand.
+    setSorteer((was) =>
+      was.op !== op
+        ? { op, omgekeerd: false }
+        : was.omgekeerd
+          ? { op: "bestand", omgekeerd: false }
+          : { op, omgekeerd: true },
+    );
+  }
+  const zichtbaar = useMemo(() => {
+    const doetMee = (r: ImportRij) =>
+      maandFilter === "alles" || r.frequency === "elke" || r.frequency === maandFilter;
+    const opStraat = (a: ImportRij, b: ImportRij) =>
+      a.straat.localeCompare(b.straat, "nl") ||
+      a.huisnummer - b.huisnummer ||
+      a.toevoeging.localeCompare(b.toevoeging);
+    const freqVolgorde = { elke: 0, even: 1, oneven: 2 } as const;
+    const vergelijk =
+      sorteer.op === "straat"
+        ? opStraat
+        : sorteer.op === "frequentie"
+          ? (a: ImportRij, b: ImportRij) =>
+              freqVolgorde[a.frequency] - freqVolgorde[b.frequency] || opStraat(a, b)
+          : sorteer.op === "prijs"
+            ? (a: ImportRij, b: ImportRij) => a.prijs - b.prijs || opStraat(a, b)
+            : null;
+    const gefilterd = lijst.filter(doetMee);
+    if (!vergelijk) return gefilterd;
+    const uit = [...gefilterd].sort(vergelijk);
+    return sorteer.omgekeerd ? uit.reverse() : uit;
+  }, [lijst, sorteer, maandFilter]);
 
   const nakijken = useMemo(
     () =>
@@ -1691,21 +1737,79 @@ function ImportPagina() {
               </p>
             )}
 
+            {/* Zelfde knoppen als bovenaan de wijken: alleen wat in die maand
+                meegaat, zodat je het naast het Excel-tabblad van die maand
+                kunt leggen. */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-0.5 rounded-full border border-border bg-card p-1">
+                {(
+                  [
+                    ["alles", "Alles"],
+                    ["even", "Even maand"],
+                    ["oneven", "Oneven maand"],
+                  ] as const
+                ).map(([waarde, label]) => (
+                  <button
+                    key={waarde}
+                    type="button"
+                    aria-pressed={maandFilter === waarde}
+                    onClick={() => setMaandFilter(waarde)}
+                    className={`rounded-full px-3 py-1 text-[12.5px] font-medium transition-colors ${
+                      maandFilter === waarde
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:bg-surface hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[12.5px] text-muted-foreground">
+                {zichtbaar.length === lijst.length
+                  ? `${lijst.length} adressen`
+                  : `${zichtbaar.length} van ${lijst.length} adressen`}
+                {(maandFilter !== "alles" || sorteer.op !== "bestand") &&
+                  " · alleen om te bekijken, importeren doet ze allemaal"}
+              </p>
+            </div>
+
             <div className="rounded-[18px] border border-border bg-card shadow-card">
               <table className="w-full table-fixed text-sm">
                 <thead className="bg-card-header text-left text-[11px] font-medium text-muted-foreground/80 zak:bg-card zak:text-[10px] zak:font-bold zak:uppercase zak:tracking-[0.08em] zak:text-muted-foreground">
                   <tr>
-                    <th className="w-[15%] px-3 py-2">Straat</th>
+                    <th className="w-[15%] px-3 py-2">
+                      <SorteerKop
+                        label="Straat"
+                        actief={sorteer.op === "straat"}
+                        omgekeerd={sorteer.omgekeerd}
+                        onClick={() => sorteerOp("straat")}
+                      />
+                    </th>
                     <th className="w-20 px-3 py-2">Nr.</th>
                     <th className="w-[55%] px-3 py-2">Notitie</th>
-                    <th className="w-40 px-3 py-2">Frequentie</th>
-                    <th className="w-24 px-3 py-2 text-right">Prijs</th>
+                    <th className="w-40 px-3 py-2">
+                      <SorteerKop
+                        label="Frequentie"
+                        actief={sorteer.op === "frequentie"}
+                        omgekeerd={sorteer.omgekeerd}
+                        onClick={() => sorteerOp("frequentie")}
+                      />
+                    </th>
+                    <th className="w-24 px-3 py-2 text-right">
+                      <SorteerKop
+                        label="Prijs"
+                        rechts
+                        actief={sorteer.op === "prijs"}
+                        omgekeerd={sorteer.omgekeerd}
+                        onClick={() => sorteerOp("prijs")}
+                      />
+                    </th>
                     <th className="w-20 px-2 py-2" />
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-border">
-                  {lijst.map((r) => (
+                  {zichtbaar.map((r) => (
                     <tr
                       key={r.id}
                       className={nakijkRijen.has(r.id) ? "bg-tint-roze/60" : undefined}
@@ -1860,6 +1964,35 @@ function ImportPagina() {
         />
       </div>
     </AppLayout>
+  );
+}
+
+/** Een kolomkop waarop je klikt om te sorteren; het pijltje zegt hoe. */
+function SorteerKop({
+  label,
+  actief,
+  omgekeerd,
+  rechts = false,
+  onClick,
+}: {
+  label: string;
+  actief: boolean;
+  omgekeerd: boolean;
+  rechts?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Sorteren op ${label.toLowerCase()}`}
+      className={`inline-flex items-center gap-1 hover:text-foreground ${
+        rechts ? "flex-row-reverse" : ""
+      } ${actief ? "text-foreground" : ""}`}
+    >
+      {label}
+      {actief && (omgekeerd ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />)}
+    </button>
   );
 }
 

@@ -104,7 +104,8 @@ export function WassenVanaf({
         </DropdownMenuItem>
         {c.start_maand && (
           <DropdownMenuItem onSelect={() => onPatch({ start_maand: "" })}>
-            <CircleSlash className="size-4" /> Meteen (aanmaakmaand)
+            <CircleSlash className="size-4" />{" "}
+            {c.geimporteerd ? "Standaard (al klant)" : "Meteen (aanmaakmaand)"}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

@@ -447,14 +447,17 @@ export function NotitieCel({
                     </p>
                   </>
                 )}
+                {/* De notitie op een eigen regel: naast het bedrag en de
+                    minuten bleef er in dit smalle venster maar een paar
+                    letters ruimte over, en zag je niet wat er stond. */}
+                <Input
+                  value={regel.notitie}
+                  placeholder="bijv. serre"
+                  className="h-8 text-xs"
+                  onChange={(e) => pasAan(i, { notitie: e.target.value })}
+                  onKeyDown={sluitBijEnter}
+                />
                 <div className="flex gap-1.5">
-                  <Input
-                    value={regel.notitie}
-                    placeholder="bijv. serre"
-                    className="h-8 text-xs"
-                    onChange={(e) => pasAan(i, { notitie: e.target.value })}
-                    onKeyDown={sluitBijEnter}
-                  />
                   {/* Alleen wat er bij komt: op een factuur hoort het meerwerk
                       apart te staan van wat het pand normaal kost. Zonder
                       recht op prijzen geen bedragveld. */}
@@ -484,7 +487,7 @@ export function NotitieCel({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-8 px-2 text-muted-foreground hover:text-destructive"
+                    className="ml-auto h-8 px-2 text-muted-foreground hover:text-destructive"
                     aria-label="Deze maanden weghalen"
                     onClick={() => setWerk(werk.filter((_, j) => j !== i))}
                   >

@@ -35,7 +35,13 @@ import {
   sortCustomers,
   type Customer,
 } from "@/lib/klanten";
-import { fetchKaart, soortLabel, type Kaart, type KaartAdres } from "@/lib/overzichten";
+import {
+  fetchKaart,
+  soortLabel,
+  type Kaart,
+  type KaartAdres,
+  type KaartPost,
+} from "@/lib/overzichten";
 import { cn } from "@/lib/utils";
 
 const MAANDEN = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
@@ -80,6 +86,12 @@ function maandVan(iso: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+/** In welk maandvakje een post hoort: bij een wasbeurt de ronde, zodat de
+ *  septemberbeurt die uitliep tot 1 oktober in september staat. */
+function vakjeVan(p: KaartPost): string {
+  return p.ronde || p.datum.slice(0, 7);
+}
+
 /** De maanden die in de beginstand open stonden ("2026-07"), uit de post. */
 function beginMaandenVan(data: KaartAdres | undefined): string[] {
   const begin = (data?.posten ?? []).find((p) => p.soort === "beginstand");
@@ -109,8 +121,9 @@ function vakVoor(
   const betaald = posten.filter((p) => {
     if (!p.betaald_op) return false;
     const betaalMaand = maandVan(p.betaald_op);
-    const postMaand = p.datum.slice(0, 7);
-    return (betaalMaand > postMaand ? betaalMaand : postMaand) === maand;
+    // Pas later betaald dan de maand waarin gewassen werd: dan staat het in
+    // de maand van betalen. Anders in het vakje van de beurt (de ronde).
+    return (betaalMaand > p.datum.slice(0, 7) ? betaalMaand : vakjeVan(p)) === maand;
   });
   if (betaald.length > 0) {
     return {
@@ -136,7 +149,7 @@ function vakVoor(
   }
   // Vanaf de startmaand: gewassen maar (nog) niet betaald.
   if (!peilMaand || maand >= peilMaand) {
-    const gewassen = posten.filter((p) => p.soort === "wassen" && p.datum.slice(0, 7) === maand);
+    const gewassen = posten.filter((p) => p.soort === "wassen" && vakjeVan(p) === maand);
     if (gewassen.length > 0) {
       return { soort: "open", nogOpen: gewassen.some((p) => p.gedekt < p.bedrag - 0.005) };
     }
@@ -899,7 +912,7 @@ export function GeldKaart({
           </h3>
           <div className="mt-2 space-y-1 text-[13px]">
             {(details?.posten ?? [])
-              .filter((p) => p.datum.slice(0, 7) === gekozen.maand && p.soort !== "beginstand")
+              .filter((p) => vakjeVan(p) === gekozen.maand && p.soort !== "beginstand")
               .map((p, i) => (
                 <p key={`p${i}`}>
                   {p.soort === "klus" ? `Klus: ${p.omschrijving}` : "Gewassen"} op {p.datum} ·{" "}
@@ -930,7 +943,7 @@ export function GeldKaart({
                 </p>
               ))}
             {(details?.posten ?? []).every(
-              (p) => p.datum.slice(0, 7) !== gekozen.maand || p.soort === "beginstand",
+              (p) => vakjeVan(p) !== gekozen.maand || p.soort === "beginstand",
             ) &&
               (details?.gebeurtenissen ?? []).every((g) => maandVan(g.op) !== gekozen.maand) && (
                 <p className="text-muted-foreground">Niets gebeurd in deze maand.</p>

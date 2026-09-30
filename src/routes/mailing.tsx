@@ -62,7 +62,7 @@ import { datumSleutel, fetchWasdag, fetchWasdagen, toonDatum, vandaag } from "@/
 import { fetchKlussen } from "@/lib/klussen";
 import { fetchDagPloegen } from "@/lib/ploegen";
 import { usePlanningInstellingen } from "@/lib/planninginstellingen";
-import { klussenVanDag, maakBouwstenen, maandVan, tijdvakkenVoorDag } from "@/lib/dagbouwstenen";
+import { klussenVanDag, maakBouwstenen, rondeVanDag, tijdvakkenVoorDag } from "@/lib/dagbouwstenen";
 import { fetchSjablonen as fetchBerichtSjablonen, standaardVan } from "@/lib/sjablonen";
 import {
   bewaarAfzender,
@@ -429,7 +429,10 @@ function Opstellen({ beginDag }: { beginDag?: string | undefined }) {
       adressenVoorTijd.data ?? [],
       stratenVoorTijd.data ?? [],
       wijkenVoorTijd.data ?? [],
-      maandVan(datum),
+      rondeVanDag(
+        (wasdagVoorTijd.data ?? []).map((r) => ({ datum, ronde: r.ronde })),
+        datum,
+      ),
       planInstellingen,
     );
     const regels = (wasdagVoorTijd.data ?? [])

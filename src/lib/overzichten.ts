@@ -156,6 +156,9 @@ export interface KaartPost {
   betaald_soort: "betaald" | "korting" | null;
   betaald_op: string | null;
   betaald_door: string | null;
+  /** Bij een wasbeurt: de ronde ("2026-09"). Een septemberbeurt op
+   *  1 oktober hoort in het septembervakje. */
+  ronde?: string | null;
 }
 
 export interface KaartAdres {

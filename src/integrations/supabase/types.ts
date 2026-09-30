@@ -3634,6 +3634,7 @@ export type Database = {
           notitie_op_factuur: boolean;
           ploeg_nr: number | null;
           rest: boolean;
+          ronde: string;
           vaste_start: string | null;
           volgorde: number | null;
         };
@@ -3654,6 +3655,7 @@ export type Database = {
           notitie_op_factuur?: boolean;
           ploeg_nr?: number | null;
           rest?: boolean;
+          ronde?: string;
           vaste_start?: string | null;
           volgorde?: number | null;
         };
@@ -3674,6 +3676,7 @@ export type Database = {
           notitie_op_factuur?: boolean;
           ploeg_nr?: number | null;
           rest?: boolean;
+          ronde?: string;
           vaste_start?: string | null;
           volgorde?: number | null;
         };

@@ -779,10 +779,12 @@ async function wijzigingsbericht(
   // duizend rijen per opvraging aan, en dan zou juist de dag die nog moet
   // komen wegvallen — en beloven we een datum die allang geweest is.
   const nieuweDatum = new Map<string, string>();
+  /** De ronde van die nieuwe dag: een septemberbeurt kan op 1 oktober staan. */
+  const nieuweRonde = new Map<string, string>();
   for (const stuk of inStukjes(ids)) {
     const { data } = await db
       .from("wasdag_regels")
-      .select("customer_id,datum")
+      .select("customer_id,datum,ronde")
       .eq("company_id", bedrijf.id)
       .in("customer_id", stuk)
       .gte("datum", vandaag)
@@ -791,7 +793,10 @@ async function wijzigingsbericht(
       const id = r["customer_id"] as string;
       const datum = r["datum"] as string;
       const was = nieuweDatum.get(id);
-      if (!was || datum < was) nieuweDatum.set(id, datum);
+      if (!was || datum < was) {
+        nieuweDatum.set(id, datum);
+        nieuweRonde.set(id, (r["ronde"] as string | null) ?? datum.slice(0, 7));
+      }
     }
   }
 
@@ -810,9 +815,15 @@ async function wijzigingsbericht(
     for (const r of data ?? []) oudeDatum.set(r["customer_id"] as string, r["datum"] as string);
   }
 
-  // De klanten erbij. De maand van de nieuwe dag telt voor "slaat over".
-  const maand = (nieuweDatum.values().next().value ?? vandaag).slice(0, 7);
-  const klanten = await klantenVoorAdressen(db, bedrijf.id, ids, maand);
+  // De klanten erbij. Per adres de ronde van zijn nieuwe dag telt voor
+  // "slaat over": dat kan voor het ene adres september zijn, voor het andere
+  // oktober.
+  const klanten = await klantenVoorAdressen(
+    db,
+    bedrijf.id,
+    ids,
+    (id) => nieuweRonde.get(id) ?? vandaag.slice(0, 7),
+  );
   for (const k of klanten) {
     const metDatum = k.customer_ids.find((id) => nieuweDatum.has(id));
     const metOud = k.customer_ids.find((id) => oudeDatum.has(id));
@@ -1337,14 +1348,18 @@ async function klantenVoorDag(
   datum: string,
   uitsluiten: Set<string> = new Set(),
 ): Promise<KlantOpDag[]> {
-  // Wie deze maand overslaat staat nog wel op de dag, maar komt niet: die
-  // hoort ook geen aankondiging te krijgen.
-  const maand = datum.slice(0, 7);
+  // Wie deze ronde overslaat staat nog wel op de dag, maar komt niet: die
+  // hoort ook geen aankondiging te krijgen. De ronde van de dag, want een
+  // uitgelopen septemberronde kan op 1 oktober staan.
   const { data: regels } = await db
     .from("wasdag_regels")
-    .select("customer_id")
+    .select("customer_id,ronde")
     .eq("company_id", companyId)
     .eq("datum", datum);
+  const rondeVan = new Map(
+    (regels ?? []).map((r) => [r["customer_id"] as string, (r["ronde"] as string | null) ?? ""]),
+  );
+  const maand = (id: string) => rondeVan.get(id) || datum.slice(0, 7);
 
   const ids = (regels ?? [])
     .map((r) => r["customer_id"] as string | null)
@@ -1361,9 +1376,11 @@ async function klantenVoorAdressen(
   db: ReturnType<typeof createClient>,
   companyId: string,
   ids: string[],
-  maand: string,
+  /** De ronde waarin "slaat over" telt: één voor allemaal, of per adres. */
+  maand: string | ((id: string) => string),
 ): Promise<KlantOpDag[]> {
   if (ids.length === 0) return [];
+  const rondeVan = typeof maand === "string" ? () => maand : maand;
 
   const adressen: {
     id: string;
@@ -1383,7 +1400,8 @@ async function klantenVoorAdressen(
       .is("inactief_op", null)
       .in("id", stuk);
     for (const c of data ?? []) {
-      if (((c["overslaan"] as string[] | null) ?? []).includes(maand)) continue;
+      if (((c["overslaan"] as string[] | null) ?? []).includes(rondeVan(c["id"] as string)))
+        continue;
       adressen.push({
         id: c["id"] as string,
         klant_id: c["klant_id"] as string | null,
@@ -1535,12 +1553,16 @@ async function telDekking(
   datum: string,
   uitsluiten: Set<string> = new Set(),
 ): Promise<{ zonderEmail: number; overgeslagen: number }> {
-  const maand = datum.slice(0, 7);
   const { data: regels } = await db
     .from("wasdag_regels")
-    .select("customer_id")
+    .select("customer_id,ronde")
     .eq("company_id", companyId)
     .eq("datum", datum);
+  // Zelfde ronde als klantenVoorDag, anders tellen ze verschillend.
+  const rondeVan = new Map(
+    (regels ?? []).map((r) => [r["customer_id"] as string, (r["ronde"] as string | null) ?? ""]),
+  );
+  const maand = (id: string) => rondeVan.get(id) || datum.slice(0, 7);
   const ids = (regels ?? [])
     .map((r) => r["customer_id"] as string | null)
     .filter((id): id is string => !!id && !uitsluiten.has(id));
@@ -1551,14 +1573,14 @@ async function telDekking(
   for (const stuk of inStukjes(ids)) {
     const { data } = await db
       .from("customers")
-      .select("klant_id,overslaan")
+      .select("id,klant_id,overslaan")
       .eq("company_id", companyId)
       .is("deleted_at", null)
       // Zelfde telling als lijstVoorDag: inactieve adressen doen niet mee.
       .is("inactief_op", null)
       .in("id", stuk);
     for (const c of data ?? []) {
-      if (((c["overslaan"] as string[] | null) ?? []).includes(maand)) {
+      if (((c["overslaan"] as string[] | null) ?? []).includes(maand(c["id"] as string))) {
         overgeslagen += 1;
         continue;
       }

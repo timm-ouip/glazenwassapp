@@ -220,7 +220,7 @@ async function adressenVan(db: Db, companyId: string, klantIds: string[]) {
   if (adresIds.length > 0) {
     const { data: dagen, error: dagFout } = await db
       .from("wasdag_regels")
-      .select("customer_id,datum")
+      .select("customer_id,datum,ronde")
       .eq("company_id", companyId)
       .in("customer_id", adresIds)
       .gte("datum", vandaag)
@@ -228,7 +228,9 @@ async function adressenVan(db: Db, companyId: string, klantIds: string[]) {
       .limit(200);
     if (dagFout) throw new Error(`Planning: ${dagFout.message}`);
     for (const d of dagen ?? []) {
-      if (slaatOver.get(d.customer_id)?.has(String(d.datum).slice(0, 7))) continue;
+      // Overslaan geldt per ronde: een septemberbeurt op 1 oktober valt weg
+      // als september is overgeslagen.
+      if (slaatOver.get(d.customer_id)?.has(d.ronde ?? String(d.datum).slice(0, 7))) continue;
       if (!volgende.has(d.customer_id)) volgende.set(d.customer_id, d.datum);
     }
   }

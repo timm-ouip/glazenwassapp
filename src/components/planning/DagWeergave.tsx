@@ -48,7 +48,7 @@ import {
   type Tijdlijn,
   verdeelOverAdressen,
 } from "@/lib/dagplanning";
-import { maandVan, type Bouwstenen } from "@/lib/dagbouwstenen";
+import { overslaanLabel, type Bouwstenen } from "@/lib/dagbouwstenen";
 import { statusVan, type AankondigingRij } from "@/lib/aankondigingen";
 import { ploegNaam } from "@/lib/ploegen";
 import { formatPrice, toonMaand, wijkInkt, wijkVlak } from "@/lib/klanten";
@@ -488,7 +488,8 @@ export function DagWeergave(p: DagWeergaveProps) {
     );
   }
 
-  const maandNaam = toonMaand(maandVan(p.datum));
+  // De ronde van de beurten zelf: 1 oktober kan een septemberdag zijn.
+  const overslaanTekst = (ids: string[]) => overslaanLabel(p.regels, ids, p.datum);
 
   /** Wat er in het menu van één eenheid staat, voor allebei de menu's. */
   function actiesVan(kolom: Kolom, e: Eenheid, anders: string[]): Actie[] {
@@ -549,7 +550,7 @@ export function DagWeergave(p: DagWeergaveProps) {
         },
         {
           sleutel: "adres-overslaan",
-          label: `Overslaan in ${maandNaam}`,
+          label: overslaanTekst([id]),
           doe: () => p.onOverslaan([id]),
         },
       );
@@ -635,8 +636,8 @@ export function DagWeergave(p: DagWeergaveProps) {
       uit.push({
         sleutel: "overslaan",
         label: hoeveel
-          ? `Overslaan in ${maandNaam} (${blok.adressen.length})`
-          : `Overslaan in ${maandNaam}`,
+          ? `${overslaanTekst(blok.adressen)} (${blok.adressen.length})`
+          : overslaanTekst(blok.adressen),
         doe: () => p.onOverslaan(blok.adressen),
       });
     }

@@ -26,6 +26,7 @@ import type { Ploeg } from "@/lib/dagplanning";
 import { ploegNaam } from "@/lib/ploegen";
 import { pushUndo, undoKnop } from "@/lib/undo";
 import { toonDatum, vandaag, type WasdagRegel } from "@/lib/wasdag";
+import { rondeVanDag } from "@/lib/dagbouwstenen";
 
 type Keuze = "terug" | "overslaan";
 
@@ -177,6 +178,11 @@ export function DagKlaar({
             .map((r) => adressen.get(r.customer_id!))
             .filter((c): c is Customer => !!c)}
           straten={straten}
+          rondes={
+            new Map(
+              regels.filter((r) => r.customer_id && r.ronde).map((r) => [r.customer_id!, r.ronde!]),
+            )
+          }
           volgorde={
             new Map(
               regels
@@ -200,6 +206,7 @@ function DagKlaarDialog({
   naam,
   adressen,
   straten,
+  rondes,
   volgorde,
   klussen,
   klusTekst,
@@ -211,6 +218,8 @@ function DagKlaarDialog({
   naam: string;
   adressen: Customer[];
   straten: Map<string, Street>;
+  /** Bij welke ronde de beurt van elk adres hoort ("2026-09"). */
+  rondes: Map<string, string>;
   /** Waar een adres in de rij van de dag staat, om de straten net zo te
    *  ordenen als op de dagpagina. */
   volgorde: Map<string, number>;
@@ -265,7 +274,12 @@ function DagKlaarDialog({
       );
   }, [adressen, straten, volgorde]);
 
-  const maand = datum.slice(0, 7);
+  // De ronde van de dag: loopt september uit tot 1 oktober, dan sla je hier
+  // september over en niet oktober.
+  const maand = rondeVanDag(
+    [...rondes.values()].map((ronde) => ({ datum, ronde })),
+    datum,
+  );
   const aantalTerug = [...nietGedaan.values()].filter((k) => k === "terug").length;
   const aantalOver = [...nietGedaan.values()].filter((k) => k === "overslaan").length;
   const gedaan = adressen.length - nietGedaan.size;
@@ -288,7 +302,11 @@ function DagKlaarDialog({
       const overslaanTerug =
         overslaan.length > 0
           ? await zetOverslaan(
-              overslaan.map((c) => ({ c, maanden: [maand] })),
+              // De ronde van de beurt zelf; op 1 oktober kan dat september zijn.
+              overslaan.map((c) => ({
+                c,
+                maanden: [rondes.get(c.id) ?? maand],
+              })),
               qc,
             )
           : null;
@@ -467,11 +485,14 @@ function DagKlaarDialog({
             </div>
           )}
         </PopupBody>
-        <PopupVoet>
-          <span className="mr-auto text-[12.5px] text-muted-foreground">
-            {gedaan} gedaan
-            {nietGedaan.size > 0 && ` · ${nietGedaan.size} niet`}
-          </span>
+        <PopupVoet
+          links={
+            <span className="text-[12.5px] text-muted-foreground">
+              {gedaan} gedaan
+              {nietGedaan.size > 0 && ` · ${nietGedaan.size} niet`}
+            </span>
+          }
+        >
           <Button variant="outline" className="rounded-full" onClick={onSluit}>
             Annuleren
           </Button>

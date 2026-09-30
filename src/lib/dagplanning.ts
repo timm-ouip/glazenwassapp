@@ -64,6 +64,8 @@ export interface DagRegel {
   volgorde: number | null;
   rest: boolean;
   vaste_start: string | null;
+  /** De ronde van de beurt ("2026-09"); zie WasdagRegel. */
+  ronde?: string;
 }
 
 /** Eén extra opdracht op een dag. */

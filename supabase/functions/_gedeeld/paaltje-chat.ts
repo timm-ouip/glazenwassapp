@@ -250,7 +250,7 @@ export async function snelkeuzesVan(db: Db, companyId: string): Promise<Snelkeuz
 // ---------------------------------------------------------------------
 
 const ADRES_VELDEN =
-  "id,klant_id,street_id,house_number,addition,note,maandwerk,interval_maanden,ritme,overslaan,start_maand,inactief_op,inactief_reden,created_at,streets(name,volledige_naam,districts(name,plaats)),klanten(id,naam,email,email2,telefoon,telefoon2,deleted_at)";
+  "id,klant_id,street_id,house_number,addition,note,maandwerk,interval_maanden,ritme,overslaan,start_maand,inactief_op,inactief_reden,created_at,geimporteerd,streets(name,volledige_naam,districts(name,plaats)),klanten(id,naam,email,email2,telefoon,telefoon2,deleted_at)";
 
 // deno-lint-ignore no-explicit-any
 type AdresRij = any;
@@ -618,6 +618,8 @@ interface Stand {
   overslaan: string[];
   start_maand: string;
   created_at: string;
+  /** Via een import binnengekomen: zonder startmaand een vaste klant. */
+  geimporteerd: boolean;
   inactief: boolean;
   /** null = geen rij in adres_prijzen. */
   prijs: number | null;
@@ -656,6 +658,7 @@ export async function standVan(
         overslaan: [...(c.overslaan ?? [])].sort(),
         start_maand: c.start_maand ?? "",
         created_at: c.created_at,
+        geimporteerd: !!c.geimporteerd,
         inactief: !!c.inactief_op,
         prijs: p && p.prijs !== undefined && p.prijs !== null ? Number(p.prijs) : null,
       });
@@ -1081,7 +1084,10 @@ async function schrijfRegel(db: Db, companyId: string, g: Regel, s: Stand): Prom
     }
     case "overslaan": {
       const voor = { overslaan: s.overslaan, start_maand: s.start_maand };
-      const na = metOverslaan({ ...voor, created_at: s.created_at }, g.nieuw as string[]);
+      const na = metOverslaan(
+        { ...voor, created_at: s.created_at, geimporteerd: s.geimporteerd },
+        g.nieuw as string[],
+      );
       const { data, error } = await db
         .from("customers")
         .update({ overslaan: na.overslaan, start_maand: na.start_maand })
@@ -1120,7 +1126,9 @@ async function schrijfRegel(db: Db, companyId: string, g: Regel, s: Stand): Prom
       const gevraagd = String(g.nieuw ?? "");
       let maand = gevraagd || maandVan(new Date(s.created_at));
       let verschoven = false;
-      if (maand >= maandVan(new Date())) {
+      // Geïmporteerd en geen startmaand gevraagd: al lang begonnen.
+      const alBegonnen = !gevraagd && s.geimporteerd;
+      if (!alBegonnen && maand >= maandVan(new Date())) {
         while (rest.includes(maand)) {
           rest.splice(rest.indexOf(maand), 1);
           const [jaar, nr] = maand.split("-").map(Number);

@@ -3,6 +3,7 @@ import {
   isEigenBlok,
   maandSleutel,
   prijsVoorMaand,
+  toonMaand,
   type Customer,
   type District,
   type Street,
@@ -77,6 +78,41 @@ export function maakBouwstenen(
 /** De maand waar een dag in valt, zoals maandwerk en prijzen hem lezen. */
 export function maandVan(datum: string): string {
   return maandSleutel(new Date(`${datum}T12:00:00`));
+}
+
+/**
+ * De ronde van een dag: die van de beurten die erop staan. Loopt september
+ * uit tot 1 oktober, dan is 1 oktober een septemberdag, met het extra werk
+ * en de prijzen van september. Staat er nog niets op, dan de eigen maand.
+ */
+export function rondeVanDag(
+  regels: { datum: string; ronde?: string | undefined }[],
+  datum: string,
+): string {
+  const tel = new Map<string, number>();
+  for (const r of regels)
+    if (r.datum === datum && r.ronde) tel.set(r.ronde, (tel.get(r.ronde) ?? 0) + 1);
+  return [...tel].sort((a, b) => b[1] - a[1])[0]?.[0] ?? maandVan(datum);
+}
+
+/**
+ * "Overslaan in september" voor deze adressen op die dag: de ronde van hun
+ * eigen beurt, want dat is wat er overgeslagen wordt. Horen ze bij
+ * verschillende rondes, dan zeggen we dat.
+ */
+export function overslaanLabel(
+  regels: { customer_id: string | null; ronde?: string | undefined }[],
+  ids: string[],
+  datum: string,
+): string {
+  const wie = new Set(ids);
+  const rondes = new Set(
+    regels
+      .filter((r) => r.customer_id && wie.has(r.customer_id))
+      .map((r) => r.ronde ?? maandVan(datum)),
+  );
+  if (rondes.size > 1) return "Overslaan, elk in zijn eigen ronde";
+  return `Overslaan in ${toonMaand([...rondes][0] ?? maandVan(datum))}`;
 }
 
 /**

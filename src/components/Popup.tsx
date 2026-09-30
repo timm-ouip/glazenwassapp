@@ -20,9 +20,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
  */
 
 /** Het schermpje als blad dat van onderen omhoog schuift, zoals op de telefoon
- *  hoort; dezelfde vorm als het klantblad (KlantgegevensDialog). */
+ *  hoort; dezelfde vorm als het klantblad (KlantgegevensDialog).
+ *
+ *  `grid-cols-[minmax(0,1fr)]`: zonder dat maakt de breedste regel (meestal
+ *  de voet met drie knoppen) het blad breder dan het scherm, en vallen rechts
+ *  het kruisje en de knop Opslaan eraf. */
 const BLAD =
-  "bottom-0 left-0 top-auto max-h-[90dvh] max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] sm:max-w-none sm:rounded-b-none sm:rounded-t-[24px] data-[state=open]:slide-in-from-bottom-10 data-[state=open]:zoom-in-100 data-[state=closed]:slide-out-to-bottom data-[state=closed]:zoom-out-100";
+  "grid-cols-[minmax(0,1fr)] bottom-0 left-0 top-auto max-h-[90dvh] max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] sm:max-w-none sm:rounded-b-none sm:rounded-t-[24px] data-[state=open]:slide-in-from-bottom-10 data-[state=open]:zoom-in-100 data-[state=closed]:slide-out-to-bottom data-[state=closed]:zoom-out-100";
 
 /** De buitenkant. Vervangt DialogContent: geen eigen vulling en geen rand,
  *  want de kop en de voet lopen tot aan de zijkant door.
@@ -356,9 +360,11 @@ export function PopupScheiding() {
  *  terugzetten) blijft links. Op elk schermpje dezelfde plek. */
 export function PopupVoet({ links, children }: { links?: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-2 border-t border-border/70 bg-card px-6 py-3.5">
+    // Past het niet naast elkaar (op de telefoon), dan gaan de knoppen rechts
+    // naar een eigen regel in plaats van het schermpje breder te maken.
+    <div className="flex flex-wrap items-center gap-2 border-t border-border/70 bg-card px-6 py-3.5">
       {links && <div className="mr-auto flex items-center gap-2">{links}</div>}
-      <div className={cn("flex items-center gap-2", links ? "" : "ml-auto")}>{children}</div>
+      <div className="ml-auto flex items-center gap-2">{children}</div>
     </div>
   );
 }

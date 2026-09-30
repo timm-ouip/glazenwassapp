@@ -47,6 +47,30 @@ export interface WasdagRegel {
   niet_gewassen_naam?: string | null;
   /** Wat de beurt zou hebben gekost, om doorgestreept te tonen. */
   prijs_vervallen?: number;
+  /**
+   * Bij welke ronde deze beurt hoort ("2026-09"). Meestal de maand van de
+   * datum; loopt de septemberronde uit tot 1 oktober, dan staat hier
+   * september. Prijs, extra werk en "deze ronde al gewassen" volgen dit;
+   * omzet, btw en facturen blijven op de datum.
+   */
+  ronde?: string;
+}
+
+/** De ronde waar een dag vanzelf bij hoort: zijn eigen maand. */
+export function rondeVanDatum(datum: string): string {
+  return datum.slice(0, 7);
+}
+
+/**
+ * Bij welke ronde je iets op `datum` plant, als je naar ronde `bekeken`
+ * kijkt. Een maand ervoor of erna mag (uitlopen, of vooruitwerken); verder
+ * weg is een vergissing en telt de maand van de dag zelf.
+ */
+export function rondeVoorDag(datum: string, bekeken: string | null): string {
+  const eigen = rondeVanDatum(datum);
+  if (!bekeken || !/^\d{4}-\d{2}$/.test(bekeken)) return eigen;
+  const tel = (m: string) => Number(m.slice(0, 4)) * 12 + Number(m.slice(5, 7));
+  return Math.abs(tel(bekeken) - tel(eigen)) <= 1 ? bekeken : eigen;
 }
 
 /**
@@ -81,7 +105,7 @@ export async function fetchWasdag(datum: string): Promise<WasdagRegel[]> {
   const { data, error } = await supabase
     .from("wasdag_regels")
     .select(
-      "customer_id,notitie,ploeg_nr,volgorde,rest,vaste_start,niet_gewassen_op,niet_gewassen_naam,wasdag_prijzen(prijs)",
+      "customer_id,notitie,ploeg_nr,volgorde,rest,vaste_start,niet_gewassen_op,niet_gewassen_naam,ronde,wasdag_prijzen(prijs)",
     )
     .eq("datum", datum);
   if (error) throw error;
@@ -97,11 +121,13 @@ export async function fetchWasdag(datum: string): Promise<WasdagRegel[]> {
       betaalmethode: string | null;
       niet_gewassen_op: string | null;
       niet_gewassen_naam: string | null;
+      ronde: string;
       wasdag_prijzen: { prijs: number } | { prijs: number }[] | null;
     }[]
   ).map((r) => ({
     customer_id: r.customer_id,
     notitie: r.notitie,
+    ronde: r.ronde,
     ...vervallenPrijs(r, Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0)),
     ploeg_nr: r.ploeg_nr,
     volgorde: r.volgorde,
@@ -138,14 +164,12 @@ function vervallenPrijs(
  * halen.
  */
 export async function fetchNietGewassen(
-  vanaf: string,
-  tot: string,
+  ronde: string,
 ): Promise<{ customer_id: string; datum: string }[]> {
   const { data, error } = await supabase
     .from("wasdag_regels")
     .select("customer_id,datum")
-    .gte("datum", vanaf)
-    .lte("datum", tot)
+    .eq("ronde", ronde)
     .not("niet_gewassen_op", "is", null);
   if (error) throw error;
   const gemeld = ((data ?? []) as { customer_id: string | null; datum: string }[]).filter(
@@ -153,14 +177,13 @@ export async function fetchNietGewassen(
   );
   if (gemeld.length === 0) return [];
 
-  // Staat het adres deze maand alweer op een gewone dag — opnieuw ingepland
+  // Staat het adres deze ronde alweer op een gewone dag — opnieuw ingepland
   // of alsnog gewassen — dan is het ingehaald en hoeft de melding er niet
   // meer bij te staan.
   const { data: ingehaald, error: fout } = await supabase
     .from("wasdag_regels")
     .select("customer_id")
-    .gte("datum", vanaf)
-    .lte("datum", tot)
+    .eq("ronde", ronde)
     .is("niet_gewassen_op", null)
     .in("customer_id", [...new Set(gemeld.map((r) => r.customer_id))]);
   if (fout) throw fout;
@@ -178,24 +201,39 @@ export interface WasdagDagRegel extends WasdagRegel {
 }
 
 /** Alle regels tussen twee datums (beide meegerekend), voor de kalender. */
-export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagDagRegel[]> {
+export function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagDagRegel[]> {
+  return haalWasdagen({ vanaf, tot });
+}
+
+/** Alle regels van één ronde, op welke dag ze ook staan. */
+export function fetchWasdagenVanRonde(ronde: string): Promise<WasdagDagRegel[]> {
+  return haalWasdagen({ ronde });
+}
+
+async function haalWasdagen(
+  waar: { vanaf: string; tot: string } | { ronde: string },
+): Promise<WasdagDagRegel[]> {
   // In stukken: een paar maanden planning is al snel meer dan 1000 regels,
   // en dan viel de rest stil weg.
-  const data = await haalAllePaginas((van, totRij) =>
-    supabase
+  const data = await haalAllePaginas((van, totRij) => {
+    const vraag = supabase
       .from("wasdag_regels")
       .select(
-        "id,datum,customer_id,ploeg_nr,volgorde,rest,vaste_start,betaalmethode,niet_gewassen_op,niet_gewassen_naam,wasdag_prijzen(prijs)",
-      )
-      .gte("datum", vanaf)
-      .lte("datum", tot)
+        "id,datum,customer_id,ploeg_nr,volgorde,rest,vaste_start,betaalmethode,niet_gewassen_op,niet_gewassen_naam,ronde,wasdag_prijzen(prijs)",
+      );
+    return (
+      "ronde" in waar
+        ? vraag.eq("ronde", waar.ronde)
+        : vraag.gte("datum", waar.vanaf).lte("datum", waar.tot)
+    )
       .order("datum", { ascending: true })
       .order("id", { ascending: true })
-      .range(van, totRij),
-  );
+      .range(van, totRij);
+  });
   return (
     data as unknown as {
       datum: string;
+      ronde: string;
       customer_id: string | null;
       ploeg_nr: number | null;
       volgorde: number | null;
@@ -208,6 +246,7 @@ export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagD
     }[]
   ).map((r) => ({
     datum: r.datum,
+    ronde: r.ronde,
     customer_id: r.customer_id,
     ...vervallenPrijs(r, Number(eenVan(r.wasdag_prijzen)?.prijs ?? 0)),
     ploeg_nr: r.ploeg_nr,
@@ -227,8 +266,33 @@ export async function fetchWasdagen(vanaf: string, tot: string): Promise<WasdagD
 export async function voegToeAanWasdag(
   datum: string,
   regels: { customer_id: string; prijs: number; notitie?: string | null }[],
-  /** Bij welke ploeg en waar in de rij; weglaten = nog niet ingedeeld. */
-  plek?: { ploeg_nr?: number | null; volgorde?: number | null; rest?: boolean },
+  /** Bij welke ploeg en waar in de rij; weglaten = nog niet ingedeeld.
+   *  `ronde` geldt alleen voor adressen die nog niet op de dag stonden;
+   *  weglaten = de maand van de dag. */
+  plek?: { ploeg_nr?: number | null; volgorde?: number | null; rest?: boolean; ronde?: string },
+) {
+  if (regels.length === 0) return;
+  // De ronde alleen voor wat nieuw op de dag komt. Een adres dat er al op
+  // stond houdt zijn eigen ronde (en de prijs die daarbij hoort): een upsert
+  // zou hem anders stil omzetten.
+  if (plek?.ronde !== undefined) {
+    const { ronde, ...rest } = plek;
+    // De hele dag en niet op id: een wijk vol id's maakt de URL te lang, en
+    // een dag telt hooguit een paar honderd regels.
+    const erop = new Set((await rondesOp(datum)).keys());
+    const oud = regels.filter((r) => erop.has(r.customer_id));
+    const nieuw = regels.filter((r) => !erop.has(r.customer_id));
+    await voegToeAanWasdag(datum, oud, rest);
+    await schrijfRegels(datum, nieuw, { ...rest, ronde });
+    return;
+  }
+  await schrijfRegels(datum, regels, plek);
+}
+
+async function schrijfRegels(
+  datum: string,
+  regels: { customer_id: string; prijs: number; notitie?: string | null }[],
+  plek?: { ploeg_nr?: number | null; volgorde?: number | null; rest?: boolean; ronde?: string },
 ) {
   if (regels.length === 0) return;
   const { data, error } = await supabase
@@ -243,6 +307,7 @@ export async function voegToeAanWasdag(
         ...(plek?.ploeg_nr !== undefined ? { ploeg_nr: plek.ploeg_nr } : {}),
         ...(plek?.volgorde !== undefined ? { volgorde: plek.volgorde } : {}),
         ...(plek?.rest !== undefined ? { rest: plek.rest } : {}),
+        ...(plek?.ronde !== undefined ? { ronde: plek.ronde } : {}),
       })),
       { onConflict: "company_id,datum,customer_id" },
     )
@@ -263,6 +328,20 @@ export async function voegToeAanWasdag(
       .upsert(prijzen, { onConflict: "regel_id" });
     if (prijsFout && prijsFout.code !== "42501") throw prijsFout;
   }
+}
+
+/** Per adres op die dag de ronde van zijn beurt. */
+export async function rondesOp(datum: string): Promise<Map<string, string>> {
+  const { data, error } = await supabase
+    .from("wasdag_regels")
+    .select("customer_id,ronde")
+    .eq("datum", datum);
+  if (error) throw error;
+  return new Map(
+    (data ?? [])
+      .filter((r): r is { customer_id: string; ronde: string } => !!r.customer_id)
+      .map((r) => [r.customer_id, r.ronde]),
+  );
 }
 
 /**

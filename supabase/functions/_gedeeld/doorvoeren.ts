@@ -60,10 +60,13 @@ export function veiligVoorAutomatisch(maanden: string[]): boolean {
 
 /** Overslaan erbij, met de startmaand die meeschuift. Ook voor de assistent in de app (`paaltje-chat.ts`). */
 export function metOverslaan(
-  c: { overslaan: string[]; start_maand: string; created_at: string },
+  c: { overslaan: string[]; start_maand: string; created_at: string; geimporteerd?: boolean },
   maanden: string[],
 ): { overslaan: string[]; start_maand: string } {
   const overslaan = [...new Set([...c.overslaan, ...maanden])].sort();
+  // Geïmporteerd zonder eigen startmaand: een vaste klant, al lang begonnen
+  // (net als eersteMaand in de app). Overslaan is dan een pauze.
+  if (!c.start_maand && c.geimporteerd) return { overslaan, start_maand: c.start_maand };
   let start = c.start_maand || maandVan(new Date(c.created_at));
   if (start < maandVan(new Date())) return { overslaan, start_maand: c.start_maand };
 
@@ -105,7 +108,7 @@ export async function voerOverslaanDoor(
   const { data: rijen, error: leesFout } = await db
     .from("customers")
     .select(
-      "id,overslaan,start_maand,created_at,house_number,addition,streets(name,volledige_naam),klanten(naam)",
+      "id,overslaan,start_maand,created_at,geimporteerd,house_number,addition,streets(name,volledige_naam),klanten(naam)",
     )
     .eq("company_id", o.companyId)
     .is("deleted_at", null)
@@ -121,7 +124,12 @@ export async function voerOverslaanDoor(
     const voorOverslaan: string[] = c.overslaan ?? [];
     const voorStart: string = c.start_maand ?? "";
     const na = metOverslaan(
-      { overslaan: voorOverslaan, start_maand: voorStart, created_at: c.created_at },
+      {
+        overslaan: voorOverslaan,
+        start_maand: voorStart,
+        created_at: c.created_at,
+        geimporteerd: c.geimporteerd,
+      },
       o.maanden,
     );
     const zelfde =

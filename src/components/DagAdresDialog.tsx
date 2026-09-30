@@ -43,6 +43,8 @@ interface Props {
   /** Wat er nu op de regel van deze dag staat. */
   prijs: number;
   notitie: string | null;
+  /** De ronde van deze beurt; weglaten = de maand van de dag. */
+  ronde?: string | undefined;
   onOpslaan: (prijs: number, notitie: string | null) => void;
 }
 
@@ -72,6 +74,7 @@ export function DagAdresDialog({
   datum,
   prijs,
   notitie,
+  ronde,
   onOpslaan,
 }: Props) {
   const [bedrag, setBedrag] = useState("");
@@ -92,7 +95,8 @@ export function DagAdresDialog({
 
   if (!c) return null;
 
-  const maand = datum.slice(0, 7);
+  // De ronde van de beurt: op 1 oktober kan dat september zijn.
+  const maand = ronde ?? datum.slice(0, 7);
   const standaard = prijsVoorMaand(c, maand);
   const vast = noteVoorMaand(c, maand);
   const afwijkend = bedragVan(bedrag) !== standaard || tekst.trim() !== "";

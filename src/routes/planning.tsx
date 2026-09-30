@@ -111,6 +111,7 @@ import {
 import {
   fetchWasdag,
   fetchWasdagen,
+  fetchWasdagenVanRonde,
   haalUitWasdag,
   maakWasdagLeeg,
   maandGrenzen,
@@ -129,7 +130,13 @@ import {
   zetDagVolgorde,
   type VolgordeBlok,
 } from "@/lib/ploegen";
-import { maakBouwstenen, klussenVanDag, maandVan, tijdvakkenVoorDag } from "@/lib/dagbouwstenen";
+import {
+  maakBouwstenen,
+  klussenVanDag,
+  maandVan,
+  rondeVanDag,
+  tijdvakkenVoorDag,
+} from "@/lib/dagbouwstenen";
 import { ploegNaam } from "@/lib/ploegen";
 import {
   duurTekst,
@@ -396,6 +403,12 @@ function Planning() {
     queryKey: ["wasdagen", sleutel(van), sleutel(tot)],
     queryFn: () => fetchWasdagen(sleutel(van), sleutel(tot)),
   });
+  // Wat er voor de ronde van deze maand al ergens op staat, ook als de ronde
+  // uitliep tot in de volgende maand: dat is niet meer "nog te doen".
+  const rondeQuery = useQuery({
+    queryKey: ["wasdagen", "ronde", format(maand, "yyyy-MM")],
+    queryFn: () => fetchWasdagenVanRonde(format(maand, "yyyy-MM")),
+  });
   // Welke dagen die voorbij zijn nog niet met "Dag klaar" zijn afgemeld: daar
   // staat nog niets open bij de klant, dus die krijgen een stipje.
   const magAfmeldenZien = useRecht("planning");
@@ -581,6 +594,7 @@ function Planning() {
 
     const maandSleutelVanBlad = format(maand, "yyyy-MM");
     const regelsDezeMaand = regels.filter((r) => r.datum.startsWith(maandSleutelVanBlad));
+    const regelsDezeRonde = rondeQuery.data ?? [];
     // Het tempo komt uit gedaan werk, dus mét gestopte adressen; wat er nog
     // moet alleen uit de actieve.
     const gemeten = meetTempo(historieQuery.data ?? [], adressenQuery.data ?? [], streets);
@@ -589,7 +603,7 @@ function Planning() {
       districts,
       streets,
       customers,
-      regelsDezeMaand,
+      regelsDezeRonde,
       gemeten,
     );
     // Dagen waar al iets op staat laten we met rust: die heb je zelf ingedeeld.
@@ -601,6 +615,7 @@ function Planning() {
     actieveAdressen,
     adressenQuery.data,
     regels,
+    rondeQuery.data,
     historieQuery.data,
     maand,
     vasteWerkdagen,
@@ -696,10 +711,10 @@ function Planning() {
         adressenQuery.data ?? [],
         streetsQuery.data ?? [],
         districtsQuery.data ?? [],
-        maandVan(gekozenDag),
+        rondeVanDag(regels, gekozenDag),
         instellingen,
       ),
-    [adressenQuery.data, streetsQuery.data, districtsQuery.data, gekozenDag, instellingen],
+    [adressenQuery.data, streetsQuery.data, districtsQuery.data, gekozenDag, regels, instellingen],
   );
 
   /** De regels per dag, met hun ploeg en volgorde. */
@@ -772,6 +787,7 @@ function Planning() {
         volgorde: r.volgorde ?? null,
         rest: r.rest ?? false,
         vaste_start: r.vaste_start ?? null,
+        ...(r.ronde ? { ronde: r.ronde } : {}),
       }));
   }
 
@@ -1889,7 +1905,9 @@ function Planning() {
     const straten = new Set(
       (streetsQuery.data ?? []).filter((s) => s.district_id === wijk.id).map((s) => s.id),
     );
-    const maandVanDag = datum.slice(0, 7);
+    // De ronde die al op de dag staat: een wijk erbij op een septemberdag
+    // in oktober is ook de septemberbeurt, net als een losse straat.
+    const maandVanDag = rondeVanDag(regels, datum);
     const kandidaten = alleAdressen.filter(
       (c) => !c.inactief_op && straten.has(c.street_id) && aanDeBeurt(c, maandVanDag),
     );
@@ -1928,7 +1946,7 @@ function Planning() {
     }
 
     try {
-      await voegToeAanWasdag(datum, erbij);
+      await voegToeAanWasdag(datum, erbij, { ronde: maandVanDag });
     } catch (e) {
       toast.error("Inplannen mislukt: " + (e instanceof Error ? e.message : String(e)));
       return;
@@ -2308,12 +2326,15 @@ function Planning() {
     const wat: { c: Customer; maanden: string[] }[] = [];
     const vanDag = new Map<string, string[]>();
     for (const [datum, lijst] of perDag) {
-      const deze = maanden ?? [maandVan(datum)];
       for (const id of lijst) {
         const c = klanten.get(id);
         if (!c) continue;
+        // De ronde van de beurt zelf: op 1 oktober kan dat september zijn.
+        const ronde =
+          regels.find((r) => r.datum === datum && r.customer_id === id)?.ronde ?? maandVan(datum);
+        const deze = maanden ?? [ronde];
         wat.push({ c, maanden: deze });
-        if (deze.includes(maandVan(datum))) vanDag.set(datum, [...(vanDag.get(datum) ?? []), id]);
+        if (deze.includes(ronde)) vanDag.set(datum, [...(vanDag.get(datum) ?? []), id]);
       }
     }
     if (wat.length === 0) return;
@@ -2516,7 +2537,9 @@ function Planning() {
 
   /** Een straat uit de strook op een dag (en eventueel een ploeg) zetten. */
   async function zetStraatOpDag(adressen: string[], datum: string, ploegNr: number | null) {
-    const maandNu = maandVan(datum);
+    // Bij de ronde die al op de dag staat: een straat erbij op een
+    // septemberdag in oktober is ook de septemberbeurt.
+    const maandNu = rondeVanDag(regels, datum);
     const regelsErbij = adressen
       .map((id) => actieveAdressen.find((c) => c.id === id))
       .filter((c): c is Customer => !!c)
@@ -2525,7 +2548,7 @@ function Planning() {
     try {
       const dichtbij = await alDichtbij(datum, adressen, datum);
       if (dichtbij.size > 0 && !(await bevestig(dubbelVraag(dichtbij)))) return;
-      await voegToeAanWasdag(datum, regelsErbij, { ploeg_nr: ploegNr });
+      await voegToeAanWasdag(datum, regelsErbij, { ploeg_nr: ploegNr, ronde: maandNu });
       pushUndo({
         label: `${regelsErbij.length} op ${toonDatum(datum)}`,
         undo: async () => {

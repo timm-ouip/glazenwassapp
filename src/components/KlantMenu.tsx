@@ -344,7 +344,8 @@ function KlantMenuVol({
                 </ContextMenuItem>
                 {c.start_maand && (
                   <ContextMenuItem onSelect={() => onPatch({ start_maand: "" })}>
-                    <CircleSlash className="size-4" /> Meteen (aanmaakmaand)
+                    <CircleSlash className="size-4" />{" "}
+                    {c.geimporteerd ? "Standaard (al klant)" : "Meteen (aanmaakmaand)"}
                   </ContextMenuItem>
                 )}
               </ContextMenuSubContent>

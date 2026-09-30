@@ -32,7 +32,7 @@ import {
   type Tijdlijn,
   verdeelOverAdressen,
 } from "@/lib/dagplanning";
-import { maandVan, type Bouwstenen } from "@/lib/dagbouwstenen";
+import { overslaanLabel, type Bouwstenen } from "@/lib/dagbouwstenen";
 import {
   isGestuurd,
   samenvattingVan,
@@ -68,8 +68,10 @@ interface Handelingen {
   /** Van de dag af, terug naar "Nog in te plannen". Bij een extra opdracht
    *  telt `klusId`: die staat daarna weer open. */
   onUitPlanning: (datum: string, ids: string[], klusId?: string) => void;
-  /** De maand van die dag overslaan; ze gaan dan ook van de dag af. */
+  /** De ronde van die dag overslaan; ze gaan dan ook van de dag af. */
   onOverslaan: (datum: string, ids: string[]) => void;
+  /** "Overslaan in september" voor deze adressen op die dag. */
+  overslaanTekst: (datum: string, ids: string[]) => string;
   /** Klanten laten weten dat hun dag of tijd veranderd is. */
   onWijziging: (ids: string[]) => void;
 }
@@ -129,7 +131,7 @@ export function WeekWeergave({
   onKiesDag: (datum: string) => void;
   gekozenDag: string;
   onPloegen: (datum: string) => void;
-} & Handelingen &
+} & Omit<Handelingen, "overslaanTekst"> &
   Post) {
   /** Staan de losse adressen onder hun straat? */
   const [uitgeklapt, setUitgeklapt] = useState(false);
@@ -139,6 +141,8 @@ export function WeekWeergave({
     onUitPlanning,
     onOverslaan,
     onWijziging,
+    overslaanTekst: (datum, ids) =>
+      overslaanLabel(dagen.find((d) => d.datum === datum)?.regels ?? [], ids, datum),
   };
   const post = useMemo<Post>(
     () => ({ aankondigingen, heeftContact, staatOp }),
@@ -786,7 +790,7 @@ function actiesVoor({
   if (!klusId) {
     acties.push({
       sleutel: "overslaan",
-      label: `Overslaan in ${toonMaand(maandVan(datum))}${aantal}`,
+      label: `${doen.overslaanTekst(datum, ids)}${aantal}`,
       doe: () => doen.onOverslaan(datum, ids),
     });
   }

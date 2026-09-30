@@ -16,14 +16,16 @@ import {
   PointerSensor,
   TouchSensor,
   closestCenter,
+  useDndContext,
   useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, useSortable, type SortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { createPortal } from "react-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { netjesStraat } from "@/lib/schoonschrift";
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
@@ -132,10 +134,12 @@ import { nieuweKlus, verwijderKlus } from "@/lib/klussen";
 import {
   fetchWasdag,
   fetchNietGewassen,
-  fetchWasdagen,
+  fetchWasdagenVanRonde,
   haalUitWasdag,
   maakWasdagLeeg,
-  maandGrenzen,
+  rondeVanDatum,
+  rondeVoorDag,
+  rondesOp,
   toonDatum,
   vandaag,
   voegToeAanWasdag,
@@ -576,6 +580,17 @@ function Index() {
   });
   const dagRegels = useMemo(() => wasdagQuery.data ?? [], [wasdagQuery.data]);
 
+  /**
+   * De ronde waar je nu voor plant. Standaard de maand van de dag; staat de
+   * maandknop op de maand ervoor, dan loopt die ronde uit: plan je op
+   * 1 oktober met de knop op september, dan is dat de septemberbeurt. Zo zie
+   * je wat er in september al gedaan is, en telt 1 oktober in oktober niet
+   * mee als beurt.
+   */
+  const rondeActief = bewerktDag
+    ? rondeVoorDag(bewerktDag, isKalendermaand(filter) ? filter : null)
+    : ronde;
+
   // Bewerk je een bestaande dag, dan staat die eerst aangevinkt. Eén keer,
   // bij het binnenkomen: daarna is de selectie van jou.
   const gevuldVoor = useRef<string | null>(null);
@@ -594,6 +609,12 @@ function Index() {
     if (gevuldVoor.current !== bewerktDag) {
       gevuldVoor.current = bewerktDag;
       vorigeStand.current = opDag;
+      // Hoort wat er al op de dag staat bij een andere ronde dan de knop
+      // aangeeft, dan springt de knop mee: je bewerkt dan de septemberdag.
+      const rondes = new Map<string, number>();
+      for (const r of dagRegels) if (r.ronde) rondes.set(r.ronde, (rondes.get(r.ronde) ?? 0) + 1);
+      const meest = [...rondes].sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (meest && isKalendermaand(filter) && meest !== filter) setFilter(meest);
       // Samen met wat je al aanvinkte: begon je met een veeg of Cmd-klik,
       // dan stond de dag nog niet klaar, en die vinkjes horen te blijven.
       setKeuze((huidig) => new Set([...huidig, ...opDag]));
@@ -613,6 +634,9 @@ function Index() {
       for (const id of af) nu.delete(id);
       return nu;
     });
+    // Alleen bij binnenkomst van een dag, niet als je daarna zelf de knop
+    // verzet: `filter` hoort er daarom niet bij.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bewerktDag, dagData, wasdagQuery.isFetching, dagRegels]);
 
   // Er is altijd precies één dag gekozen zolang je selecteert: standaard
@@ -645,33 +669,30 @@ function Index() {
     let som = 0;
     for (const id of keuze) {
       const c = perId.get(id);
-      if (c) som += prijsVoorMaand(c, ronde);
+      if (c) som += prijsVoorMaand(c, rondeActief);
     }
     return som;
-  }, [keuze, customers, ronde]);
+  }, [keuze, customers, rondeActief]);
 
   // Zolang een bestaande dag nog binnenkomt weten we niet wat er al op staat;
   // de vinkjes staan dan uit, anders vink je tegen een leeg antwoord aan.
   const dagKlaar = bewerktDag === null || (dagData !== undefined && dagGevuld);
 
-  // Wat er deze maand al op een ándere dag staat. Plan je morgen, dan zie je
+  // Wat er deze ronde al op een ándere dag staat. Plan je morgen, dan zie je
   // zo welke adressen vandaag al gedaan zijn — je wil ze niet twee keer in
-  // dezelfde maand. Verder dan de maand van de dag die je plant kijken we
-  // nooit, dus op de eerste van de maand staat de teller vanzelf weer op nul.
-  // Zonder gekozen dag kijken we naar de maand die je bekijkt; bewerk je een
-  // bestaande dag, dan naar die van die dag.
-  const maand = maandGrenzen(bewerktDag ?? `${ronde}-01`);
+  // dezelfde ronde. Het gaat om de ronde en niet om de kalendermaand: loopt
+  // september uit tot 1 oktober, dan hoort die dag hier gewoon bij.
   const maandQuery = useQuery({
-    queryKey: ["wasdagen", maand.vanaf, maand.tot],
-    queryFn: () => fetchWasdagen(maand.vanaf, maand.tot),
+    queryKey: ["wasdagen", "ronde", rondeActief],
+    queryFn: () => fetchWasdagenVanRonde(rondeActief),
     enabled: selecteren,
   });
   const nu = vandaag();
   // Los van de maandplanning, want dit moet ook buiten de selecteermodus te
   // zien zijn: het zijn er hooguit een handvol per maand.
   const nietGewassenQuery = useQuery({
-    queryKey: ["niet-gewassen", maand.vanaf, maand.tot],
-    queryFn: () => fetchNietGewassen(maand.vanaf, maand.tot),
+    queryKey: ["niet-gewassen", rondeActief],
+    queryFn: () => fetchNietGewassen(rondeActief),
     staleTime: 60_000,
   });
   const nietGewassen = useMemo(() => {
@@ -941,9 +962,30 @@ function Index() {
       verplaatsPerDag.set(oud, [...(verplaatsPerDag.get(oud) ?? []), id]);
     }
 
+    // De ronde van deze dag, zoals de knop bovenaan hem aangeeft: daar hoort
+    // de prijs bij (extra werk van die maand), en die gaat mee op de regel.
+    const planRonde = rondeVoorDag(datum, isKalendermaand(filter) ? filter : null);
+    // Wat je verplaatst blijft dezelfde beurt, met de ronde van de oude dag:
+    // een septemberbeurt van 28 september naar 2 oktober is nog september.
+    const rondeVan = new Map<string, string>();
+    try {
+      for (const [oud, ids] of verplaatsPerDag) {
+        const rondes = await rondesOp(oud);
+        for (const id of ids) {
+          const ronde = rondes.get(id);
+          if (ronde) rondeVan.set(id, ronde);
+        }
+      }
+    } catch {
+      toast.error("Kon niet ophalen bij welke ronde de verplaatste adressen horen.");
+      return false;
+    }
     const toevoegen = nieuweIds
       .filter((id) => keuzes.get(id) !== "niet")
-      .map((id) => ({ customer_id: id, prijs: prijsVoorMaand(perId.get(id)!, ronde) }));
+      .map((id) => ({
+        customer_id: id,
+        prijs: prijsVoorMaand(perId.get(id)!, rondeVan.get(id) ?? planRonde),
+      }));
 
     // Alleen bij het bewerken van een dag: wat je uitvinkte hoort eraf.
     const weghalen =
@@ -972,7 +1014,13 @@ function Index() {
           weghalen.map((r) => r.customer_id),
         );
       }
-      await voegToeAanWasdag(datum, toevoegen);
+      // Per ronde apart wegschrijven: meestal is dat er één.
+      const perRonde = new Map<string, typeof toevoegen>();
+      for (const t of toevoegen) {
+        const ronde = rondeVan.get(t.customer_id) ?? planRonde;
+        perRonde.set(ronde, [...(perRonde.get(ronde) ?? []), t]);
+      }
+      for (const [ronde, lijst] of perRonde) await voegToeAanWasdag(datum, lijst, { ronde });
     } catch (e) {
       toast.error(
         "Inplannen mislukt: " +
@@ -2137,18 +2185,43 @@ function Index() {
      *  In een straat die per 1 oploopt zegt de kolom niets over de kant van
      *  de straat — daar is het gewoon de eerste of de tweede helft van één
      *  doorlopende rij — dus dan blijft de hoekkant zoals hij was. */
-    const doorlopendeStraat = streets.find((s) => s.id === doelStraat)?.doorlopend ?? false;
+    const straat = streets.find((s) => s.id === doelStraat);
+    const doorlopendeStraat = straat?.doorlopend ?? false;
     function kantVoor(c: Customer): Kant | "" {
       if (doorlopendeStraat || !doelKant || !verplaatstIds.has(c.id)) return c.hoek_kant;
       return doelKant === natuurlijkeKant(c) ? "" : doelKant;
     }
 
-    const doelLijst = sortCustomers(
-      customers.filter((c) => c.street_id === doelStraat && !verplaatstIds.has(c.id)),
+    // Een geselecteerd adres aanwijzen terwijl je de selectie sleept: dat
+    // adres gaat zelf mee, dus er is geen plek om naast te landen.
+    if (overKlant && verplaatstIds.has(overKlant.id)) return;
+
+    // Alles in de volgorde zoals je het op het scherm ziet: een straat die
+    // aflopend staat, rekenen we ook aflopend. Je landt vóór het adres dat je
+    // aanwijst, en op een lege plek onderaan de kolom — precies waar het
+    // streepje stond.
+    const omgekeerd = straat?.sort_desc ?? false;
+    const opScherm = (l: Customer[]) => (omgekeerd ? [...l].reverse() : l);
+    const doelLijst = opScherm(
+      sortCustomers(
+        customers.filter((c) => c.street_id === doelStraat && !verplaatstIds.has(c.id)),
+      ),
     );
-    const index = overKlant ? doelLijst.findIndex((c) => c.id === overKlant!.id) : doelLijst.length;
+    let index = doelLijst.length;
+    if (overKlant) index = doelLijst.findIndex((c) => c.id === overKlant!.id);
+    else if (doorlopendeStraat && doelKant === "even") {
+      // De eerste helft van een doorlopende straat: onder de laatste regel
+      // die in die kolom staat, niet achteraan de hele straat.
+      const laatste = groepen
+        .find((g) => g.street.id === doelStraat)
+        ?.even.filter((c) => !verplaatstIds.has(c.id))
+        .at(-1);
+      const i = laatste ? doelLijst.findIndex((c) => c.id === laatste.id) : -1;
+      if (i >= 0) index = i + 1;
+    }
     const nieuw = [...doelLijst];
-    nieuw.splice(index < 0 ? doelLijst.length : index, 0, ...verplaatst);
+    nieuw.splice(index < 0 ? doelLijst.length : index, 0, ...opScherm(verplaatst));
+    if (omgekeerd) nieuw.reverse();
 
     const updates = nieuw.map((c, i) => ({
       id: c.id,
@@ -2283,6 +2356,12 @@ function Index() {
     return () => window.removeEventListener("keydown", opToets);
   }, []);
 
+  /** Plan je voor een andere ronde dan de maand van de dag, dan zeggen we
+   *  het erbij: "1 oktober · septemberronde". */
+  const rondeLabel =
+    bewerktDag && rondeActief !== rondeVanDatum(bewerktDag)
+      ? ` · ${toonMaand(rondeActief)}ronde`
+      : "";
   /** "vandaag" of "ma 21": de dag waar Opslaan naartoe gaat. */
   const dagNaam = bewerktDag ? (bewerktDag === nu ? "vandaag" : kortDag(bewerktDag)) : "";
   /** Onder het bedrag: wat opslaan gaat doen. */
@@ -2317,7 +2396,9 @@ function Index() {
             {prijzenZien && <span className="font-display"> · {formatPrice(keuzeBedrag)}</span>}
           </p>
           <p className="truncate text-[11.5px] text-muted-foreground">
-            {bewerktDag ? `${toonDatum(bewerktDag)} · ${wijzigingTekst}` : "Tik adressen aan"}
+            {bewerktDag
+              ? `${toonDatum(bewerktDag)}${rondeLabel} · ${wijzigingTekst}`
+              : "Tik adressen aan"}
           </p>
         </div>
         <button
@@ -2733,7 +2814,7 @@ function Index() {
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
         >
-          <SortableContext items={straatIds} strategy={verticalListSortingStrategy}>
+          <SortableContext items={straatIds} strategy={nietOpschuiven}>
             <div
               data-selecteren={selecteren ? "" : undefined}
               // Pas twee straten naast elkaar als elke adresregel dan nog
@@ -2784,6 +2865,7 @@ function Index() {
               </div>
             ) : null}
           </DragOverlay>
+          <SleepStreep selectie={selectie} />
         </DndContext>
 
         {/* Op de computer: de balk van de selecteermodus zweeft onderin,
@@ -2816,6 +2898,7 @@ function Index() {
                       title="Deze dag op de kalender bekijken"
                     >
                       {toonDatum(bewerktDag)}
+                      {rondeLabel}
                     </Link>
                   )}
                   <span className={nietOpgeslagen ? "font-medium text-foreground" : ""}>
@@ -3678,6 +3761,69 @@ const StraatBlok = memo(function StraatBlok(p: BlokProps) {
 });
 
 /**
+ * Tijdens het slepen schuift niets opzij: de andere regels blijven staan en
+ * een streepje wijst aan waar het terechtkomt. Opschuiven kost bij honderden
+ * regels een verschuiving per regel per muisbeweging, en het klopte bovendien
+ * niet met waar het echt landde.
+ */
+const nietOpschuiven: SortingStrategy = () => null;
+
+/**
+ * Het streepje waar een regel, straat of groep terechtkomt als je loslaat.
+ *
+ * Het leest dezelfde regels als `onDragEnd`: een adres of straat komt vóór
+ * wat je aanwijst (zoals het op het scherm staat, ook in een aflopende
+ * straat), op een lege plek in een kolom onderaan, op een groepkop
+ * bovenaan in die groep, en een groep schuift voorbij de groep die je
+ * aanwijst. Waar niets gebeurt, staat ook geen streepje.
+ *
+ * Alleen dit kleine component hertekent bij elke muisbeweging; de regels
+ * zelf blijven met rust.
+ */
+function SleepStreep({ selectie }: { selectie: string[] }) {
+  const { active, over, droppableContainers } = useDndContext();
+  if (!active || !over || active.id === over.id) return null;
+  const a = String(active.id);
+  const o = String(over.id);
+  // Een selectie slepen en een adres aanwijzen dat zelf meegaat: daar landt niets.
+  if (
+    a.startsWith("c:") &&
+    o.startsWith("c:") &&
+    selectie.includes(a.slice(2)) &&
+    selectie.includes(o.slice(2))
+  )
+    return null;
+  const node = droppableContainers.get(over.id)?.node.current;
+  if (!node) return null;
+  const r = node.getBoundingClientRect();
+
+  let y: number | null = null;
+  if (a.startsWith("c:")) {
+    if (o.startsWith("c:")) y = r.top;
+    else if (o.startsWith("z:")) y = r.bottom;
+  } else if (a.startsWith("s:")) {
+    if (o.startsWith("s:")) y = r.top;
+    else if (o.startsWith("g:"))
+      y = node.firstElementChild?.getBoundingClientRect().bottom ?? r.top;
+  } else if (a.startsWith("g:") && o.startsWith("g:")) {
+    const bron = droppableContainers.get(active.id)?.node.current;
+    const omlaag =
+      !!bron && !!(bron.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
+    y = omlaag ? r.bottom : r.top;
+  }
+  if (y === null) return null;
+
+  return createPortal(
+    <div
+      aria-hidden
+      className="pointer-events-none fixed z-50 h-[3px] rounded-full bg-primary shadow-[0_0_0_1px_var(--background)]"
+      style={{ top: y - 1.5, left: r.left, width: r.width }}
+    />,
+    document.body,
+  );
+}
+
+/**
  * Eén helft van een straat: de even of de oneven kant.
  *
  * Dit is een eigen component omdat de id-lijst voor dnd-kit een vaste
@@ -3705,7 +3851,7 @@ const StraatKolom = memo(function StraatKolom({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const ids = useMemo(() => regels.map((c) => `c:${c.id}`), [sleutel]);
   return (
-    <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+    <SortableContext items={ids} strategy={nietOpschuiven}>
       <div ref={setZoneRef} className="min-h-6">
         {regels.map((c) => (
           <KlantRij

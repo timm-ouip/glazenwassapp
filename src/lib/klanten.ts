@@ -1141,7 +1141,7 @@ export function volgendeMaand(sleutel: string): string {
  * verzetten.
  */
 export function schuifStartOp(
-  c: Pick<Customer, "start_maand" | "created_at" | "overslaan">,
+  c: Pick<Customer, "start_maand" | "created_at" | "overslaan" | "geimporteerd">,
   patch: Partial<Customer>,
 ): Partial<Customer> {
   const overslaan = patch.overslaan ?? c.overslaan;
@@ -1159,10 +1159,21 @@ export function schuifStartOp(
   return verschoven ? { ...patch, start_maand: start, overslaan: rest } : patch;
 }
 
-/** De maand waarin dit adres voor het eerst aan de beurt is. */
-export function eersteMaand(c: Pick<Customer, "start_maand" | "created_at">): string {
-  return c.start_maand || maandSleutel(new Date(c.created_at));
+/** De maand waarin dit adres voor het eerst aan de beurt is.
+ *
+ *  Een geïmporteerd adres zonder eigen startmaand was er al vóór de import:
+ *  dat is een vaste klant, geen nieuwe. Dan telt de dag van de import niet
+ *  als begin, anders werd na elke import de hele wijk groen met "nieuw". */
+export function eersteMaand(
+  c: Pick<Customer, "start_maand" | "created_at"> & { geimporteerd?: boolean },
+): string {
+  if (c.start_maand) return c.start_maand;
+  if (c.geimporteerd) return AL_KLANT;
+  return maandSleutel(new Date(c.created_at));
 }
+
+/** Een maand die altijd vóór elke echte maand ligt. */
+const AL_KLANT = "0000-01";
 
 /**
  * De eerste maand vanaf `maand` die in het ritme van dit adres valt. Voor
@@ -1190,7 +1201,7 @@ export function eersteBeurtVanaf(
  * is, en nee als je die maand hebt overgeslagen.
  */
 export function doetMee(
-  c: Pick<Customer, "start_maand" | "created_at" | "overslaan">,
+  c: Pick<Customer, "start_maand" | "created_at" | "overslaan" | "geimporteerd">,
   maand: string,
 ): boolean {
   if (c.overslaan.includes(maand)) return false;
@@ -1198,7 +1209,10 @@ export function doetMee(
 }
 
 /** Nieuw deze ronde: de eerste maand dat hij meegaat. */
-export function isNieuw(c: Pick<Customer, "start_maand" | "created_at">, maand: string): boolean {
+export function isNieuw(
+  c: Pick<Customer, "start_maand" | "created_at" | "geimporteerd">,
+  maand: string,
+): boolean {
   return maand === eersteMaand(c);
 }
 
@@ -1211,7 +1225,7 @@ export function isNieuw(c: Pick<Customer, "start_maand" | "created_at">, maand: 
  * je wilt zien, ook als je hem een kleur had gegeven.
  */
 export function regelKleur(
-  c: Pick<Customer, "markering" | "start_maand" | "created_at" | "overslaan">,
+  c: Pick<Customer, "markering" | "start_maand" | "created_at" | "overslaan" | "geimporteerd">,
   maand: string,
   markeringen: MarkeringRij[] = [],
 ): RegelKleur {
@@ -1315,7 +1329,13 @@ export function ritmeOmschrijving(c: Pick<Customer, "interval_maanden" | "ritme"
 export function aanDeBeurt(
   c: Pick<
     Customer,
-    "interval_maanden" | "ritme" | "start_maand" | "created_at" | "overslaan" | "maandwerk"
+    | "interval_maanden"
+    | "ritme"
+    | "start_maand"
+    | "created_at"
+    | "overslaan"
+    | "maandwerk"
+    | "geimporteerd"
   >,
   maand: string,
 ): boolean {

@@ -1114,7 +1114,7 @@ async function klantWaarden(
     );
     const { data: dagen, error: dagFout } = await db
       .from("wasdag_regels")
-      .select("customer_id,datum")
+      .select("customer_id,datum,ronde")
       .eq("company_id", companyId)
       .in(
         "customer_id",
@@ -1126,8 +1126,9 @@ async function klantWaarden(
     if (dagFout) throw new Error(`Planning: ${dagFout.message}`);
     const overslaan = new Map(lijst.map((a) => [a.id, new Set(a.overslaan ?? [])]));
     const eerst = (dagen ?? []).find(
-      (d: { customer_id: string; datum: string }) =>
-        !overslaan.get(d.customer_id)?.has(String(d.datum).slice(0, 7)),
+      // Overslaan geldt per ronde, niet per kalendermaand.
+      (d: { customer_id: string; datum: string; ronde: string | null }) =>
+        !overslaan.get(d.customer_id)?.has(d.ronde ?? String(d.datum).slice(0, 7)),
     );
     if (eerst) datum = datumVoluit(String(eerst.datum));
   }

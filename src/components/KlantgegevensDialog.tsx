@@ -577,28 +577,36 @@ export function KlantgegevensDialog({
         // later — anders staan er twee badges die hetzelfde zeggen.
         await patchCustomer(
           adresId,
-          schuifStartOp(dossierCustomer ?? { start_maand: "", created_at: nu, overslaan: [] }, {
-            ...(prijzenZien ? { price: prijsGetal(pand.price) } : {}),
-            ...(leesDuur(pand.duur) !== undefined
-              ? { duur_min: leesDuur(pand.duur) ?? null, duur_zelf: pand.duurZelf }
-              : {}),
-            eigen_blok: pand.eigenBlok,
-            note: pand.note.trim(),
-            // De postcode hoort bij het pand, niet bij de bewoner — en de
-            // klantenlijst leest hem daar ook vandaan.
-            ...(pandPostcode !== null ? { postcode: pandPostcode } : {}),
-            interval_maanden: pand.interval_maanden,
-            ritme: pand.ritme,
-            maandwerk: pand.maandwerk,
-            overslaan: [...pand.overslaan].sort(),
-            start_maand: pand.start_maand,
-            markering: pand.markering,
-            // Alleen meesturen als het verandert: de database laat dit alleen
-            // toe voor wie klanten bewerkt.
-            ...(pand.betaalmethode !== (dossierCustomer?.betaalmethode ?? null)
-              ? { betaalmethode: pand.betaalmethode }
-              : {}),
-          }),
+          schuifStartOp(
+            dossierCustomer ?? {
+              start_maand: "",
+              created_at: nu,
+              overslaan: [],
+              geimporteerd: false,
+            },
+            {
+              ...(prijzenZien ? { price: prijsGetal(pand.price) } : {}),
+              ...(leesDuur(pand.duur) !== undefined
+                ? { duur_min: leesDuur(pand.duur) ?? null, duur_zelf: pand.duurZelf }
+                : {}),
+              eigen_blok: pand.eigenBlok,
+              note: pand.note.trim(),
+              // De postcode hoort bij het pand, niet bij de bewoner — en de
+              // klantenlijst leest hem daar ook vandaan.
+              ...(pandPostcode !== null ? { postcode: pandPostcode } : {}),
+              interval_maanden: pand.interval_maanden,
+              ritme: pand.ritme,
+              maandwerk: pand.maandwerk,
+              overslaan: [...pand.overslaan].sort(),
+              start_maand: pand.start_maand,
+              markering: pand.markering,
+              // Alleen meesturen als het verandert: de database laat dit alleen
+              // toe voor wie klanten bewerkt.
+              ...(pand.betaalmethode !== (dossierCustomer?.betaalmethode ?? null)
+                ? { betaalmethode: pand.betaalmethode }
+                : {}),
+            },
+          ),
         );
       } else if (adresId && bestaandePostcode === "" && velden.postcode.trim()) {
         // Een gevonden adres houdt zijn eigen gegevens. Alleen een postcode
@@ -1275,7 +1283,11 @@ export function KlantgegevensDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
-                    <SelectItem value={METEEN}>Meteen (aanmaakmaand)</SelectItem>
+                    <SelectItem value={METEEN}>
+                      {dossierCustomer?.geimporteerd
+                        ? "Standaard (al klant)"
+                        : "Meteen (aanmaakmaand)"}
+                    </SelectItem>
                     <SelectItem value={vorigeMaand()}>Niet nieuw, al langer klant</SelectItem>
                     {maandenVooruit.map((m) => (
                       <SelectItem key={m} value={m}>
