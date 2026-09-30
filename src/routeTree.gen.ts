@@ -29,6 +29,7 @@ import { Route as PrullenbakRouteImport } from './routes/prullenbak'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StijlgidsRouteImport } from './routes/stijlgids'
 import { Route as TeamRouteImport } from './routes/team'
+import { Route as TweestapsRouteImport } from './routes/tweestaps'
 import { Route as UitnodigingRouteImport } from './routes/uitnodiging'
 
 const IndexRoute = IndexRouteImport.update({
@@ -131,6 +132,11 @@ const TeamRoute = TeamRouteImport.update({
   path: '/team',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TweestapsRoute = TweestapsRouteImport.update({
+  id: '/tweestaps',
+  path: '/tweestaps',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UitnodigingRoute = UitnodigingRouteImport.update({
   id: '/uitnodiging',
   path: '/uitnodiging',
@@ -158,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/stijlgids': typeof StijlgidsRoute
   '/team': typeof TeamRoute
+  '/tweestaps': typeof TweestapsRoute
   '/uitnodiging': typeof UitnodigingRoute
 }
 export interface FileRoutesByTo {
@@ -181,6 +188,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/stijlgids': typeof StijlgidsRoute
   '/team': typeof TeamRoute
+  '/tweestaps': typeof TweestapsRoute
   '/uitnodiging': typeof UitnodigingRoute
 }
 export interface FileRoutesById {
@@ -205,6 +213,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/stijlgids': typeof StijlgidsRoute
   '/team': typeof TeamRoute
+  '/tweestaps': typeof TweestapsRoute
   '/uitnodiging': typeof UitnodigingRoute
 }
 export interface FileRouteTypes {
@@ -230,6 +239,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/stijlgids'
     | '/team'
+    | '/tweestaps'
     | '/uitnodiging'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -253,6 +263,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/stijlgids'
     | '/team'
+    | '/tweestaps'
     | '/uitnodiging'
   id:
     | '__root__'
@@ -276,6 +287,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/stijlgids'
     | '/team'
+    | '/tweestaps'
     | '/uitnodiging'
   fileRoutesById: FileRoutesById
 }
@@ -300,6 +312,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   StijlgidsRoute: typeof StijlgidsRoute
   TeamRoute: typeof TeamRoute
+  TweestapsRoute: typeof TweestapsRoute
   UitnodigingRoute: typeof UitnodigingRoute
 }
 
@@ -445,6 +458,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TeamRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tweestaps': {
+      id: '/tweestaps'
+      path: '/tweestaps'
+      fullPath: '/tweestaps'
+      preLoaderRoute: typeof TweestapsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/uitnodiging': {
       id: '/uitnodiging'
       path: '/uitnodiging'
@@ -476,6 +496,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   StijlgidsRoute: StijlgidsRoute,
   TeamRoute: TeamRoute,
+  TweestapsRoute: TweestapsRoute,
   UitnodigingRoute: UitnodigingRoute,
 }
 export const routeTree = rootRouteImport

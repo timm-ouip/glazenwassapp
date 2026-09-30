@@ -121,7 +121,8 @@ function UitnodigingPagina() {
         ? `Welkom bij ${stand.bedrijf}!`
         : "Welkom bij het team!",
     );
-    void navigate({ to: "/home" });
+    // Eerst de inlogcode instellen; zonder die code is de app nog dicht.
+    void navigate({ to: "/tweestaps" });
   }
 
   /** Eigen uitnodiging: de server zet het wachtwoord en het lidmaatschap, daarna gewoon inloggen. */

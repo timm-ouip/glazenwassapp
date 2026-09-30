@@ -84,6 +84,7 @@ import {
   fetchTeam,
   inviteEmployee,
   removeEmployee,
+  resetTweestaps,
   trekUitnodigingIn,
   updateEmployeeRole,
   updateMyProfile,
@@ -103,6 +104,7 @@ import { Herinneringstrappen } from "@/components/facturen/Herinneringstrappen";
 import { AppLayout } from "@/components/AppLayout";
 import { WijkToevoegenKnop } from "@/components/WijkKiezer";
 import { useBevestig } from "@/components/Bevestig";
+import { TweestapsKoppelen } from "@/components/TweestapsKoppelen";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -802,7 +804,122 @@ function AccountTab() {
           </div>
         </div>
       </Kaart>
+
+      <InlogcodeKaart />
     </div>
+  );
+}
+
+/**
+ * Je gekoppelde authenticator-apps. Een tweede toestel (een tablet, of de
+ * telefoon van thuis) is je reserve: raak je je telefoon kwijt, dan kom je
+ * daarmee nog binnen. Supabase maakt geen reservecodes op papier.
+ */
+function InlogcodeKaart() {
+  const bevestig = useBevestig();
+  const { employee } = useAuth();
+  const [toestellen, setToestellen] = useState<{ id: string; naam: string; op: string }[]>([]);
+  const [koppelen, setKoppelen] = useState(false);
+
+  async function laad() {
+    const { data } = await supabase.auth.mfa.listFactors();
+    setToestellen(
+      (data?.totp ?? []).map((f) => ({
+        id: f.id,
+        naam: f.friendly_name || "Toestel",
+        op: f.created_at,
+      })),
+    );
+  }
+
+  useEffect(() => {
+    void laad();
+  }, []);
+
+  async function haalWeg(t: { id: string; naam: string }) {
+    const ja = await bevestig({
+      titel: `${t.naam} loskoppelen?`,
+      tekst: "De codes uit die app werken dan niet meer om in te loggen.",
+      bevestigLabel: "Loskoppelen",
+      gevaarlijk: true,
+    });
+    if (!ja) return;
+    const { error } = await supabase.auth.mfa.unenroll({ factorId: t.id });
+    if (error) {
+      toast.error("Loskoppelen mislukt: " + error.message);
+      return;
+    }
+    // De sessie opnieuw ophalen, zodat de app weet welke toestellen er nog zijn.
+    await supabase.auth.refreshSession();
+    toast.success("Losgekoppeld");
+    void laad();
+  }
+
+  // Een naam die nog niet bestaat: Supabase wil ze per account uniek.
+  let nr = toestellen.length + 1;
+  while (toestellen.some((t) => t.naam === `Reservetoestel ${nr}`)) nr++;
+
+  return (
+    <Kaart
+      titel="Inlogcode"
+      uitleg="Na je wachtwoord vraagt de app om de code uit je authenticator-app. Koppel ook een reservetoestel, voor als je telefoon kwijtraakt."
+    >
+      {toestellen.length === 1 && (
+        <p className="mb-3 rounded-xl bg-amber-500/15 px-3 py-2 text-[12.5px] text-foreground">
+          Je hebt maar één toestel gekoppeld.{" "}
+          {employee?.rol === "eigenaar"
+            ? "Raak je dat kwijt, dan kan niemand in de app je code resetten. Koppel daarom een reservetoestel en bewaar dat thuis."
+            : "Raak je dat kwijt, dan moet de eigenaar je code resetten. Met een reservetoestel kom je zelf weer binnen."}
+        </p>
+      )}
+      <ul className="divide-y divide-border/60">
+        {toestellen.map((t) => (
+          <li key={t.id} className="flex items-center gap-2 py-2 text-sm">
+            <div className="min-w-0 flex-1">
+              <p className="truncate">{t.naam}</p>
+              <p className="text-[12px] text-muted-foreground">
+                Gekoppeld op{" "}
+                {new Date(t.op).toLocaleDateString("nl-NL", { day: "numeric", month: "long" })}
+              </p>
+            </div>
+            {/* De laatste kan niet weg: zonder app kom je er zelf niet meer in. */}
+            {toestellen.length > 1 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="rounded-full text-muted-foreground hover:text-destructive"
+                onClick={() => void haalWeg(t)}
+              >
+                Loskoppelen
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {koppelen ? (
+        <div className="mt-3 border-t border-border/60 pt-3">
+          <TweestapsKoppelen
+            naam={`Reservetoestel ${nr}`}
+            onKlaar={() => {
+              setKoppelen(false);
+              void laad();
+            }}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2 rounded-full"
+            onClick={() => setKoppelen(false)}
+          >
+            Annuleren
+          </Button>
+        </div>
+      ) : (
+        <Button variant="outline" className="mt-3 rounded-full" onClick={() => setKoppelen(true)}>
+          <Plus className="size-4" /> Reservetoestel koppelen
+        </Button>
+      )}
+    </Kaart>
   );
 }
 
@@ -826,6 +943,10 @@ function TeamTab() {
   const [uitgenodigd, setUitgenodigd] = useState<
     { id: string; email: string; op: string; verlopen: boolean }[]
   >([]);
+  /** Wie zijn inlogcode al heeft ingesteld; alleen de eigenaar krijgt dit te zien. */
+  const [inlogcode, setInlogcode] = useState<Record<string, "ja" | "nee" | "onbekend">>({});
+  /** Na een reset: het tijdelijke wachtwoord, één keer te zien voor de eigenaar. */
+  const [tijdelijk, setTijdelijk] = useState<{ naam: string; wachtwoord: string } | null>(null);
   const [nieuweEmail, setNieuweEmail] = useState("");
   const [uitnodigen, setUitnodigen] = useState(false);
   const bevestig = useBevestig();
@@ -837,6 +958,7 @@ function TeamTab() {
       setRol(data.rol);
       setCollegas(data.collegas as Collega[]);
       setUitgenodigd(data.uitgenodigd);
+      setInlogcode(data.inlogcode);
     } catch (err) {
       toast.error("Team laden mislukt: " + (err instanceof Error ? err.message : String(err)));
     }
@@ -921,6 +1043,24 @@ function TeamTab() {
     }
   }
 
+  async function resetCode(c: Collega) {
+    const ja = await bevestig({
+      titel: `Inlogcode van ${c.naam || c.email} resetten?`,
+      tekst:
+        "Zijn gekoppelde app en zijn wachtwoord werken dan niet meer, en hij wordt overal uitgelogd. Je krijgt een tijdelijk wachtwoord om hem persoonlijk te geven; daarmee logt hij in en koppelt hij een nieuwe app. Doe dit als zijn telefoon kwijt of nieuw is.",
+      bevestigLabel: "Resetten",
+      gevaarlijk: true,
+    });
+    if (!ja) return;
+    try {
+      const { wachtwoord } = await resetTweestaps({ data: { employeeId: c.id } });
+      setTijdelijk({ naam: c.naam || c.email, wachtwoord });
+      void herlaad();
+    } catch (err) {
+      toast.error("Resetten mislukt: " + (err instanceof Error ? err.message : String(err)));
+    }
+  }
+
   async function verwijder(c: Collega) {
     const ja = await bevestig({
       titel: `${c.naam || c.email} verwijderen uit het team?`,
@@ -941,16 +1081,51 @@ function TeamTab() {
 
   return (
     <div className="max-w-3xl space-y-4">
+      {tijdelijk && (
+        <Kaart
+          titel={`Tijdelijk wachtwoord voor ${tijdelijk.naam}`}
+          uitleg="Geef dit persoonlijk of telefonisch door, niet via de mail of een chat op de telefoon die kwijt is. Hij logt ermee in, koppelt een nieuwe app, en kiest daarna bij Account zelf een nieuw wachtwoord. Je ziet het maar één keer."
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="rounded-lg bg-muted px-3 py-1.5 font-mono text-base tracking-wide">
+              {tijdelijk.wachtwoord}
+            </code>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(tijdelijk.wachtwoord)
+                  .then(() => toast.success("Gekopieerd"))
+                  .catch(() => toast.error("Kopiëren lukte niet"));
+              }}
+            >
+              Kopiëren
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-full"
+              onClick={() => setTijdelijk(null)}
+            >
+              Klaar
+            </Button>
+          </div>
+        </Kaart>
+      )}
+
       {/* Op de telefoon past de tabel niet: dan schuift hij opzij, zodat
           Rechten en het prullenbakje nog te bereiken zijn. */}
       <div className="overflow-x-auto rounded-[18px] border border-border bg-card shadow-card">
-        <table className="w-full min-w-[560px] text-sm">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-card-header text-left text-[11px] font-medium text-muted-foreground/80 zak:bg-card zak:text-[10px] zak:font-bold zak:uppercase zak:tracking-[0.08em] zak:text-muted-foreground">
             <tr>
               <th className="px-3 py-2 font-medium">Naam</th>
               <th className="px-3 py-2 font-medium">E-mail</th>
               <th className="px-3 py-2 font-medium">Rol</th>
               <th className="px-3 py-2 font-medium">Rechten</th>
+              {isEigenaar && <th className="px-3 py-2 font-medium">Inlogcode</th>}
               {isEigenaar && <th className="px-3 py-2" />}
             </tr>
           </thead>
@@ -1014,6 +1189,27 @@ function TeamTab() {
                       </span>
                     )}
                   </td>
+                  {isEigenaar && (
+                    <td className="px-3 py-2 text-[13px]">
+                      {inlogcode[c.id] === "ja" ? (
+                        <span className="inline-flex items-center gap-2">
+                          Ingesteld
+                          {!zelf && (
+                            <button
+                              className="font-semibold text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                              onClick={() => void resetCode(c)}
+                            >
+                              Resetten
+                            </button>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          {inlogcode[c.id] === "onbekend" ? "Onbekend" : "Nog niet"}
+                        </span>
+                      )}
+                    </td>
+                  )}
                   {isEigenaar && (
                     <td className="px-3 py-2 text-right">
                       {!zelf && c.rol !== "eigenaar" && (

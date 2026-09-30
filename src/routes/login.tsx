@@ -70,7 +70,8 @@ function LoginPagina() {
     } catch {
       // Privémodus of geen opslag beschikbaar: dan onthouden we niets.
     }
-    void navigate({ to: "/home" });
+    // Daarna nog de code uit de authenticator-app (of die eerst instellen).
+    void navigate({ to: "/tweestaps" });
   }
 
   return (

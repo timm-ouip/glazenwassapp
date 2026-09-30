@@ -58,7 +58,8 @@ function SignupPagina() {
     await refreshEmployee();
     setBezig(false);
     toast.success(`Welkom, ${bedrijfsnaam.trim()}!`);
-    void navigate({ to: "/home" });
+    // Eerst de inlogcode instellen; zonder die code is de app nog dicht.
+    void navigate({ to: "/tweestaps" });
   }
 
   return (

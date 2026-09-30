@@ -4,6 +4,18 @@ import { getRequest } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 /**
+ * Zonder de code uit de authenticator-app (aal2 in het token) mag je hier
+ * niets. Deze functies werken met de admin-client en slaan de sloten in de
+ * database dus over; daarom hier apart. Alleen bedrijf aanmaken en een
+ * uitnodiging afronden kunnen zonder: daarna stel je pas je code in.
+ */
+function eisTweestaps(claims: unknown) {
+  if ((claims as { aal?: string } | null)?.aal !== "aal2") {
+    throw new Error("Vul eerst de code uit je authenticator-app in.");
+  }
+}
+
+/**
  * Maakt bij het registreren van een nieuw bedrijf zowel de `companies`-rij
  * als de eerste `employees`-rij (rol "eigenaar") aan. Dit moet via de
  * service-role admin-client omdat een gloednieuwe gebruiker nog geen
@@ -106,6 +118,7 @@ export const inviteEmployee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { email: string; teamlidId?: string }) => data)
   .handler(async ({ data, context }): Promise<UitnodigingVia> => {
+    eisTweestaps(context.claims);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { data: me } = await supabaseAdmin
@@ -468,6 +481,7 @@ export const completeInvite = createServerFn({ method: "POST" })
 export const fetchTeam = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    eisTweestaps(context.claims);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { data: me } = await supabaseAdmin
@@ -499,7 +513,101 @@ export const fetchTeam = createServerFn({ method: "GET" })
       });
     }
 
-    return { rol: me.rol, collegas: collegas ?? [], uitgenodigd };
+    // Wie zijn code uit de authenticator-app al heeft ingesteld: alleen voor
+    // de eigenaar, die een code kan resetten als een telefoon kwijt is. Lukt
+    // het nakijken niet, dan "onbekend" -- niet "nee", want dan lijkt iemand
+    // onbeveiligd die dat niet is.
+    const inlogcode: Record<string, "ja" | "nee" | "onbekend"> = {};
+    if (me.rol === "eigenaar") {
+      await Promise.all(
+        (collegas ?? []).map(async (c) => {
+          const { data: f, error: fFout } = await supabaseAdmin.auth.admin.mfa.listFactors({
+            userId: c.id,
+          });
+          inlogcode[c.id] = fFout
+            ? "onbekend"
+            : f?.factors?.some((x) => x.status === "verified")
+              ? "ja"
+              : "nee";
+        }),
+      );
+    }
+
+    return { rol: me.rol, collegas: collegas ?? [], uitgenodigd, inlogcode };
+  });
+
+/** Een tijdelijk wachtwoord dat je hardop kunt voorlezen: geen 0/O of 1/l/I. */
+function tijdelijkWachtwoord(): string {
+  const tekens = "abcdefghjkmnpqrstuvwxyz23456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  const s = Array.from(bytes, (b) => tekens[b % tekens.length]).join("");
+  return `${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8)}`;
+}
+
+/**
+ * Eigenaar reset de code van een collega, bijvoorbeeld als zijn telefoon kwijt
+ * is. Alle gekoppelde apps gaan eraf en al zijn sessies worden ingetrokken.
+ *
+ * Ook zijn wachtwoord wordt vervangen door een tijdelijk wachtwoord, dat de
+ * eigenaar persoonlijk doorgeeft. Anders zou wie de verloren telefoon vindt,
+ * met het daarop bewaarde wachtwoord inloggen en zelf een nieuwe app koppelen.
+ * Je eigen code reset je zo niet: dan zou één gestolen sessie genoeg zijn om
+ * hem over te nemen.
+ */
+export const resetTweestaps = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { employeeId: string }) => data)
+  .handler(async ({ data, context }) => {
+    eisTweestaps(context.claims);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    if (data.employeeId === context.userId) {
+      throw new Error("Je eigen code wijzig je bij Account.");
+    }
+    const { data: me } = await supabaseAdmin
+      .from("employees")
+      .select("company_id,rol")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (!me || me.rol !== "eigenaar") {
+      throw new Error("Alleen de eigenaar kan een code resetten");
+    }
+    const { data: doel } = await supabaseAdmin
+      .from("employees")
+      .select("id")
+      .eq("id", data.employeeId)
+      .eq("company_id", me.company_id)
+      .maybeSingle();
+    if (!doel) throw new Error("Deze medewerker staat niet (meer) in jouw team");
+
+    // Eerst het wachtwoord: lukt dat niet, dan blijft alles zoals het was.
+    // Andersom zou er even een account zijn zonder app, met het oude (en
+    // misschien op de verloren telefoon bewaarde) wachtwoord.
+    const wachtwoord = tijdelijkWachtwoord();
+    const { error: pwFout } = await supabaseAdmin.auth.admin.updateUserById(data.employeeId, {
+      password: wachtwoord,
+    });
+    if (pwFout) throw new Error("Resetten mislukt: " + pwFout.message);
+
+    const { data: f, error } = await supabaseAdmin.auth.admin.mfa.listFactors({
+      userId: data.employeeId,
+    });
+    if (error) throw new Error(error.message);
+    for (const factor of f?.factors ?? []) {
+      const { error: wegFout } = await supabaseAdmin.auth.admin.mfa.deleteFactor({
+        id: factor.id,
+        userId: data.employeeId,
+      });
+      if (wegFout) throw new Error(wegFout.message);
+    }
+
+    // Als laatste: dan valt ook wie er tussendoor nog inlogde eruit.
+    const { error: sessieFout } = await supabaseAdmin.rpc("sessies_intrekken", {
+      gebruiker: data.employeeId,
+    });
+    if (sessieFout) console.error("[team] Sessies intrekken mislukt:", sessieFout.message);
+
+    return { wachtwoord };
   });
 
 /** Eigenaar trekt een uitnodiging in die nog niet gebruikt is. */
@@ -507,6 +615,7 @@ export const trekUitnodigingIn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { userId: string }) => data)
   .handler(async ({ data, context }) => {
+    eisTweestaps(context.claims);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { data: me } = await supabaseAdmin
@@ -540,6 +649,7 @@ export const removeEmployee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { employeeId: string }) => data)
   .handler(async ({ data, context }) => {
+    eisTweestaps(context.claims);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     if (data.employeeId === context.userId) {
@@ -580,6 +690,16 @@ export const removeEmployee = createServerFn({ method: "POST" })
       console.error("[team] Sessies intrekken mislukt:", sessieFout.message);
     }
 
+    // Ook zijn gekoppelde authenticator-apps eraf. Wordt hij later opnieuw
+    // uitgenodigd, dan kiest hij een wachtwoord met een inloglink (zonder
+    // code), en met een app nog gekoppeld weigert Supabase dat.
+    const { data: f } = await supabaseAdmin.auth.admin.mfa.listFactors({
+      userId: data.employeeId,
+    });
+    for (const factor of f?.factors ?? []) {
+      await supabaseAdmin.auth.admin.mfa.deleteFactor({ id: factor.id, userId: data.employeeId });
+    }
+
     return { ok: true };
   });
 
@@ -589,6 +709,7 @@ export const updateMyProfile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { naam: string }) => data)
   .handler(async ({ data, context }) => {
+    eisTweestaps(context.claims);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const naam = data.naam.trim();
@@ -612,6 +733,7 @@ export const assignRol = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { employeeId: string; rolId: string | null }) => data)
   .handler(async ({ data, context }) => {
+    eisTweestaps(context.claims);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { data: me } = await supabaseAdmin
@@ -666,6 +788,7 @@ export const updateEmployeeRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { employeeId: string; rol: string }) => data)
   .handler(async ({ data, context }) => {
+    eisTweestaps(context.claims);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     if (data.rol !== "eigenaar" && data.rol !== "medewerker") {

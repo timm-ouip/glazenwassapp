@@ -33,6 +33,31 @@ function alsMedewerker(rij: unknown): Employee | null {
   return { ...rest, rolnaam: rollen?.naam ?? "", rechten: rollen?.rechten ?? [] };
 }
 
+/**
+ * Hoe het staat met de code uit de authenticator-app voor deze sessie:
+ * - "ok": ingevuld (aal2 in het token), de app is open;
+ * - "invullen": er is een app gekoppeld, maar de code is nog niet ingevuld;
+ * - "instellen": er is nog geen app gekoppeld.
+ * Zonder "ok" geeft de database niets terug (zie de migratie
+ * tweestaps_verplicht), dus dan heeft ophalen ook geen zin.
+ */
+export type Tweestaps = "ok" | "invullen" | "instellen";
+
+/** Rekent het zelf uit, zonder supabase aan te roepen: dit moet ook binnen
+ *  `onAuthStateChange` kunnen, en daar hangt een aanroep naar supabase. */
+export function tweestapsVan(session: Session): Tweestaps {
+  let aal = "";
+  try {
+    const deel = session.access_token.split(".")[1] ?? "";
+    const json = atob(deel.replace(/-/g, "+").replace(/_/g, "/"));
+    aal = (JSON.parse(json) as { aal?: string }).aal ?? "";
+  } catch {
+    // Onleesbaar token: dan geldt het als niet ingevuld.
+  }
+  if (aal === "aal2") return "ok";
+  return session.user.factors?.some((f) => f.status === "verified") ? "invullen" : "instellen";
+}
+
 /** Alleen wat de app buiten de instellingenpagina nodig heeft: de naam die
  *  linksboven in de zijbalk staat. */
 export type Company = {
@@ -42,6 +67,8 @@ export type Company = {
 
 type AuthState = {
   session: Session | null;
+  /** Leeg zonder sessie. */
+  tweestaps: Tweestaps | null;
   employee: Employee | null;
   company: Company | null;
   loading: boolean;
@@ -57,6 +84,7 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState>({
   session: null,
+  tweestaps: null,
   employee: null,
   company: null,
   loading: true,
@@ -79,6 +107,7 @@ async function laadBedrijf(employee: Employee | null): Promise<Company | null> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<Omit<AuthState, "refreshEmployee">>({
     session: null,
+    tweestaps: null,
     employee: null,
     company: null,
     loading: true,
@@ -98,9 +127,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     function zetSessie(session: Session | null) {
       if (!actief) return;
       setState((vorig) => {
-        const zelfde = session && vorig.employee?.id === session.user.id;
+        const tweestaps = session ? tweestapsVan(session) : null;
+        const zelfde = session && tweestaps === "ok" && vorig.employee?.id === session.user.id;
         return {
           session,
+          tweestaps,
           employee: zelfde ? vorig.employee : null,
           company: zelfde ? vorig.company : null,
           loading: false,
@@ -124,6 +155,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         geladenVoor = null;
         return;
       }
+      // Zonder code geeft de database niets; en een lege uitkomst zou hieronder
+      // lijken op "uit het team gehaald". Na het invullen komt hier een nieuwe
+      // sessie langs, en dan wel.
+      if (tweestapsVan(session) !== "ok") return;
       if (geladenVoor === session.user.id) return;
       // Vóór de eerste await, anders glipt een tweede aanroep er nog langs.
       geladenVoor = session.user.id;
@@ -177,6 +212,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function refreshEmployee() {
     const { data } = await supabase.auth.getSession();
     if (!data.session) return;
+    if (tweestapsVan(data.session) !== "ok") return;
     const { data: emp, error } = await supabase
       .from("employees")
       .select(MEDEWERKER_VELDEN)
@@ -185,6 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const employee = alsMedewerker(emp);
     setState({
       session: data.session,
+      tweestaps: "ok",
       employee,
       company: await laadBedrijf(employee),
       loading: false,
@@ -224,19 +261,23 @@ export async function requireSession() {
   if (!data.session) {
     throw redirect({ to: "/login" });
   }
+  if (tweestapsVan(data.session) !== "ok") {
+    throw redirect({ to: "/tweestaps" });
+  }
   return data.session;
 }
 
-/** Client-side vangnet: stuurt alsnog naar /login als er (na laden) geen sessie blijkt te zijn. */
+/** Client-side vangnet: stuurt alsnog naar /login als er (na laden) geen
+ *  sessie blijkt te zijn, en naar /tweestaps als de code nog niet is ingevuld. */
 export function useRequireAuth() {
-  const { session, loading, geenTeamregel } = useAuth();
+  const { session, tweestaps, loading, geenTeamregel } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && !session) {
-      void navigate({ to: "/login" });
-    }
-  }, [loading, session, navigate]);
+    if (loading) return;
+    if (!session) void navigate({ to: "/login" });
+    else if (tweestaps !== "ok") void navigate({ to: "/tweestaps" });
+  }, [loading, session, tweestaps, navigate]);
 
   // Uit het team gehaald: je sessie loopt nog (die verloopt pas later), maar
   // er valt niets meer te zien. Dan hier uitloggen in plaats van je naar een
