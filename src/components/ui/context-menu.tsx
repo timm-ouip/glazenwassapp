@@ -8,6 +8,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { slikRestVanTik } from "@/components/ui/tik-buiten";
 
 const ContextMenu = ContextMenuPrimitive.Root;
 
@@ -115,10 +116,15 @@ ContextMenuSubContent.displayName = ContextMenuPrimitive.SubContent.displayName;
 const ContextMenuContent = React.forwardRef<
   React.ElementRef<typeof ContextMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content>
->(({ className, collisionPadding = 8, sticky = "always", ...props }, ref) => (
+>(({ className, collisionPadding = 8, sticky = "always", onPointerDownOutside, ...props }, ref) => (
   <ContextMenuPrimitive.Portal>
     <ContextMenuPrimitive.Content
       ref={ref}
+      // Een tik buiten het menu sluit het alleen; zie tik-buiten.ts.
+      onPointerDownOutside={(e) => {
+        onPointerDownOutside?.(e);
+        slikRestVanTik(e);
+      }}
       // Helemaal in beeld houden, ook als een submenu erin openklapt (op de
       // telefoon) en het menu hoger wordt dan de ruimte onder de tik.
       collisionPadding={collisionPadding}

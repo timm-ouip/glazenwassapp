@@ -4375,6 +4375,10 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
   // Zolang het menu open is krijgt de regel een rand (het menu zet daarvoor
   // data-state="open" op de regel): anders zie je niet over welk adres het
   // menu gaat. Een rand en geen vlak, want het vlak is al de kleur van de regel.
+  // Dezelfde rand als er een pop-up van een vakje in de regel open is (de
+  // notitie, de prijs, de frequentie): Radix zet dan data-state="open" op dat
+  // knopje, en `has-` ziet dat zonder dat de regel opnieuw getekend wordt.
+  // In de actiekleur van het thema, zodat hij opvalt naast de regelkleuren.
   return (
     <KlantMenu
       customer={c}
@@ -4389,7 +4393,7 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
     >
       <KlantRijSleep
         id={`c:${c.id}`}
-        className={`group relative flex items-center gap-0.5 rounded-[9px] px-0.5 max-md:select-none max-md:[-webkit-touch-callout:none] ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond} ${!p.geselecteerd && !kleur ? "hover:bg-muted/70" : ""} data-[state=open]:ring-2 data-[state=open]:ring-inset data-[state=open]:ring-foreground/60`}
+        className={`group relative flex items-center gap-0.5 rounded-[9px] px-0.5 max-md:select-none max-md:[-webkit-touch-callout:none] ${p.rowPad} ${p.rowText} ${p.geselecteerd ? "bg-accent" : ""} ${achtergrond} ${!p.geselecteerd && !kleur ? "hover:bg-muted/70" : ""} data-[state=open]:ring-2 data-[state=open]:ring-inset data-[state=open]:ring-primary has-[[data-state=open]]:ring-2 has-[[data-state=open]]:ring-inset has-[[data-state=open]]:ring-primary`}
         verfKlant={c.id}
         onGreep={p.magPlannen ? (e) => p.onSelect(c, e.shiftKey) : null}
         data-klantrij=""
