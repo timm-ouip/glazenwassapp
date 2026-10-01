@@ -227,7 +227,12 @@ function Mailing() {
         {/* Ook op een tablet in de lengte: daar telt de app je niet als
             telefoon, en zonder dit blokje kom je niet meer terug bij je mail. */}
         {kanaalKiezer}
-        {kanaal === "whatsapp" ? <WhatsAppGesprekken /> : <Gesprekken />}
+        {kanaal === "whatsapp" ? (
+          <WhatsAppGesprekken />
+        ) : (
+          // Niet onthouden: morgen begin je gewoon weer in je eigen keuze.
+          <Gesprekken onNaarPostvak={() => setKanaal("postvak")} />
+        )}
       </div>
     );
 

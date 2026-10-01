@@ -23,6 +23,7 @@ import {
   IconPaperclip as Paperclip,
   IconCornerUpLeft as Reply,
   IconSend as Send,
+  IconSparkles as Sparkles,
   IconUser as UserRound,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
@@ -32,15 +33,15 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { MailOpstellen, type Opzet } from "@/components/mail/MailOpstellen";
 import { MailHtml, antwoordOpzet } from "@/components/mail/Postvak";
-import { Bubbel } from "@/components/whatsapp/Chat";
+import { Bubbel, PaaltjeStrook } from "@/components/whatsapp/Chat";
 import { SjabloonBericht } from "@/components/whatsapp/Sjablonen";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { requireSession, useRequireAuth } from "@/lib/auth";
 import { fetchBericht, fetchDossierMails, lijstDatum, type DossierMail } from "@/lib/berichten";
 import { fetchKlachtenVanKlant, type Klacht } from "@/lib/klachten";
 import { fetchCustomers, fetchKlanten, fetchStreets, formatNumber } from "@/lib/klanten";
-import { fetchMailbox } from "@/lib/mailbox";
-import { zetGelezen } from "@/lib/mailacties";
+import { fetchMailbox, type MailMap } from "@/lib/mailbox";
+import { bulkActie, handelAf, zetGelezen } from "@/lib/mailacties";
 import { useRecht } from "@/lib/rechten";
 import {
   fetchGesprekken,
@@ -131,6 +132,11 @@ function Berichten() {
     queryKey: ["dossier-mail", klantId],
     queryFn: () => fetchDossierMails(klantId!),
     enabled: !!klantId,
+    // Leest Paaltje de laatste mail nog, dan verschijnt zijn voorstel vanzelf.
+    refetchInterval: (q) => {
+      const s = q.state.data?.find((m) => m.richting === "in" && m.op_server)?.paaltje_status;
+      return s === "wacht" || s === "bezig" ? 30_000 : false;
+    },
   });
   const klachten = useQuery({
     queryKey: ["klachten", klantId],
@@ -173,6 +179,7 @@ function Berichten() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waGesprekken.data, alleNummers.join(",")]);
+
   const waAlles = waPerNummer.flatMap((q) => q.data ?? []);
   const waVersie = waPerNummer.map((q) => q.dataUpdatedAt).join(",");
 
@@ -192,6 +199,61 @@ function Berichten() {
   const [gekozenKanaal, setKanaal] = useState<Kanaal | null>(null);
   /** Eén opstelscherm voor de hele pagina, niet één per mail. */
   const [opzet, setOpzet] = useState<Opzet | null>(null);
+
+  // Mail: openen is lezen, net als bij WhatsApp hierboven, en ook op de
+  // mailserver. Wat ongelezen binnenkwam houdt deze keer zijn stip, zodat je
+  // ziet wat er nieuw was.
+  // De klant zelf staat in de klantentabel; wie alleen mail mag lezen kan die
+  // niet openen, en zou dan een lege pagina krijgen.
+  const magKlantZien = useRecht("klanten_bekijken", "klanten_bewerken", "planning");
+  const magMailLezen = useRecht("mail_lezen");
+  const [nieuweMail, setNieuweMail] = useState<Set<string>>(() => new Set());
+  const mailAlGelezen = useRef(new Set<string>());
+  // Alleen als je de mail ook echt ziet: niet met het filter op WhatsApp, en
+  // niet als de pagina zelf niet open mag.
+  const mailZichtbaar = magKlantZien && !!klant && filter !== "whatsapp";
+  useEffect(() => {
+    if (!mailZichtbaar || !magMailLezen || mailbox.data?.status !== "actief") return;
+    const ids = (mails.data ?? [])
+      .filter(
+        (m) =>
+          m.richting === "in" && !m.gelezen && m.op_server && !mailAlGelezen.current.has(m.id),
+      )
+      .map((m) => m.id)
+      // Zoveel kan de server in één keer; de rest volgt na het verversen.
+      .slice(0, 50);
+    if (ids.length === 0) return;
+    for (const id of ids) mailAlGelezen.current.add(id);
+    setNieuweMail((oud) => new Set([...oud, ...ids]));
+    void bulkActie(ids, "gelezen")
+      .then(({ mislukt }) => {
+        const gelukt = new Set(ids.filter((id) => !mislukt.includes(id)));
+        if (gelukt.size === 0) return;
+        // Meteen in de cache, zoals het postvak doet: het getal op de Mail-tab
+        // gaat dan direct omlaag.
+        const perMap = new Map<string, number>();
+        for (const m of mails.data ?? []) {
+          if (gelukt.has(m.id) && m.map_id) perMap.set(m.map_id, (perMap.get(m.map_id) ?? 0) + 1);
+        }
+        qc.setQueryData<DossierMail[]>(["dossier-mail", klantId], (oud) =>
+          oud?.map((m) => (gelukt.has(m.id) ? { ...m, gelezen: true } : m)),
+        );
+        qc.setQueryData<MailMap[]>(["mail-mappen"], (oud) =>
+          oud?.map((map) =>
+            perMap.has(map.id)
+              ? { ...map, ongelezen: Math.max(0, map.ongelezen - perMap.get(map.id)!) }
+              : map,
+          ),
+        );
+        void qc.invalidateQueries({ queryKey: ["mail-gesprekken"] });
+        void qc.invalidateQueries({ queryKey: ["mail-mappen"] });
+        void qc.invalidateQueries({ queryKey: ["berichten"] });
+      })
+      .catch(() => {
+        // Stil, net als in het postvak: de volgende ophaalronde trekt het recht.
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mails.data, mailZichtbaar, magMailLezen, mailbox.data?.status]);
 
   const items = useMemo(() => {
     const lijst: Item[] = [
@@ -222,9 +284,6 @@ function Berichten() {
   }, [mails.data, waVersie, klachten.data, filter, klantId]);
 
   const laden = mails.isLoading || nummers.isLoading || klachten.isLoading;
-  // De klant zelf staat in de klantentabel; wie alleen mail mag lezen kan die
-  // niet openen, en zou dan een lege pagina krijgen.
-  const magKlantZien = useRecht("klanten_bekijken", "klanten_bewerken", "planning");
 
   // In de chat begin je onderaan, bij het nieuwste bericht. Komt er daarna
   // iets binnen, dan schuiven we alleen mee als je al onderaan stond: anders
@@ -254,6 +313,16 @@ function Berichten() {
     setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: "center" }), 50);
   }
 
+  // Wat Paaltje klaar heeft: het antwoord op de nieuwste mail van de klant
+  // waar nog niet op geantwoord is. Leest hij de nieuwste mail nog, dan dat.
+  const mailIn = (mails.data ?? []).filter((m) => m.richting === "in");
+  // Alleen mail die nog op de server staat: andere leest Paaltje niet meer.
+  const paaltjeLeest = ["wacht", "bezig"].includes(
+    mailIn.find((m) => m.op_server)?.paaltje_status ?? "",
+  );
+  const voorstel =
+    mailIn.find((m) => m.concept.trim() && !m.beantwoord_op && !m.afgehandeld_op) ?? null;
+
   const antwoordBalk = klant && (
     <AntwoordBalk
       klantId={klant.id}
@@ -261,10 +330,14 @@ function Berichten() {
       email={klant.email.trim() || klant.email2.trim()}
       telefoon={telefoon}
       waBerichten={waAntwoordnummer}
+      // Op een gedeeld nummer alleen wat bij deze klant hoort, net als in de chat.
+      waVanKlant={waAntwoordnummer.filter((w) => !w.klant_id || w.klant_id === klant.id)}
       gekozenKanaal={gekozenKanaal}
       onKanaal={setKanaal}
       // De lijst staat nieuwste eerst: de eerste inkomende is de laatste mail van de klant.
-      laatsteMailIn={(mails.data ?? []).find((m) => m.richting === "in") ?? null}
+      laatsteMailIn={mailIn[0] ?? null}
+      voorstel={voorstel}
+      paaltjeLeest={paaltjeLeest}
       onVerstuurd={() => {
         void qc.invalidateQueries({ queryKey: ["wa-berichten", telefoon] });
         void qc.invalidateQueries({ queryKey: ["dossier-whatsapp", klant.id] });
@@ -390,12 +463,13 @@ function Berichten() {
           ) : weergave === "chat" ? (
             <ChatTijdlijn
               items={items}
+              nieuw={nieuweMail}
               openMail={openMail}
               onOpenMail={setOpenMail}
               onBeantwoord={setOpzet}
             />
           ) : (
-            <LijstTijdlijn items={items} onKies={naarBericht} />
+            <LijstTijdlijn items={items} nieuw={nieuweMail} onKies={naarBericht} />
           )}
 
           <MailOpstellen open={opzet !== null} opzet={opzet} onSluit={() => setOpzet(null)} />
@@ -413,11 +487,14 @@ function Berichten() {
 /** Alles als chat: wat de klant stuurde links, wat jij stuurde rechts. */
 function ChatTijdlijn({
   items,
+  nieuw,
   openMail,
   onOpenMail,
   onBeantwoord,
 }: {
   items: Item[];
+  /** Mail die ongelezen was toen je dit gesprek opende. */
+  nieuw: Set<string>;
   openMail: string | null;
   onOpenMail: (id: string | null) => void;
   onBeantwoord: (opzet: Opzet) => void;
@@ -451,6 +528,7 @@ function ChatTijdlijn({
             ) : (
               <MailBubbel
                 mail={i.mail}
+                nieuw={nieuw.has(i.mail.id)}
                 open={openMail === i.mail.id}
                 onOpen={() => onOpenMail(openMail === i.mail.id ? null : i.mail.id)}
                 onBeantwoord={onBeantwoord}
@@ -466,16 +544,19 @@ function ChatTijdlijn({
 /** Een mail als ballon; tik hem open voor de hele mail. */
 function MailBubbel({
   mail: m,
+  nieuw,
   open,
   onOpen,
   onBeantwoord,
 }: {
   mail: DossierMail;
+  nieuw: boolean;
   open: boolean;
   onOpen: () => void;
   onBeantwoord: (opzet: Opzet) => void;
 }) {
   const uit = m.richting === "uit";
+  const ongelezen = !uit && (!m.gelezen || nieuw);
   const bericht = useQuery({
     queryKey: ["bericht", m.id, "dossier"],
     queryFn: () => fetchBericht(m.id, true),
@@ -490,6 +571,7 @@ function MailBubbel({
       .then(() => {
         void qc.invalidateQueries({ queryKey: ["dossier-mail"] });
         void qc.invalidateQueries({ queryKey: ["mail-gesprekken"] });
+        void qc.invalidateQueries({ queryKey: ["mail-mappen"] });
       })
       .catch(() => undefined);
   }, [open, m.id, m.richting, m.gelezen, qc]);
@@ -506,7 +588,18 @@ function MailBubbel({
         )}
       >
         <button type="button" onClick={onOpen} className="block w-full px-3 py-2 text-left">
-          <span className="flex items-center gap-1.5 text-[12.5px] font-semibold">
+          <span
+            className={cn(
+              "flex items-center gap-1.5 text-[12.5px]",
+              ongelezen ? "font-semibold" : "font-medium",
+            )}
+          >
+            {ongelezen && (
+              <span
+                className="size-2 shrink-0 rounded-full bg-tint-blauw-ink"
+                aria-label="Ongelezen"
+              />
+            )}
             <Mail className="size-3.5 shrink-0" />
             <span className="truncate">{m.onderwerp || "(geen onderwerp)"}</span>
             {m.heeft_bijlagen && <Paperclip className="size-3 shrink-0" />}
@@ -578,7 +671,16 @@ function MailBubbel({
 }
 
 /** Alles als lijst, nieuwste bovenaan, zoals zoekresultaten in je mailapp. */
-function LijstTijdlijn({ items, onKies }: { items: Item[]; onKies: (id: string) => void }) {
+function LijstTijdlijn({
+  items,
+  nieuw,
+  onKies,
+}: {
+  items: Item[];
+  /** Mail die ongelezen was toen je dit gesprek opende. */
+  nieuw: Set<string>;
+  onKies: (id: string) => void;
+}) {
   const nieuwsteEerst = [...items].reverse();
   const weekGeleden = Date.now() - 7 * 24 * 60 * 60 * 1000;
   let vorigeGroep = "";
@@ -595,7 +697,7 @@ function LijstTijdlijn({ items, onKies }: { items: Item[]; onKies: (id: string) 
                 kleur: i.mail.richting === "uit" ? "text-muted-foreground" : "text-tint-blauw-mid",
                 titel: i.mail.onderwerp || "(geen onderwerp)",
                 tekst: i.mail.richting === "uit" ? `Jij: ${i.mail.fragment}` : i.mail.fragment,
-                vet: i.mail.richting === "in" && !i.mail.gelezen,
+                vet: i.mail.richting === "in" && (!i.mail.gelezen || nieuw.has(i.mail.id)),
               }
             : i.soort === "whatsapp"
               ? {
@@ -632,6 +734,12 @@ function LijstTijdlijn({ items, onKies }: { items: Item[]; onKies: (id: string) 
               <Icoon className={cn("mt-0.5 size-[18px] shrink-0", kleur)} />
               <span className="min-w-0 flex-1">
                 <span className="flex items-baseline gap-2">
+                  {vet && i.soort === "mail" && (
+                    <span
+                      className="size-2 shrink-0 self-center rounded-full bg-tint-blauw-ink"
+                      aria-label="Ongelezen"
+                    />
+                  )}
                   <span className={cn("flex-1 truncate text-[14px]", vet && "font-semibold")}>
                     {titel}
                   </span>
@@ -687,7 +795,10 @@ function AntwoordBalk({
   email,
   telefoon,
   waBerichten,
+  waVanKlant,
   laatsteMailIn,
+  voorstel,
+  paaltjeLeest,
   gekozenKanaal,
   onKanaal: setKanaal,
   onVerstuurd,
@@ -697,7 +808,13 @@ function AntwoordBalk({
   email: string;
   telefoon: string;
   waBerichten: WaBericht[];
+  /** De appjes van het nummer die bij deze klant horen, voor Paaltje. */
+  waVanKlant: WaBericht[];
   laatsteMailIn: DossierMail | null;
+  /** De mail waarop Paaltje een antwoord klaar heeft. */
+  voorstel: DossierMail | null;
+  /** Paaltje leest de nieuwste mail nog. */
+  paaltjeLeest: boolean;
   gekozenKanaal: Kanaal | null;
   onKanaal: (k: Kanaal) => void;
   onVerstuurd: () => void;
@@ -714,6 +831,9 @@ function AntwoordBalk({
   const [bezig, setBezig] = useState(false);
   const [opzet, setOpzet] = useState<Opzet | null>(null);
   const [sjabloonOpen, setSjabloonOpen] = useState(false);
+  /** De mail waarop je antwoordt, als je het voorstel van Paaltje gebruikte. */
+  const [antwoordOp, setAntwoordOp] = useState<string | null>(null);
+  const qc = useQueryClient();
   const venster = vensterOpen(waBerichten);
 
   if (!magVersturen) {
@@ -734,7 +854,8 @@ function AntwoordBalk({
       }
       setBezig(true);
       try {
-        const vorige = laatsteMailIn ? await fetchBericht(laatsteMailIn.id, true) : null;
+        const doel = antwoordOp ?? laatsteMailIn?.id;
+        const vorige = doel ? await fetchBericht(doel, true) : null;
         setOpzet(
           vorige
             ? { ...antwoordOpzet(vorige, inhoud), klantId }
@@ -746,6 +867,7 @@ function AntwoordBalk({
               },
         );
         setTekst("");
+        setAntwoordOp(null);
       } catch (e) {
         toast.error(
           "De mail kon niet klaargezet worden: " + (e instanceof Error ? e.message : String(e)),
@@ -785,8 +907,75 @@ function AntwoordBalk({
 
   const sjabloonNodig = kanaal === "whatsapp" && waKan && !venster;
 
+  async function nietNodig(id: string) {
+    setBezig(true);
+    try {
+      await handelAf(id, true);
+      toast.success("Afgehandeld.");
+      void qc.invalidateQueries({ queryKey: ["dossier-mail"] });
+      void qc.invalidateQueries({ queryKey: ["mail-gesprekken"] });
+      void qc.invalidateQueries({ queryKey: ["mail-wacht"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBezig(false);
+    }
+  }
+
   return (
     <>
+      {/* Wat Paaltje klaar heeft staat boven het antwoordvak: "Gebruiken" zet
+          het erin, zodat je het nog kunt aanpassen voor het weggaat. */}
+      {paaltjeLeest ? (
+        <p className="mb-1.5 flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-[12px] text-muted-foreground shadow-card">
+          <Sparkles className="size-3.5 shrink-0" /> Paaltje leest de nieuwe mail…
+        </p>
+      ) : (
+        voorstel && (
+          <div className="mb-1.5 space-y-1 rounded-[18px] border border-border bg-card px-3 py-2 text-[12.5px] shadow-card">
+            {voorstel.samenvatting && (
+              <p className="flex items-start gap-1.5 text-muted-foreground">
+                <Sparkles className="mt-0.5 size-3.5 shrink-0" />
+                <span className="line-clamp-2">{voorstel.samenvatting}</span>
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="line-clamp-2 min-w-0 flex-1">
+                <Mail className="mr-1 inline size-3.5 align-[-2px] text-tint-blauw-mid" />
+                Paaltje stelt voor: <q className="italic">{voorstel.concept.trim()}</q>
+              </span>
+              <div className="flex shrink-0 flex-col gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 rounded-full px-2.5 text-[12px]"
+                  disabled={bezig}
+                  onClick={() => {
+                    setKanaal("mail");
+                    setAntwoordOp(voorstel.id);
+                    setTekst(voorstel.concept.trim());
+                  }}
+                >
+                  Gebruiken
+                </Button>
+                <button
+                  type="button"
+                  className="text-[11.5px] text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+                  disabled={bezig}
+                  onClick={() => void nietNodig(voorstel.id)}
+                >
+                  Niet nodig
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      )}
+      {kanaal === "whatsapp" && (
+        <div className="mb-1.5 overflow-hidden rounded-[18px] border border-border bg-card shadow-card empty:hidden [&>*]:border-t-0">
+          <PaaltjeStrook berichten={waVanKlant} telefoon={telefoon} onGebruik={setTekst} />
+        </div>
+      )}
       <form
         className="flex items-end gap-1.5 rounded-[24px] border border-border bg-card p-1.5 shadow-[0_4px_20px_oklch(0.3_0.02_70/18%)]"
         onSubmit={(e) => {
@@ -817,7 +1006,8 @@ function AntwoordBalk({
           </button>
         ) : (
           <textarea
-            rows={1}
+            // Een voorstel van Paaltje is vaak een paar regels: laat die zien.
+            rows={Math.min(5, tekst.split("\n").length)}
             value={tekst}
             maxLength={4096}
             placeholder={

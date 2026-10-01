@@ -356,9 +356,32 @@ async function zetGelezen(
   );
   if (!gelukt) return antwoord({ fout: VERANDERD }, 409);
 
-  const { error } = await db.from("berichten").update({ gelezen }).eq("id", plek.id);
+  // Alleen als het echt verandert: dan klopt het telletje van de map ook als
+  // dezelfde mail twee keer gelezen gezet wordt.
+  const { data: veranderd, error } = await db
+    .from("berichten")
+    .update({ gelezen })
+    .eq("id", plek.id)
+    .neq("gelezen", gelezen)
+    .select("id");
   // Op de server is het gelukt; de volgende ophaalronde trekt Paaltje Systems gelijk.
   if (error) console.error("gelezen bijwerken:", error.message);
+  if (veranderd?.length && plek.map_id) {
+    // Het getal bij de map (en op de Mail-tab) meteen bijwerken, niet pas bij
+    // de volgende ophaalronde. Die telt het daarna weer precies na.
+    const { data: map } = await db
+      .from("mail_mappen")
+      .select("ongelezen")
+      .eq("id", plek.map_id)
+      .maybeSingle();
+    if (map) {
+      const { error: telFout } = await db
+        .from("mail_mappen")
+        .update({ ongelezen: Math.max(0, Number(map.ongelezen) + (gelezen ? -1 : 1)) })
+        .eq("id", plek.map_id);
+      if (telFout) console.error("telletje bijwerken:", telFout.message);
+    }
+  }
   return antwoord({ ok: true });
 }
 

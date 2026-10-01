@@ -4,22 +4,27 @@
  * ongelezen is. Tik je op een klant, dan opent zijn Berichten-pagina.
  *
  * Appjes van een nummer dat nog bij geen klant hoort staan er ook in: die
- * open je als losse chat. Mail zonder klant staat alleen in het postvak.
+ * open je als losse chat. Mail zonder klant staat alleen in het postvak; is
+ * daar iets ongelezen, dan zegt een regel bovenaan dat.
  */
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   IconBrandWhatsapp as WhatsApp,
+  IconChevronRight as ChevronRight,
   IconHelp as Onbekend,
+  IconInbox as Inbox,
   IconMail as Mail,
   IconSearch as Search,
+  IconSparkles as Sparkles,
 } from "@tabler/icons-react";
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ChatVenster } from "@/components/whatsapp/Chat";
-import { fetchMailGesprekken, lijstDatum } from "@/lib/berichten";
+import { fetchMailGesprekken, lijstDatum, telOngelezenZonderKlant } from "@/lib/berichten";
 import { fetchCustomers, fetchKlanten, fetchStreets, formatNumber } from "@/lib/klanten";
+import { fetchMappen } from "@/lib/mailbox";
 import { fetchGesprekken, toonNummer } from "@/lib/whatsapp";
 import { cn } from "@/lib/utils";
 
@@ -37,9 +42,11 @@ interface Regel {
   vanMij: boolean;
   op: string;
   ongelezen: number;
+  /** Paaltje heeft een antwoord op een mail van deze klant klaar. */
+  paaltjeKlaar: boolean;
 }
 
-export function Gesprekken() {
+export function Gesprekken({ onNaarPostvak }: { onNaarPostvak?: () => void }) {
   const [filter, setFilter] = useState<Filter>("alles");
   const [alleenOngelezen, setAlleenOngelezen] = useState(false);
   const [zoek, setZoek] = useState("");
@@ -58,6 +65,16 @@ export function Gesprekken() {
   const klanten = useQuery({ queryKey: ["klanten"], queryFn: fetchKlanten });
   const customers = useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
   const streets = useQuery({ queryKey: ["streets"], queryFn: fetchStreets });
+  // Dezelfde sleutel als het postvak en de Mail-tab: geen extra verkeer.
+  const mappen = useQuery({ queryKey: ["mail-mappen"], queryFn: fetchMappen });
+  const postvakId = mappen.data?.find((m) => m.rol === "postvak")?.id;
+  // Onder "mail-gesprekken": wat die lijst ververst, ververst dit telletje ook.
+  const zonderKlant = useQuery({
+    queryKey: ["mail-gesprekken", "zonder-klant", postvakId],
+    queryFn: () => telOngelezenZonderKlant(postvakId!),
+    enabled: !!postvakId,
+    refetchInterval: 60_000,
+  });
 
   /** Per klant zijn naam en het adres zoals het op de wijklijst staat. */
   const wie = useMemo(() => {
@@ -94,6 +111,7 @@ export function Gesprekken() {
         const bestaand = perKlant.get(m.klant_id);
         if (bestaand) {
           bestaand.ongelezen += ongelezen;
+          bestaand.paaltjeKlaar ||= m.paaltje_klaar;
           continue;
         }
         const w = wie(m.klant_id, m.van_naam);
@@ -108,13 +126,14 @@ export function Gesprekken() {
           vanMij: m.richting === "uit",
           op: m.ontvangen_op,
           ongelezen,
+          paaltjeKlaar: m.paaltje_klaar,
         });
       }
     }
 
     if (filter !== "mail") {
       for (const g of wa.data ?? []) {
-        const nieuw: Omit<Regel, "sleutel" | "klantId" | "titel" | "nummer"> = {
+        const nieuw: Omit<Regel, "sleutel" | "klantId" | "titel" | "nummer" | "paaltjeKlaar"> = {
           telefoon: g.wa_telefoon,
           onder: g.fragment,
           kanaal: "whatsapp",
@@ -129,6 +148,7 @@ export function Gesprekken() {
             klantId: null,
             titel: g.naam || toonNummer(g.wa_telefoon),
             nummer: "",
+            paaltjeKlaar: false,
           });
           continue;
         }
@@ -147,6 +167,7 @@ export function Gesprekken() {
           klantId: g.klant_id,
           titel: w.titel,
           nummer: w.nummer,
+          paaltjeKlaar: false,
         });
       }
     }
@@ -160,6 +181,7 @@ export function Gesprekken() {
 
   const laden = mail.isLoading || wa.isLoading;
   const fout = mail.isError && wa.isError;
+  const losOngelezen = filter !== "whatsapp" ? (zonderKlant.data ?? 0) : 0;
 
   return (
     <div>
@@ -202,6 +224,26 @@ export function Gesprekken() {
           {mail.isError ? "De mail" : "WhatsApp"} kon niet geladen worden; de lijst is niet
           compleet.
         </p>
+      )}
+      {losOngelezen > 0 && onNaarPostvak && (
+        <button
+          type="button"
+          onClick={onNaarPostvak}
+          className="mb-1 flex w-full items-center gap-3 rounded-[14px] px-1 py-2 text-left hover:bg-card"
+        >
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-tint-blauw text-tint-blauw-ink">
+            <Inbox className="size-[18px]" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold">
+              {losOngelezen} ongelezen in het Postvak
+            </span>
+            <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
+              Staat niet bij een klant
+            </span>
+          </span>
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+        </button>
       )}
       {laden ? (
         <p className="py-8 text-center text-sm text-muted-foreground">Gesprekken ophalen…</p>
@@ -276,6 +318,11 @@ export function Gesprekken() {
                       </span>
                     )}
                   </span>
+                  {r.paaltjeKlaar && (
+                    <span className="mt-1 inline-flex items-center gap-0.5 rounded-full bg-tint-paars px-1.5 py-px text-[10.5px] font-medium text-tint-paars-ink">
+                      <Sparkles className="size-2.5" /> Paaltje heeft een antwoord klaar
+                    </span>
+                  )}
                 </span>
               </>
             );

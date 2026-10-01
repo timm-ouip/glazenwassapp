@@ -460,6 +460,8 @@ export interface MailGesprekRegel {
   fragment: string;
   ontvangen_op: string;
   gelezen: boolean;
+  /** Paaltje heeft een antwoord klaar dat nog niet verstuurd of afgehandeld is. */
+  paaltje_klaar: boolean;
 }
 
 /**
@@ -467,26 +469,70 @@ export interface MailGesprekRegel {
  * 500 mails is ruim genoeg om van de laatste weken iedereen te zien.
  */
 export async function fetchMailGesprekken(): Promise<MailGesprekRegel[]> {
-  const { data, error } = await supabase
-    .from("berichten")
-    .select("id,klant_id,richting,van_naam,onderwerp,fragment,ontvangen_op,gelezen")
-    .eq("kanaal", "mail")
-    .not("klant_id", "is", null)
-    .is("deleted_at", null)
-    .is("uit_dossier_op", null)
-    .order("ontvangen_op", { ascending: false })
-    .limit(500);
-  if (error) throw error;
-  return (data ?? []).map((r) => ({
+  // Los gevraagd welke een antwoord van Paaltje klaar hebben: dan hoeft de
+  // tekst van al die antwoorden niet mee.
+  const [lijst, klaar] = await Promise.all([
+    supabase
+      .from("berichten")
+      .select("id,klant_id,richting,van_naam,onderwerp,fragment,ontvangen_op,gelezen")
+      .eq("kanaal", "mail")
+      .not("klant_id", "is", null)
+      .is("deleted_at", null)
+      .is("uit_dossier_op", null)
+      .order("ontvangen_op", { ascending: false })
+      .limit(500),
+    supabase
+      .from("berichten")
+      .select("id")
+      .eq("kanaal", "mail")
+      .eq("richting", "in")
+      .not("klant_id", "is", null)
+      .is("deleted_at", null)
+      .is("uit_dossier_op", null)
+      .neq("concept", "")
+      .is("beantwoord_op", null)
+      .is("afgehandeld_op", null)
+      .order("ontvangen_op", { ascending: false })
+      .limit(500),
+  ]);
+  if (lijst.error) throw lijst.error;
+  // Lukt dat niet, dan alleen geen label: de lijst zelf is belangrijker.
+  if (klaar.error) console.error("antwoorden van Paaltje:", klaar.error.message);
+  const metAntwoord = new Set((klaar.data ?? []).map((r) => r.id));
+  return (lijst.data ?? []).map((r) => ({
     ...r,
     klant_id: r.klant_id!,
     richting: r.richting === "uit" ? "uit" : "in",
+    paaltje_klaar: metAntwoord.has(r.id),
   })) as MailGesprekRegel[];
+}
+
+/**
+ * Ongelezen mail in het postvak die niet in Gesprekken staat: zonder klant,
+ * of uit het dossier gehaald. Zo zie je waar het getal op de Mail-tab vandaan komt.
+ */
+export async function telOngelezenZonderKlant(postvakId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("berichten")
+    .select("id", { count: "exact", head: true })
+    .eq("map_id", postvakId)
+    .eq("op_server", true)
+    .eq("gelezen", false)
+    .is("deleted_at", null)
+    .or("klant_id.is.null,uit_dossier_op.not.is.null");
+  if (error) throw error;
+  return count ?? 0;
 }
 
 /** Een mail in het dossier van een klant: ook als hij uit de mailbox weg is. */
 export interface DossierMail extends BerichtRegel {
   op_server: boolean;
+  /** Wat Paaltje ervan maakte, voor zijn voorstel onder het gesprek. */
+  paaltje_status: Bericht["paaltje_status"];
+  samenvatting: string;
+  concept: string;
+  beantwoord_op: string | null;
+  afgehandeld_op: string | null;
 }
 
 /** Alle mail van en aan een klant, nieuwste eerst. In stukken van 1000. */
@@ -495,7 +541,7 @@ export async function fetchDossierMails(klantId: string): Promise<DossierMail[]>
   for (let vanaf = 0; ; vanaf += 1000) {
     const { data, error } = await supabase
       .from("berichten")
-      .select(`${REGEL_KOLOMMEN},op_server`)
+      .select(`${REGEL_KOLOMMEN},op_server,paaltje_status,samenvatting,beantwoord_op`)
       // WhatsApp krijgt een eigen weergave in het dossier.
       .eq("kanaal", "mail")
       .eq("klant_id", klantId)
@@ -505,8 +551,19 @@ export async function fetchDossierMails(klantId: string): Promise<DossierMail[]>
       .order("id", { ascending: false })
       .range(vanaf, vanaf + 999);
     if (error) throw error;
-    const rijen = (data ?? []) as unknown as (RegelRij & { op_server: boolean })[];
-    uit.push(...rijen.map((r) => ({ ...alsRegel(r), op_server: r.op_server })));
+    const rijen = (data ?? []) as unknown as (RegelRij &
+      Pick<Rij, "op_server" | "paaltje_status" | "samenvatting" | "beantwoord_op">)[];
+    uit.push(
+      ...rijen.map((r) => ({
+        ...alsRegel(r),
+        op_server: r.op_server,
+        paaltje_status: r.paaltje_status as Bericht["paaltje_status"],
+        samenvatting: r.samenvatting,
+        concept: r.concept,
+        beantwoord_op: r.beantwoord_op,
+        afgehandeld_op: r.afgehandeld_op,
+      })),
+    );
     if (rijen.length < 1000) return uit;
   }
 }

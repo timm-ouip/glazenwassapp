@@ -1615,7 +1615,7 @@ function BerichtRij({
               <div className="flex items-center gap-2">
                 {!b.gelezen && (
                   <span
-                    className="size-2 shrink-0 rounded-full bg-tint-blauw-ink max-md:hidden"
+                    className="size-2 shrink-0 rounded-full bg-tint-blauw-ink"
                     aria-label="Ongelezen"
                   />
                 )}
@@ -1934,6 +1934,9 @@ function Leesvenster({
         ),
       );
     }
+    // Gesprekken en de berichten van de klant tonen het ook.
+    void qc.invalidateQueries({ queryKey: ["mail-gesprekken"] });
+    void qc.invalidateQueries({ queryKey: ["dossier-mail"] });
   }
 
   // Openen is lezen, net als in een mailprogramma. Eén keer per mail: ook als

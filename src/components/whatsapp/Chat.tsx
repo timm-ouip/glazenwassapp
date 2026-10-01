@@ -321,7 +321,7 @@ function Media({
  * om te gebruiken, of iets wat hij in Paaltje Systems veranderde (geel, terug te
  * draaien).
  */
-function PaaltjeStrook({
+export function PaaltjeStrook({
   berichten,
   telefoon,
   onGebruik,
