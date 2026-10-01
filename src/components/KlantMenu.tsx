@@ -53,13 +53,17 @@ interface Props {
    *  vast, zodat het opent waar je bent — een sprong naar de klantenpagina
    *  raakte het dossier kwijt zodra het adres nog geen klant had. */
   onDossier: () => void;
-  /** Opent het hoekadres-schermpje; ook dat houdt de pagina vast. */
-  onHoekadres: () => void;
+  /** Opent het hoekadres-schermpje; ook dat houdt de pagina vast. Laat weg
+   *  waar dat schermpje er niet is (de dag). */
+  onHoekadres?: (() => void) | undefined;
   /** Extra opdracht bij dit adres: werk zonder maand, dat meerijdt als je
    *  toch in die wijk bent. */
   onKlus?: (() => void) | undefined;
   /** Klant laat stoppen: gestopt of verhuisd. Laat weg waar dat niet kan. */
   onStoppen?: (() => void) | undefined;
+  /** Wat er bij een adres op één dag hoort (van de dag halen, verplaatsen,
+   *  betalen). Menu-items, direct onder het dossier. */
+  dagItems?: ReactNode;
   /** De aangevinkte adressen van deze straat eruit lichten, in een nieuwe
    *  straat ernaast. Alleen in de selecteermodus, op een aangevinkt adres;
    *  laat het verder weg. */
@@ -151,6 +155,7 @@ function KlantMenuVol({
   onHoekadres,
   onKlus,
   onStoppen,
+  dagItems,
   onSplitsen,
   markeringen,
   alleenLezen = false,
@@ -249,6 +254,12 @@ function KlantMenuVol({
         <ContextMenuItem onSelect={onDossier}>
           <FileText className="size-4" /> Dossier
         </ContextMenuItem>
+        {dagItems && (
+          <>
+            <ContextMenuSeparator />
+            {dagItems}
+          </>
+        )}
         {/* Alleen in de selecteermodus op een aangevinkt adres: dan gaat dit
             menu niet meer over dit ene adres, maar over wat je in deze straat
             aangevinkt hebt. De tegenhanger van straten samenvoegen. */}
@@ -394,15 +405,19 @@ function KlantMenuVol({
               )
             )}
 
-            <ContextMenuSeparator />
-            <ContextMenuItem onSelect={onHoekadres}>
-              <CornerDownRight className="size-4" /> Hoekadres…
-              {c.hoek_straat && (
-                <span className="ml-auto truncate text-xs text-muted-foreground">
-                  {c.hoek_straat}
-                </span>
-              )}
-            </ContextMenuItem>
+            {onHoekadres && (
+              <>
+                <ContextMenuSeparator />
+                <ContextMenuItem onSelect={onHoekadres}>
+                  <CornerDownRight className="size-4" /> Hoekadres…
+                  {c.hoek_straat && (
+                    <span className="ml-auto truncate text-xs text-muted-foreground">
+                      {c.hoek_straat}
+                    </span>
+                  )}
+                </ContextMenuItem>
+              </>
+            )}
           </>
         )}
       </ContextMenuContent>

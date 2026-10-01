@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconCash as Cash } from "@tabler/icons-react";
@@ -13,7 +13,7 @@ import { boek, nieuweTik } from "@/lib/geldlopen";
 import { formatPrice } from "@/lib/klanten";
 import { vandaag } from "@/lib/wasdag";
 
-interface DagStand {
+export interface DagStand {
   open: number;
   delen: GeldDeel[];
   /**
@@ -30,7 +30,7 @@ interface DagStand {
   } | null;
 }
 
-async function fetchDagStand(adres: string): Promise<DagStand | null> {
+export async function fetchDagStand(adres: string): Promise<DagStand | null> {
   const { data, error } = await supabase.rpc("dag_geld_stand", { adres_id: adres });
   if (error) throw error;
   if (!data) return null;
@@ -61,7 +61,14 @@ function leesBedrag(tekst: string): number | null {
  * Alleen bij een contant adres op de route van vandaag; de wasser ziet dan
  * het bedrag van alleen dit adres, met de wasbeurt van vandaag erbij.
  */
-export function DagContant({ adres }: { adres: string }) {
+export function DagContant({
+  adres,
+  leeg,
+}: {
+  adres: string;
+  /** Wat er staat als hier niets in te tikken valt (de database zegt nee). */
+  leeg?: ReactNode;
+}) {
   const qc = useQueryClient();
   const { employee } = useAuth();
   const stand = useQuery({
@@ -76,7 +83,7 @@ export function DagContant({ adres }: { adres: string }) {
   const s = stand.data;
   // Staat de betaling van vandaag er al, dan hoeft er niets opnieuw.
   if (s?.vandaag) vorige.current = null;
-  if (!s) return null;
+  if (!s) return stand.isSuccess ? (leeg ?? null) : null;
 
   async function tik(bedrag: number) {
     setBezig(true);

@@ -1,9 +1,23 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconArrowRight as ArrowRight,
+  IconCalendarMinus as CalendarMinus,
   IconCalendarPlus as CalendarPlus,
+  IconCalendarUp as CalendarArrowUp,
+  IconCash as Cash,
+  IconDots as MoreHorizontal,
+  IconPencil as Pencil,
+  IconPlus as Plus,
   IconSquareCheck as CheckSquare,
   IconCornerDownRight as CornerDownRight,
   IconChevronLeft as ChevronLeft,
@@ -29,15 +43,27 @@ import { AppLayout } from "@/components/AppLayout";
 import { VergetenStrook } from "@/components/VergetenStrook";
 import { Cijferkaarten } from "@/components/Cijferkaarten";
 import { Button } from "@/components/ui/button";
-import { VerplaatsNaarKnop } from "@/components/VerplaatsNaarKnop";
+import { VerplaatsNaarDialoog, VerplaatsNaarKnop } from "@/components/VerplaatsNaarKnop";
 import { OverslaanKnop } from "@/components/OverslaanKnop";
 import { DagAdresDialog } from "@/components/DagAdresDialog";
+import { DagAdresToevoegen } from "@/components/DagAdresToevoegen";
+import { DagBetalen } from "@/components/betalingen/DagBetalen";
+import { KlantMenu } from "@/components/KlantMenu";
+import { ContextMenuItem } from "@/components/ui/context-menu";
+import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
+import { KlusDialog } from "@/components/KlusDialog";
+import { StopDialog } from "@/components/StopDialog";
+import { useKlantActies } from "@/lib/useKlantActies";
 import { DagKlaar } from "@/components/DagKlaar";
 import { Verdeling } from "@/components/Verdeling";
 import {
+  addQuickNote,
   fetchCustomers,
   fetchCustomersMetInactief,
   fetchDistricts,
+  fetchKlanten,
+  fetchMarkeringen,
+  fetchQuickNotes,
   fetchStraatGroepen,
   fetchStreets,
   formatNumber,
@@ -49,6 +75,8 @@ import {
   splitEvenOdd,
   wijkKleur,
   type Customer,
+  type Klant,
+  type QuickNote,
 } from "@/lib/klanten";
 import { useRecht } from "@/lib/rechten";
 import { useBevestig } from "@/components/Bevestig";
@@ -57,14 +85,18 @@ import { useAankondigingen } from "@/lib/aankondigingen";
 import { WijzigingsberichtDialog } from "@/components/WijzigingsberichtDialog";
 import { useKlachtenBijAdres } from "@/lib/klachten";
 import {
+  alDichtbij,
   datumSleutel,
+  dubbelVraag,
   fetchWasdag,
   fetchWasdagen,
   haalUitWasdag,
+  haalUitWasdagBewaard,
   toonDatum,
   vandaag,
   voegToeAanWasdag,
   werkWasdagRegelBij,
+  type WasdagRegel,
 } from "@/lib/wasdag";
 import {
   fetchKlussen,
@@ -77,7 +109,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { laatsteUndo, pushUndo, undoKnop, undoMetMelding, useLaatsteUndoLabel } from "@/lib/undo";
 import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
-import { redenLabel } from "@/lib/stoppen";
+import { geplandeDagen, redenLabel } from "@/lib/stoppen";
 import { verplaatsWasdag } from "@/lib/wasdag";
 import { zetWasdagTerug } from "@/lib/wasdag";
 import { rondeVanDag } from "@/lib/dagbouwstenen";
@@ -894,10 +926,13 @@ function DagPagina() {
    *
    * Losse opdrachten hebben geen wasdag-regel; die krijgen gewoon een andere
    * dag mee. Vandaar twee wegen in één knop.
+   *
+   * Met `alleen` gaat het om één adres, uit het menu op zijn regel: dan blijft
+   * wat je in de selecteerstand aangevinkt had gewoon staan.
    */
-  async function verplaatsNaar(nieuw: string) {
-    const ids = [...keuze];
-    const teVerzetten = klussen.filter((k) => klusKeuze.has(k.id));
+  async function verplaatsNaar(nieuw: string, alleen?: string) {
+    const ids = alleen ? [alleen] : [...keuze];
+    const teVerzetten = alleen ? [] : klussen.filter((k) => klusKeuze.has(k.id));
     if (ids.length === 0 && teVerzetten.length === 0) return;
 
     const regelsMee = ids.map((id) => ({
@@ -951,8 +986,10 @@ function DagPagina() {
     qc.invalidateQueries({ queryKey: ["wasdag"] });
     qc.invalidateQueries({ queryKey: ["wasdagen"] });
     qc.invalidateQueries({ queryKey: ["klussen"] });
-    setKeuze(new Set());
-    setKlusKeuze(new Set());
+    if (!alleen) {
+      setKeuze(new Set());
+      setKlusKeuze(new Set());
+    }
 
     const delen: string[] = [];
     if (ids.length) delen.push(`${ids.length} ${ids.length === 1 ? "adres" : "adressen"}`);
@@ -1094,6 +1131,324 @@ function DagPagina() {
    * keer anders ging.
    */
   const [bewerkt, setBewerkt] = useState<{ customer: Customer; straat: string } | null>(null);
+  // Het adres zoals het nu in de lijst staat: pas je de vaste prijs of de
+  // notitie aan, dan ziet het schermpje dat meteen.
+  const bewerktAdres = bewerkt ? (adresOpId.get(bewerkt.customer.id) ?? bewerkt.customer) : null;
+
+  // --- Het menu op een adresregel ----------------------------------------
+  // Rechtermuisknop, lang indrukken of "…" op de telefoon: hetzelfde menu als
+  // in de wijken, met wat er bij een adres op deze dag hoort erbij.
+  const magPlannen = useRecht("planning");
+  const magKlanten = useRecht("klanten_bewerken");
+  const isEigenaar = employee?.rol === "eigenaar";
+  const { herlaad, patchKlant, maakKlus, stopKlant, verwijderKlant } = useKlantActies();
+  const quickNotesQuery = useQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes });
+  const markeringQuery = useQuery({ queryKey: ["markeringen"], queryFn: fetchMarkeringen });
+  const quickNotes = useMemo(() => quickNotesQuery.data ?? [], [quickNotesQuery.data]);
+  const markeringen = useMemo(() => markeringQuery.data ?? [], [markeringQuery.data]);
+  const wijkOpId = useMemo(
+    () => new Map((districtsQuery.data ?? []).map((d) => [d.id, d])),
+    [districtsQuery.data],
+  );
+  const [stop, setStop] = useState<{ open: boolean; customer: Customer | null }>({
+    open: false,
+    customer: null,
+  });
+  const [klus, setKlus] = useState<{ open: boolean; customer: Customer | null }>({
+    open: false,
+    customer: null,
+  });
+  const [verplaats, setVerplaats] = useState<{ customer: Customer; straat: string } | null>(null);
+  const [betalen, setBetalen] = useState<{
+    open: boolean;
+    customer: Customer | null;
+    straat: string;
+  }>({ open: false, customer: null, straat: "" });
+  const [dossier, setDossier] = useState<{
+    customer: Customer;
+    klant: Klant | null;
+    klanten: Klant[];
+    customers: Customer[];
+    quickNotes: QuickNote[];
+  } | null>(null);
+  const [toevoegen, setToevoegen] = useState(false);
+  const [nieuwAdres, setNieuwAdres] = useState<{
+    open: boolean;
+    streetId?: string | undefined;
+    nummer?: string | undefined;
+    toevoeging?: string | undefined;
+  }>({ open: false });
+
+  /** In welk team een adres vandaag loopt; elke regel vraagt ernaar. */
+  const ploegVanAdres = useMemo(
+    () => new Map((wasdagQuery.data ?? []).map((r) => [r.customer_id, r.ploeg_nr ?? null])),
+    [wasdagQuery.data],
+  );
+
+  /** "Kerkstraat 12": in meldingen en in de kop van een schermpje. */
+  function adresTekst(c: Customer) {
+    return `${straatOpId.get(c.street_id)?.name ?? ""} ${formatNumber(c)}`.trim();
+  }
+
+  /**
+   * Mag je hier "Betalen…"? Alleen bij een contant adres. De eigenaar boekt
+   * op kantoor en mag dat altijd (is de wijk nog niet gestart, dan zegt het
+   * betaalmenu dat). Een medewerker met planning tikt alleen vandaag in wat
+   * hij kreeg, in een gestarte wijk en op de route van zijn eigen team —
+   * dezelfde regels als de database (dag_geld_toegang).
+   */
+  function kanBetalen(c: Customer): boolean {
+    const wijk = wijkOpId.get(straatOpId.get(c.street_id)?.district_id ?? "");
+    if ((c.betaalmethode ?? wijk?.betaalmethode) !== "contant") return false;
+    if (isEigenaar) return true;
+    if (!magPlannen || datum !== vandaag() || !wijk?.geld_peildatum) return false;
+    const ploeg = ploegVanAdres.get(c.id) ?? null;
+    return ploeg === null || ploeg === eigenPloeg;
+  }
+
+  /** Van de dag af, en met Ongedaan maken weer terug mét het bedrag van die keer. */
+  async function haalVanDag(c: Customer) {
+    const adres = adresTekst(c);
+    let kenmerk: string | null;
+    try {
+      kenmerk = await haalUitWasdagBewaard(datum, [c.id]);
+    } catch (e) {
+      toast.error("Van de dag halen mislukt: " + (e as Error).message);
+      return;
+    }
+    const ververs = () => {
+      qc.invalidateQueries({ queryKey: ["wasdag"] });
+      qc.invalidateQueries({ queryKey: ["wasdagen"] });
+    };
+    if (!kenmerk) {
+      // Iemand anders was je voor: dan valt er ook niets terug te zetten.
+      ververs();
+      toast.info(`${adres} stond al niet meer op ${toonDatum(datum)}.`);
+      return;
+    }
+    pushUndo({
+      label: `${adres} van ${toonDatum(datum)}`,
+      undo: async () => {
+        await zetWasdagTerug(kenmerk);
+        ververs();
+      },
+    });
+    ververs();
+    toast.success(`${adres} van ${toonDatum(datum)} gehaald`, {
+      duration: 10000,
+      action: undoKnop(),
+    });
+  }
+
+  /**
+   * Een adres op deze dag zetten, met de prijs van de ronde van de dag. Staat
+   * het kort ervoor of erna al ingepland, dan eerst de vraag of dat de
+   * bedoeling is. Kijk je naar je eigen team, dan komt het in jouw team:
+   * anders zou het meteen uit je lijst verdwijnen.
+   */
+  async function zetOpDag(id: string): Promise<boolean> {
+    if ((wasdagQuery.data ?? []).some((r) => r.customer_id === id)) {
+      toast.info("Dit adres staat al op deze dag.");
+      return false;
+    }
+    try {
+      let c = (customersQuery.data ?? []).find((x) => x.id === id);
+      if (!c) {
+        // Net aangemaakt, of nog niet in de lijst: vers ophalen.
+        const lijst = await qc.fetchQuery({
+          queryKey: ["customers"],
+          queryFn: fetchCustomers,
+          staleTime: 0,
+        });
+        c = lijst.find((x) => x.id === id);
+      }
+      if (!c) {
+        toast.error("Dit adres staat er niet (meer), of is gestopt.");
+        return false;
+      }
+      const dichtbij = await alDichtbij(datum, [id], datum);
+      if (dichtbij.size > 0 && !(await bevestig(dubbelVraag(dichtbij)))) return false;
+      await voegToeAanWasdag(datum, [{ customer_id: id, prijs: prijsVoorMaand(c, maand) }], {
+        ronde: maand,
+        ...(alleenEigen && eigenPloeg !== null ? { ploeg_nr: eigenPloeg } : {}),
+      });
+      const adres = adresTekst(c);
+      pushUndo({
+        label: `${adres} op ${toonDatum(datum)}`,
+        undo: async () => {
+          await haalUitWasdag(datum, [id]);
+          qc.invalidateQueries({ queryKey: ["wasdag"] });
+          qc.invalidateQueries({ queryKey: ["wasdagen"] });
+        },
+      });
+      qc.invalidateQueries({ queryKey: ["wasdag"] });
+      qc.invalidateQueries({ queryKey: ["wasdagen"] });
+      toast.success(`${adres} staat op ${toonDatum(datum)}`, {
+        duration: 10000,
+        action: undoKnop(),
+      });
+      return true;
+    } catch (e) {
+      toast.error("Op de dag zetten mislukt: " + (e as Error).message);
+      return false;
+    }
+  }
+
+  /**
+   * Niet gevonden bij "+ Adres": een nieuw adres maken. Wat je typte gaat mee,
+   * zodat straat en huisnummer al klaarstaan als die eenduidig zijn.
+   */
+  function maakNieuwAdres(zoek: string) {
+    const m = zoek.match(/^(.*?)\s*(\d+)\s*([a-zA-Z]{0,3})$/);
+    const naam = (m ? (m[1] ?? "") : zoek).trim().toLowerCase();
+    const straten = streetsQuery.data ?? [];
+    const past = (s: (typeof straten)[number], heel: boolean) =>
+      [s.name, s.volledige_naam].some((n) => {
+        const x = n.trim().toLowerCase();
+        return x !== "" && (heel ? x === naam : x.includes(naam));
+      });
+    const precies = naam ? straten.filter((s) => past(s, true)) : [];
+    const ongeveer = naam.length >= 2 ? straten.filter((s) => past(s, false)) : [];
+    const straat =
+      precies.length === 1 ? precies[0] : ongeveer.length === 1 ? ongeveer[0] : undefined;
+    setToevoegen(false);
+    setNieuwAdres({
+      open: true,
+      // Niet herkend: leeg, zodat je zelf de straat kiest. Anders stond de
+      // eerste straat van de lijst er ongemerkt in.
+      streetId: straat?.id ?? "",
+      nummer: m?.[2],
+      toevoeging: m?.[3] || undefined,
+    });
+  }
+
+  /**
+   * De regel van dit adres zoals hij nu in de cache staat, niet zoals bij de
+   * laatste render: een opslag die net klaar is (de vaste prijs, en dan "Ook
+   * voor vandaag") moet zien wat Opslaan intussen bewaarde.
+   */
+  function regelNu(id: string): { prijs: number; notitie: string | null } | undefined {
+    const r = qc.getQueryData<WasdagRegel[]>(["wasdag", datum])?.find((x) => x.customer_id === id);
+    return r ? { prijs: Number(r.prijs), notitie: r.notitie ?? null } : undefined;
+  }
+
+  // De namen van de klanten, om bij "+ Adres" ook op naam te zoeken.
+  const klantenQuery = useQuery({
+    queryKey: ["klanten"],
+    queryFn: fetchKlanten,
+    enabled: toevoegen,
+  });
+
+  /** Wat er al op deze dag staat (alle teams), voor de zoeklijst van "+ Adres". */
+  const opDeDag = useMemo(
+    () => new Set((wasdagQuery.data ?? []).flatMap((r) => (r.customer_id ? [r.customer_id] : []))),
+    [wasdagQuery.data],
+  );
+
+  /**
+   * Achteraan in de straat die je in het schermpje kiest, zoals bij "+ adres"
+   * in de wijken. Pas bij het opslaan: de straat kan daar nog veranderen.
+   */
+  function plekInStraat(streetId: string) {
+    return (
+      Math.max(
+        0,
+        ...(customersQuery.data ?? [])
+          .filter((c) => c.street_id === streetId)
+          .map((c) => c.sort_order),
+      ) + 1
+    );
+  }
+
+  /** Alle straten op naam, voor het schermpje van een nieuw adres. */
+  const stratenOpNaam = useMemo(
+    () => [...(streetsQuery.data ?? [])].sort((a, b) => a.name.localeCompare(b.name, "nl")),
+    [streetsQuery.data],
+  );
+
+  async function nieuweSnelkeuze(label: string) {
+    try {
+      await addQuickNote(label);
+      qc.invalidateQueries({ queryKey: ["quick_notes"] });
+      toast.success("Snelkeuze toegevoegd");
+    } catch (e) {
+      toast.error("Toevoegen mislukt: " + (e as Error).message);
+    }
+  }
+
+  /**
+   * Het dossier, hier op de dag. Klanten en adressen vers ophalen: het
+   * dossier schrijft bij opslaan alles terug, en met een oude versie zou je
+   * een net toegevoegd nummer stil weer wissen (zie DossierKnop).
+   */
+  async function openDossier(c: Customer) {
+    try {
+      const [klanten, customers, notes] = await Promise.all([
+        qc.fetchQuery({ queryKey: ["klanten"], queryFn: fetchKlanten, staleTime: 0 }),
+        qc.fetchQuery({ queryKey: ["customers"], queryFn: fetchCustomers, staleTime: 0 }),
+        qc.fetchQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes, staleTime: 0 }),
+      ]);
+      setDossier({
+        customer: customers.find((x) => x.id === c.id) ?? c,
+        klant: klanten.find((k) => k.id === c.klant_id) ?? null,
+        klanten,
+        customers,
+        quickNotes: notes,
+      });
+    } catch {
+      toast.error("Het dossier kon niet geladen worden. Probeer het zo nog eens.");
+    }
+  }
+
+  /** Wat er bij een adres op deze dag hoort, bovenin het menu. */
+  function dagItems(c: Customer, straatNaam: string) {
+    return (
+      <>
+        {kanBetalen(c) && (
+          <ContextMenuItem
+            onSelect={() => setBetalen({ open: true, customer: c, straat: straatNaam })}
+          >
+            <Cash className="size-4" /> Betalen…
+          </ContextMenuItem>
+        )}
+        <ContextMenuItem onSelect={() => setBewerkt({ customer: c, straat: straatNaam })}>
+          <Pencil className="size-4" /> {prijzenZien ? "Prijs en notitie…" : "Notitie…"}
+        </ContextMenuItem>
+        {magPlannen && (
+          <>
+            <ContextMenuItem onSelect={() => setVerplaats({ customer: c, straat: straatNaam })}>
+              <CalendarArrowUp className="size-4" /> Verplaatsen naar…
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => void haalVanDag(c)}>
+              <CalendarMinus className="size-4" /> Van de dag halen
+            </ContextMenuItem>
+          </>
+        )}
+      </>
+    );
+  }
+
+  /**
+   * Hangt het menu om een regel. In de selecteerstand niet: daar is een tik
+   * aanvinken en een veeg een streek, en dat moet zo blijven.
+   */
+  function metMenu(c: Customer, straatNaam: string, rij: ReactElement): ReactNode {
+    if (selecteren) return rij;
+    return (
+      <KlantMenu
+        customer={c}
+        onPatch={(patch) => void patchKlant(c, patch)}
+        onDossier={() => void openDossier(c)}
+        onKlus={magPlannen || magKlanten ? () => setKlus({ open: true, customer: c }) : undefined}
+        onStoppen={magKlanten ? () => setStop({ open: true, customer: c }) : undefined}
+        markeringen={markeringen}
+        alleenLezen={!magPlannen}
+        dagItems={dagItems(c, straatNaam)}
+      >
+        {rij}
+      </KlantMenu>
+    );
+  }
 
   /**
    * Het bedrag en de notitie van deze ene dag opslaan. De vaste prijs van het
@@ -1101,15 +1456,24 @@ function DagPagina() {
    * niet goedkoper te maken.
    */
   async function bewaarDag(c: Customer, prijs: number, notitie: string | null) {
-    const oud = perWijk.regelVan.get(c.id);
+    const oud = regelNu(c.id);
     if (!oud) return;
     // Zonder recht op prijzen kent hij het bedrag niet (hij kreeg 0 binnen);
     // dan alleen de notitie, anders overschrijft of weigert het de dagprijs.
     if ((!prijzenZien || oud.prijs === prijs) && (oud.notitie ?? null) === notitie) return;
+    // Meteen in de lijst: een tweede keer opslaan vlak hierna (het vinkje
+    // "Ook voor vandaag" en daarna Opslaan) ziet dan dat er niets meer
+    // verandert, en zet geen dubbele stap op Ongedaan maken.
+    qc.setQueryData<WasdagRegel[]>(["wasdag", datum], (oudeLijst) =>
+      oudeLijst?.map((r) =>
+        r.customer_id === c.id ? { ...r, ...(prijzenZien ? { prijs } : {}), notitie } : r,
+      ),
+    );
     try {
       await werkWasdagRegelBij(datum, c.id, prijzenZien ? { prijs, notitie } : { notitie });
     } catch (e) {
       toast.error("Opslaan mislukt: " + (e as Error).message);
+      qc.invalidateQueries({ queryKey: ["wasdag"] });
       return;
     }
     pushUndo({
@@ -1229,6 +1593,19 @@ function DagPagina() {
                 <CalendarPlus className="size-4" /> <span className={WOORD}>Inplannen</span>
               </Link>
             </Button>
+            {/* Eén adres erbij, zonder naar de wijken te gaan: zoeken op
+                straat en nummer, of op naam. */}
+            {magPlannen && (
+              <Button
+                size="sm"
+                variant="outline"
+                className={`rounded-full ${KNOP_TEL}`}
+                onClick={() => setToevoegen(true)}
+                title="Een adres op deze dag zetten"
+              >
+                <Plus className="size-4" /> <span className={WOORD}>Adres</span>
+              </Button>
+            )}
             {regels.length === 0 ? (
               // Een link kan niet uit staan: op een lege dag een gewone knop.
               <Button size="sm" className="rounded-full" disabled>
@@ -1460,6 +1837,7 @@ function DagPagina() {
                             keuze={keuze}
                             vakKnop={vakKnop}
                             onAdres={setBewerkt}
+                            menu={metMenu}
                             beloofd={beloofdTijdvak}
                             kanten={kanten}
                           />
@@ -1475,6 +1853,7 @@ function DagPagina() {
                         keuze={keuze}
                         vakKnop={vakKnop}
                         onAdres={setBewerkt}
+                        menu={metMenu}
                         beloofd={beloofdTijdvak}
                         kanten={kanten}
                       />
@@ -1592,34 +1971,166 @@ function DagPagina() {
               </button>
             )}
           </div>
-
-          <DagAdresDialog
-            open={bewerkt !== null}
-            onOpenChange={(v) => {
-              if (!v) setBewerkt(null);
-            }}
-            customer={bewerkt?.customer ?? null}
-            straat={bewerkt?.straat ?? ""}
-            datum={datum}
-            ronde={
-              (wasdagQuery.data ?? []).find((r) => r.customer_id === bewerkt?.customer?.id)?.ronde
-            }
-            prijs={bewerkt ? (perWijk.regelVan.get(bewerkt.customer.id)?.prijs ?? 0) : 0}
-            notitie={bewerkt ? (perWijk.regelVan.get(bewerkt.customer.id)?.notitie ?? null) : null}
-            onOpslaan={(prijs, notitie) => {
-              if (bewerkt) void bewaarDag(bewerkt.customer, prijs, notitie);
-            }}
-          />
-
-          {wijziging && (
-            <WijzigingsberichtDialog
-              open
-              onOpenChange={(o) => !o && setWijziging(null)}
-              customerIds={wijziging}
-              soort="niet_af"
-            />
-          )}
         </div>
+      )}
+
+      {/* De schermpjes staan buiten de lijst: ook op een lege dag (of als
+          het laatste adres net verplaatst is) moeten ze kunnen openen. */}
+      <DagAdresDialog
+        open={bewerkt !== null}
+        onOpenChange={(v) => {
+          if (!v) setBewerkt(null);
+        }}
+        customer={bewerktAdres}
+        straat={bewerkt?.straat ?? ""}
+        datum={datum}
+        ronde={(wasdagQuery.data ?? []).find((r) => r.customer_id === bewerkt?.customer?.id)?.ronde}
+        prijs={bewerkt ? (perWijk.regelVan.get(bewerkt.customer.id)?.prijs ?? 0) : 0}
+        notitie={bewerkt ? (perWijk.regelVan.get(bewerkt.customer.id)?.notitie ?? null) : null}
+        onOpslaan={(prijs, notitie) => {
+          if (bewerkt) void bewaarDag(bewerkt.customer, prijs, notitie);
+        }}
+        onPatch={(patch) => (bewerktAdres ? patchKlant(bewerktAdres, patch) : false)}
+        quickNotes={quickNotes}
+        onAddQuickNote={(label) => void nieuweSnelkeuze(label)}
+        onDagPrijs={(prijs) => {
+          // Alleen het bedrag; de notitie van deze dag blijft zoals hij
+          // bewaard is (wat je typte, bewaart Opslaan).
+          if (bewerkt) {
+            const id = bewerkt.customer.id;
+            void bewaarDag(bewerkt.customer, prijs, regelNu(id)?.notitie ?? null);
+          }
+        }}
+        onBetalen={
+          bewerktAdres && kanBetalen(bewerktAdres)
+            ? () => {
+                const b = bewerkt;
+                setBewerkt(null);
+                if (b) setBetalen({ open: true, customer: bewerktAdres, straat: b.straat });
+              }
+            : undefined
+        }
+      />
+
+      {wijziging && (
+        <WijzigingsberichtDialog
+          open
+          onOpenChange={(o) => !o && setWijziging(null)}
+          customerIds={wijziging}
+          soort="niet_af"
+        />
+      )}
+
+      <VerplaatsNaarDialoog
+        open={verplaats !== null}
+        onOpenChange={(o) => !o && setVerplaats(null)}
+        adres={verplaats ? `${verplaats.straat} ${formatNumber(verplaats.customer)}` : ""}
+        huidigeDag={datum}
+        onKies={(d) => {
+          if (verplaats) void verplaatsNaar(d, verplaats.customer.id);
+        }}
+      />
+
+      <DagBetalen
+        open={betalen.open}
+        onOpenChange={(open) => setBetalen((b) => ({ ...b, open }))}
+        customer={betalen.customer}
+        adresTekst={
+          betalen.customer ? `${betalen.straat} ${formatNumber(betalen.customer)}`.trim() : ""
+        }
+        vandaag={datum === vandaag()}
+        wijk={
+          betalen.customer
+            ? wijkOpId.get(straatOpId.get(betalen.customer.street_id)?.district_id ?? "")
+            : undefined
+        }
+      />
+
+      <StopDialog
+        open={stop.open}
+        onOpenChange={(open) => setStop((x) => ({ ...x, open }))}
+        titel={stop.customer?.klant_id ? "Klant stopt" : "Adres weghalen"}
+        metKlant={Boolean(stop.customer?.klant_id)}
+        omschrijving={stop.customer ? adresTekst(stop.customer) : ""}
+        telDagen={() => geplandeDagen(stop.customer ? [stop.customer.id] : [])}
+        adressen={stop.customer ? [stop.customer.id] : undefined}
+        onBevestig={(reden, planningWeg) =>
+          stop.customer ? stopKlant(stop.customer, reden, planningWeg) : Promise.resolve()
+        }
+        onVerwijder={(planningWeg) =>
+          stop.customer ? verwijderKlant(stop.customer, planningWeg) : Promise.resolve()
+        }
+      />
+      <KlusDialog
+        open={klus.open}
+        onOpenChange={(open) => setKlus((k) => ({ ...k, open }))}
+        customer={klus.customer}
+        klus={null}
+        onOpslaan={(customerId, omschrijving, prijs) =>
+          void maakKlus(customerId, omschrijving, prijs)
+        }
+      />
+      {dossier && (
+        <KlantgegevensDialog
+          open
+          onOpenChange={(o) => !o && setDossier(null)}
+          klant={dossier.klant}
+          voorstelCustomer={dossier.customer}
+          districts={districtsQuery.data ?? []}
+          streets={streetsQuery.data ?? []}
+          customers={dossier.customers}
+          klanten={dossier.klanten}
+          quickNotes={dossier.quickNotes}
+          onAddQuickNote={(label) => void nieuweSnelkeuze(label)}
+          standaardWijkId={straatOpId.get(dossier.customer.street_id)?.district_id ?? null}
+          onSaved={() => {
+            herlaad();
+            qc.invalidateQueries({ queryKey: ["klanten"] });
+          }}
+        />
+      )}
+
+      <DagAdresToevoegen
+        open={toevoegen}
+        onOpenChange={setToevoegen}
+        datum={datum}
+        opDeDag={opDeDag}
+        adressen={customersQuery.data ?? []}
+        straten={streetsQuery.data ?? []}
+        wijken={districtsQuery.data ?? []}
+        klanten={klantenQuery.data ?? []}
+        klantenLaden={klantenQuery.isPending}
+        onKies={zetOpDag}
+        onNieuw={magKlanten ? maakNieuwAdres : undefined}
+      />
+      {/* Een nieuw adres: het dossier als leeg formulier. Een nieuwe straat
+          komt in de wijk van de straat die je als laatste koos. */}
+      {nieuwAdres.open && (
+        <KlantgegevensDialog
+          open
+          onOpenChange={(open) => setNieuwAdres((n) => ({ ...n, open }))}
+          klant={null}
+          voorstelCustomer={null}
+          nieuw={{
+            streetId: nieuwAdres.streetId,
+            nummer: nieuwAdres.nummer,
+            toevoeging: nieuwAdres.toevoeging,
+            plekVoor: plekInStraat,
+            straten: stratenOpNaam,
+          }}
+          districts={districtsQuery.data ?? []}
+          streets={streetsQuery.data ?? []}
+          customers={customersQuery.data ?? []}
+          klanten={klantenQuery.data ?? []}
+          quickNotes={quickNotes}
+          onAddQuickNote={(label) => void nieuweSnelkeuze(label)}
+          onSaved={(id) => {
+            herlaad();
+            qc.invalidateQueries({ queryKey: ["klanten"] });
+            // Meteen op deze dag: daarvoor maakte je hem hier aan.
+            if (id) void zetOpDag(id);
+          }}
+        />
       )}
     </AppLayout>
   );
@@ -1671,6 +2182,7 @@ function StraatRij({
   keuze,
   vakKnop,
   onAdres,
+  menu,
   beloofd,
   kanten,
 }: {
@@ -1682,6 +2194,8 @@ function StraatRij({
   vakKnop: (vak: string) => Knop;
   /** Klikken buiten de selecteerstand opent het schermpje van dit adres. */
   onAdres: (keuze: { customer: Customer; straat: string }) => void;
+  /** Hangt het menu (rechtermuisknop, lang indrukken, "…") om een regel. */
+  menu: (c: Customer, straatNaam: string, rij: ReactElement) => ReactNode;
   /** Het tijdvak dat een adres beloofd kreeg ("10:00–12:00"). */
   beloofd: Map<string, string>;
   /** De even en de oneven kant naast elkaar, in plaats van één lijst. */
@@ -1714,9 +2228,41 @@ function StraatRij({
     const { className: rijKnop, ...rijRest } = selecteren
       ? vakKnop(`c:${c.id}`)
       : {
-          onClick: () => onAdres({ customer: c, straat: straat.naam }),
-          className: "cursor-pointer hover:bg-card-header",
+          onClick: (e: React.MouseEvent<HTMLElement>) => {
+            // Ging het menu net open door lang indrukken, dan niet ook nog
+            // het schermpje van de dag erachteraan.
+            if (e.currentTarget.getAttribute("data-state") === "open") return;
+            onAdres({ customer: c, straat: straat.naam });
+          },
+          "data-dagrij": "",
+          // Een rand zolang het menu open is: zo zie je over welk adres het
+          // gaat. Lang indrukken opent het menu, en selecteert dus geen tekst.
+          className:
+            "cursor-pointer hover:bg-card-header max-md:select-none data-[state=open]:ring-2 data-[state=open]:ring-inset data-[state=open]:ring-primary",
         };
+    // Op de telefoon is er geen rechtermuisknop: dit knopje opent hetzelfde
+    // menu, net als in de wijken.
+    const meer = !selecteren && (
+      <button
+        type="button"
+        className="-my-1.5 -mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground md:hidden"
+        aria-label={`Meer voor ${straat.naam} ${formatNumber(c)}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          const knop = e.currentTarget.getBoundingClientRect();
+          e.currentTarget.closest("[data-dagrij]")?.dispatchEvent(
+            new MouseEvent("contextmenu", {
+              bubbles: true,
+              cancelable: true,
+              clientX: knop.right,
+              clientY: knop.bottom,
+            }),
+          );
+        }}
+      >
+        <MoreHorizontal className="size-4" />
+      </button>
+    );
     const kleur = gekozen
       ? "bg-accent text-accent-foreground"
       : nietGewassen
@@ -1814,47 +2360,59 @@ function StraatRij({
     if (smal) {
       const onder = hoekStraat || inactief || beloofdLabel || nietGewassenLabel || tekst;
       return (
-        <li
-          key={c.id}
-          {...rijRest}
-          className={`flex flex-col gap-0.5 rounded-[9px] px-2 py-1 text-[12.5px] ${rijKnop ?? ""} ${kleur}`}
-        >
-          <span className="flex items-center gap-1.5">
-            {vinkje}
-            {nummer}
-            {klacht}
-            <span className="flex-1" />
-            {prijs}
-          </span>
-          {onder && (
-            <span className="flex min-w-0 flex-wrap items-center gap-1 text-[11px]">
-              {hoekStraat}
-              {inactief}
-              {beloofdLabel}
-              {nietGewassenLabel}
-              {tekst && <span className={`min-w-0 flex-1 truncate ${tekstKlas}`}>{tekst}</span>}
-            </span>
+        <Fragment key={c.id}>
+          {menu(
+            c,
+            straat.naam,
+            <li
+              {...rijRest}
+              className={`flex flex-col gap-0.5 rounded-[9px] px-2 py-1 text-[12.5px] ${rijKnop ?? ""} ${kleur}`}
+            >
+              <span className="flex items-center gap-1.5">
+                {vinkje}
+                {nummer}
+                {klacht}
+                <span className="flex-1" />
+                {prijs}
+                {meer}
+              </span>
+              {onder && (
+                <span className="flex min-w-0 flex-wrap items-center gap-1 text-[11px]">
+                  {hoekStraat}
+                  {inactief}
+                  {beloofdLabel}
+                  {nietGewassenLabel}
+                  {tekst && <span className={`min-w-0 flex-1 truncate ${tekstKlas}`}>{tekst}</span>}
+                </span>
+              )}
+            </li>,
           )}
-        </li>
+        </Fragment>
       );
     }
 
     return (
-      <li
-        key={c.id}
-        {...rijRest}
-        className={`flex items-center gap-2 rounded-[9px] px-2.5 py-[3px] text-[12.5px] ${rijKnop ?? ""} ${kleur}`}
-      >
-        {vinkje}
-        {nummer}
-        {hoekStraat}
-        {klacht}
-        {inactief}
-        {beloofdLabel}
-        {nietGewassenLabel}
-        <span className={`min-w-0 flex-1 truncate ${tekstKlas}`}>{tekst}</span>
-        {prijs}
-      </li>
+      <Fragment key={c.id}>
+        {menu(
+          c,
+          straat.naam,
+          <li
+            {...rijRest}
+            className={`flex items-center gap-2 rounded-[9px] px-2.5 py-[3px] text-[12.5px] ${rijKnop ?? ""} ${kleur}`}
+          >
+            {vinkje}
+            {nummer}
+            {hoekStraat}
+            {klacht}
+            {inactief}
+            {beloofdLabel}
+            {nietGewassenLabel}
+            <span className={`min-w-0 flex-1 truncate ${tekstKlas}`}>{tekst}</span>
+            {prijs}
+            {meer}
+          </li>,
+        )}
+      </Fragment>
     );
   }
 

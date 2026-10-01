@@ -25,6 +25,16 @@ import {
 import { klachtAanDeDeur, maakVasteKorting, type GeldloopAdres } from "@/lib/geldlopen";
 import { formatPrice } from "@/lib/klanten";
 
+/**
+ * Wat de korting en de gedeeltelijke betaling van een adres nodig hebben. Een
+ * deel van een geldloop-adres, zodat de dag (het menu Betalen) dezelfde
+ * vensters kan gebruiken met de stand uit het dossier.
+ */
+export type DeurAdres = Pick<
+  GeldloopAdres,
+  "id" | "open" | "delen" | "house_number" | "addition" | "vaste_kortingen"
+>;
+
 /** De redenen die aan de deur het vaakst voorkomen. */
 const REDENEN = ["Horren", "Luiken dicht", "Raam vergeten", "Niet goed schoon"];
 
@@ -57,7 +67,7 @@ export function KortingDialoog({
   onVeranderd,
 }: {
   open: boolean;
-  adres: GeldloopAdres;
+  adres: DeurAdres;
   onSluit: () => void;
   onKorting: (bedrag: number, reden: string) => Promise<boolean>;
   onVeranderd: () => void;
@@ -295,7 +305,7 @@ export function BedragDialoog({
   onBedrag,
 }: {
   open: boolean;
-  adres: GeldloopAdres;
+  adres: DeurAdres;
   onSluit: () => void;
   onBedrag: (bedrag: number) => Promise<boolean>;
 }) {

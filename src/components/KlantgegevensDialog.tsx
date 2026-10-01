@@ -61,6 +61,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { maakNieuwAdres, plekAchteraan } from "@/lib/nieuwAdres";
 import {
   IconBuilding as Building,
   IconFileInvoice as FileInvoice,
@@ -83,6 +84,7 @@ import {
   IconMessage as MessageSquare,
   IconPalette as Palette,
   IconPhone as Phone,
+  IconPlus as Plus,
   IconSignRight as Signpost,
   IconUser as User,
   IconX as X,
@@ -92,6 +94,7 @@ import { useRecht } from "@/lib/rechten";
 import {
   adresVanRegel,
   bewaarKlant,
+  splitsHuisnummer,
   formatNumber,
   formatPrice,
   INTERVALLEN,
@@ -173,9 +176,48 @@ interface Props {
   quickNotes: QuickNote[];
   onAddQuickNote: (label: string) => void;
   /** De wijk die de pagina toont; daar belandt een nieuw adres in. */
-  standaardWijkId?: string | null;
-  onSaved: () => void;
+  standaardWijkId?: string | null | undefined;
+  /** Het dossier als leeg formulier voor een nieuw adres (zie {@link NieuwAdres}). */
+  nieuw?: NieuwAdres | undefined;
+  /** Na het opslaan; bij een nieuw adres met het id van dat adres. */
+  onSaved: (adresId?: string) => void;
 }
+
+/**
+ * Het dossier in de stand "nieuw": een adres dat nog niet bestaat, met een
+ * straat uit de lijst (of een nieuwe straat), huisnummer, prijs en frequentie
+ * verplicht, en de klantgegevens erbij als je die al weet.
+ */
+export interface NieuwAdres {
+  /** De straat die al gekozen is, bijvoorbeeld via "+ adres" in een straat. */
+  streetId?: string | undefined;
+  nummer?: string | undefined;
+  toevoeging?: string | undefined;
+  /** Plek in de straat (achteraan), als die al bekend is. */
+  sortOrder?: number | undefined;
+  /** Plek in de straat die je uiteindelijk kiest; gaat vóór `sortOrder`. */
+  plekVoor?: ((streetId: string) => number) | undefined;
+  /** De straten in de keuzelijst; zonder dit alle straten op naam. */
+  straten?: Street[] | undefined;
+}
+
+/** De keuze "Nieuwe straat…" in de straatlijst; geen echt id. */
+const NIEUWE_STRAAT = "__nieuwe_straat";
+
+/** Straat, nummer en toevoeging zoals je ze in de nieuw-stand kiest. */
+interface AdresKeuze {
+  /** Id van de straat, NIEUWE_STRAAT, of leeg. */
+  straat: string;
+  /** De naam van de nieuwe straat. */
+  naam: string;
+  nummer: string;
+  toevoeging: string;
+}
+
+const LEGE_KEUZE: AdresKeuze = { straat: "", naam: "", nummer: "", toevoeging: "" };
+
+/** De echte straatnaam, met de werknaam van de wijklijst als terugval. */
+const volledigeNaam = (s: Street) => s.volledige_naam.trim() || s.name;
 
 /**
  * Alles wat bij het adres hoort en niet bij de persoon: wat het kost, hoe
@@ -260,8 +302,11 @@ export function KlantgegevensDialog({
   quickNotes,
   onAddQuickNote,
   standaardWijkId,
+  nieuw,
   onSaved,
 }: Props) {
+  /** Een leeg dossier voor een nieuw adres, met de straat uit een lijst. */
+  const isNieuw = Boolean(nieuw) && !klant && !voorstelCustomer;
   // De zelfgemaakte kleuren komen hier rechtstreeks binnen: dit schermpje
   // wordt vanaf twee pagina's geopend, en dan is één query minder gedoe dan
   // hem overal doorgeven. React Query deelt hem met de rest.
@@ -298,6 +343,8 @@ export function KlantgegevensDialog({
   const [extra, setExtra] = useState<string[]>([]);
   const [koppelOpen, setKoppelOpen] = useState(false);
   const [wijkId, setWijkId] = useState("");
+  /** In de nieuw-stand: welke straat, welk nummer. */
+  const [keuze, setKeuze] = useState<AdresKeuze>(LEGE_KEUZE);
   const [saving, setSaving] = useState(false);
   // Zonder dit recht geen prijsveld, en geen prijs meesturen bij opslaan.
   const prijzenZien = useRecht("prijzen_zien");
@@ -315,6 +362,7 @@ export function KlantgegevensDialog({
     pand: Pand;
     extra: string[];
     wijkId: string;
+    keuze: AdresKeuze;
   } | null>(null);
 
   /** Het adres waar dit dossier over gaat; null als het nog niet bestaat. */
@@ -366,6 +414,16 @@ export function KlantgegevensDialog({
     const wijkVan = (s: Street | undefined) => districts.find((d) => d.id === s?.district_id);
 
     let beginVelden: typeof LEEG;
+    // Nieuw-stand: de straat (en dus de wijk) die al gekozen was.
+    const beginKeuze: AdresKeuze = isNieuw
+      ? {
+          ...LEGE_KEUZE,
+          straat: nieuw?.streetId ?? "",
+          nummer: nieuw?.nummer ?? "",
+          toevoeging: nieuw?.toevoeging ?? "",
+        }
+      : LEGE_KEUZE;
+    const beginStraat = isNieuw ? streets.find((s) => s.id === beginKeuze.straat) : undefined;
     if (klant) {
       beginVelden = stripId(klant);
     } else if (voorstelCustomer) {
@@ -377,6 +435,14 @@ export function KlantgegevensDialog({
       // De postcode van het pand zelf, niet leeg: anders schreef Opslaan een
       // lege of opgezochte postcode over die van het huis heen.
       beginVelden = { ...LEEG, ...adres, postcode: voorstelCustomer.postcode ?? "" };
+    } else if (isNieuw) {
+      const wijk = wijkVan(beginStraat) ?? districts.find((d) => d.id === standaardWijkId);
+      beginVelden = {
+        ...LEEG,
+        straat: beginStraat ? volledigeNaam(beginStraat) : "",
+        huisnummer: `${beginKeuze.nummer.trim()}${beginKeuze.toevoeging.trim()}`,
+        plaats: wijk?.plaats.trim() || (plaatsen[0] ?? ""),
+      };
     } else {
       // De plaats van de wijk waar je in werkt wint van de meest gebruikte
       // plaats: Testwijk ligt in Den Haag, ook al staan de meeste klanten in
@@ -392,26 +458,44 @@ export function KlantgegevensDialog({
     beginKoppeling.current = bestaand;
     setExtra(bestaand.filter((id) => id !== voorstelCustomer?.id));
 
-    const beginPand = voorstelCustomer ? pandVan(voorstelCustomer) : LEEG_PAND;
-    const beginWijk =
-      straatVan(voorstelCustomer ?? null)?.district_id ?? standaardWijkId ?? districts[0]?.id ?? "";
+    // Een nieuw adres heeft nog geen frequentie (0): die kies je zelf, anders
+    // staat er ongemerkt "elke maand" op een adres dat om de twee moet.
+    const beginPand = voorstelCustomer
+      ? pandVan(voorstelCustomer)
+      : isNieuw
+        ? { ...LEEG_PAND, interval_maanden: 0 }
+        : LEEG_PAND;
+    // Nieuw-stand: de wijk van de gekozen straat, of die van de pagina. Is
+    // die niet te bepalen, dan kies je hem zelf (alleen bij een nieuwe straat).
+    const beginWijk = isNieuw
+      ? (beginStraat?.district_id ??
+        standaardWijkId ??
+        (districts.length === 1 ? (districts[0]?.id ?? "") : ""))
+      : (straatVan(voorstelCustomer ?? null)?.district_id ??
+        standaardWijkId ??
+        districts[0]?.id ??
+        "");
     setPand(beginPand);
     setWijkId(beginWijk);
+    setKeuze(beginKeuze);
     beginStand.current = {
       velden: beginVelden,
       pand: beginPand,
       extra: bestaand.filter((id) => id !== voorstelCustomer?.id),
       wijkId: beginWijk,
+      keuze: beginKeuze,
     };
     setKoppelOpen(false);
-    setTab("klant");
+    // Straat en nummer staan er al (via "+ adres"): dan meteen naar prijs en
+    // frequentie, want die zijn nog nodig.
+    setTab(isNieuw && beginStraat && beginKeuze.nummer.trim() ? "adres" : "klant");
     // Een nieuw adres heeft nog niets om snel te bekijken: meteen de lijst.
     setStap(voorstelCustomer ? "blad" : "overzicht");
     // Staat er al een postcode, dan zoekt de app er niet overheen.
     setPostcodeHandmatig(Boolean(beginVelden.postcode));
     // Alleen bij openen opnieuw vullen; verder is dit een vrij formulier.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, klant, voorstelCustomer]);
+  }, [open, klant, voorstelCustomer, isNieuw]);
 
   // Postcode opzoeken zodra straat, huisnummer en plaats compleet zijn.
   useEffect(() => {
@@ -471,6 +555,44 @@ export function KlantgegevensDialog({
     [customers, dossierCustomer, extra],
   );
 
+  // --- Nieuw-stand: straat, nummer en toevoeging --------------------------
+  /** De straten in de keuzelijst: wat de pagina meegeeft, anders alle op naam. */
+  const keuzeStraten = useMemo(
+    () => nieuw?.straten ?? [...streets].sort((a, b) => a.name.localeCompare(b.name, "nl")),
+    [nieuw?.straten, streets],
+  );
+  /** Staan er straten uit meer wijken in de lijst? Dan de wijk erachter. */
+  const meerWijken = new Set(keuzeStraten.map((s) => s.district_id)).size > 1;
+  const wijkNaam = (id: string) => districts.find((d) => d.id === id)?.name ?? "";
+  const nieuweStraat = isNieuw && keuze.straat === NIEUWE_STRAAT;
+  /** Bestaat de nieuwe straat al in die wijk? Dan stellen we voor die te kiezen. */
+  const dubbeleStraat = useMemo(() => {
+    const naam = keuze.naam.trim().toLowerCase();
+    if (!nieuweStraat || !naam || !wijkId) return undefined;
+    return streets.find(
+      (s) =>
+        s.district_id === wijkId &&
+        [s.name, s.volledige_naam].some((n) => n.trim().toLowerCase() === naam),
+    );
+  }, [nieuweStraat, keuze.naam, wijkId, streets]);
+
+  /** Straat of nummer gewijzigd: het adres van de klant en de postcode-
+   *  opzoeking lopen mee, en de wijk volgt de gekozen straat. */
+  function zetKeuze(patch: Partial<AdresKeuze>, andereWijk?: string) {
+    const k = { ...keuze, ...patch };
+    setKeuze(k);
+    const s = k.straat === NIEUWE_STRAAT ? undefined : streets.find((x) => x.id === k.straat);
+    // Bij "Nieuwe straat…" blijft de wijk van de straat die je als laatste koos.
+    const wijk = andereWijk ?? s?.district_id ?? wijkId;
+    const plaats = districts.find((d) => d.id === wijk)?.plaats.trim();
+    if (wijk !== wijkId) setWijkId(wijk);
+    zet({
+      straat: k.straat === NIEUWE_STRAAT ? k.naam.trim() : s ? volledigeNaam(s) : "",
+      huisnummer: `${k.nummer.trim()}${k.toevoeging.trim()}`,
+      ...(wijk !== wijkId && plaats ? { plaats } : {}),
+    });
+  }
+
   /** Loopt er al een opslag? Een tweede Enter maakte anders alles dubbel
    *  (twee klanten, twee adressen); de uitgezette knop hield alleen klikken tegen. */
   const opslaanBezig = useRef(false);
@@ -478,9 +600,110 @@ export function KlantgegevensDialog({
     if (opslaanBezig.current) return;
     opslaanBezig.current = true;
     try {
-      await bewaar();
+      await (isNieuw ? bewaarNieuw() : bewaar());
     } finally {
       opslaanBezig.current = false;
+    }
+  }
+
+  /**
+   * Een nieuw adres opslaan: eerst (zo nodig) de straat, dan het adres met
+   * alles van "Het adres", dan de prijs, en als er een naam, mail of telefoon
+   * is een klant die eraan gekoppeld wordt. Zonder die gegevens blijft het
+   * een adres zonder klant.
+   */
+  async function bewaarNieuw() {
+    if (!magBewerken || !nieuw) return;
+    const naarTab = (t: typeof tab) => {
+      setTab(t);
+      if (mobiel) setStap("tab");
+    };
+    const straatNaamNieuw = keuze.naam.trim();
+    if (nieuweStraat ? !straatNaamNieuw : !keuze.straat) {
+      toast.error(nieuweStraat ? "Vul de naam van de nieuwe straat in." : "Kies een straat.");
+      naarTab("klant");
+      return;
+    }
+    if (nieuweStraat && !wijkId) {
+      toast.error("Kies in welke wijk de nieuwe straat komt.");
+      naarTab("klant");
+      return;
+    }
+    if (dubbeleStraat) {
+      toast.error(
+        `In ${wijkNaam(wijkId)} staat al ${volledigeNaam(dubbeleStraat)}. Kies die in de lijst.`,
+      );
+      naarTab("klant");
+      return;
+    }
+    // "12a" in het nummervak telt ook: dan is de a de toevoeging.
+    const nr = splitsHuisnummer(`${keuze.nummer.trim()}${keuze.toevoeging.trim()}`);
+    if (!nr) {
+      toast.error("Vul een huisnummer in.");
+      naarTab("klant");
+      return;
+    }
+    const prijs = Number(pand.price.trim().replace(",", "."));
+    if (prijzenZien && (pand.price.trim() === "" || Number.isNaN(prijs))) {
+      toast.error("Vul een prijs in.");
+      naarTab("adres");
+      return;
+    }
+    if (!pand.interval_maanden) {
+      toast.error("Kies een frequentie.");
+      naarTab("adres");
+      return;
+    }
+    setSaving(true);
+    try {
+      const uit = await maakNieuwAdres({
+        straat: nieuweStraat ? { wijkId, naam: straatNaamNieuw } : { id: keuze.straat },
+        huisnummer: `${nr.house_number}${nr.addition}`,
+        pand: {
+          note: pand.note,
+          interval_maanden: pand.interval_maanden,
+          ritme: pand.ritme,
+          overslaan: pand.overslaan,
+          start_maand: pand.start_maand,
+          markering: pand.markering,
+          eigen_blok: pand.eigenBlok,
+          ...(leesDuur(pand.duur) !== undefined
+            ? { duur_min: leesDuur(pand.duur) ?? null, duur_zelf: pand.duurZelf }
+            : {}),
+          // De postcode hoort bij het pand, niet bij de bewoner.
+          postcode: velden.postcode,
+          betaalmethode: pand.betaalmethode,
+          maandwerk: pand.maandwerk,
+        },
+        prijs: prijzenZien ? prijs : null,
+        klant: velden,
+        plek: (id) =>
+          nieuw.plekVoor
+            ? nieuw.plekVoor(id)
+            : id === nieuw.streetId && nieuw.sortOrder !== undefined
+              ? nieuw.sortOrder
+              : plekAchteraan(customers, id),
+        // Gaat er na de nieuwe straat iets mis, dan die straat gekozen
+        // houden: nog eens opslaan maakt hem anders twee keer aan.
+        opStraat: (id) => {
+          void qc.invalidateQueries({ queryKey: ["streets"] });
+          setKeuze((k) => ({ ...k, straat: id, naam: "" }));
+        },
+      });
+      if (uit.klantId) void qc.invalidateQueries({ queryKey: ["klanten"] });
+      if (uit.mislukt.length > 0) {
+        toast.error(`Het adres is opgeslagen, maar ${uit.mislukt.join(" en ")} niet.`, {
+          duration: 10000,
+        });
+      } else {
+        toast.success(uit.klantId ? "Klant toegevoegd" : "Adres toegevoegd");
+      }
+      onOpenChange(false);
+      onSaved(uit.adresId);
+    } catch (e) {
+      toast.error("Opslaan mislukt: " + (e as Error).message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -717,6 +940,209 @@ export function KlantgegevensDialog({
   /** Twaalf maanden vooruit: waar je een pauze of een startmaand uit kiest. */
   const maandenVooruit = komendeMaanden();
 
+  /** Waar het adres ligt. In de nieuw-stand bovenaan, met een straatkeuze. */
+  const adresBlok = (
+    <PopupBlok label={isNieuw ? "Waar" : undefined}>
+      {isNieuw ? (
+        <>
+          <PopupVeld icoon={<Signpost className="size-4" />}>
+            <Select
+              disabled={!magBewerken}
+              value={keuze.straat}
+              onValueChange={(v) => zetKeuze({ straat: v })}
+            >
+              <SelectTrigger className="h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0">
+                {/* Dicht alleen de echte naam; de werknaam staat in de uitgeklapte lijst. */}
+                <SelectValue placeholder="Kies een straat">
+                  {nieuweStraat
+                    ? "Nieuwe straat…"
+                    : (() => {
+                        const s = streets.find((x) => x.id === keuze.straat);
+                        if (!s) return undefined;
+                        return meerWijken
+                          ? `${volledigeNaam(s)} (${wijkNaam(s.district_id)})`
+                          : volledigeNaam(s);
+                      })()}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className="max-h-80">
+                <SelectItem value={NIEUWE_STRAAT}>
+                  <span className="inline-flex items-center gap-1.5 font-medium">
+                    <Plus className="size-3.5" /> Nieuwe straat…
+                  </span>
+                </SelectItem>
+                {keuzeStraten.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {volledigeNaam(s)}
+                    {/* De werknaam erachter als hij anders is: zo herken je de straat van de lijst. */}
+                    {s.volledige_naam.trim() &&
+                      s.volledige_naam.trim().toLowerCase() !== s.name.trim().toLowerCase() && (
+                        <span className="ml-1.5 text-muted-foreground">({s.name})</span>
+                      )}
+                    {meerWijken && (
+                      <span className="ml-1.5 text-muted-foreground">
+                        ({wijkNaam(s.district_id)})
+                      </span>
+                    )}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </PopupVeld>
+          {nieuweStraat && (
+            <>
+              <PopupVeld icoon={<Plus className="size-4" />}>
+                <Input
+                  id="nieuwe_straat"
+                  list="bekende-straten"
+                  className={popupInvoer}
+                  placeholder="Naam van de nieuwe straat"
+                  value={keuze.naam}
+                  onChange={(e) => zetKeuze({ naam: e.target.value })}
+                  autoFocus={!mobiel}
+                />
+              </PopupVeld>
+              <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                Komt in de wijk
+                <Select
+                  disabled={!magBewerken}
+                  value={wijkId}
+                  onValueChange={(w) => zetKeuze({}, w)}
+                >
+                  <SelectTrigger className="h-auto w-auto gap-1 border-0 px-1 py-0 text-xs font-medium text-foreground shadow-none focus:ring-0">
+                    <SelectValue placeholder="kies een wijk" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {districts.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </p>
+              {dubbeleStraat && (
+                <p className="rounded-[14px] bg-tint-geel px-3 py-2 text-[12.5px] text-tint-geel-ink">
+                  In {wijkNaam(wijkId)} staat al {volledigeNaam(dubbeleStraat)}.{" "}
+                  <button
+                    type="button"
+                    className="font-medium underline underline-offset-2"
+                    onClick={() => zetKeuze({ straat: dubbeleStraat.id, naam: "" })}
+                  >
+                    Die kiezen
+                  </button>
+                </p>
+              )}
+            </>
+          )}
+          <PopupPaar smal>
+            <PopupVeld icoon={<Hash className="size-4" />}>
+              <Input
+                id="huisnr"
+                inputMode="numeric"
+                className={popupInvoer}
+                placeholder="Huisnummer"
+                value={keuze.nummer}
+                onChange={(e) => zetKeuze({ nummer: e.target.value })}
+              />
+            </PopupVeld>
+            <PopupVeld>
+              <Input
+                id="toevoeging"
+                className={popupInvoer}
+                placeholder="a, bis…"
+                value={keuze.toevoeging}
+                onChange={(e) => zetKeuze({ toevoeging: e.target.value })}
+              />
+            </PopupVeld>
+          </PopupPaar>
+          <datalist id="bekende-straten">
+            {straatSuggesties.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        </>
+      ) : (
+        <>
+          <PopupPaar smal>
+            <PopupVeld icoon={<Signpost className="size-4" />}>
+              <Input
+                id="straat"
+                list="bekende-straten"
+                className={popupInvoer}
+                placeholder="Straat"
+                value={velden.straat}
+                onChange={(e) => zet({ straat: e.target.value })}
+              />
+            </PopupVeld>
+            <PopupVeld icoon={<Hash className="size-4" />}>
+              <Input
+                id="huisnr"
+                className={popupInvoer}
+                placeholder="12a"
+                value={velden.huisnummer}
+                onChange={(e) => zet({ huisnummer: e.target.value })}
+              />
+            </PopupVeld>
+          </PopupPaar>
+          <datalist id="bekende-straten">
+            {straatSuggesties.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        </>
+      )}
+
+      <PopupPaar smal>
+        <PopupVeld icoon={<MapPin className="size-4" />}>
+          <Input
+            id="plaats"
+            list="bekende-plaatsen"
+            className={popupInvoer}
+            placeholder="Plaats"
+            value={velden.plaats}
+            onChange={(e) => zet({ plaats: e.target.value })}
+          />
+        </PopupVeld>
+        <PopupVeld>
+          <Input
+            id="postcode"
+            className={popupInvoer}
+            placeholder="1234 AB"
+            value={velden.postcode}
+            onChange={(e) => {
+              setPostcodeHandmatig(true);
+              zet({ postcode: e.target.value });
+            }}
+          />
+        </PopupVeld>
+      </PopupPaar>
+      <datalist id="bekende-plaatsen">
+        {plaatsen.map((p) => (
+          <option key={p} value={p} />
+        ))}
+      </datalist>
+
+      {!isNieuw && nieuwAdres && (
+        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+          Wordt aangemaakt in
+          <Select disabled={!magBewerken} value={wijkId} onValueChange={setWijkId}>
+            <SelectTrigger className="h-auto w-auto gap-1 border-0 px-1 py-0 text-xs font-medium text-foreground shadow-none focus:ring-0">
+              <SelectValue placeholder="een wijk" />
+            </SelectTrigger>
+            <SelectContent>
+              {districts.map((d) => (
+                <SelectItem key={d.id} value={d.id}>
+                  {d.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </p>
+      )}
+    </PopupBlok>
+  );
+
   const tabInhoud = (
     <>
       {dossierCustomer && (tab === "klant" || tab === "adres") && (
@@ -731,6 +1157,7 @@ export function KlantgegevensDialog({
       <fieldset disabled={!magBewerken} className="contents">
         {tab === "klant" && (
           <>
+            {isNieuw && adresBlok}
             <PopupBlok label="De klant" terzijde={klantSinds}>
               <PopupVeld icoon={<User className="size-4" />}>
                 <Input
@@ -740,7 +1167,8 @@ export function KlantgegevensDialog({
                   value={velden.naam}
                   onChange={(e) => zet({ naam: e.target.value })}
                   // Op de telefoon niet: dan schiet het toetsenbord over het scherm.
-                  autoFocus={!mobiel}
+                  // Bij een nieuw adres begin je bij de straat, bovenaan.
+                  autoFocus={!mobiel && !isNieuw}
                 />
               </PopupVeld>
               <PopupPaar>
@@ -795,93 +1223,23 @@ export function KlantgegevensDialog({
               {/* Bij de velden zelf, en voor elke klant: ook een particulier
                   kan overmaken. Zonder adres blijft een factuur als concept
                   liggen, en dat merk je pas als je op Versturen drukt. */}
-              {!velden.email.trim() && !velden.email2.trim() && !velden.factuur_email.trim() && (
-                <p className="rounded-[14px] bg-tint-geel px-3 py-2 text-[12.5px] text-tint-geel-ink">
-                  Deze klant heeft nergens een e-mailadres staan: er kan geen aankondiging naartoe,
-                  en een factuur blijft als concept liggen.
-                </p>
-              )}
+              {/* Bij een nieuw adres pas als er iemand ingevuld is: een adres
+                  zonder klant mag ook. */}
+              {!velden.email.trim() &&
+                !velden.email2.trim() &&
+                !velden.factuur_email.trim() &&
+                (!isNieuw ||
+                  Boolean(
+                    velden.naam.trim() || velden.telefoon.trim() || velden.telefoon2.trim(),
+                  )) && (
+                  <p className="rounded-[14px] bg-tint-geel px-3 py-2 text-[12.5px] text-tint-geel-ink">
+                    Deze klant heeft nergens een e-mailadres staan: er kan geen aankondiging
+                    naartoe, en een factuur blijft als concept liggen.
+                  </p>
+                )}
             </PopupBlok>
 
-            <PopupBlok>
-              <PopupPaar smal>
-                <PopupVeld icoon={<Signpost className="size-4" />}>
-                  <Input
-                    id="straat"
-                    list="bekende-straten"
-                    className={popupInvoer}
-                    placeholder="Straat"
-                    value={velden.straat}
-                    onChange={(e) => zet({ straat: e.target.value })}
-                  />
-                </PopupVeld>
-                <PopupVeld icoon={<Hash className="size-4" />}>
-                  <Input
-                    id="huisnr"
-                    className={popupInvoer}
-                    placeholder="12a"
-                    value={velden.huisnummer}
-                    onChange={(e) => zet({ huisnummer: e.target.value })}
-                  />
-                </PopupVeld>
-              </PopupPaar>
-              <datalist id="bekende-straten">
-                {straatSuggesties.map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-
-              <PopupPaar smal>
-                <PopupVeld icoon={<MapPin className="size-4" />}>
-                  <Input
-                    id="plaats"
-                    list="bekende-plaatsen"
-                    className={popupInvoer}
-                    placeholder="Plaats"
-                    value={velden.plaats}
-                    onChange={(e) => zet({ plaats: e.target.value })}
-                  />
-                </PopupVeld>
-                <PopupVeld>
-                  <Input
-                    id="postcode"
-                    className={popupInvoer}
-                    placeholder="1234 AB"
-                    value={velden.postcode}
-                    onChange={(e) => {
-                      setPostcodeHandmatig(true);
-                      zet({ postcode: e.target.value });
-                    }}
-                  />
-                </PopupVeld>
-              </PopupPaar>
-              <datalist id="bekende-plaatsen">
-                {plaatsen.map((p) => (
-                  <option key={p} value={p} />
-                ))}
-              </datalist>
-
-              {/* Een adres dat nog niet op een wijklijst staat, wordt bij
-                    opslaan aangemaakt. In welke wijk staat hier, en is te
-                    wijzigen zonder dat het een eigen formulierrij kost. */}
-              {nieuwAdres && (
-                <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                  Wordt aangemaakt in
-                  <Select disabled={!magBewerken} value={wijkId} onValueChange={setWijkId}>
-                    <SelectTrigger className="h-auto w-auto gap-1 border-0 px-1 py-0 text-xs font-medium text-foreground shadow-none focus:ring-0">
-                      <SelectValue placeholder="een wijk" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {districts.map((d) => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </p>
-              )}
-            </PopupBlok>
+            {!isNieuw && adresBlok}
 
             <PopupBlok>
               <PopupVeld icoon={<MessageSquare className="size-4" />}>
@@ -1055,73 +1413,91 @@ export function KlantgegevensDialog({
               </>
             )}
 
-            <PopupScheiding />
+            {isNieuw ? (
+              // Prijs en frequentie staan bij "Het adres"; zonder die twee kan
+              // er niet opgeslagen worden, dus dat zeggen we hier al.
+              <PopupHint>
+                {prijzenZien ? "Prijs en frequentie" : "De frequentie"} vul je in bij{" "}
+                <button
+                  type="button"
+                  className="font-medium text-foreground underline underline-offset-2"
+                  onClick={() => setTab("adres")}
+                >
+                  Het adres
+                </button>
+                .
+              </PopupHint>
+            ) : (
+              <>
+                <PopupScheiding />
 
-            {/* Twee adressen op één persoon is de uitzondering, dus het
+                {/* Twee adressen op één persoon is de uitzondering, dus het
                   krijgt één regel: de andere adressen als labels, en een
                   zoekveld dat alleen ruimte inneemt als je het opent. */}
-            <PopupBlok label="Ook van deze klant">
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                {extra.map((id) => {
-                  const c = customers.find((x) => x.id === id);
-                  if (!c) return null;
-                  return (
-                    <span
-                      key={id}
-                      className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-accent-foreground"
-                    >
-                      {adresTekst(c)}
-                      <button
-                        type="button"
-                        aria-label={`${adresTekst(c)} losmaken`}
-                        onClick={() => setExtra((l) => l.filter((x) => x !== id))}
-                        className="text-accent-foreground/60 hover:text-accent-foreground"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </span>
-                  );
-                })}
+                <PopupBlok label="Ook van deze klant">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    {extra.map((id) => {
+                      const c = customers.find((x) => x.id === id);
+                      if (!c) return null;
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-accent-foreground"
+                        >
+                          {adresTekst(c)}
+                          <button
+                            type="button"
+                            aria-label={`${adresTekst(c)} losmaken`}
+                            onClick={() => setExtra((l) => l.filter((x) => x !== id))}
+                            className="text-accent-foreground/60 hover:text-accent-foreground"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
 
-                <Popover open={koppelOpen} onOpenChange={setKoppelOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                    >
-                      <Link2 className="size-3.5" /> nog een adres koppelen
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80 p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Zoek een adres…" />
-                      <CommandList>
-                        <CommandEmpty>Geen adres gevonden.</CommandEmpty>
-                        <CommandGroup>
-                          {koppelbaar.map((c) => (
-                            <CommandItem
-                              key={c.id}
-                              value={`${adresTekst(c)} ${wijkNaamVan(c.street_id)}`}
-                              onSelect={() => {
-                                setExtra((l) => [...l, c.id]);
-                                setKoppelOpen(false);
-                              }}
-                            >
-                              <span className="truncate">{adresTekst(c)}</span>
-                              <span className="ml-auto shrink-0 pl-2 text-xs text-muted-foreground">
-                                {c.klant_id && c.klant_id !== klant?.id
-                                  ? `nu van ${klantNaam(c.klant_id) || "een andere klant"}`
-                                  : wijkNaamVan(c.street_id)}
-                              </span>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </PopupBlok>
+                    <Popover open={koppelOpen} onOpenChange={setKoppelOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                        >
+                          <Link2 className="size-3.5" /> nog een adres koppelen
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Zoek een adres…" />
+                          <CommandList>
+                            <CommandEmpty>Geen adres gevonden.</CommandEmpty>
+                            <CommandGroup>
+                              {koppelbaar.map((c) => (
+                                <CommandItem
+                                  key={c.id}
+                                  value={`${adresTekst(c)} ${wijkNaamVan(c.street_id)}`}
+                                  onSelect={() => {
+                                    setExtra((l) => [...l, c.id]);
+                                    setKoppelOpen(false);
+                                  }}
+                                >
+                                  <span className="truncate">{adresTekst(c)}</span>
+                                  <span className="ml-auto shrink-0 pl-2 text-xs text-muted-foreground">
+                                    {c.klant_id && c.klant_id !== klant?.id
+                                      ? `nu van ${klantNaam(c.klant_id) || "een andere klant"}`
+                                      : wijkNaamVan(c.street_id)}
+                                  </span>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </PopupBlok>
+              </>
+            )}
           </>
         )}
 
@@ -1133,6 +1509,9 @@ export function KlantgegevensDialog({
                   <PopupVeld icoon={<span className="text-sm">€</span>}>
                     <Input
                       id="prijs"
+                      // Kwam je via "+ adres", dan staan straat en nummer er al:
+                      // dan begin je hier.
+                      autoFocus={isNieuw && !mobiel && Boolean(nieuw?.nummer)}
                       inputMode="decimal"
                       className={`${popupInvoer} tabular-nums`}
                       placeholder="0"
@@ -1160,13 +1539,14 @@ export function KlantgegevensDialog({
                 <PopupVeld icoon={<CalendarDays className="size-4" />}>
                   <Select
                     disabled={!magBewerken}
-                    value={String(pand.interval_maanden)}
+                    // 0 is: nog niet gekozen (alleen bij een nieuw adres).
+                    value={pand.interval_maanden ? String(pand.interval_maanden) : ""}
                     onValueChange={(v) =>
                       setPand((p) => ({ ...p, interval_maanden: Number(v), ritme: 1 }))
                     }
                   >
                     <SelectTrigger className="h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0">
-                      <SelectValue />
+                      <SelectValue placeholder="Kies een frequentie" />
                     </SelectTrigger>
                     <SelectContent>
                       {INTERVALLEN.map((n) => (
@@ -1202,6 +1582,14 @@ export function KlantgegevensDialog({
                     );
                   })}
                 </div>
+              )}
+
+              {isNieuw && (
+                <PopupHint>
+                  {prijzenZien
+                    ? "Allebei nodig: zonder prijs en frequentie weet de app niet wanneer dit adres aan de beurt is of wat het opbrengt."
+                    : "Nodig: zonder frequentie weet de app niet wanneer dit adres aan de beurt is."}
+                </PopupHint>
               )}
 
               {/* Grote panden staan in de dagweergave als eigen blok, en
@@ -1313,9 +1701,11 @@ export function KlantgegevensDialog({
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
                     <SelectItem value={METEEN}>
-                      {dossierCustomer?.geimporteerd
-                        ? "Standaard (al klant)"
-                        : "Meteen (aanmaakmaand)"}
+                      {isNieuw
+                        ? "Bij de eerste beurt van de frequentie"
+                        : dossierCustomer?.geimporteerd
+                          ? "Standaard (al klant)"
+                          : "Meteen (aanmaakmaand)"}
                     </SelectItem>
                     <SelectItem value={vorigeMaand()}>Niet nieuw, al langer klant</SelectItem>
                     {maandenVooruit.map((m) => (
@@ -1477,7 +1867,7 @@ export function KlantgegevensDialog({
   const gewijzigd =
     magBewerken &&
     beginStand.current !== null &&
-    JSON.stringify({ velden, pand, extra, wijkId }) !== JSON.stringify(beginStand.current);
+    JSON.stringify({ velden, pand, extra, wijkId, keuze }) !== JSON.stringify(beginStand.current);
 
   /**
    * Na een prijsverhoging, als er nog beurten vooruit betaald zijn: gratis
@@ -1487,7 +1877,9 @@ export function KlantgegevensDialog({
   async function vraagOmrekenen(adres: string) {
     const g = await fetchGeldAdres(adres).catch(() => null);
     if (!g) {
-      toast.warning("Vooruit betaalde beurten konden niet worden gecontroleerd, kijk in het dossier.");
+      toast.warning(
+        "Vooruit betaalde beurten konden niet worden gecontroleerd, kijk in het dossier.",
+      );
       return;
     }
     if (g.vooruit_eigen <= 0 || g.vooruit_p === null) return;
@@ -1804,11 +2196,15 @@ export function KlantgegevensDialog({
       // Op de telefoon ook bij wegtikken of Escape eerst vragen.
       onOpenChange={(o) => (o || !mobiel ? onOpenChange(o) : void sluitMetVraag())}
     >
-      {mobiel ? (
+      {/* Een nieuw adres heeft nog niets om snel te bekijken: op de telefoon
+          gewoon het formulier, als blad dat van onderen omhoog schuift. */}
+      {mobiel && !isNieuw ? (
         mobielDossier
       ) : (
         <PopupKader
-          className="sm:max-w-lg"
+          className={mobiel ? "" : "sm:max-w-lg"}
+          blad={mobiel}
+          onSluit={() => void sluitMetVraag()}
           onKeyDown={magBewerken ? opslaanBijEnter(() => void save()) : undefined}
         >
           <PopupKop
@@ -1821,9 +2217,21 @@ export function KlantgegevensDialog({
                   : "Nieuw adres"
             }
             subtitel={
-              [dossierCustomer ? wijkNaamVan(dossierCustomer.street_id) : "", velden.plaats.trim()]
-                .filter(Boolean)
-                .join(" · ") || "Alles van dit adres bij elkaar"
+              isNieuw
+                ? [
+                    velden.straat.trim() && velden.huisnummer.trim()
+                      ? `${velden.straat.trim()} ${velden.huisnummer.trim()}`
+                      : "",
+                    wijkNaam(wijkId),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "Een adres in een wijk"
+                : [
+                    dossierCustomer ? wijkNaamVan(dossierCustomer.street_id) : "",
+                    velden.plaats.trim(),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "Alles van dit adres bij elkaar"
             }
             tabs={
               <>
@@ -1841,14 +2249,17 @@ export function KlantgegevensDialog({
                 >
                   Het adres
                 </PopupTab>
-                <PopupTab
-                  actief={tab === "werk"}
-                  onClick={() => setTab("werk")}
-                  icoon={<Hammer className="size-[15px]" />}
-                  telletje={openKlussen.length}
-                >
-                  Werk
-                </PopupTab>
+                {/* Werk noteer je pas als het adres bestaat. */}
+                {!isNieuw && (
+                  <PopupTab
+                    actief={tab === "werk"}
+                    onClick={() => setTab("werk")}
+                    icoon={<Hammer className="size-[15px]" />}
+                    telletje={openKlussen.length}
+                  >
+                    Werk
+                  </PopupTab>
+                )}
                 {klant && magMailLezen && (
                   <PopupTab
                     actief={tab === "mail"}

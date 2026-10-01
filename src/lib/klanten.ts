@@ -1723,6 +1723,38 @@ export async function persistKolomStart(vlaggen: { id: string; kolom_start: bool
   if (mis?.error) throw mis.error;
 }
 
+/**
+ * Een nieuwe straat onderaan in een wijk. Gedeeld door "Nieuwe straat" op de
+ * wijkenpagina en de straatkeuze in het dossier. Geeft het id terug.
+ */
+export async function maakStraat(
+  wijkId: string,
+  naam: string,
+  /** De officiële naam, als die bekend is; anders blijft hij leeg. */
+  volledigeNaam?: string,
+): Promise<string> {
+  const { data: laatste, error: zoekFout } = await supabase
+    .from("streets")
+    .select("sort_order")
+    .eq("district_id", wijkId)
+    .is("deleted_at", null)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  if (zoekFout) throw zoekFout;
+  const { data, error } = await supabase
+    .from("streets")
+    .insert({
+      name: netjesStraat(naam),
+      ...(volledigeNaam?.trim() ? { volledige_naam: netjesStraat(volledigeNaam) } : {}),
+      sort_order: Math.max(0, laatste?.[0]?.sort_order ?? 0) + 1,
+      district_id: wijkId,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id;
+}
+
 export async function setStreetSortDesc(id: string, desc: boolean) {
   const { error } = await supabase.from("streets").update({ sort_desc: desc }).eq("id", id);
   if (error) throw error;

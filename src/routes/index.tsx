@@ -95,7 +95,6 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppLayout } from "@/components/AppLayout";
 import { Cijferkaarten } from "@/components/Cijferkaarten";
-import { KlantDialog } from "@/components/KlantDialog";
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { SneltoetsenHulp } from "@/components/mail/Sneltoetsen";
 import { WeekStrook } from "@/components/WeekStrook";
@@ -130,7 +129,6 @@ import { FrequentieKiezer } from "@/components/FrequentieKiezer";
 import { WassenVanaf } from "@/components/WassenVanaf";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
 import { useStabiel } from "@/hooks/use-stabiel";
-import { nieuweKlus, verwijderKlus } from "@/lib/klussen";
 import {
   fetchWasdag,
   fetchNietGewassen,
@@ -157,6 +155,7 @@ import {
   fetchQuickNotes,
   fetchStraatGroepen,
   fetchStreets,
+  maakStraat,
   nieuweStraatGroep,
   formatNumber,
   formatPrice,
@@ -165,7 +164,6 @@ import {
   kantVan,
   komendeMaanden,
   volgendeMaand,
-  patchCustomer,
   schuifStartOp,
   maandSleutel,
   prijsVoorMaand,
@@ -197,14 +195,8 @@ import {
 } from "@/lib/klanten";
 import { heeftRecht, useRecht } from "@/lib/rechten";
 import { StopDialog } from "@/components/StopDialog";
-import {
-  draaiStoppenTerug,
-  geplandeDagen,
-  haalVanPlanning,
-  zetInactief,
-  zetPlanningTerug,
-  type StopReden,
-} from "@/lib/stoppen";
+import { geplandeDagen } from "@/lib/stoppen";
+import { useKlantActies } from "@/lib/useKlantActies";
 import { alDichtbij, datumSleutel, haalUitWasdagBewaard, zetWasdagTerug } from "@/lib/wasdag";
 import { isWerkdag, useWerkdagenStatus } from "@/lib/werkdagen";
 
@@ -457,24 +449,12 @@ function Index() {
   );
   const undoLabel = useLaatsteUndoLabel();
 
-  function herlaad() {
-    qc.invalidateQueries({ queryKey: ["districts"] });
-    qc.invalidateQueries({ queryKey: ["streets"] });
-    qc.invalidateQueries({ queryKey: ["customers"] });
-    qc.invalidateQueries({ queryKey: ["straat_groepen"] });
-  }
+  // Wat het menu op een regel met één adres doet: dezelfde handelingen (en
+  // Ongedaan-meldingen) als op de dag. Zie useKlantActies.
+  const { herlaad, meldUndo, patchKlant, maakKlus, stopKlant, verwijderKlant } = useKlantActies();
 
   function doeUndo() {
     return undoMetMelding(laatsteUndo(), "Niets om terug te draaien");
-  }
-
-  function meldUndo(bericht: string) {
-    // Standaard verdwijnt een melding na ~4 seconden. Dat is te kort om te beslissen
-    // of je een verwijdering terugdraait — de knop is weg voor je hem kunt raken.
-    toast(bericht, {
-      duration: 12000,
-      action: undoKnop(),
-    });
   }
 
   useEffect(() => {
@@ -1480,60 +1460,6 @@ function Index() {
     };
   }, [magPlannen]);
 
-  async function patchKlant(c: Customer, patch: Partial<Customer>) {
-    const vorige: Partial<Customer> = {};
-    for (const key of Object.keys(patch) as (keyof Customer)[]) {
-      (vorige as Record<string, unknown>)[key] = c[key];
-    }
-    qc.setQueryData<Customer[]>(["customers"], (old) =>
-      (old ?? []).map((x) => (x.id === c.id ? { ...x, ...patch } : x)),
-    );
-    // Via patchCustomer: een prijs of meerprijs gaat dan naar zijn eigen tabel.
-    try {
-      await patchCustomer(c.id, patch);
-    } catch (error) {
-      toast.error(
-        "Opslaan mislukt: " +
-          (error instanceof Error
-            ? error.message
-            : String((error as { message?: string })?.message ?? error)),
-      );
-      qc.invalidateQueries({ queryKey: ["customers"] });
-      return;
-    }
-    pushUndo({
-      label: `Wijziging ${formatNumber(c)}`,
-      undo: async () => {
-        await patchCustomer(c.id, vorige);
-        herlaad();
-      },
-    });
-  }
-
-  /**
-   * Een extra opdracht bij een adres. Hij komt zonder dag binnen: waar en
-   * wanneer je hem doet beslis je op de planning, als die wijk aan de beurt
-   * is.
-   */
-  async function maakKlus(customerId: string, omschrijving: string, prijs: number) {
-    let id: string;
-    try {
-      id = await nieuweKlus(customerId, omschrijving, prijs);
-    } catch (e) {
-      toast.error("Opslaan mislukt: " + (e as Error).message);
-      return;
-    }
-    pushUndo({
-      label: `Opdracht ${omschrijving}`,
-      undo: async () => {
-        await verwijderKlus(id);
-        qc.invalidateQueries({ queryKey: ["klussen"] });
-      },
-    });
-    qc.invalidateQueries({ queryKey: ["klussen"] });
-    toast.success(`Opdracht genoteerd: ${omschrijving}`);
-  }
-
   async function nieuweSnelkeuze(label: string) {
     try {
       await addQuickNote(label);
@@ -1542,73 +1468,6 @@ function Index() {
     } catch (e) {
       toast.error("Toevoegen mislukt: " + (e as Error).message);
     }
-  }
-
-  /** Een klant laat stoppen: het adres wordt inactief, met alles bewaard. */
-  async function stopKlant(c: Customer, reden: StopReden, planningWeg: boolean) {
-    const straat = streets.find((s) => s.id === c.street_id)?.name;
-    const adres = straat ? `${straat} ${formatNumber(c)}` : `Klant ${formatNumber(c)}`;
-    const u = await zetInactief([c.id], reden, planningWeg);
-    if (u.adressen.length === 0) {
-      toast.info(`${adres} was al inactief of weg.`);
-      herlaad();
-      return;
-    }
-    pushUndo({
-      label: `Stoppen ${adres}`,
-      undo: async () => {
-        await draaiStoppenTerug(u);
-        herlaad();
-      },
-    });
-    herlaad();
-    meldUndo(`${adres} staat nu bij Inactief (klantenpagina)`);
-  }
-
-  async function verwijderKlant(c: Customer, planningWeg: boolean) {
-    // Met de straat erbij: "Klant 8" zegt niet welke 8, en elke straat heeft er een.
-    const straat = streets.find((s) => s.id === c.street_id)?.name;
-    const adres = straat ? `${straat} ${formatNumber(c)}` : `Klant ${formatNumber(c)}`;
-    // Geen aparte vraag meer: je koos "Verwijderen" in het stopschermpje, en
-    // daar ook wat er met de planning moet.
-    let kenmerken: string[] = [];
-    // Zonder het recht op de planning kan dat deel niet; het verwijderen zelf
-    // wel. Dan blijft de planning staan, en dat zeggen we.
-    const planningMag = planningWeg && magPlannen;
-    if (planningWeg && !magPlannen) {
-      toast.info("De planning bleef staan: je rol mag de planning niet aanpassen.");
-    }
-    try {
-      if (planningMag) kenmerken = await haalVanPlanning([c.id]);
-      await legWeg("customers", [c.id]);
-    } catch (e) {
-      // Stond hij al van de planning af, dan dat terug: half is erger dan niets.
-      await zetPlanningTerug(kenmerken).catch(() => {});
-      toast.error("Verwijderen mislukt: " + (e as Error).message);
-      return;
-    }
-    pushUndo({
-      label: `Verwijderen ${adres}`,
-      undo: async () => {
-        // Eerst het adres terug, dan de planning: een weggegooid adres komt
-        // niet terug op een dag in de toekomst.
-        await haalTerug("customers", [c.id]);
-        await zetPlanningTerug(kenmerken);
-        qc.invalidateQueries({ queryKey: ["wasdag"] });
-        qc.invalidateQueries({ queryKey: ["wasdagen"] });
-        herlaad();
-      },
-    });
-    if (kenmerken.length) {
-      qc.invalidateQueries({ queryKey: ["wasdag"] });
-      qc.invalidateQueries({ queryKey: ["wasdagen"] });
-    }
-    herlaad();
-    meldUndo(
-      kenmerken.length
-        ? `${adres} verwijderd en van ${kenmerken.length} ${kenmerken.length === 1 ? "dag" : "dagen"} op de planning gehaald`
-        : `${adres} verwijderd`,
-    );
   }
 
   async function verwijderStraat(s: Street) {
@@ -1886,17 +1745,13 @@ function Index() {
       toast.error("Maak eerst een wijk aan.");
       return;
     }
-    const max = Math.max(0, ...streets.map((s) => s.sort_order));
-    const { data, error } = await supabase
-      .from("streets")
-      .insert({ name: netjesStraat(naam), sort_order: max + 1, district_id: actieveWijk })
-      .select("id")
-      .single();
-    if (error) {
-      toast.error("Toevoegen mislukt: " + error.message);
+    let nieuwId: string;
+    try {
+      nieuwId = await maakStraat(actieveWijk, naam);
+    } catch (e) {
+      toast.error("Toevoegen mislukt: " + (e as Error).message);
       return;
     }
-    const nieuwId = (data as { id: string } | null)?.id;
     if (nieuwId) {
       pushUndo({
         label: `Toevoegen straat ${naam.trim()}`,
@@ -2961,17 +2816,30 @@ function Index() {
         )}
       </div>
 
-      <KlantDialog
+      {/* Een nieuw adres: het dossier als leeg formulier, met de straten van
+          deze wijk. Een nieuwe straat komt in de wijk die je bekijkt. */}
+      <KlantgegevensDialog
         open={klantDialog.open}
         onOpenChange={(open) => setKlantDialog((s) => ({ ...s, open }))}
-        streets={streets}
-        customer={klantDialog.customer}
-        defaultStreetId={klantDialog.streetId}
-        defaultNumber={klantDialog.nummer}
-        nieuweSortOrder={klantDialog.sortOrder}
+        klant={null}
+        voorstelCustomer={null}
+        nieuw={{
+          streetId: klantDialog.streetId,
+          nummer: klantDialog.nummer,
+          sortOrder: klantDialog.sortOrder,
+          straten: streets,
+        }}
+        districts={districts}
+        streets={alleStraten}
+        customers={customers}
+        klanten={alleKlanten}
         quickNotes={quickNotes}
         onAddQuickNote={nieuweSnelkeuze}
-        onSaved={herlaad}
+        standaardWijkId={actieveWijk}
+        onSaved={() => {
+          herlaad();
+          qc.invalidateQueries({ queryKey: ["klanten"] });
+        }}
       />
       <StopDialog
         open={stop.open}
