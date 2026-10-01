@@ -4,14 +4,14 @@ import { WachtrijVerzender } from "@/components/betalingen/WachtrijVerzender";
 import { useRouterState } from "@tanstack/react-router";
 import { IconLock as Lock } from "@tabler/icons-react";
 
-import { NaarDagKnop } from "@/components/NaarDagKnop";
+import { NaarDagKnop, NaarLopenKnop } from "@/components/NaarDagKnop";
 import { Tabbalk } from "@/components/Tabbalk";
 import { Zijbalk } from "@/components/Zijbalk";
 import { PaaltjeKnop } from "@/components/paaltje/PaaltjeKnop";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useVerbergBijScrollen } from "@/hooks/use-verberg-bij-scrollen";
 import { useAuth } from "@/lib/auth";
-import { useDagVast } from "@/lib/dagslot";
+import { useDagVast, useGeldloopVast } from "@/lib/dagslot";
 import { heeftRecht, rechtenVoorPad } from "@/lib/rechten";
 // Zet de golf onder je vinger aan; hij luistert zelf mee op de hele pagina.
 import "@/lib/golf";
@@ -77,6 +77,16 @@ export function AppLayout({
   // en niet voor wie de dag niet mag zien.
   const dagVast = useDagVast();
   const dagKnop = dagVast && pad !== "/dag" && heeftRecht(employee, "planning");
+  // Net zo voor het geldlopen. Het loopscherm zelf zit onder /betalingen, en
+  // een geldloper (zonder "prijzen zien") heeft daar alleen het loopscherm.
+  const geldloopVast = useGeldloopVast();
+  const tab = useRouterState({
+    select: (st) => (st.location.search as { tab?: string }).tab,
+  });
+  const opLoopscherm =
+    pad === "/betalingen" && (tab === "lopen" || !heeftRecht(employee, "prijzen_zien"));
+  const lopenKnop = geldloopVast && !opLoopscherm && heeftRecht(employee, "geldlopen");
+  const zweefKnop = dagKnop || lopenKnop;
 
   const mobiel = useIsMobile();
   const weg = useVerbergBijScrollen(verbergBijScrollen && mobiel);
@@ -176,7 +186,7 @@ export function AppLayout({
           className={`min-w-0 flex-1 px-3 md:px-6 ${
             // Staat de dag-knop boven Paaltje, dan moet de laatste regel ook
             // daar nog onderuit kunnen.
-            dagKnop
+            zweefKnop
               ? "pb-[calc(var(--onderrand,0px)+9.5rem)] md:pb-[calc(9.5rem+env(safe-area-inset-bottom))]"
               : "pb-[calc(var(--onderrand,0px)+5rem)] md:pb-4"
           } ${
@@ -200,6 +210,7 @@ export function AppLayout({
       <Tabbalk boven={mag ? onderbalk : undefined} />
       {/* Vóór Paaltje: gaat diens paneel open, dan ligt dat eroverheen. */}
       {dagKnop && <NaarDagKnop />}
+      {lopenKnop && <NaarLopenKnop />}
       {employee && <PaaltjeKnop />}
       {/* Tikken van een geldloper die nog op de telefoon staan: overal versturen. */}
       {employee && <WachtrijVerzender />}
