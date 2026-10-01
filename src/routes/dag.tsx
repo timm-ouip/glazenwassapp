@@ -113,6 +113,7 @@ import { geplandeDagen, redenLabel } from "@/lib/stoppen";
 import { verplaatsWasdag } from "@/lib/wasdag";
 import { zetWasdagTerug } from "@/lib/wasdag";
 import { rondeVanDag } from "@/lib/dagbouwstenen";
+import { useZelfdePlek } from "@/lib/zelfdeplek";
 
 interface DagSearch {
   datum?: string;
@@ -188,96 +189,6 @@ const WEERGAVE_OPSLAG = "paaltje.dag-weergave";
 const PLEK_OPSLAG = "wooshy.dag-plek.";
 /** Per dag, in deze tab: alleen je eigen team of alle teams ("1" of "0"). */
 const EIGEN_OPSLAG = "wooshy.dag-eigen.";
-
-/**
- * Terug op de dag, op dezelfde plek: ga je naar een klant, een wijk of een
- * andere pagina en kom je terug (met een link, de knop of de terugknop), dan
- * sta je weer bij dezelfde straat. Bewaard wordt welke straat bovenin stond
- * en hoe ver van de bovenrand; dat blijft kloppen als er intussen een adres
- * bij of af kwam. Een andere dag heeft zijn eigen plek en begint bovenaan.
- *
- * De lijst scrolt met de pagina zelf mee (er is geen eigen scrollvak). Wat
- * erboven staat (Dag klaar, de vergeten-strook) laadt soms later en duwt de
- * lijst omlaag; daarom houden we de straat op zijn plek tot je zelf de
- * pagina aanraakt, of tot er anderhalve tel niets meer verschoven is.
- */
-function useZelfdePlek(datum: string, klaar: boolean) {
-  useEffect(() => {
-    if (!klaar) return;
-    const sleutel = PLEK_OPSLAG + datum;
-    let plek: { straat: string; boven: number } | null = null;
-    try {
-      plek = JSON.parse(sessionStorage.getItem(sleutel) ?? "null");
-    } catch {
-      // Geen opslag of iets onleesbaars: dan gewoon bovenaan.
-    }
-
-    let herstellen = plek !== null;
-    const begin = performance.now();
-    // Rust: na de laatste verschuiving. Hoe dan ook: na tien tellen stoppen.
-    let rust = begin + 2500;
-    let frame = 0;
-    const zet = () => {
-      const nu = performance.now();
-      if (!herstellen || nu > rust || nu > begin + 10_000) {
-        herstellen = false;
-        return;
-      }
-      const el = document.querySelector(`[data-dagstraat="${CSS.escape(plek!.straat)}"]`);
-      if (!el) {
-        // Nog niet te zien (de keuze "alleen mijn team" komt net terug), of
-        // hij staat er niet meer op: even blijven kijken, dan met rust laten.
-        frame = requestAnimationFrame(zet);
-        return;
-      }
-      const verschil = el.getBoundingClientRect().top - plek!.boven;
-      if (Math.abs(verschil) > 1) {
-        const was = window.scrollY;
-        window.scrollBy(0, verschil);
-        // Kon hij niet verder (de pagina is te kort), dan telt het niet als
-        // verschuiving: anders blijft hij het tot de tien tellen proberen.
-        if (window.scrollY !== was) rust = nu + 1500;
-      }
-      frame = requestAnimationFrame(zet);
-    };
-    if (herstellen) frame = requestAnimationFrame(zet);
-    const stop = () => {
-      herstellen = false;
-    };
-
-    let bewaarFrame = 0;
-    const bewaar = () => {
-      if (herstellen) return;
-      cancelAnimationFrame(bewaarFrame);
-      bewaarFrame = requestAnimationFrame(() => {
-        // De eerste straat die nog (deels) in beeld is.
-        for (const el of document.querySelectorAll<HTMLElement>("[data-dagstraat]")) {
-          const { top, bottom } = el.getBoundingClientRect();
-          if (bottom <= 0) continue;
-          try {
-            sessionStorage.setItem(
-              sleutel,
-              JSON.stringify({ straat: el.dataset["dagstraat"], boven: Math.round(top) }),
-            );
-          } catch {
-            // Niet te bewaren; dan begin je de volgende keer bovenaan.
-          }
-          return;
-        }
-      });
-    };
-
-    const invoer = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
-    for (const soort of invoer) window.addEventListener(soort, stop, { passive: true });
-    window.addEventListener("scroll", bewaar, { passive: true });
-    return () => {
-      cancelAnimationFrame(frame);
-      cancelAnimationFrame(bewaarFrame);
-      for (const soort of invoer) window.removeEventListener(soort, stop);
-      window.removeEventListener("scroll", bewaar);
-    };
-  }, [datum, klaar]);
-}
 
 interface Straat {
   id: string;
@@ -411,7 +322,7 @@ function DagPagina() {
   // Pas als alles er is wat bepaalt welke straten er staan, en in welke
   // volgorde: anders zet je de plek terug in een lijst die nog verspringt.
   useZelfdePlek(
-    datum,
+    PLEK_OPSLAG + datum,
     ![
       wasdagQuery,
       adressenQuery,

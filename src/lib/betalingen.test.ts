@@ -61,6 +61,68 @@ describe("rekening", () => {
     expect(r[0]!.wanneer).toBe("jul, aug");
   });
 
+  test("kaart met twee prijzen: een regel per prijs, zoals op een factuur", () => {
+    const kaart = (rest: number) =>
+      rekening([
+        {
+          soort: "beginstand",
+          datum: "2026-09-30",
+          bedrag: 55,
+          rest,
+          aantal: 3,
+          omschrijving:
+            "2026-07,2026-08,2026-09,2026-06=v,2026-06~8.00~v,2026-07~15.00~0,2026-08~15.00~0,2026-09~17.00~0",
+        },
+      ]).map((r) => [r.label, r.wanneer, r.bedrag]);
+    expect(kaart(55)).toEqual([
+      [`2× wasbeurt à ${formatPrice(15)}`, "jul, aug", 30],
+      ["Wasbeurt", "sep", 17],
+      ["Wasbeurt, v", "jun", 8],
+    ]);
+    // € 20 betaald: eerst juni (€ 8), dan € 12 van juli.
+    expect(kaart(35)).toEqual([
+      ["Wasbeurt", "aug", 15],
+      ["Wasbeurt", "sep", 17],
+      ["Wasbeurt, rest", "jul", 3],
+    ]);
+  });
+
+  test("kaart zonder bedragen per maand blijft één regel", () => {
+    const r = rekening([
+      {
+        soort: "beginstand",
+        datum: "2026-09-30",
+        bedrag: 30,
+        rest: 30,
+        aantal: 2,
+        omschrijving: "2026-07,2026-08",
+      },
+    ]);
+    expect(r).toHaveLength(1);
+  });
+
+  test("prijs per beurt alleen als het de prijs van nu is", () => {
+    const kaart = (bedrag: number, aantal: number, prijs?: number) =>
+      rekening(
+        [
+          {
+            soort: "beginstand",
+            datum: "2026-09-01",
+            bedrag,
+            rest: bedrag,
+            aantal,
+            omschrijving: "",
+          },
+        ],
+        prijs,
+      )[0]!.label;
+    expect(kaart(64, 8, 8)).toBe(`8× wasbeurt à ${formatPrice(8)}`);
+    // € 15 + € 17: netjes te delen, maar "à € 16" heeft nooit bestaan.
+    expect(kaart(32, 2, 17)).toBe("2× wasbeurt");
+    expect(kaart(50, 3, 16.5)).toBe("3× wasbeurt");
+    expect(kaart(64, 8)).toBe("8× wasbeurt");
+  });
+
   test("een beginstand met een letter of + van de kaart", () => {
     const r = rekening([
       {

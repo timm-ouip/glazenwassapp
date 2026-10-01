@@ -168,7 +168,7 @@ export function BetaalPaneel({
     toast("Teruggedraaid");
   }
 
-  const regels = a ? rekening(a.delen) : [];
+  const regels = a ? rekening(a.delen, a.vooruit_p) : [];
   const open = a && heeftIetsOpen(a);
   const kanTikken = !!a && (!voorbij || isEigenaar);
   const vanMij = a?.vanavond && (a.vanavond.door === employee?.id || isEigenaar);

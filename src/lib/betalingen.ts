@@ -263,12 +263,94 @@ export interface RekeningRegel {
  * of een notitie, een klus of een deels betaalde post staat apart, zodat je
  * aan de deur kunt uitleggen waar een bedrag vandaan komt.
  */
-export function rekening(delen: GeldDeel[]): RekeningRegel[] {
+/**
+ * " à € 8": wat één beurt kost, zoals bij de gewone wasbeurten, zodat je aan
+ * de deur "8× à € 8" kunt zeggen. Alleen als het precies de prijs van nu is:
+ * een kaart met oude en nieuwe prijzen door elkaar (€ 15 + € 17) of een
+ * ingetypt bedrag heeft geen echte prijs per beurt, en een gemiddelde zou je
+ * iets laten zeggen wat niet klopt.
+ */
+function perBeurtTekst(bedrag: number, aantal: number, prijs: number | null | undefined): string {
+  if (!prijs || Math.round(prijs * 100) * aantal !== Math.round(bedrag * 100)) return "";
+  return ` à ${formatPrice(prijs)}`;
+}
+
+/**
+ * Een beginstand van de kaart als rekening, zoals op een factuur: per prijs
+ * een regel ("2× wasbeurt à € 15" en "Wasbeurt € 17"), een letter apart
+ * ("Wasbeurt, v") en wat te weinig betaald was ook. De database geeft daarvoor
+ * per maand mee wat die kost ("2026-07~15.00~0"); staat dat er niet (een oude
+ * beginstand zonder vakjes), dan null en blijft het één regel.
+ *
+ * Wat er al van betaald is, gaat van de oudste maand af, net als de database
+ * het geld van oud naar nieuw over de posten legt.
+ */
+function kaartRegels(d: GeldDeel): RekeningRegel[] | null {
+  const vakjes = d.omschrijving
+    .split(",")
+    .map((x) => /^(\d{4}-\d{2})~(\d+(?:\.\d+)?)~(.+)$/.exec(x))
+    .filter((m) => m !== null)
+    .map((m) => ({ maand: m[1]!, centen: Math.round(Number(m[2]) * 100), teken: m[3]! }))
+    .sort((a, b) => a.maand.localeCompare(b.maand));
+  const totaal = vakjes.reduce((t, v) => t + v.centen, 0);
+  // Klopt het niet met het bedrag van de beginstand, dan liever één regel.
+  if (vakjes.length === 0 || totaal !== Math.round(d.bedrag * 100)) return null;
+
+  let betaald = Math.max(0, totaal - Math.round(d.rest * 100));
+  const open = vakjes
+    .map((v) => {
+      const af = Math.min(betaald, v.centen);
+      betaald -= af;
+      return { ...v, open: v.centen - af };
+    })
+    .filter((v) => v.open > 0);
+
+  const regels: RekeningRegel[] = [];
+  // Hele beurten (0) per prijs bij elkaar; de rest, of een deels betaalde, los.
+  const perPrijs = new Map<number, string[]>();
+  for (const v of open) {
+    if (v.teken === "0" && v.open === v.centen) {
+      perPrijs.set(v.centen, [...(perPrijs.get(v.centen) ?? []), v.maand]);
+      continue;
+    }
+    const rest = v.open < v.centen;
+    regels.push({
+      label:
+        v.teken === "0"
+          ? "Wasbeurt, rest"
+          : v.teken === "+"
+            ? `Te weinig betaald${rest ? ", rest" : ""}`
+            : `Wasbeurt, ${v.teken}${rest ? ", rest" : ""}`,
+      wanneer: maandKort(`${v.maand}-01`),
+      bedrag: v.open / 100,
+    });
+  }
+  const hele = [...perPrijs.entries()].map(([centen, maanden]) => ({
+    label:
+      maanden.length === 1
+        ? "Wasbeurt"
+        : `${maanden.length}× wasbeurt à ${formatPrice(centen / 100)}`,
+    wanneer: maanden.map((m) => maandKort(`${m}-01`)).join(", "),
+    bedrag: (centen * maanden.length) / 100,
+  }));
+  return [...hele, ...regels];
+}
+
+/**
+ * `prijs`: wat één beurt op dit adres nu kost. Zonder die prijs staat er bij
+ * de beurten van de kaart geen prijs per beurt.
+ */
+export function rekening(delen: GeldDeel[], prijs?: number | null): RekeningRegel[] {
   const regels: RekeningRegel[] = [];
   const vanDeKaart: RekeningRegel[] = [];
   const groepen = new Map<number, string[]>();
   for (const d of delen) {
     if (d.soort === "beginstand") {
+      const perMaand = kaartRegels(d);
+      if (perMaand) {
+        vanDeKaart.push(...perMaand);
+        continue;
+      }
       const deels = d.rest < d.bedrag - 0.005;
       const maanden = maandenVanDeKaart(d);
       // Met een letter of + erin is het geen rij hele beurten meer.
@@ -281,7 +363,7 @@ export function rekening(delen: GeldDeel[]): RekeningRegel[] {
           : deels
             ? "Wasbeurt, rest"
             : d.aantal > 1
-              ? `${d.aantal}× wasbeurt`
+              ? `${d.aantal}× wasbeurt${perBeurtTekst(d.bedrag, d.aantal, prijs)}`
               : "Wasbeurt",
         // De maanden waar de pof voor staat, niet de dag waarop de kaart is
         // overgenomen: "sep" bij een stand van september is anders zo gelezen

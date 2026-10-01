@@ -207,7 +207,7 @@ function KantoorBetalen({
     );
   }
 
-  const regels = rekening(stand.delen);
+  const regels = rekening(stand.delen, g.vooruit_p);
   const open = stand.open > 0.005;
   const gestopt = !!c.inactief_op;
   // Beurten die nog gebruikt worden; die van een vorige bewoner niet.

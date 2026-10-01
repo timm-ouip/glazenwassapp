@@ -35,6 +35,7 @@ import {
 } from "@/lib/geldlopen";
 import { formatPrice, kantVan, type Kant } from "@/lib/klanten";
 import { leesOpenStraat, onthoudOpenStraat } from "@/lib/openstraat";
+import { heeftPlek, useZelfdePlek } from "@/lib/zelfdeplek";
 import { vooruitLabel } from "@/lib/overzichten";
 import { useAuth } from "@/lib/auth";
 import { useRecht } from "@/lib/rechten";
@@ -46,6 +47,9 @@ import {
   vergeetMislukt,
   type Wachtend,
 } from "@/lib/geldloop-wachtrij";
+
+/** Per avond, in deze tab: welk adres (of welke straat) bovenin stond. */
+const PLEK_OPSLAG = "wooshy.geldloop-plek.";
 
 /** Vanaf zoveel open wasbeurten staat het bedrag van een adres in het rood. */
 export const ROOD_VANAF = 3;
@@ -188,11 +192,17 @@ export function GeldloopScherm({
   const onthouden = useMemo(() => leesOpenStraat(vrijgave.id), [vrijgave.id]);
   /**
    * De open straat in beeld schuiven, zodra hij er staat. Kom je terug in een
-   * straat die je had openstaan, dan hoef je niet opnieuw te zoeken.
+   * straat die je had openstaan, dan hoef je niet opnieuw te zoeken. Weten we
+   * nog precies waar je was (welk adres bovenin, in deze tab), dan zet
+   * useZelfdePlek je daar neer en blijft dit stil.
    */
+  const plekSleutel = PLEK_OPSLAG + vrijgave.id;
   const [scrollen, setScrollen] = useState<ScrollBehavior | null>(() =>
-    leesOpenStraat(vrijgave.id) ? "auto" : null,
+    leesOpenStraat(vrijgave.id) && !heeftPlek(plekSleutel) ? "auto" : null,
   );
+  // Staat het adres er niet meer (het zoeken is weg, of je koos op de kaart
+  // een andere straat), dan alsnog de open straat in beeld.
+  useZelfdePlek(plekSleutel, Boolean(lijst.data), "geldplek", () => setScrollen("auto"));
   const [nu, setNu] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNu(Date.now()), 30_000);
@@ -523,7 +533,9 @@ export function GeldloopScherm({
         data-open-straat={inZoeken ? undefined : ""}
         className="scroll-mt-24 rounded-[24px] bg-card p-1.5 shadow-card"
       >
-        <h2 className="flex items-center gap-2 px-2.5 pb-1 pt-1.5">
+        {/* Het anker voor terugkomen is de kop, niet de hele straat: anders
+            telt een lange straat als één plek en kom je bovenaan uit. */}
+        <h2 data-geldplek={`straat-${s.id}`} className="flex items-center gap-2 px-2.5 pb-1 pt-1.5">
           {inZoeken ? (
             <span className="flex min-w-0 flex-1">{naam}</span>
           ) : (
@@ -782,6 +794,7 @@ function DichteStraat({ s, metWijk, onKies }: { s: Straat; metWijk: boolean; onK
       type="button"
       onClick={onKies}
       aria-expanded={false}
+      data-geldplek={`straat-${s.id}`}
       className={`flex w-full flex-col gap-1.5 rounded-[16px] px-3.5 py-2.5 text-left ${
         af ? "border border-dashed border-border text-muted-foreground" : "bg-card shadow-card"
       }`}
@@ -978,6 +991,7 @@ function AdresRij({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
     <button
       type="button"
       onClick={onKies}
+      data-geldplek={a.id}
       className={`flex min-h-14 w-full items-center gap-3 rounded-[12px] px-2.5 py-2 text-left transition-colors ${
         vlak || "active:bg-surface"
       }`}

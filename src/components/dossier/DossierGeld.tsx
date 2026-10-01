@@ -590,7 +590,7 @@ function Tegels({
 
 /** De open posten als rekening: per regel wat, wanneer en waarom, en het totaal. */
 function WatErOpenstaat({ g }: { g: GeldAdres }) {
-  const regels = rekening(g.delen);
+  const regels = rekening(g.delen, g.vooruit_p);
   return (
     <div className="flex flex-col gap-1 rounded-[18px] bg-card px-5 py-[18px]">
       <div className="pb-2">
