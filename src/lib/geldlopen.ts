@@ -7,7 +7,14 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
-import { dagKort, maandKort, type GeldDeel } from "@/lib/betalingen";
+import {
+  dagKort,
+  maandKort,
+  maandVanNu,
+  volgendeMaand,
+  vooruitTot,
+  type GeldDeel,
+} from "@/lib/betalingen";
 
 export interface Vrijgave {
   id: string;
@@ -26,7 +33,17 @@ export interface Loper {
   eigenaar: boolean;
 }
 
-export type Tiksoort = "betaald" | "korting" | "niet_thuis" | "geen_geld" | "ongedaan";
+export type Tiksoort =
+  | "betaald"
+  | "korting"
+  | "niet_thuis"
+  | "geen_geld"
+  | "ongedaan"
+  | "vooruit"
+  /** Alleen op kantoor: de vooruitbetaling die over was, is teruggegeven. */
+  | "terugbetaald"
+  /** Na een prijsverhoging: de vooruit betaalde beurten omgerekend naar de nieuwe prijs. */
+  | "omgerekend";
 
 export interface GeldloopAdres {
   id: string;
@@ -58,6 +75,23 @@ export interface GeldloopAdres {
   open: number;
   open_wassen: number;
   delen: GeldDeel[];
+  /**
+   * Vooruitbetaalde beurten die dit adres nog kan opmaken (zonder die van een
+   * vorige bewoner of van een gestopt adres), en wat alle ongebruikte samen
+   * waard zijn.
+   */
+  vooruit_over: number;
+  vooruit_waarde: number;
+  /**
+   * Beurten van een vorige bewoner (of een gestopt adres) die nog terug
+   * moeten. Zolang die er zijn kan er niet opnieuw vooruit betaald worden.
+   */
+  vooruit_vast: number;
+  /** Wat de ongebruikte beurten van vorige bewoners en van de huidige klant waard zijn. */
+  vooruit_vorige_waarde: number;
+  vooruit_eigen_waarde: number;
+  /** De prijs per beurt voor een nieuwe vooruitbetaling; leeg zonder prijs. */
+  vooruit_p: number | null;
   klachten: string[];
   vaste_kortingen: { id: string; naam: string; bedrag: number }[];
   /** De kortingen die vanavond gegeven zijn, om ze te kunnen herstellen. */
@@ -69,11 +103,13 @@ export interface GeldloopAdres {
     door_naam: string;
     op: string;
   }[];
-  /** De laatste tik van vanavond op dit adres (betaald, niet thuis, geen geld). */
+  /** De laatste tik van vanavond op dit adres (betaald, vooruit, niet thuis, geen geld). */
   vanavond: {
     id: string;
-    soort: "betaald" | "niet_thuis" | "geen_geld";
+    soort: "betaald" | "vooruit" | "niet_thuis" | "geen_geld";
     bedrag: number;
+    /** Bij vooruit: hoeveel beurten. */
+    aantal?: number | null;
     op: string;
     door: string | null;
     door_naam: string;
@@ -209,13 +245,27 @@ export async function fetchGeldloopLijst(vrijgave: string): Promise<GeldloopLijs
         rest: Number(d.rest),
         aantal: Number(d.aantal ?? 1),
         omschrijving: d.omschrijving ?? "",
+        vooruit: Number(d.vooruit ?? 0),
       })),
+      // De server telt ook de beurten mee die niet meer opgemaakt worden.
+      vooruit_over: Math.max(0, Number(a.vooruit_over ?? 0) - Number(a.vooruit_vast ?? 0)),
+      vooruit_waarde: Number(a.vooruit_waarde ?? 0),
+      vooruit_vast: Number(a.vooruit_vast ?? 0),
+      vooruit_vorige_waarde: Number(a.vooruit_vorige_waarde ?? 0),
+      vooruit_eigen_waarde: Number(a.vooruit_eigen_waarde ?? 0),
+      vooruit_p: a.vooruit_p == null ? null : Number(a.vooruit_p),
       vaste_kortingen: (a.vaste_kortingen ?? []).map((k) => ({ ...k, bedrag: Number(k.bedrag) })),
       kortingen_vanavond: (a.kortingen_vanavond ?? []).map((k) => ({
         ...k,
         bedrag: Number(k.bedrag),
       })),
-      vanavond: a.vanavond ? { ...a.vanavond, bedrag: Number(a.vanavond.bedrag) } : null,
+      vanavond: a.vanavond
+        ? {
+            ...a.vanavond,
+            bedrag: Number(a.vanavond.bedrag),
+            aantal: a.vanavond.aantal == null ? null : Number(a.vanavond.aantal),
+          }
+        : null,
     })),
   };
 }
@@ -233,6 +283,9 @@ export interface Tik {
   op: string;
   getoond_open?: number | null;
   bron?: "geldloop" | "kantoor" | "dag";
+  /** Bij vooruit: hoeveel beurten, en tegen welke prijs per beurt. */
+  aantal?: number | null;
+  prijs_per_beurt?: number | null;
 }
 
 export function nieuweTik(t: Omit<Tik, "id" | "op">): Tik {
@@ -242,7 +295,7 @@ export function nieuweTik(t: Omit<Tik, "id" | "op">): Tik {
 export async function boek(
   t: Tik,
   signaal?: AbortSignal,
-): Promise<{ status: "nieuw" | "al_ontvangen"; botsing: boolean }> {
+): Promise<{ status: "nieuw" | "al_ontvangen"; botsing: boolean; prijs_afwijkend?: boolean }> {
   const vraag = supabase.rpc("geld_boeken", {
     id: t.id,
     adres_id: t.adres,
@@ -254,10 +307,16 @@ export async function boek(
     op: t.op,
     getoond_open: t.getoond_open ?? null,
     bron: t.bron ?? "geldloop",
+    aantal: t.aantal ?? null,
+    prijs_per_beurt: t.prijs_per_beurt ?? null,
   });
   const { data, error } = await (signaal ? vraag.abortSignal(signaal) : vraag);
   if (error) throw error;
-  return data as unknown as { status: "nieuw" | "al_ontvangen"; botsing: boolean };
+  return data as unknown as {
+    status: "nieuw" | "al_ontvangen";
+    botsing: boolean;
+    prijs_afwijkend?: boolean;
+  };
 }
 
 export async function maakVasteKorting(adres: string, naam: string, bedrag: number) {
@@ -401,6 +460,16 @@ export function looprichting(a: GeldloopAdres[]): GeldloopAdres[] {
 /** Staat er vanavond nog iets te doen bij dit adres? */
 export function heeftIetsOpen(a: GeldloopAdres): boolean {
   return a.open > 0.005;
+}
+
+/**
+ * Tot welke maand de vooruitbetaling van dit adres ongeveer reikt ("okt").
+ * Je loopt pas na het wassen: wacht er geen beurt meer, dan is die van deze
+ * maand al gedaan en tellen de beurten die over zijn vanaf volgende maand.
+ */
+export function vooruitTotVan(a: GeldloopAdres, nu = new Date()): string {
+  const hier = maandVanNu(nu);
+  return vooruitTot(a, a.vooruit_over, a.wacht_op_wasbeurt ? hier : volgendeMaand(hier), nu);
 }
 
 /**

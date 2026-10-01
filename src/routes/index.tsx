@@ -2984,6 +2984,7 @@ function Index() {
             : ""
         }
         telDagen={() => geplandeDagen(stop.customer ? [stop.customer.id] : [])}
+        adressen={stop.customer ? [stop.customer.id] : undefined}
         onBevestig={(reden, planningWeg) =>
           stop.customer ? stopKlant(stop.customer, reden, planningWeg) : Promise.resolve()
         }

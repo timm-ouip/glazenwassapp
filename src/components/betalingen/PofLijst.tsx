@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { IconArrowLeft as ArrowLeft } from "@tabler/icons-react";
 
 import { ROOD_VANAF } from "@/components/betalingen/GeldloopScherm";
-import { rekening } from "@/lib/betalingen";
+import { rekening, terugTekst } from "@/lib/betalingen";
 import { fetchDistricts, formatPrice } from "@/lib/klanten";
 import { fetchPof, type PofRegel } from "@/lib/overzichten";
 import { toonDatum } from "@/lib/wasdag";
@@ -35,7 +35,14 @@ export function PofLijst({
   });
   const regels = pof.data ?? [];
   const open = useMemo(() => regels.filter((r) => r.open > 0.005), [regels]);
-  const tegoed = useMemo(() => regels.filter((r) => r.open < -0.005), [regels]);
+  // Beurten die vooruit betaald zijn maar niet meer gebruikt worden (gestopt,
+  // of een nieuwe bewoner): die moeten terug naar de klant. Dat tegoed staat
+  // daar, niet nog eens bij het gewone tegoed.
+  const terug = useMemo(() => regels.filter((r) => r.vooruit_vast > 0), [regels]);
+  const tegoed = useMemo(
+    () => regels.filter((r) => r.open < -0.005 && r.vooruit_vast === 0),
+    [regels],
+  );
   const totaal = open.reduce((t, r) => t + r.open, 0);
 
   return (
@@ -84,6 +91,44 @@ export function PofLijst({
           </div>
         )}
       </section>
+
+      {terug.length > 0 && (
+        <section className="rounded-[24px] border border-border bg-card p-4 shadow-card">
+          <h2 className="mb-1 font-display text-[15px] font-semibold">Terug te geven</h2>
+          <p className="mb-2 text-[12.5px] text-muted-foreground">
+            Vooruit betaald, maar gestopt of verhuisd: deze beurten worden niet meer gebruikt. Geef
+            het geld terug en tik in het dossier op Teruggegeven.
+          </p>
+          <div className="divide-y divide-border/70">
+            {terug.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => onKaart(r.straat_id)}
+                title="Op de kaart bekijken"
+                className="flex w-full items-center gap-3 py-1.5 text-left text-[13px] hover:bg-surface"
+              >
+                <span className="min-w-0 flex-1">
+                  {r.straat} {r.house_number}
+                  {r.addition}
+                  {r.naam && <span className="text-muted-foreground"> · {r.naam}</span>}
+                  <span className="block text-[12px] text-muted-foreground">
+                    {terugTekst({
+                      vorige: r.vooruit_vorige,
+                      vorigeWaarde: r.vooruit_vorige_waarde,
+                      eigen: r.vooruit_eigen,
+                      eigenWaarde: r.vooruit_eigen_waarde,
+                      open: r.open,
+                      gestopt: r.gestopt,
+                    })}
+                  </span>
+                </span>
+                <span className="tabular-nums font-medium">{formatPrice(r.terug)}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {tegoed.length > 0 && (
         <section className="rounded-[24px] border border-border bg-card p-4 shadow-card">

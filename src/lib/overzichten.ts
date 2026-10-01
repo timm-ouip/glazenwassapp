@@ -4,13 +4,21 @@
  * kaart. Alleen lezen; rekenen doet de database (zie geld_overzichten).
  */
 import { supabase } from "@/integrations/supabase/client";
-import type { GeldDeel } from "@/lib/betalingen";
+import { beurtenTekst, type GeldDeel } from "@/lib/betalingen";
 
 export interface Gebeurtenis {
   id: string;
   customer_id: string;
   adres: string;
-  soort: "beginstand" | "betaald" | "korting" | "niet_thuis" | "geen_geld";
+  soort:
+    | "beginstand"
+    | "betaald"
+    | "korting"
+    | "niet_thuis"
+    | "geen_geld"
+    | "vooruit"
+    | "terugbetaald"
+    | "omgerekend";
   bedrag: number;
   reden: string;
   aantal: number | null;
@@ -24,14 +32,32 @@ export interface Gebeurtenis {
   /** Kwam veel later binnen dan hij getikt werd (geen bereik). */
   later_binnen?: boolean;
   ongedaan: { id: string; door_naam: string; op: string } | null;
+  /** Bij vooruit: de prijs per beurt en vanaf welke beurt hij telt. */
+  prijs_per_beurt?: number | null;
+  vanaf?: string | null;
+  /** Tikte de loper een andere prijs dan de gewone? Dan staat die hier. */
+  prijs_verwacht?: number | null;
+  /** Bij vooruit: hoeveel beurten al gebruikt of teruggegeven zijn. */
+  gebruikt?: number;
+  teruggegeven?: number;
+  /** Bij omgerekend: hoeveel beurten er werden omgerekend. */
+  omgerekend_van?: number;
 }
 
 function leesGebeurtenissen(x: unknown): Gebeurtenis[] {
-  return (Array.isArray(x) ? x : []).map((g) => ({
-    ...(g as Gebeurtenis),
-    bedrag: Number((g as Gebeurtenis).bedrag ?? 0),
-    maanden: (g as Gebeurtenis).maanden ?? [],
-  }));
+  return (Array.isArray(x) ? x : []).map((ruw) => {
+    const g = ruw as Gebeurtenis;
+    return {
+      ...g,
+      bedrag: Number(g.bedrag ?? 0),
+      maanden: g.maanden ?? [],
+      prijs_per_beurt: g.prijs_per_beurt == null ? null : Number(g.prijs_per_beurt),
+      prijs_verwacht: g.prijs_verwacht == null ? null : Number(g.prijs_verwacht),
+      gebruikt: Number(g.gebruikt ?? 0),
+      teruggegeven: Number(g.teruggegeven ?? 0),
+      omgerekend_van: Number(g.omgerekend_van ?? 0),
+    };
+  });
 }
 
 export interface Avond {
@@ -88,6 +114,8 @@ export interface PerLoper {
   door: string | null;
   opgehaald: number;
   betaald: number;
+  /** Hoe vaak er beurten vooruit betaald zijn. */
+  vooruit: number;
   nietThuis: number;
   geenGeld: number;
   korting: number;
@@ -103,13 +131,18 @@ export function perLoper(gebeurtenissen: Gebeurtenis[]): PerLoper[] {
       door: g.door,
       opgehaald: 0,
       betaald: 0,
+      vooruit: 0,
       nietThuis: 0,
       geenGeld: 0,
       korting: 0,
     };
+    // Vooruit is ook opgehaald geld; teruggegeven geld telt nooit mee.
     if (g.soort === "betaald") {
       r.opgehaald += g.bedrag;
       r.betaald += 1;
+    } else if (g.soort === "vooruit") {
+      r.opgehaald += g.bedrag;
+      r.vooruit += 1;
     } else if (g.soort === "korting") r.korting += g.bedrag;
     else if (g.soort === "niet_thuis") r.nietThuis += 1;
     else if (g.soort === "geen_geld") r.geenGeld += 1;
@@ -132,6 +165,20 @@ export interface PofRegel {
   open: number;
   open_wassen: number;
   delen: GeldDeel[];
+  vooruit_over: number;
+  vooruit_waarde: number;
+  /** Beurten die niet meer gebruikt worden (gestopt, of een nieuwe bewoner). */
+  vooruit_vast: number;
+  /** Ongebruikte beurten van vorige bewoners, en van de huidige (laatste) klant. */
+  vooruit_vorige: number;
+  vooruit_vorige_waarde: number;
+  vooruit_eigen: number;
+  vooruit_eigen_waarde: number;
+  /**
+   * Wat er nu terug moet: de beurten van vorige bewoners, en bij een gestopt
+   * adres ook de eigen beurten plus tegoed, min wat er nog open staat.
+   */
+  terug: number;
   laatst_betaald: string | null;
   laatste_poging: { soort: "niet_thuis" | "geen_geld"; op: string; door_naam: string } | null;
 }
@@ -143,6 +190,14 @@ export async function fetchPof(wijken: string[] | null): Promise<PofRegel[]> {
     ...r,
     open: Number(r.open),
     open_wassen: Number(r.open_wassen),
+    vooruit_over: Number(r.vooruit_over ?? 0),
+    vooruit_waarde: Number(r.vooruit_waarde ?? 0),
+    vooruit_vast: Number(r.vooruit_vast ?? 0),
+    vooruit_vorige: Number(r.vooruit_vorige ?? 0),
+    vooruit_vorige_waarde: Number(r.vooruit_vorige_waarde ?? 0),
+    vooruit_eigen: Number(r.vooruit_eigen ?? 0),
+    vooruit_eigen_waarde: Number(r.vooruit_eigen_waarde ?? 0),
+    terug: Number(r.terug ?? 0),
   }));
 }
 
@@ -153,7 +208,9 @@ export interface KaartPost {
   aantal: number;
   omschrijving: string;
   gedekt: number;
-  betaald_soort: "betaald" | "korting" | null;
+  betaald_soort: "betaald" | "korting" | "vooruit" | null;
+  /** Wat er met een vooruitbetaalde beurt van betaald is. */
+  vooruit: number;
   betaald_op: string | null;
   betaald_door: string | null;
   /** Bij een wasbeurt: de ronde ("2026-09"). Een septemberbeurt op
@@ -164,6 +221,8 @@ export interface KaartPost {
 export interface KaartAdres {
   id: string;
   posten: KaartPost[];
+  vooruit_over: number;
+  vooruit_vast: number;
   gebeurtenissen: Gebeurtenis[];
 }
 
@@ -185,16 +244,42 @@ export async function fetchKaart(straat: string, jaar: number): Promise<Kaart> {
         bedrag: Number(p.bedrag),
         gedekt: Number(p.gedekt),
         aantal: Number(p.aantal ?? 1),
+        vooruit: Number(p.vooruit ?? 0),
       })),
+      vooruit_over: Number(a.vooruit_over ?? 0),
+      vooruit_vast: Number(a.vooruit_vast ?? 0),
       gebeurtenissen: leesGebeurtenissen(a.gebeurtenissen),
     })),
   };
+}
+
+/** Een geplande of net uitgevoerde wissel naar overmaken (zie het dossier). */
+export interface Betaalwissel {
+  status: "gepland" | "uitgevoerd";
+  gepland_op: string | null;
+  gepland_naam: string | null;
+  uitgevoerd_op: string | null;
 }
 
 export interface GeldAdres {
   open: number;
   open_wassen: number;
   delen: GeldDeel[];
+  /** Vooruitbetaalde beurten die nog niet gebruikt zijn (ook die vastzitten). */
+  vooruit_over: number;
+  vooruit_waarde: number;
+  /** Daarvan: die niet meer gebruikt worden (gestopt, of een nieuwe bewoner). */
+  vooruit_vast: number;
+  /** Ongebruikte beurten van vorige bewoners, en van de huidige (laatste) klant. */
+  vooruit_vorige: number;
+  vooruit_vorige_waarde: number;
+  vooruit_eigen: number;
+  vooruit_eigen_waarde: number;
+  /** Wat er nu terug moet (zoals de server het bij "Teruggegeven" controleert). */
+  terug: number;
+  /** De prijs per beurt voor een nieuwe vooruitbetaling; leeg zonder prijs. */
+  vooruit_p: number | null;
+  wissel: Betaalwissel | null;
   gebeurtenissen: Gebeurtenis[];
   vaste_kortingen: { id: string; naam: string; bedrag: number; door_naam: string; op: string }[];
 }
@@ -212,7 +297,18 @@ export async function fetchGeldAdres(adres: string): Promise<GeldAdres> {
       rest: Number(d.rest),
       aantal: Number(d.aantal ?? 1),
       omschrijving: d.omschrijving ?? "",
+      vooruit: Number(d.vooruit ?? 0),
     })),
+    vooruit_over: Number(x.vooruit_over ?? 0),
+    vooruit_waarde: Number(x.vooruit_waarde ?? 0),
+    vooruit_vast: Number(x.vooruit_vast ?? 0),
+    vooruit_vorige: Number(x.vooruit_vorige ?? 0),
+    vooruit_vorige_waarde: Number(x.vooruit_vorige_waarde ?? 0),
+    vooruit_eigen: Number(x.vooruit_eigen ?? 0),
+    vooruit_eigen_waarde: Number(x.vooruit_eigen_waarde ?? 0),
+    terug: Number(x.terug ?? 0),
+    vooruit_p: x.vooruit_p == null ? null : Number(x.vooruit_p),
+    wissel: x.wissel ?? null,
     gebeurtenissen: leesGebeurtenissen(x.gebeurtenissen),
     vaste_kortingen: (x.vaste_kortingen ?? []).map((k) => ({ ...k, bedrag: Number(k.bedrag) })),
   };
@@ -226,5 +322,24 @@ export function soortLabel(s: Gebeurtenis["soort"]): string {
     korting: "Korting",
     niet_thuis: "Niet thuis",
     geen_geld: "Geen geld",
+    vooruit: "Vooruit betaald",
+    terugbetaald: "Teruggegeven",
+    omgerekend: "Omgerekend naar nieuwe prijs",
   }[s];
+}
+
+/** "4 beurten vooruit", voor een regel in een overzicht. */
+export function vooruitLabel(aantal: number | null | undefined): string {
+  return `${beurtenTekst(aantal ?? 0)} vooruit`;
+}
+
+/**
+ * Wat de bevestiging zegt bij het ongedaan maken van een vooruitbetaling:
+ * beurten die al gebruikt zijn, komen weer open te staan.
+ */
+export function vooruitOngedaanTekst(g: Pick<Gebeurtenis, "aantal" | "gebruikt">): string {
+  const gebruikt = g.gebruikt ?? 0;
+  return gebruikt > 0
+    ? `${gebruikt} van de ${g.aantal ?? 0} beurten ${gebruikt === 1 ? "is" : "zijn"} al gebruikt; die komen weer open te staan. De rest vervalt.`
+    : "Er is nog geen beurt van gebruikt; de beurten vervallen.";
 }

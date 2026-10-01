@@ -23,11 +23,13 @@ import {
   looprichting,
   aanDeBeurt,
   useGeldloopLive,
+  vooruitTotVan,
   type GeldloopAdres,
   type GeldloopLijst,
   type Vrijgave,
 } from "@/lib/geldlopen";
 import { formatPrice, kantVan, type Kant } from "@/lib/klanten";
+import { vooruitLabel } from "@/lib/overzichten";
 import { useAuth } from "@/lib/auth";
 import { useRecht } from "@/lib/rechten";
 import {
@@ -539,7 +541,7 @@ function Tegel({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
   // Deel betaald boekt dezelfde soort tik als helemaal betaald. Salie mag dus
   // pas als er echt niets meer open staat; anders leest een adres waar nog
   // € 15 van moet komen als afgerond en slaat de volgende loper hem over.
-  const getikt = a.vanavond?.soort === "betaald";
+  const getikt = a.vanavond?.soort === "betaald" || a.vanavond?.soort === "vooruit";
   const volledig = getikt && !heeftIetsOpen(a);
   const deels = getikt && !volledig;
   const mislukt = a.vanavond && !getikt;
@@ -583,8 +585,10 @@ function Tegel({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
 
 function AdresRij({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
   const rood = a.open_wassen >= ROOD_VANAF && heeftIetsOpen(a);
-  const betaald = a.vanavond?.soort === "betaald";
+  const betaald = a.vanavond?.soort === "betaald" || a.vanavond?.soort === "vooruit";
   const overmaken = a.methode === "overmaken";
+  // Niets open maar nog beurten vooruit: dan zegt de rij tot wanneer.
+  const vooruit = !overmaken && !a.gestopt && a.vooruit_over > 0 ? vooruitTotVan(a) : "";
   const nummer = `${a.house_number}${a.addition}`;
   return (
     <button
@@ -631,7 +635,12 @@ function AdresRij({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
             ? heeftIetsOpen(a)
               ? "maakt over · nog contant open"
               : "maakt over"
-            : [frequentieZin(a), maandenVan(a), rood ? `${a.open_wassen}× open` : ""]
+            : [
+                frequentieZin(a),
+                maandenVan(a),
+                rood ? `${a.open_wassen}× open` : "",
+                vooruit ? `betaald t/m ${vooruit}` : "",
+              ]
                 .filter(Boolean)
                 .join(" · ")}
         </span>
@@ -656,7 +665,7 @@ function AdresRij({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
 function Status({ a }: { a: GeldloopAdres }) {
   const v = a.vanavond!;
   const door = v.door_naam.split(" ")[0] ?? "";
-  if (v.soort === "betaald") {
+  if (v.soort === "betaald" || v.soort === "vooruit") {
     // Ook hier: kwam er maar een deel binnen, dan groen met wat er nog open
     // staat erboven. Salie en het vinkje zijn voor een leeg adres.
     const rest = heeftIetsOpen(a);
@@ -673,6 +682,7 @@ function Status({ a }: { a: GeldloopAdres }) {
           }`}
         >
           {!rest && <Check className="size-3.5" />}
+          {v.soort === "vooruit" && `${vooruitLabel(v.aantal)} · `}
           {formatPrice(v.bedrag)}
         </span>
         <span className="mt-0.5 text-[11px] text-muted-foreground">{door}</span>

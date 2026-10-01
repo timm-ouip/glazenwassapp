@@ -68,7 +68,7 @@ export function LoperStart({
     const uit = { betaald: 0, nietThuis: 0, geenGeld: 0 };
     for (const a of lijst.data?.adressen ?? []) {
       if (!a.vanavond || a.vanavond.door !== employee?.id) continue;
-      if (a.vanavond.soort === "betaald") uit.betaald += 1;
+      if (a.vanavond.soort === "betaald" || a.vanavond.soort === "vooruit") uit.betaald += 1;
       else if (a.vanavond.soort === "niet_thuis") uit.nietThuis += 1;
       else uit.geenGeld += 1;
     }

@@ -8,7 +8,7 @@
  * eerst. Hier staat alleen hoe de app dat opvraagt en laat zien.
  */
 import { supabase } from "@/integrations/supabase/client";
-import { formatPrice, type Customer, type District } from "@/lib/klanten";
+import { formatPrice, ritmeMaanden, type Customer, type District } from "@/lib/klanten";
 
 export type Betaalmethode = "contant" | "overmaken";
 
@@ -59,6 +59,11 @@ export interface GeldDeel {
   aantal: number;
   /** Wat de klus was, of het extra werk en de dagnotitie bij een wasbeurt. */
   omschrijving: string;
+  /**
+   * Bij een wasbeurt: het deel dat met een vooruitbetaalde beurt betaald is.
+   * Staat er dan nog iets open, dan is dat de meerprijs (extra werk).
+   */
+  vooruit?: number;
 }
 
 export interface GeldStand {
@@ -87,6 +92,7 @@ function leesDelen(x: unknown): GeldDeel[] {
     rest: Number(d.rest ?? 0),
     aantal: Number(d.aantal ?? 1),
     omschrijving: String(d.omschrijving ?? ""),
+    vooruit: Number(d.vooruit ?? 0),
   }));
 }
 
@@ -261,6 +267,16 @@ export function rekening(delen: GeldDeel[]): RekeningRegel[] {
         wanneer: dagKort(d.datum),
         bedrag: d.rest,
       });
+    } else if ((d.vooruit ?? 0) > 0.005) {
+      // De beurt zelf is vooruit betaald; wat openstaat is het extra werk.
+      regels.push({
+        label: "Meerprijs",
+        wanneer: maandKort(d.datum),
+        uitleg: d.omschrijving
+          ? `incl. ${d.omschrijving}; de beurt zelf is vooruit betaald`
+          : "de beurt zelf is vooruit betaald",
+        bedrag: d.rest,
+      });
     } else if (d.omschrijving || d.rest < d.bedrag - 0.005) {
       regels.push({
         label: d.rest < d.bedrag - 0.005 ? "Wasbeurt, rest" : "Wasbeurt",
@@ -305,4 +321,215 @@ export function rekeningKort(stand: Pick<GeldStand, "open" | "delen">): string {
   if (r.length === 0) return "";
   if (r.length === 1) return r[0]!.wanneer;
   return r.map((x) => x.wanneer).join(" + ");
+}
+
+// ---------------------------------------------------------------------
+// Vooruit betalen
+// ---------------------------------------------------------------------
+
+/** "1 beurt", "4 beurten". */
+export function beurtenTekst(n: number): string {
+  return n === 1 ? "1 beurt" : `${n} beurten`;
+}
+
+/** De maand van nu, als "2026-09". */
+export function maandVanNu(nu = new Date()): string {
+  return `${nu.getFullYear()}-${String(nu.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** "2026-09" → "2026-10", en "2026-12" → "2027-01". */
+export function volgendeMaand(maand: string): string {
+  const [jaar, m] = maand.split("-").map(Number);
+  if (!jaar || !m) return maand;
+  return m === 12 ? `${jaar + 1}-01` : `${jaar}-${String(m + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Welke maanden de vooruitbetaalde beurten die nog over zijn ongeveer gaan
+ * dekken ("2026-10", "2026-12", ...): de volgende maanden van de frequentie,
+ * vanaf `start`, zonder de maanden die hij overslaat. Het is een schatting —
+ * een extra beurt tussendoor gebruikt er ook een — maar genoeg voor "t/m
+ * ongeveer maart" en de lichte vakjes op de kaart.
+ */
+export function vooruitMaanden(
+  c: Pick<Customer, "interval_maanden" | "ritme"> & { overslaan?: string[] | undefined },
+  over: number,
+  start: string,
+): string[] {
+  const uit: string[] = [];
+  const [beginJaar, beginMaand] = start.split("-").map(Number);
+  if (over <= 0 || !beginJaar || !beginMaand) return uit;
+  const aanDeBeurt = ritmeMaanden(c);
+  if (aanDeBeurt.length === 0) return uit;
+  const overslaan = c.overslaan ?? [];
+  let jaar = beginJaar;
+  let maand = beginMaand;
+  // Hooguit dertig jaar vooruit kijken: alles overgeslagen mag niet eindeloos lopen.
+  for (let i = 0; i < 360 && uit.length < over; i++) {
+    const sleutel = `${jaar}-${String(maand).padStart(2, "0")}`;
+    if (aanDeBeurt.includes(maand) && !overslaan.includes(sleutel)) uit.push(sleutel);
+    maand += 1;
+    if (maand > 12) {
+      maand = 1;
+      jaar += 1;
+    }
+  }
+  return uit;
+}
+
+/**
+ * Tot en met welke maand de vooruitbetaling ongeveer reikt: "mrt '27", of
+ * "onbekend" als er geen frequentie is om mee te rekenen.
+ */
+export function vooruitTot(
+  c: Pick<Customer, "interval_maanden" | "ritme"> & { overslaan?: string[] | undefined },
+  over: number,
+  start: string,
+  nu = new Date(),
+): string {
+  const maanden = vooruitMaanden(c, over, start);
+  const laatste = maanden[maanden.length - 1];
+  return laatste && maanden.length === over ? maandKort(`${laatste}-01`, nu) : "onbekend";
+}
+
+/**
+ * Vanaf welke maand de beurten die nog over zijn meetellen: deze maand, of
+ * de maand na de laatste gewassen beurt als die van deze maand er al is.
+ */
+export function vooruitStart(laatsteRonde: string | null | undefined, nu = new Date()): string {
+  const hier = maandVanNu(nu);
+  if (!laatsteRonde) return hier;
+  const erna = volgendeMaand(laatsteRonde.slice(0, 7));
+  return erna > hier ? erna : hier;
+}
+
+/**
+ * Omrekenen na een prijsverhoging: hetzelfde geld, minder beurten tegen de
+ * nieuwe prijs; wat overblijft wordt tegoed. € 37,50 bij € 15 = 2 beurten en
+ * € 7,50 tegoed. (De database rekent hetzelfde en controleert het.)
+ */
+export function omrekenen(waarde: number, prijs: number): { beurten: number; tegoed: number } {
+  const centen = Math.round(waarde * 100);
+  const perBeurt = Math.round(prijs * 100);
+  if (perBeurt <= 0) return { beurten: 0, tegoed: centen / 100 };
+  const beurten = Math.floor(centen / perBeurt);
+  return { beurten, tegoed: (centen - beurten * perBeurt) / 100 };
+}
+
+export interface TerugStand {
+  /** Ongebruikte beurten van vorige bewoners, en wat ze waard zijn. */
+  vorige: number;
+  vorigeWaarde: number;
+  /** Ongebruikte beurten van de huidige (laatste) klant, en wat ze waard zijn. */
+  eigen: number;
+  eigenWaarde: number;
+  /** Wat er open staat (negatief = tegoed). */
+  open: number;
+  gestopt: boolean;
+}
+
+/** Wat er terug moet (zoals de database het rekent, zie vooruit_terug). */
+export function terugBedrag(t: TerugStand): number {
+  const eigen = t.gestopt ? Math.max(0, t.eigenWaarde - t.open) : 0;
+  return Math.round((t.vorigeWaarde + eigen) * 100) / 100;
+}
+
+/**
+ * Wat er terug moet, in één regel: "2 beurten (€ 25) + tegoed € 2,50 =
+ * € 27,50". De beurten van een vorige bewoner gaan altijd helemaal terug:
+ * wat de huidige klant open heeft gaat daar niet af. Bij een gestopt adres
+ * komen de eigen beurten en het tegoed erbij, min wat er nog open staat. Loopt
+ * het adres nog, dan blijft tegoed op het adres staan.
+ */
+export function terugTekst(t: TerugStand): string {
+  const terug = terugBedrag(t);
+  const delen: { tekst: string; kort: string }[] = [];
+  if (t.vorige > 0) {
+    const wie = `${beurtenTekst(t.vorige)} van de vorige bewoner`;
+    delen.push({ tekst: `${wie} (${formatPrice(t.vorigeWaarde)})`, kort: wie });
+  }
+  if (t.gestopt && t.eigen > 0) {
+    delen.push({
+      tekst: `${beurtenTekst(t.eigen)} (${formatPrice(t.eigenWaarde)})`,
+      kort: beurtenTekst(t.eigen),
+    });
+  }
+  if (t.gestopt && t.open < -0.005) {
+    const tegoed = `tegoed ${formatPrice(-t.open)}`;
+    delen.push({ tekst: tegoed, kort: tegoed });
+  }
+  // Wat er open staat gaat alleen van de eigen beurten af, nooit verder.
+  const aftrek = t.gestopt && t.open > 0.005 ? Math.min(t.open, t.eigenWaarde) : 0;
+  if (delen.length === 0) return formatPrice(terug);
+  const min = aftrek > 0.005 ? ` − nog open ${formatPrice(aftrek)}` : "";
+  const enige = delen.length === 1 && !min ? delen[0] : undefined;
+  // Eén deel: "1 beurt = € 12,50", of alleen "tegoed € 5".
+  if (enige) return enige.kort === enige.tekst ? enige.tekst : `${enige.kort} = ${formatPrice(terug)}`;
+  return `${delen.map((d) => d.tekst).join(" + ")}${min} = ${formatPrice(terug)}`;
+}
+
+/**
+ * De ronde van de laatste gewassen beurt ("2026-09"), om te weten vanaf
+ * welke maand de vooruitbetaalde beurten die nog over zijn gaan tellen.
+ */
+export async function fetchLaatsteRonde(adres: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("wasdag_regels")
+    .select("ronde")
+    .eq("customer_id", adres)
+    .not("gedaan_op", "is", null)
+    // Teruggemeld als niet gewassen: die beurt telt niet, dus ook niet als laatste.
+    .is("niet_gewassen_op", null)
+    .order("ronde", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return data?.[0]?.ronde ?? null;
+}
+
+/** Een vooruitbetaling ongedaan laten: de geplande (of net gedane) wissel naar overmaken. */
+export async function draaiBetaalwisselTerug(adres: string) {
+  const { error } = await supabase.rpc("betaalwissel_ongedaan", { adres });
+  if (error) throw error;
+}
+
+/** Staat er voor dit adres een wissel naar overmaken klaar? */
+export async function fetchWisselStatus(adres: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("customers")
+    .select("wissel_status")
+    .eq("id", adres)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.wissel_status ?? null;
+}
+
+/**
+ * Hoeveel adressen die de wijk volgen nog vooruitbetaalde beurten hebben:
+ * die gaan niet meteen mee naar overmaken, maar pas als het op is. Eerst de
+ * adressen die ooit vooruit betaalden (weinig), dan per adres de stand.
+ */
+export async function telVooruitInWijk(wijk: string): Promise<number> {
+  // Meteen op de wijk gefilterd (en alleen adressen die de wijk volgen en
+  // nog lopen): zo blijven er maar een paar adressen over om na te kijken.
+  const { data: rijen, error } = await supabase
+    .from("betaal_gebeurtenissen")
+    .select(
+      "customer_id, customers!inner(betaalmethode, inactief_op, deleted_at, streets!inner(district_id))",
+    )
+    .eq("soort", "vooruit")
+    .eq("customers.streets.district_id", wijk)
+    .is("customers.betaalmethode", null)
+    .is("customers.inactief_op", null)
+    .is("customers.deleted_at", null);
+  if (error) throw error;
+  const adressen = [...new Set((rijen ?? []).map((r) => r.customer_id))];
+  const standen = await Promise.all(
+    adressen.map(async (id) => {
+      const { data, error: e } = await supabase.rpc("geld_adres", { adres: id });
+      if (e) throw e;
+      const x = (data ?? {}) as { vooruit_over?: number; vooruit_vast?: number };
+      return Number(x.vooruit_over ?? 0) - Number(x.vooruit_vast ?? 0);
+    }),
+  );
+  return standen.filter((n) => n > 0).length;
 }

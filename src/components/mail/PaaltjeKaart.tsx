@@ -283,6 +283,7 @@ export function PaaltjeKaart({
                 onOpenChange={setStopOpen}
                 titel="Klant stopt"
                 omschrijving={stopNamen.data?.join(", ") ?? ""}
+                adressen={b.voorstel.stoppen.adressen}
                 telDagen={() => stoppenPlanning(b.id)}
                 onBevestig={async (reden, planningWeg) => {
                   setBezig("stoppen");

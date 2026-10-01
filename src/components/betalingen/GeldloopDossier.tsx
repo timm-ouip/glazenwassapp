@@ -23,6 +23,7 @@ import {
   popupInvoer,
 } from "@/components/Popup";
 import { StopDialog } from "@/components/StopDialog";
+import { terugBedrag } from "@/lib/betalingen";
 import {
   bewaarGeldloopDossier,
   fetchGeldloopDossier,
@@ -140,6 +141,22 @@ export function GeldloopDossier({
         // mee weg en de eigenaar kan het terugdraaien.
         telDagen={async () => ({ dagen: [], aantal: 0 })}
         metKlant={!!adres.naam}
+        // De stand staat al in de lijst van de avond; niets op te zoeken.
+        // Wat er ná het stoppen terug moet: de beurten van een vorige
+        // bewoner helemaal, en de eigen beurten plus tegoed min wat er nog
+        // open staat.
+        vooruit={{
+          beurten: adres.gestopt ? 0 : adres.vooruit_over,
+          vorige: adres.gestopt ? 0 : adres.vooruit_vast,
+          terug: terugBedrag({
+            vorige: adres.vooruit_vast,
+            vorigeWaarde: adres.vooruit_vorige_waarde,
+            eigen: adres.vooruit_over,
+            eigenWaarde: adres.vooruit_eigen_waarde,
+            open: adres.open,
+            gestopt: true,
+          }),
+        }}
         onBevestig={async (reden) => {
           await geldloopStoppen(adres.id, reden);
           toast.success(

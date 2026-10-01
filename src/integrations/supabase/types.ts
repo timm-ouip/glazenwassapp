@@ -151,6 +151,51 @@ export type Database = {
           },
         ];
       };
+      adres_klantwissels: {
+        Row: {
+          company_id: string;
+          customer_id: string;
+          gemaakt_op: string;
+          id: string;
+          naar_klant: string | null;
+          tot: string;
+          van_klant: string;
+        };
+        Insert: {
+          company_id: string;
+          customer_id: string;
+          gemaakt_op?: string;
+          id?: string;
+          naar_klant?: string | null;
+          tot: string;
+          van_klant: string;
+        };
+        Update: {
+          company_id?: string;
+          customer_id?: string;
+          gemaakt_op?: string;
+          id?: string;
+          naar_klant?: string | null;
+          tot?: string;
+          van_klant?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "adres_klantwissels_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "adres_klantwissels_customer_id_company_id_fkey";
+            columns: ["customer_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
       adres_prijzen: {
         Row: {
           company_id: string;
@@ -543,6 +588,7 @@ export type Database = {
       betaal_gebeurtenissen: {
         Row: {
           aantal: number | null;
+          alle_beurten: boolean;
           adres: string;
           bedrag: number;
           botsing_met: string | null;
@@ -554,17 +600,22 @@ export type Database = {
           getoond_open: number | null;
           herroept_id: string | null;
           id: string;
+          klant_id: string | null;
           maanden: string[] | null;
           ontvangen_op: string;
           op: string;
           peildatum: string | null;
+          prijs_per_beurt: number | null;
+          prijs_verwacht: number | null;
           reden: string;
           soort: string;
+          vanaf: string | null;
           vaste_korting_id: string | null;
           vrijgave_id: string | null;
         };
         Insert: {
           aantal?: number | null;
+          alle_beurten?: boolean;
           adres?: string;
           bedrag?: number;
           botsing_met?: string | null;
@@ -576,17 +627,22 @@ export type Database = {
           getoond_open?: number | null;
           herroept_id?: string | null;
           id?: string;
+          klant_id?: string | null;
           maanden?: string[] | null;
           ontvangen_op?: string;
           op?: string;
           peildatum?: string | null;
+          prijs_per_beurt?: number | null;
+          prijs_verwacht?: number | null;
           reden?: string;
           soort: string;
+          vanaf?: string | null;
           vaste_korting_id?: string | null;
           vrijgave_id?: string | null;
         };
         Update: {
           aantal?: number | null;
+          alle_beurten?: boolean;
           adres?: string;
           bedrag?: number;
           botsing_met?: string | null;
@@ -598,12 +654,16 @@ export type Database = {
           getoond_open?: number | null;
           herroept_id?: string | null;
           id?: string;
+          klant_id?: string | null;
           maanden?: string[] | null;
           ontvangen_op?: string;
           op?: string;
           peildatum?: string | null;
+          prijs_per_beurt?: number | null;
+          prijs_verwacht?: number | null;
           reden?: string;
           soort?: string;
+          vanaf?: string | null;
           vaste_korting_id?: string | null;
           vrijgave_id?: string | null;
         };
@@ -857,6 +917,13 @@ export type Database = {
           sort_order: number;
           start_maand: string;
           street_id: string;
+          wissel_gepland_naam: string | null;
+          wissel_gepland_op: string | null;
+          wissel_naar: string | null;
+          wissel_periode_tot: string | null;
+          wissel_status: string | null;
+          wissel_uitgevoerd_op: string | null;
+          wissel_vorige: string | null;
         };
         Insert: {
           aangemeld_op?: string | null;
@@ -890,6 +957,13 @@ export type Database = {
           sort_order?: number;
           start_maand?: string;
           street_id: string;
+          wissel_gepland_naam?: string | null;
+          wissel_gepland_op?: string | null;
+          wissel_naar?: string | null;
+          wissel_periode_tot?: string | null;
+          wissel_status?: string | null;
+          wissel_uitgevoerd_op?: string | null;
+          wissel_vorige?: string | null;
         };
         Update: {
           aangemeld_op?: string | null;
@@ -923,6 +997,13 @@ export type Database = {
           sort_order?: number;
           start_maand?: string;
           street_id?: string;
+          wissel_gepland_naam?: string | null;
+          wissel_gepland_op?: string | null;
+          wissel_naar?: string | null;
+          wissel_periode_tot?: string | null;
+          wissel_status?: string | null;
+          wissel_uitgevoerd_op?: string | null;
+          wissel_vorige?: string | null;
         };
         Relationships: [
           {
@@ -3586,16 +3667,19 @@ export type Database = {
       wasdag_prijzen: {
         Row: {
           company_id: string;
+          normaal: number | null;
           prijs: number;
           regel_id: string;
         };
         Insert: {
           company_id?: string;
+          normaal?: number | null;
           prijs?: number;
           regel_id: string;
         };
         Update: {
           company_id?: string;
+          normaal?: number | null;
           prijs?: number;
           regel_id?: string;
         };
@@ -3842,6 +3926,11 @@ export type Database = {
         Args: { aanmelding: string; met_vorige_klant: boolean };
         Returns: string;
       };
+      betaalwissel_ongedaan: { Args: { adres: string }; Returns: undefined };
+      betaalwissels_bijwerken: {
+        Args: { adressen: string[]; bedrijf: string };
+        Returns: undefined;
+      };
       bericht_echt_wissen: { Args: { bericht: string }; Returns: undefined };
       bericht_uit_dossier: {
         Args: { bericht: string; weg: boolean };
@@ -4000,6 +4089,7 @@ export type Database = {
       };
       geld_boeken: {
         Args: {
+          aantal?: number | null;
           adres_id: string;
           bedrag?: number | null;
           bron?: string | null;
@@ -4007,6 +4097,7 @@ export type Database = {
           herroept?: string | null;
           id: string;
           op?: string | null;
+          prijs_per_beurt?: number | null;
           reden?: string | null;
           soort: string;
           vaste_korting?: string | null;
@@ -4053,6 +4144,7 @@ export type Database = {
           ref: string;
           soort: string;
           volg: number;
+          vooruit: number;
         }[];
       };
       geld_posten_betaald: {
@@ -4070,6 +4162,7 @@ export type Database = {
           omschrijving: string;
           ref: string;
           soort: string;
+          vooruit: number;
         }[];
       };
       geld_schuld: {
@@ -4092,6 +4185,9 @@ export type Database = {
           delen: Json;
           open: number;
           open_wassen: number;
+          vooruit_over: number;
+          vooruit_vast: number;
+          vooruit_waarde: number;
         }[];
       };
       geld_stand_wijk: { Args: { wijk: string }; Returns: Json };
@@ -4100,6 +4196,18 @@ export type Database = {
         Returns: string;
       };
       geld_vaste_korting_weg: { Args: { korting: string }; Returns: undefined };
+      geld_vooruit: {
+        Args: { adressen: string[]; bedrijf: string };
+        Returns: {
+          aantal: number;
+          bedrag: number;
+          customer_id: string;
+          datum: string;
+          ref: string;
+          soort: string;
+          vooruit_id: string;
+        }[];
+      };
       geld_wijk_klaar: {
         Args: { klaar: boolean; wijk: string };
         Returns: undefined;
@@ -4281,6 +4389,9 @@ export type Database = {
       };
       straten_volgorde: { Args: { ids: string[] }; Returns: number };
       telefoon_sleutel: { Args: { tekst: string }; Returns: string };
+      vooruit_beurten_open: { Args: { adres: string }; Returns: number };
+      vooruit_prijs: { Args: { adres: string }; Returns: number };
+      vooruit_wissel_plannen: { Args: { adressen: string[] }; Returns: undefined };
       wa_toestemming_bestaande_klanten: {
         Args: never;
         Returns: {

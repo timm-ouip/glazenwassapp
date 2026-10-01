@@ -6,6 +6,7 @@
  * het er overal hetzelfde uitziet en dezelfde vragen stelt.
  */
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   IconAlertTriangle as AlertTriangle,
   IconCalendar as CalendarDays,
@@ -18,6 +19,10 @@ import { toast } from "sonner";
 import { PopupBody, PopupKader, PopupKop, PopupVoet } from "@/components/Popup";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { beurtenTekst, terugBedrag } from "@/lib/betalingen";
+import { formatPrice } from "@/lib/klanten";
+import { fetchGeldAdres } from "@/lib/overzichten";
+import { useRecht } from "@/lib/rechten";
 import { STOP_REDENEN, type StopReden } from "@/lib/stoppen";
 import { toonDatum } from "@/lib/wasdag";
 import { cn } from "@/lib/utils";
@@ -47,6 +52,25 @@ interface Props {
   onVerwijder?: ((planningWeg: boolean) => Promise<void>) | undefined;
   /** Hangt er een klant aan het adres? Anders gaat de vraag over het adres. */
   metKlant?: boolean | undefined;
+  /**
+   * De adressen die stoppen: heeft er een nog vooruitbetaalde beurten, dan
+   * waarschuwt het schermpje (alleen met "prijzen zien" kan het dat opzoeken).
+   */
+  adressen?: string[] | undefined;
+  /** Of die stand al bekend is (de geldloper heeft hem in zijn lijst). */
+  vooruit?: VooruitBijStoppen | undefined;
+}
+
+export interface VooruitBijStoppen {
+  /** Ongebruikte beurten van de klant die stopt. */
+  beurten: number;
+  /** Ongebruikte beurten van een vorige bewoner die nog terug moeten. */
+  vorige: number;
+  /**
+   * Wat er na het stoppen terug moet: de beurten van een vorige bewoner
+   * helemaal, en de eigen beurten plus tegoed min wat er nog open staat.
+   */
+  terug: number;
 }
 
 export function StopDialog({
@@ -58,7 +82,38 @@ export function StopDialog({
   onBevestig,
   onVerwijder,
   metKlant = true,
+  adressen,
+  vooruit,
 }: Props) {
+  const prijzenZien = useRecht("prijzen_zien");
+  // Vooruitbetaalde beurten worden na het stoppen niet meer gebruikt, ook
+  // niet door een nieuwe bewoner: dat hoort de eigenaar vóór het stoppen te
+  // weten, zodat hij het geld teruggeeft.
+  const opgezocht = useQuery({
+    queryKey: ["stoppen-vooruit", adressen],
+    queryFn: async (): Promise<VooruitBijStoppen> => {
+      const standen = await Promise.all((adressen ?? []).map(fetchGeldAdres));
+      return {
+        beurten: standen.reduce((t, g) => t + g.vooruit_eigen, 0),
+        vorige: standen.reduce((t, g) => t + g.vooruit_vorige, 0),
+        terug: standen.reduce(
+          (t, g) =>
+            t +
+            terugBedrag({
+              vorige: g.vooruit_vorige,
+              vorigeWaarde: g.vooruit_vorige_waarde,
+              eigen: g.vooruit_eigen,
+              eigenWaarde: g.vooruit_eigen_waarde,
+              open: g.open,
+              gestopt: true,
+            }),
+          0,
+        ),
+      };
+    },
+    enabled: open && !vooruit && prijzenZien && (adressen?.length ?? 0) > 0,
+  });
+  const vooruitStand = vooruit ?? opgezocht.data;
   const [reden, setReden] = useState<StopReden | null>(null);
   const [planningWeg, setPlanningWeg] = useState<boolean | null>(null);
   const [telling, setTelling] = useState<GeplandeDagen | null>(null);
@@ -187,6 +242,22 @@ export function StopDialog({
           ) : (
             <p className="text-[12.5px] text-muted-foreground">
               Na vandaag staat er niets meer op de planning.
+            </p>
+          )}
+
+          {vooruitStand && (vooruitStand.beurten > 0 || vooruitStand.vorige > 0) && (
+            <p className="flex items-start gap-1.5 rounded-[12px] bg-tint-amber px-3 py-2 text-[12.5px] text-tint-amber-ink">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              <span>
+                Nog {beurtenTekst(vooruitStand.beurten + vooruitStand.vorige)} vooruit betaald
+                {vooruitStand.vorige > 0 &&
+                  ` (waarvan ${beurtenTekst(vooruitStand.vorige)} van de vorige bewoner)`}
+                :{" "}
+                {prijzenZien
+                  ? `geef ${formatPrice(vooruitStand.terug)} terug`
+                  : "geef het geld terug"}
+                ; na het stoppen worden ze niet meer gebruikt, ook niet door een nieuwe bewoner.
+              </span>
             </p>
           )}
 

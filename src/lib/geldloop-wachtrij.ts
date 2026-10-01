@@ -236,17 +236,28 @@ function trekAf(delen: GeldDeel[], bedrag: number): GeldDeel[] {
   return uit;
 }
 
+const rond = (n: number) => Math.round(n * 100) / 100;
+
+/** Een beurt waarvan alleen de meerprijs openstaat (de beurt zelf is vooruit
+ *  betaald) telt niet als open wasbeurt, net als in de database. */
 function openWassen(delen: GeldDeel[]): number {
   return delen.reduce(
     (t, d) =>
       t +
       (d.soort === "wassen"
-        ? 1
+        ? (d.vooruit ?? 0) > 0.005
+          ? 0
+          : 1
         : d.soort === "beginstand"
           ? Math.ceil((d.aantal * d.rest) / d.bedrag - 0.0001)
           : 0),
     0,
   );
+}
+
+/** Wat de vaste kortingen samen van de gewone prijs afhalen. */
+function gewoneKorting(a: GeldloopAdres): number {
+  return a.vaste_kortingen.reduce((t, k) => t + k.bedrag, 0);
 }
 
 export function pasToeOpAdres(a: GeldloopAdres, t: Wachtend): GeldloopAdres {
@@ -292,6 +303,55 @@ export function pasToeOpAdres(a: GeldloopAdres, t: Wachtend): GeldloopAdres {
         ],
       };
     }
+    case "vooruit": {
+      // Zoals de database: de open wasbeurten (oudste eerst) gebruiken elk
+      // een vooruitbetaalde beurt. Wat er al met euro's aan betaald was, komt
+      // vrij en gaat naar de volgende posten; is een beurt goedkoper dan de
+      // prijs per beurt, dan wordt het verschil tegoed. Een klus of de
+      // papieren kaart gebruikt nooit een beurt. De prijs van de dag kent de
+      // telefoon niet; hij rekent met de gewone prijs (de prijs per beurt
+      // plus de vaste kortingen, die zitten daar al in) tot de server het
+      // precies zegt.
+      const aantal = t.aantal ?? 0;
+      const p = t.prijs_per_beurt ?? (aantal > 0 ? bedrag / aantal : 0);
+      const gewoon = p + gewoneKorting(a);
+      let over = aantal;
+      let vrij = 0;
+      let af = 0;
+      const gedekt = a.delen
+        .map((d) => {
+          if (over <= 0 || d.soort !== "wassen" || (d.vooruit ?? 0) > 0.005) return d;
+          over -= 1;
+          const dek = Math.min(d.bedrag, gewoon);
+          const tegoed = Math.max(0, p - dek);
+          vrij += d.bedrag - d.rest + tegoed;
+          af += dek + tegoed;
+          return { ...d, rest: rond(d.bedrag - dek), vooruit: dek };
+        })
+        .filter((d) => d.rest > 0.005);
+      const delen = trekAf(gedekt, vrij);
+      return {
+        ...a,
+        open: rond(a.open - af),
+        delen,
+        open_wassen: openWassen(delen),
+        vooruit_over: a.vooruit_over + over,
+        vooruit_waarde: rond(a.vooruit_waarde + over * p),
+        vanavond: {
+          id: t.id,
+          soort: "vooruit",
+          bedrag,
+          aantal,
+          op: t.op,
+          door: t.door,
+          door_naam: t.door_naam,
+        },
+      };
+    }
+    case "terugbetaald":
+    case "omgerekend":
+      // Gebeurt op kantoor; hoort niet in de lijst van de avond.
+      return a;
     case "niet_thuis":
     case "geen_geld":
       return {
@@ -307,6 +367,20 @@ export function pasToeOpAdres(a: GeldloopAdres, t: Wachtend): GeldloopAdres {
       };
     case "ongedaan": {
       const was = a.vanavond;
+      if (was && was.id === t.herroept && was.soort === "vooruit") {
+        // Beurten die nog over waren gaan eraf; wat al gebruikt was komt weer
+        // open. Welke posten precies, zegt de server zo meteen.
+        const aantal = was.aantal ?? 0;
+        const p = aantal > 0 ? was.bedrag / aantal : 0;
+        const ongebruikt = Math.min(aantal, a.vooruit_over);
+        return {
+          ...a,
+          open: rond(a.open + (aantal - ongebruikt) * (p + gewoneKorting(a))),
+          vooruit_over: a.vooruit_over - ongebruikt,
+          vooruit_waarde: rond(Math.max(0, a.vooruit_waarde - ongebruikt * p)),
+          vanavond: null,
+        };
+      }
       if (was && was.id === t.herroept) {
         const terug = was.soort === "betaald" ? was.bedrag : 0;
         return { ...a, open: a.open + terug, vanavond: null };
@@ -338,12 +412,17 @@ export function metWachtende(lijst: GeldloopLijst, wachtend: Wachtend[]): Geldlo
       // Alleen meetellen als de tik echt iets veranderde (hij kan al in de
       // verse lijst van de server zitten).
       if (na !== a) {
-        if (t.soort === "betaald") {
+        // Vooruit is ook geld in de tas; het telt net zo mee als betaald.
+        if (t.soort === "betaald" || t.soort === "vooruit") {
           mij += t.bedrag ?? 0;
           mijAantal += 1;
         } else if (t.soort === "ongedaan") {
           const was = a.vanavond;
-          if (was && was.id === t.herroept && was.soort === "betaald") {
+          if (
+            was &&
+            was.id === t.herroept &&
+            (was.soort === "betaald" || was.soort === "vooruit")
+          ) {
             mij -= was.bedrag;
             mijAantal -= 1;
           }

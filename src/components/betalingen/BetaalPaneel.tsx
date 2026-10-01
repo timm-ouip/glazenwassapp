@@ -13,24 +13,31 @@ import {
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
-import { KortingDialoog, BedragDialoog, KlachtDialoog } from "@/components/betalingen/DeurDialogen";
+import {
+  KortingDialoog,
+  BedragDialoog,
+  KlachtDialoog,
+  VooruitDialoog,
+} from "@/components/betalingen/DeurDialogen";
 import { GeldloopDossier } from "@/components/betalingen/GeldloopDossier";
 import { useBevestig } from "@/components/Bevestig";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { frequentieZin, rekening } from "@/lib/betalingen";
+import { beurtenTekst, frequentieZin, rekening } from "@/lib/betalingen";
 import { useAuth } from "@/lib/auth";
 import {
   geldloopNietGewassen,
   heeftIetsOpen,
   nieuweTik,
+  vooruitTotVan,
   type GeldloopAdres,
   type Tik,
   type Vrijgave,
 } from "@/lib/geldlopen";
 import { zetInWachtrij } from "@/lib/geldloop-wachtrij";
 import { formatPrice } from "@/lib/klanten";
+import { vooruitLabel } from "@/lib/overzichten";
 
-type Venster = "korting" | "bedrag" | "klacht" | "dossier" | null;
+type Venster = "korting" | "bedrag" | "klacht" | "dossier" | "vooruit" | null;
 
 /**
  * Wat je ziet als je een adres aantikt: bovenin wat je leest (wie, wat er
@@ -124,6 +131,15 @@ export function BetaalPaneel({
   const open = a && heeftIetsOpen(a);
   const kanTikken = !!a && (!voorbij || isEigenaar);
   const vanMij = a?.vanavond && (a.vanavond.door === employee?.id || isEigenaar);
+  // Vooruit betaald en nog niet op: de vaste korting zit dan al in de prijs
+  // per beurt (de database weigert hem ook).
+  const vooruitOver = a && !a.gestopt ? a.vooruit_over : 0;
+  const vooruitGedekt =
+    vooruitOver > 0 || !!a?.delen.some((d) => d.soort === "wassen" && (d.vooruit ?? 0) > 0.005);
+  // Vooruit betalen kan alleen bij een contant adres dat nog loopt en een prijs
+  // heeft, en niet zolang de beurten van een vorige bewoner nog terug moeten.
+  const vooruitKan =
+    !!a && a.vooruit_p !== null && a.methode === "contant" && !a.gestopt && a.vooruit_vast === 0;
 
   function betaalAlles() {
     if (!a || !open || !kanTikken) return;
@@ -215,7 +231,7 @@ export function BetaalPaneel({
         {a.vanavond && (
           <div
             className={`mt-3 flex items-center gap-2 rounded-[14px] px-3 py-2 text-[13px] ${
-              a.vanavond.soort === "betaald"
+              a.vanavond.soort === "betaald" || a.vanavond.soort === "vooruit"
                 ? "bg-tint-salie text-tint-salie-ink"
                 : "bg-surface text-foreground"
             }`}
@@ -223,9 +239,11 @@ export function BetaalPaneel({
             <span className="min-w-0 flex-1">
               {a.vanavond.soort === "betaald"
                 ? `Betaald ${formatPrice(a.vanavond.bedrag)}`
-                : a.vanavond.soort === "niet_thuis"
-                  ? "Niet thuis"
-                  : "Geen geld"}{" "}
+                : a.vanavond.soort === "vooruit"
+                  ? `${vooruitLabel(a.vanavond.aantal)} ${formatPrice(a.vanavond.bedrag)}`
+                  : a.vanavond.soort === "niet_thuis"
+                    ? "Niet thuis"
+                    : "Geen geld"}{" "}
               · {a.vanavond.door_naam || "?"} om{" "}
               {new Date(a.vanavond.op).toLocaleTimeString("nl-NL", {
                 hour: "2-digit",
@@ -300,12 +318,40 @@ export function BetaalPaneel({
             </>
           )}
         </div>
+
+        {/* Vooruit: wat er nog staat, en de knop om te boeken. Bewust hier,
+            bij wat je leest, en niet onderin tussen Betaald en Niet thuis:
+            het is een gesprek aan de deur, geen snelle tik. */}
+        {vooruitOver > 0 && (
+          <p className="mt-2 rounded-[14px] bg-tint-groen px-3 py-2 text-[13px] text-tint-groen-ink">
+            Nog {beurtenTekst(vooruitOver)} vooruit betaald, t/m ongeveer {vooruitTotVan(a)}.
+          </p>
+        )}
+        {kanTikken && (
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!vooruitKan}
+              onClick={() => setVenster("vooruit")}
+              className="min-h-10 rounded-full border border-border bg-card px-3.5 text-[13.5px] font-medium shadow-card active:bg-surface disabled:opacity-50"
+            >
+              Vooruit betalen
+            </button>
+            {!vooruitKan && a.methode === "contant" && !a.gestopt && (
+              <span className="text-[12px] text-muted-foreground">
+                {a.vooruit_vast > 0
+                  ? "Eerst de beurten van de vorige bewoner teruggeven (kantoor)"
+                  : "Geen prijs bekend"}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Wat je aantikt: onderin, bij je duim */}
       {kanTikken ? (
         <div className="shrink-0 pt-3">
-          {open && a.vaste_kortingen.length > 0 && (
+          {open && !vooruitGedekt && a.vaste_kortingen.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">
               {a.vaste_kortingen.map((k) => (
                 <Chip
@@ -451,6 +497,22 @@ export function BetaalPaneel({
             onBedrag={(bedrag) =>
               tik({ soort: "betaald", bedrag }, `Betaald ${formatPrice(bedrag)}`, true)
             }
+          />
+          <VooruitDialoog
+            open={venster === "vooruit"}
+            subtitel={`Nr ${a.house_number}${a.addition}${a.naam ? ` · ${a.naam}` : ""}`}
+            delen={a.delen}
+            prijs={a.vooruit_p ?? 0}
+            prijsAanpassen={isEigenaar}
+            onSluit={() => setVenster(null)}
+            onVooruit={(aantal, prijs) => {
+              const bedrag = Math.round(aantal * prijs * 100) / 100;
+              return tik(
+                { soort: "vooruit", aantal, prijs_per_beurt: prijs, bedrag },
+                `${vooruitLabel(aantal)} ${formatPrice(bedrag)}`,
+                true,
+              );
+            }}
           />
           <KlachtDialoog
             open={venster === "klacht"}

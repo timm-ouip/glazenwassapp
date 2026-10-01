@@ -1521,6 +1521,7 @@ function Klanten() {
         metKlant={Boolean(stop.regel?.klant)}
         omschrijving={stop.regel ? adresTekst(stop.regel) : ""}
         telDagen={() => geplandeDagen(stop.regel ? [stop.regel.customer.id] : [])}
+        adressen={stop.regel ? [stop.regel.customer.id] : undefined}
         onBevestig={(reden, planningWeg) =>
           stop.regel ? stopRegel(stop.regel, reden, planningWeg) : Promise.resolve()
         }

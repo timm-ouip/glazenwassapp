@@ -52,7 +52,7 @@ import { zoekWoonplaatsen } from "@/lib/postcode";
 import { useBevestig } from "@/components/Bevestig";
 import { BetaalwijzeKiezer } from "@/components/betalingen/BetaalwijzeKiezer";
 import { useAuth } from "@/lib/auth";
-import { zetWijkBetaalmethode, type Betaalmethode } from "@/lib/betalingen";
+import { telVooruitInWijk, zetWijkBetaalmethode, type Betaalmethode } from "@/lib/betalingen";
 import { fetchWijkTelling, wijkWaarschuwing } from "@/lib/facturen";
 import { opslaanBijEnter } from "@/lib/dialoog";
 
@@ -300,6 +300,11 @@ function WijkDialoog({
           let tekst: string | null = null;
           try {
             tekst = wijkWaarschuwing(await fetchWijkTelling(wijk.id));
+            // Wie nog vooruit betaald heeft, blijft contant tot dat op is.
+            const vooruit = tekst ? await telVooruitInWijk(wijk.id) : 0;
+            if (vooruit > 0) {
+              tekst += ` ${vooruit === 1 ? "1 adres heeft" : `${vooruit} adressen hebben`} nog vooruit betaald; ${vooruit === 1 ? "dat gaat" : "die gaan"} pas over als het op is.`;
+            }
           } catch (e) {
             console.error("wijktelling:", e);
           }

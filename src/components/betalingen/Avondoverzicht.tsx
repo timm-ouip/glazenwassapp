@@ -16,6 +16,7 @@ import {
   TegelOnder,
 } from "@/components/Tegel";
 import { Input } from "@/components/ui/input";
+import { useBevestig } from "@/components/Bevestig";
 import { useAuth } from "@/lib/auth";
 import {
   boek,
@@ -31,7 +32,16 @@ import {
 import { fetchDistricts, fetchStreets, formatPrice } from "@/lib/klanten";
 import { fetchFacturen, openBedrag, porNodig } from "@/lib/facturen";
 import { zetKlachtStatus } from "@/lib/klachten";
-import { fetchAvond, fetchPof, perLoper, soortLabel, type Gebeurtenis } from "@/lib/overzichten";
+import {
+  fetchAvond,
+  fetchPof,
+  perLoper,
+  soortLabel,
+  vooruitLabel,
+  vooruitOngedaanTekst,
+  type Gebeurtenis,
+} from "@/lib/overzichten";
+import { beurtenTekst } from "@/lib/betalingen";
 import { cn } from "@/lib/utils";
 import { toonDatum, vandaag } from "@/lib/wasdag";
 
@@ -71,6 +81,7 @@ export function Avondoverzicht({
   onVrijgeefVenster?: (open: boolean) => void;
 }) {
   const qc = useQueryClient();
+  const bevestig = useBevestig();
   const { employee } = useAuth();
   const isEigenaar = employee?.rol === "eigenaar";
   const [datum, setDatum] = useState(vandaag());
@@ -117,7 +128,13 @@ export function Avondoverzicht({
   });
   const a = avond.data;
   const geldig = (a?.gebeurtenissen ?? []).filter((g) => !g.ongedaan);
-  const opgehaald = geldig.filter((g) => g.soort === "betaald").reduce((t, g) => t + g.bedrag, 0);
+  // Vooruit betaald is ook geld in de tas; teruggegeven geld telt hier nooit mee.
+  const opgehaald = geldig
+    .filter((g) => g.soort === "betaald" || g.soort === "vooruit")
+    .reduce((t, g) => t + g.bedrag, 0);
+  const vooruitBeurten = geldig
+    .filter((g) => g.soort === "vooruit")
+    .reduce((t, g) => t + (g.aantal ?? 0), 0);
   const korting = geldig.filter((g) => g.soort === "korting").reduce((t, g) => t + g.bedrag, 0);
   const lopers = perLoper(a?.gebeurtenissen ?? []);
   // Wat er nu nog open staat, in alle wijken. De wijken waar deze avond
@@ -154,7 +171,10 @@ export function Avondoverzicht({
         (g) =>
           g.vrijgave_id !== null &&
           avondIds.has(g.vrijgave_id) &&
-          (g.soort === "betaald" || g.soort === "niet_thuis" || g.soort === "geen_geld"),
+          (g.soort === "betaald" ||
+            g.soort === "vooruit" ||
+            g.soort === "niet_thuis" ||
+            g.soort === "geen_geld"),
       )
       .map((g) => g.customer_id),
   );
@@ -192,8 +212,15 @@ export function Avondoverzicht({
     samenTotaal > 0 ? Math.round(((o?.samen_gedaan ?? 0) / samenTotaal) * 100) : 0;
   // Wat de eigenaar moet zien: korting, mogelijk dubbel, laat binnengekomen,
   // en wat teruggedraaid is.
+  // Vooruit hoort er ook bij: dat is een afspraak voor maanden, die wil de
+  // eigenaar terugzien (en zeker als de loper een andere prijs tikte).
   const opvallend = (a?.gebeurtenissen ?? []).filter(
-    (g) => g.soort === "korting" || g.botsing_met || g.ongedaan || g.later_binnen,
+    (g) =>
+      g.soort === "korting" ||
+      g.soort === "vooruit" ||
+      g.botsing_met ||
+      g.ongedaan ||
+      g.later_binnen,
   );
 
   async function draaiStraatTerug(id: string) {
@@ -238,6 +265,16 @@ export function Avondoverzicht({
   }
 
   async function draaiTerug(g: Gebeurtenis) {
+    if (
+      g.soort === "vooruit" &&
+      !(await bevestig({
+        titel: "Vooruitbetaling ongedaan maken?",
+        tekst: vooruitOngedaanTekst(g),
+        bevestigLabel: "Ongedaan maken",
+      }))
+    ) {
+      return;
+    }
     try {
       await boek(
         nieuweTik({ adres: g.customer_id, soort: "ongedaan", herroept: g.id, bron: "kantoor" }),
@@ -290,6 +327,7 @@ export function Avondoverzicht({
           <div className="mt-auto flex flex-col gap-[7px] md:gap-2.5">
             <span className="truncate text-[13px] opacity-80 md:text-[14.5px] zak:text-[12px] zak:text-muted-foreground zak:opacity-100 zak:md:text-[12.5px]">
               {geldig.filter((g) => g.soort === "betaald").length} keer betaald
+              {vooruitBeurten > 0 && ` · ${beurtenTekst(vooruitBeurten)} vooruit`}
               {samenAdressen > 0 &&
                 ` · ${gelopen} van de ${samenAdressen} adressen gelopen (${procentGelopen}%)`}
             </span>
@@ -501,7 +539,9 @@ export function Avondoverzicht({
                   <span className="min-w-0 flex-1">
                     <span className="block text-[14px] font-medium">{l.naam}</span>
                     <span className="block text-[12.5px] text-muted-foreground">
-                      {l.betaald} betaald · {l.nietThuis} niet thuis · {l.geenGeld} geen geld
+                      {l.betaald} betaald
+                      {l.vooruit > 0 && ` · ${l.vooruit}× vooruit`} · {l.nietThuis} niet thuis ·{" "}
+                      {l.geenGeld} geen geld
                       {l.korting > 0 && ` · ${formatPrice(l.korting)} korting`}
                     </span>
                   </span>
@@ -531,9 +571,16 @@ export function Avondoverzicht({
                   </span>
                   <span className={`min-w-0 flex-1 ${g.ongedaan ? "line-through opacity-60" : ""}`}>
                     <b className="font-medium">{g.door_naam}</b> · {g.adres} ·{" "}
-                    {soortLabel(g.soort).toLowerCase()}
+                    {g.soort === "vooruit"
+                      ? vooruitLabel(g.aantal)
+                      : soortLabel(g.soort).toLowerCase()}
                     {g.bedrag > 0 && ` ${g.soort === "korting" ? "−" : ""}${formatPrice(g.bedrag)}`}
                     {g.reden && ` (${g.reden})`}
+                    {g.soort === "vooruit" && g.prijs_verwacht != null && !g.ongedaan && (
+                      <span className="ml-1.5 rounded-full bg-tint-amber px-1.5 text-[11px] text-tint-amber-ink">
+                        gewone prijs {formatPrice(g.prijs_verwacht)}
+                      </span>
+                    )}
                     {g.botsing_met && !g.ongedaan && (
                       <span className="ml-1.5 rounded-full bg-tint-amber px-1.5 text-[11px] text-tint-amber-ink">
                         mogelijk dubbel

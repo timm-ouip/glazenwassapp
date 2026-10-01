@@ -16,7 +16,16 @@ import { BetaalwijzeKiezer } from "@/components/betalingen/BetaalwijzeKiezer";
 import { DossierGeld } from "@/components/dossier/DossierGeld";
 import { BetaalIcoon } from "@/components/betalingen/BetaalIcoon";
 import { GeldloopWijzigingenVak } from "@/components/betalingen/GeldloopWijzigingenVak";
-import { effectieveMethode, type Betaalmethode } from "@/lib/betalingen";
+import {
+  beurtenTekst,
+  effectieveMethode,
+  fetchWisselStatus,
+  omrekenen,
+  type Betaalmethode,
+} from "@/lib/betalingen";
+import { useAuth } from "@/lib/auth";
+import { boek, nieuweTik } from "@/lib/geldlopen";
+import { fetchGeldAdres } from "@/lib/overzichten";
 import { Pillen } from "@/components/Pillen";
 import { KLANTTYPEN } from "@/lib/facturen";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -258,6 +267,8 @@ export function KlantgegevensDialog({
   // hem overal doorgeven. React Query deelt hem met de rest.
   const markeringen = useQuery({ queryKey: ["markeringen"], queryFn: fetchMarkeringen }).data ?? [];
   const qc = useQueryClient();
+  // Omrekenen na een prijsverhoging doet alleen de eigenaar (zoals de database het toestaat).
+  const isEigenaar = useAuth().employee?.rol === "eigenaar";
   // Wat er nog openstaat aan extra werk voor dít adres. Openstaand werk is
   // niet aan een maand gebonden, dus er is geen periode om op te vragen.
   const klussen = useQuery({ queryKey: ["klussen"], queryFn: () => fetchKlussen() }).data ?? [];
@@ -609,6 +620,26 @@ export function KlantgegevensDialog({
             },
           ),
         );
+        // Heeft dit adres nog vooruitbetaalde beurten, dan houdt de database
+        // het op contant tot die op zijn, en plant de wissel. Dat zeggen we,
+        // anders lijkt het alsof overmaken niet is opgeslagen.
+        if (
+          dossierCustomer &&
+          pand.betaalmethode !== (dossierCustomer.betaalmethode ?? null) &&
+          (await fetchWisselStatus(adresId).catch(() => null)) === "gepland"
+        ) {
+          toast.info("Gaat overmaken zodra de vooruitbetaling op is", { duration: 8000 });
+        }
+        // Prijs omhoog terwijl er nog beurten vooruit betaald zijn: vragen
+        // of die gratis blijven of worden omgerekend.
+        if (
+          dossierCustomer &&
+          isEigenaar &&
+          !dossierCustomer.inactief_op &&
+          prijsGetal(pand.price) > dossierCustomer.price
+        ) {
+          await vraagOmrekenen(adresId);
+        }
       } else if (adresId && bestaandePostcode === "" && velden.postcode.trim()) {
         // Een gevonden adres houdt zijn eigen gegevens. Alleen een postcode
         // die er nog niet was, zetten we erbij.
@@ -1413,9 +1444,7 @@ export function KlantgegevensDialog({
           </MailLaadFout>
         </div>
       )}
-      {tab === "geld" && dossierCustomer && prijzenZien && (
-        <DossierGeld adresId={dossierCustomer.id} />
-      )}
+      {tab === "geld" && dossierCustomer && prijzenZien && <DossierGeld adres={dossierCustomer} />}
       {tab === "klachten" && klant && (
         <DossierKlachten
           klantId={klant.id}
@@ -1449,6 +1478,52 @@ export function KlantgegevensDialog({
     magBewerken &&
     beginStand.current !== null &&
     JSON.stringify({ velden, pand, extra, wijkId }) !== JSON.stringify(beginStand.current);
+
+  /**
+   * Na een prijsverhoging, als er nog beurten vooruit betaald zijn: gratis
+   * houden (niets boeken, de beurten blijven) of omrekenen (minder beurten
+   * tegen de nieuwe prijs, de rest wordt tegoed).
+   */
+  async function vraagOmrekenen(adres: string) {
+    const g = await fetchGeldAdres(adres).catch(() => null);
+    if (!g) {
+      toast.warning("Vooruit betaalde beurten konden niet worden gecontroleerd, kijk in het dossier.");
+      return;
+    }
+    if (g.vooruit_eigen <= 0 || g.vooruit_p === null) return;
+    const nieuw = omrekenen(g.vooruit_eigen_waarde, g.vooruit_p);
+    if (nieuw.beurten >= g.vooruit_eigen) return;
+    const ja = await bevestig({
+      titel: "Nieuwe prijs en vooruit betaald",
+      tekst:
+        `Deze klant heeft nog ${beurtenTekst(g.vooruit_eigen)} vooruit betaald à ` +
+        `${formatPrice(g.vooruit_eigen_waarde / g.vooruit_eigen)} (${formatPrice(g.vooruit_eigen_waarde)}). ` +
+        `Wat doen we met de nieuwe prijs van ${formatPrice(g.vooruit_p)}? ` +
+        `Gratis houden: het blijven ${beurtenTekst(g.vooruit_eigen)}. ` +
+        `Omrekenen: ${beurtenTekst(nieuw.beurten)} à ${formatPrice(g.vooruit_p)}` +
+        (nieuw.tegoed > 0.005 ? ` en ${formatPrice(nieuw.tegoed)} tegoed.` : "."),
+      bevestigLabel: "Omrekenen",
+      annuleerLabel: "Gratis houden",
+    });
+    if (!ja) return;
+    try {
+      await boek(
+        nieuweTik({
+          adres,
+          soort: "omgerekend",
+          bedrag: g.vooruit_eigen_waarde,
+          aantal: nieuw.beurten,
+          bron: "kantoor",
+        }),
+      );
+      void qc.invalidateQueries({ queryKey: ["geld-adres", adres] });
+      void qc.invalidateQueries({ queryKey: ["geld-pof"] });
+      void qc.invalidateQueries({ queryKey: ["geld-kaart"] });
+      toast.success(`Omgerekend: nog ${beurtenTekst(nieuw.beurten)} vooruit betaald`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   /** Op de telefoon kom je via terugtikken bij het kruisje, en is Opslaan
    *  uit beeld. Dan niet zomaar weggooien wat je net invulde. */

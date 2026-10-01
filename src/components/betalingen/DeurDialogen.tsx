@@ -2,9 +2,12 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   IconAlertTriangle as AlertTriangle,
+  IconCalendarDollar as CalendarDollar,
   IconCash as Cash,
   IconCheck as Check,
   IconDiscount as Discount,
+  IconMinus as Minus,
+  IconPlus as Plus,
 } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +15,13 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PopupBody, PopupKader, PopupKop, PopupVoet } from "@/components/Popup";
-import { dagKort, maandenVanDeKaart, maandKort, type GeldDeel } from "@/lib/betalingen";
+import {
+  beurtenTekst,
+  dagKort,
+  maandenVanDeKaart,
+  maandKort,
+  type GeldDeel,
+} from "@/lib/betalingen";
 import { klachtAanDeDeur, maakVasteKorting, type GeldloopAdres } from "@/lib/geldlopen";
 import { formatPrice } from "@/lib/klanten";
 
@@ -262,7 +271,8 @@ function openPosten(delen: GeldDeel[]): OpenPost[] {
       }
       return {
         sleutel: `wassen-${d.datum}-${i}`,
-        label: "Wasbeurt",
+        // De beurt zelf is vooruit betaald; open is alleen het extra werk.
+        label: (d.vooruit ?? 0) > 0.005 ? "Meerprijs" : "Wasbeurt",
         wanneer: maandKort(d.datum),
         bedrag: d.rest,
       };
@@ -396,6 +406,157 @@ export function BedragDialoog({
           </Button>
           <Button className="rounded-full" disabled={bezig || !waarde} onClick={() => void boek()}>
             Betaald {waarde ? formatPrice(waarde) : ""}
+          </Button>
+        </PopupVoet>
+      </PopupKader>
+    </Dialog>
+  );
+}
+
+/**
+ * Vooruit betalen: de klant betaalt nu voor een aantal beurten tegen de
+ * prijs die hij normaal per beurt betaalt. De app rekent het bedrag uit; de
+ * prijs kan alleen de eigenaar aanpassen.
+ *
+ * Staat er nog een gewassen beurt open, dan telt die als eerste van de
+ * beurten (zo rekent de database ook). De papieren kaart en klussen gaan er
+ * niet af: die betaalt hij apart, en dat zegt het venster erbij.
+ */
+export function VooruitDialoog({
+  open,
+  subtitel,
+  delen,
+  prijs,
+  prijsAanpassen = false,
+  onSluit,
+  onVooruit,
+}: {
+  open: boolean;
+  /** "Nr 12" of het adres, onder de titel. */
+  subtitel: string;
+  /** Wat er nu open staat. */
+  delen: GeldDeel[];
+  /** De prijs per beurt zoals de database hem voorstelt; leeg zonder gewone prijs. */
+  prijs: number | null;
+  prijsAanpassen?: boolean;
+  onSluit: () => void;
+  onVooruit: (aantal: number, prijsPerBeurt: number) => Promise<boolean>;
+}) {
+  const [aantal, setAantal] = useState(4);
+  const [prijsTekst, setPrijsTekst] = useState("");
+  const [bezig, setBezig] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    setAantal(4);
+    setPrijsTekst(prijs === null ? "" : alsTekst(prijs));
+  }, [open, prijs]);
+
+  const perBeurt = prijsAanpassen ? leesBedrag(prijsTekst) : prijs;
+  const totaal = perBeurt ? Math.round(aantal * perBeurt * 100) / 100 : null;
+  // De open wasbeurten die als eerste een beurt gebruiken, oudste eerst.
+  const openBeurten = delen
+    .filter((d) => d.soort === "wassen" && d.rest > 0.005 && (d.vooruit ?? 0) <= 0.005)
+    .sort((x, y) => x.datum.localeCompare(y.datum))
+    .slice(0, aantal)
+    .map((d) => maandKort(d.datum));
+  const apart = delen.filter((d) => d.soort !== "wassen").reduce((t, d) => t + d.rest, 0);
+
+  async function boek() {
+    if (!perBeurt || perBeurt > 1000) {
+      toast.error("Vul een prijs per beurt in.");
+      return;
+    }
+    setBezig(true);
+    try {
+      if (await onVooruit(aantal, perBeurt)) onSluit();
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onSluit()}>
+      <PopupKader className="sm:max-w-sm">
+        <PopupKop
+          kleur="groen"
+          icoon={<CalendarDollar className="size-[22px]" />}
+          titel="Vooruit betalen"
+          subtitel={subtitel}
+        />
+        <PopupBody className="gap-3">
+          <div className="flex items-center justify-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="Eén beurt minder"
+              className="size-12 rounded-full"
+              disabled={aantal <= 1}
+              onClick={() => setAantal((n) => Math.max(1, n - 1))}
+            >
+              <Minus className="size-5" />
+            </Button>
+            <span className="min-w-[6.5rem] text-center">
+              <span className="block font-display text-[34px] font-semibold leading-none tabular-nums">
+                {aantal}
+              </span>
+              <span className="text-[12.5px] text-muted-foreground">
+                {aantal === 1 ? "beurt" : "beurten"}
+              </span>
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="Eén beurt meer"
+              className="size-12 rounded-full"
+              disabled={aantal >= 12}
+              onClick={() => setAantal((n) => Math.min(12, n + 1))}
+            >
+              <Plus className="size-5" />
+            </Button>
+          </div>
+          {prijsAanpassen && (
+            <label className="flex items-center justify-between gap-3 text-[13px]">
+              <span className="text-muted-foreground">Prijs per beurt</span>
+              <Input
+                inputMode="decimal"
+                aria-label="Prijs per beurt"
+                className="h-10 w-28 rounded-full text-right tabular-nums"
+                value={prijsTekst}
+                onChange={(e) => setPrijsTekst(e.target.value)}
+              />
+            </label>
+          )}
+          <p className="rounded-[14px] bg-surface px-3 py-2.5 text-center text-[15px] font-semibold tabular-nums">
+            {perBeurt && totaal !== null
+              ? `${beurtenTekst(aantal)} × ${formatPrice(perBeurt)} = ${formatPrice(totaal)}`
+              : "Vul een prijs per beurt in"}
+          </p>
+          {openBeurten.length > 0 && (
+            <p className="text-[13px] text-muted-foreground">
+              {openBeurten.length === 1
+                ? `De open beurt van ${openBeurten[0]} telt als eerste.`
+                : `De open beurten van ${openBeurten.join(", ")} tellen als eerste.`}
+            </p>
+          )}
+          {apart > 0.005 && (
+            <p className="text-[13px] text-muted-foreground">
+              Nog {formatPrice(apart)} open van de papieren kaart of een klus: dat gaat hier niet
+              af, dat betaalt hij apart.
+            </p>
+          )}
+        </PopupBody>
+        <PopupVoet>
+          <Button variant="outline" className="rounded-full" onClick={onSluit}>
+            Annuleren
+          </Button>
+          <Button
+            className="rounded-full"
+            disabled={bezig || totaal === null}
+            onClick={() => void boek()}
+          >
+            Betaald {totaal !== null ? formatPrice(totaal) : ""}
           </Button>
         </PopupVoet>
       </PopupKader>
