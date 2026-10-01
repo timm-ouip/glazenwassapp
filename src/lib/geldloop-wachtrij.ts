@@ -8,7 +8,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 
 import { boek, type GeldloopAdres, type GeldloopLijst, type Tik } from "@/lib/geldlopen";
-import type { GeldDeel } from "@/lib/betalingen";
+import { vooruitEerst, type GeldDeel } from "@/lib/betalingen";
 
 export interface Wachtend extends Tik {
   vrijgave: string;
@@ -304,23 +304,25 @@ export function pasToeOpAdres(a: GeldloopAdres, t: Wachtend): GeldloopAdres {
       };
     }
     case "vooruit": {
-      // Zoals de database: de open wasbeurten (oudste eerst) gebruiken elk
-      // een vooruitbetaalde beurt. Wat er al met euro's aan betaald was, komt
-      // vrij en gaat naar de volgende posten; is een beurt goedkoper dan de
-      // prijs per beurt, dan wordt het verschil tegoed. Een klus of de
-      // papieren kaart gebruikt nooit een beurt. De prijs van de dag kent de
-      // telefoon niet; hij rekent met de gewone prijs (de prijs per beurt
-      // plus de vaste kortingen, die zitten daar al in) tot de server het
-      // precies zegt.
+      // Zoals de database: de open wasbeurten vanaf `vooruit_vanaf` (meestal
+      // de beurt van nu; zie vooruitEerst) gebruiken elk een vooruitbetaalde
+      // beurt.
+      // Wat er al met euro's aan betaald was, komt vrij en gaat naar de
+      // andere posten; is een beurt goedkoper dan de prijs per beurt, dan
+      // wordt het verschil tegoed. Een klus of de papieren kaart gebruikt
+      // nooit een beurt. De prijs van de dag kent de telefoon niet; hij
+      // rekent met de gewone prijs (de prijs per beurt plus de vaste
+      // kortingen, die zitten daar al in) tot de server het precies zegt.
       const aantal = t.aantal ?? 0;
       const p = t.prijs_per_beurt ?? (aantal > 0 ? bedrag / aantal : 0);
       const gewoon = p + gewoneKorting(a);
       let over = aantal;
       let vrij = 0;
       let af = 0;
+      const eerst = vooruitEerst(a.delen, a.vooruit_vanaf);
       const gedekt = a.delen
         .map((d) => {
-          if (over <= 0 || d.soort !== "wassen" || (d.vooruit ?? 0) > 0.005) return d;
+          if (over <= 0 || !eerst.includes(d)) return d;
           over -= 1;
           const dek = Math.min(d.bedrag, gewoon);
           const tegoed = Math.max(0, p - dek);

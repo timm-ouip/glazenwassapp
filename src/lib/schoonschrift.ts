@@ -32,6 +32,11 @@ export function netjesEmail(waarde: string): string {
   return waarde.trim().toLowerCase();
 }
 
+/** Een toevoeging bij het huisnummer is in hoofdletters: "12A", zoals in het BAG. */
+export function netjesToevoeging(waarde: string): string {
+  return waarde.trim().toUpperCase();
+}
+
 /**
  * Hetzelfde, maar dan op naam van het veld. Zo hoeft elke plek die een klant
  * of een adres wegschrijft niet zelf te weten welk veld welke behandeling
@@ -41,5 +46,6 @@ export function netjesVeld(veld: string, waarde: string): string {
   if (veld === "email" || veld === "email2" || veld === "factuur_email") return netjesEmail(waarde);
   if (veld === "postcode" || veld === "factuur_postcode") return netjesPostcode(waarde);
   if (veld === "straat" || veld === "factuur_straat") return netjesStraat(waarde);
+  if (veld === "huisnummer" || veld === "factuur_huisnummer") return netjesToevoeging(waarde);
   return waarde.trim();
 }

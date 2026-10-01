@@ -37,6 +37,7 @@ import { useBevestig } from "@/components/Bevestig";
 import { pushUndo, undoKnop } from "@/lib/undo";
 import { nieuweKlus, verwijderKlus } from "@/lib/klussen";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
+import { adresVormen, zoekHooiberg, zoekPast, zoekSleutel } from "@/lib/zoeken";
 import { useStabiel } from "@/hooks/use-stabiel";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { telefoonSleutel } from "@/lib/whatsapp";
@@ -134,6 +135,8 @@ type Regel = {
   customer: Customer;
   street: Street;
   klant: Klant | null;
+  /** De wijk waar de straat in ligt. */
+  wijk: District;
   /** Contant of overmaken: van het adres zelf, anders van de wijk. */
   methode: Betaalmethode;
 };
@@ -214,7 +217,7 @@ function Aangemeld({
  */
 const KlantRegel = memo(function KlantRegel({
   regel: r,
-  plaats,
+  toonWijk,
   onPatch,
   onDossier,
   onHoekadres,
@@ -229,7 +232,8 @@ const KlantRegel = memo(function KlantRegel({
   prijzenZien,
 }: {
   regel: Regel;
-  plaats: string;
+  /** Staat de wijk erbij? Bij een zoekopdracht, die over alle wijken gaat. */
+  toonWijk: boolean;
   onPatch: (c: Customer, patch: Partial<Customer>) => void;
   onDossier: (r: Regel) => void;
   onHoekadres: (c: Customer) => void;
@@ -281,6 +285,11 @@ const KlantRegel = memo(function KlantRegel({
               />
             )}
             {adres}
+            {toonWijk && (
+              <span className="shrink-0 rounded-full bg-muted px-1.5 text-[10px] font-medium text-muted-foreground">
+                {r.wijk.name}
+              </span>
+            )}
             {r.customer.hoek_straat && (
               <span className="text-[10px] uppercase text-muted-foreground">
                 {r.customer.hoek_straat}
@@ -317,7 +326,9 @@ const KlantRegel = memo(function KlantRegel({
             alleenLezen={!magKlanten}
           />
         </td>
-        <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">{plaats || "—"}</td>
+        <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">
+          {r.wijk.plaats || "—"}
+        </td>
         {prijzenZien && (
           <td
             className="whitespace-nowrap px-2 py-1 text-right tabular-nums text-muted-foreground"
@@ -570,9 +581,12 @@ const KlantRegelMobiel = memo(function KlantRegelMobiel({
  */
 function KlantenLijstMobiel({
   regels,
+  toonWijk,
   ...rest
 }: {
   regels: Regel[];
+  /** Bij een zoekopdracht staat de wijk in het kopje van de straat. */
+  toonWijk: boolean;
 } & Omit<Parameters<typeof KlantRegelMobiel>[0], "regel" | "open" | "onOpen" | "onSluitAndere">) {
   const [openId, setOpenId] = useState<string | null>(null);
   const sluitAndere = useCallback(
@@ -626,6 +640,9 @@ function KlantenLijstMobiel({
               className="sticky top-[var(--plakrand)] z-[5] scroll-mt-[var(--plakrand)] border-b border-border/60 bg-surface/95 px-3 py-1.5 text-[12px] font-semibold text-muted-foreground backdrop-blur"
             >
               {g.street.volledige_naam.trim() || g.street.name}
+              {toonWijk && g.regels[0] && (
+                <span className="ml-1.5 font-normal">· {g.regels[0].wijk.name}</span>
+              )}
               <span className="ml-1.5 font-normal tabular-nums">· {g.regels.length}</span>
             </h2>
             {g.regels.map((r) => (
@@ -823,30 +840,45 @@ function Klanten() {
     navigate,
   ]);
 
-  // Alle adressen van de wijk, in dezelfde volgorde als op de wijkenpagina,
-  // plus de klanten die nergens aan hangen.
-  const regels: Regel[] = useMemo(() => {
+  // Alle adressen van alle wijken, per wijk in dezelfde volgorde als op de
+  // wijkenpagina. Dit hangt niet van de gekozen wijk af: je wisselt van wijk
+  // zonder dat er iets opnieuw gerekend wordt, en een zoekopdracht kan er
+  // zo overheen.
+  const alleRegels: Regel[] = useMemo(() => {
     const klantOp = new Map(klanten.map((k) => [k.id, k]));
-    const eigenStraten = streets
-      .filter((s) => s.district_id === actieveWijk)
-      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
-
-    const wijk = districts.find((d) => d.id === actieveWijk);
+    const adressenPerStraat = new Map<string, Customer[]>();
+    for (const c of customers) {
+      const lijst = adressenPerStraat.get(c.street_id);
+      if (lijst) lijst.push(c);
+      else adressenPerStraat.set(c.street_id, [c]);
+    }
     const uit: Regel[] = [];
-    for (const street of eigenStraten) {
-      const eigen = sortCustomers(customers.filter((c) => c.street_id === street.id));
-      for (const customer of eigen) {
-        uit.push({
-          id: customer.id,
-          customer,
-          street,
-          klant: customer.klant_id ? (klantOp.get(customer.klant_id) ?? null) : null,
-          methode: effectieveMethode(customer, wijk),
-        });
+    // Alleen wijken die er zijn: een straat van een weggelegde wijk hoort er niet bij.
+    for (const wijk of districts) {
+      const eigenStraten = streets
+        .filter((s) => s.district_id === wijk.id)
+        .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+      for (const street of eigenStraten) {
+        for (const customer of sortCustomers(adressenPerStraat.get(street.id) ?? [])) {
+          uit.push({
+            id: customer.id,
+            customer,
+            street,
+            klant: customer.klant_id ? (klantOp.get(customer.klant_id) ?? null) : null,
+            wijk,
+            methode: effectieveMethode(customer, wijk),
+          });
+        }
       }
     }
     return uit;
-  }, [customers, streets, klanten, actieveWijk, districts]);
+  }, [customers, streets, klanten, districts]);
+
+  // De adressen van de gekozen wijk, in dezelfde volgorde.
+  const regels: Regel[] = useMemo(
+    () => alleRegels.filter((r) => r.wijk.id === actieveWijk),
+    [alleRegels, actieveWijk],
+  );
 
   /**
    * Klanten die op geen enkele wijklijst staan. Dat is niet alleen "geen pand
@@ -867,46 +899,77 @@ function Klanten() {
     return klanten.filter((k) => !opWijklijst.has(k.id) && !inactief.has(k.id));
   }, [customers, streets, districts, klanten, inactiefQuery.data]);
 
-  const zoektermenKlein = zoektermen.map((t) => t.toLowerCase());
+  const zoektermenKlein = zoektermen.map(zoekSleutel).filter(Boolean);
+  // Met een zoekterm kijkt de lijst naar alle wijken, anders naar de gekozen.
+  const zoekt = zoektermenKlein.length > 0;
 
-  // Eén treffer is genoeg: met twee straten in de balk wil je ze allebei zien,
-  // niet alleen wat op allebei past.
-  function pastZoek(velden: (string | undefined)[]) {
-    if (!zoektermenKlein.length) return true;
-    const tekst = velden.filter(Boolean).join(" ").toLowerCase();
-    return zoektermenKlein.some((t) => tekst.includes(t));
-  }
+  // Wat er per adres doorzocht wordt, één keer platgeslagen per dataset en
+  // niet bij elke toetsaanslag; en pas zodra er voor het eerst gezocht wordt.
+  // Het adres staat er onder alle namen die het heeft: de werknaam van de
+  // wijklijst, de officiële straatnaam en, bij een hoekadres, de straat waar
+  // het echt aan ligt. Anders vond "Kz Max" niets zodra de officiële naam bij
+  // de straat stond, en omgekeerd.
+  const zoekHooibergen = useMemo(() => {
+    if (!zoekt) return new Map<string, string>();
+    return new Map(
+      alleRegels.map((r) => {
+        const k = r.klant;
+        return [
+          r.id,
+          zoekHooiberg([
+            ...adresVormen(
+              [
+                r.customer.hoek_straat_volledig,
+                r.customer.hoek_straat,
+                r.street.volledige_naam,
+                r.street.name,
+              ],
+              r.customer.house_number,
+              r.customer.addition ?? "",
+            ),
+            k?.naam,
+            k?.email,
+            k?.email2,
+            k?.telefoon,
+            k?.telefoon2,
+            r.customer.postcode,
+            r.customer.postcode.replace(/\s+/g, ""),
+          ]),
+        ] as const;
+      }),
+    );
+  }, [alleRegels, zoekt]);
 
   const zichtbaar = useMemo(() => {
-    return regels.filter((r) => {
-      if (alleenLeeg && r.klant?.naam.trim()) return false;
-      const k = r.klant;
-      return pastZoek([
-        adresTekst(r),
-        k?.naam,
-        k?.email,
-        k?.email2,
-        k?.telefoon,
-        k?.telefoon2,
-        r.customer.postcode,
-      ]);
-    });
+    const open = (r: Regel) => !(alleenLeeg && r.klant?.naam.trim());
+    if (!zoekt) return regels.filter(open);
+    const treffers = alleRegels.filter(
+      (r) => open(r) && zoekPast(zoekHooibergen.get(r.id) ?? "", zoektermenKlein),
+    );
+    // De gekozen wijk eerst: daar ben je waarschijnlijk mee bezig.
+    return [
+      ...treffers.filter((r) => r.wijk.id === actieveWijk),
+      ...treffers.filter((r) => r.wijk.id !== actieveWijk),
+    ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regels, zoektermen, alleenLeeg]);
+  }, [regels, alleRegels, zoekHooibergen, zoektermen, alleenLeeg, actieveWijk]);
 
   const zichtbareLos = useMemo(() => {
     return losseKlanten.filter((k) => {
       if (alleenLeeg && k.naam.trim()) return false;
-      return pastZoek([
-        k.naam,
-        k.email,
-        k.email2,
-        k.telefoon,
-        k.telefoon2,
-        k.postcode,
-        k.straat,
-        k.plaats,
-      ]);
+      return zoekPast(
+        zoekHooiberg([
+          k.naam,
+          k.email,
+          k.email2,
+          k.telefoon,
+          k.telefoon2,
+          k.postcode,
+          k.straat,
+          k.plaats,
+        ]),
+        zoektermenKlein,
+      );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [losseKlanten, zoektermen, alleenLeeg]);
@@ -921,9 +984,12 @@ function Klanten() {
    * driehonderd regels verderop staat.
    */
   const [aantalZichtbaar, setAantalZichtbaar] = useState(25);
-  const meerRef = useRef<HTMLTableRowElement | null>(null);
-  const getoond = zichtbaar.slice(0, aantalZichtbaar);
-  const erIsMeer = aantalZichtbaar < zichtbaar.length;
+  const meerRef = useRef<HTMLElement | null>(null);
+  // Op de telefoon staat zonder zoekterm de hele wijk in één lijst, met een
+  // rij letters om naar een straat te springen; dat blijft zo. Een zoekterm
+  // gaat over alle wijken, en die lijst wordt wel in stukken getekend.
+  const getoond = mobiel && !zoekt ? zichtbaar : zichtbaar.slice(0, aantalZichtbaar);
+  const erIsMeer = getoond.length < zichtbaar.length;
 
   // Een nieuw zoekresultaat begint weer bovenaan; blijven staan op een oud,
   // groter aantal zou betekenen dat je honderden regels tekent van iets waar
@@ -950,7 +1016,7 @@ function Klanten() {
     );
     waarnemer.observe(el);
     return () => waarnemer.disconnect();
-  }, [aantalZichtbaar, zichtbaar.length]);
+  }, [aantalZichtbaar, zichtbaar.length, mobiel, zoekt]);
 
   function herlaad() {
     qc.invalidateQueries({ queryKey: ["klanten"] });
@@ -996,7 +1062,7 @@ function Klanten() {
         return;
       }
 
-      const adres = adresVanRegel(r.customer, r.street, wijkVanNu);
+      const adres = adresVanRegel(r.customer, r.street, r.wijk);
       const nieuw = await bewaarKlant(null, {
         ...LEEG_KLANT,
         naam: "",
@@ -1314,7 +1380,8 @@ function Klanten() {
             </Label>
           </div>
           <span className="ml-auto text-xs text-muted-foreground">
-            {zichtbaar.length} van {regels.length} regels
+            {zichtbaar.length} van {zoekt ? alleRegels.length : regels.length} regels
+            {zoekt && " in alle wijken"}
           </span>
         </div>
 
@@ -1336,10 +1403,10 @@ function Klanten() {
         ) : zichtbaar.length === 0 ? (
           <div className="rounded-[18px] border border-dashed border-border bg-card/50 px-6 py-12 text-center">
             <p className="font-display text-lg font-semibold">
-              {regels.length === 0 ? "Nog geen adressen in deze wijk" : "Niets gevonden"}
+              {regels.length === 0 && !zoekt ? "Nog geen adressen in deze wijk" : "Niets gevonden"}
             </p>
             <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-              {regels.length === 0
+              {regels.length === 0 && !zoekt
                 ? "Voeg eerst straten en huisnummers toe op de wijkenpagina; ze verschijnen hier vanzelf."
                 : alleenLeeg
                   ? "Alles in deze wijk heeft al een naam."
@@ -1347,20 +1414,33 @@ function Klanten() {
             </p>
           </div>
         ) : mobiel ? (
-          <KlantenLijstMobiel
-            regels={zichtbaar}
-            onDossier={opDossier}
-            onMail={opMail}
-            magMail={magMail}
-            onPatch={opPatch}
-            onHoekadres={opHoekadres}
-            onKlus={opKlus}
-            onStoppen={opStoppen}
-            markeringen={markeringen}
-            magKlanten={magKlanten}
-            magPlannen={magPlannen}
-            prijzenZien={prijzenZien}
-          />
+          <>
+            <KlantenLijstMobiel
+              regels={getoond}
+              toonWijk={zoekt}
+              onDossier={opDossier}
+              onMail={opMail}
+              magMail={magMail}
+              onPatch={opPatch}
+              onHoekadres={opHoekadres}
+              onKlus={opKlus}
+              onStoppen={opStoppen}
+              markeringen={markeringen}
+              magKlanten={magKlanten}
+              magPlannen={magPlannen}
+              prijzenZien={prijzenZien}
+            />
+            {/* Geen inhoud, alleen een plek om te zien dat je onderaan bent. */}
+            {erIsMeer && (
+              <div
+                ref={(el) => {
+                  meerRef.current = el;
+                }}
+                aria-hidden="true"
+                className="h-8"
+              />
+            )}
+          </>
         ) : (
           <div className="overflow-x-auto rounded-[18px] border border-border bg-card shadow-card">
             <table className="w-full min-w-[64rem] text-[13px]">
@@ -1385,7 +1465,7 @@ function Klanten() {
                   <KlantRegel
                     key={r.id}
                     regel={r}
-                    plaats={wijkVanNu?.plaats ?? ""}
+                    toonWijk={zoekt}
                     onPatch={opPatch}
                     onDossier={opDossier}
                     onHoekadres={opHoekadres}
@@ -1403,7 +1483,12 @@ function Klanten() {
                 {/* Geen inhoud, alleen een plek om te zien dat je onderaan
                     bent. Staat er niet als de lijst al helemaal getoond is. */}
                 {erIsMeer && (
-                  <tr ref={meerRef} aria-hidden="true">
+                  <tr
+                    ref={(el) => {
+                      meerRef.current = el;
+                    }}
+                    aria-hidden="true"
+                  >
                     <td colSpan={KOLOMMEN.length + (prijzenZien ? 7 : 6)} className="h-8" />
                   </tr>
                 )}
@@ -1550,7 +1635,11 @@ function Klanten() {
         open={hoek.open}
         onOpenChange={(open) => setHoek((h) => ({ ...h, open }))}
         customer={hoek.customer}
-        straten={streets.filter((s) => s.district_id === actieveWijk)}
+        straten={streets.filter(
+          (s) =>
+            s.district_id ===
+            (streets.find((x) => x.id === hoek.customer?.street_id)?.district_id ?? actieveWijk),
+        )}
         onOpslaan={(patch) => hoek.customer && void patchAdres(hoek.customer, patch)}
       />
       <KlantgegevensDialog

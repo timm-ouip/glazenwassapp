@@ -1,12 +1,15 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   IconAlertTriangle as AlertTriangle,
+  IconCalendarDollar as CalendarDollar,
   IconCheck as Check,
   IconCoin as Coin,
   IconDiscount as Discount,
   IconDoorOff as DoorOff,
   IconFolder as Folder,
+  IconLoader2 as Loader2,
   IconWalletOff as WalletOff,
   IconX as Kruis,
 } from "@tabler/icons-react";
@@ -21,8 +24,17 @@ import {
 } from "@/components/betalingen/DeurDialogen";
 import { GeldloopDossier } from "@/components/betalingen/GeldloopDossier";
 import { useBevestig } from "@/components/Bevestig";
+import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { beurtenTekst, frequentieZin, rekening } from "@/lib/betalingen";
+import {
+  beurtenTekst,
+  frequentieZin,
+  keerOpen,
+  maandVanNu,
+  rekening,
+  volgendeMaand,
+  vooruitNieuweMaanden,
+} from "@/lib/betalingen";
 import { useAuth } from "@/lib/auth";
 import {
   geldloopNietGewassen,
@@ -34,16 +46,41 @@ import {
   type Vrijgave,
 } from "@/lib/geldlopen";
 import { zetInWachtrij } from "@/lib/geldloop-wachtrij";
-import { formatPrice } from "@/lib/klanten";
+import {
+  addQuickNote,
+  fetchCustomers,
+  fetchDistricts,
+  fetchKlanten,
+  fetchQuickNotes,
+  fetchStreets,
+  formatPrice,
+  type Customer,
+  type District,
+  type Klant,
+  type QuickNote,
+  type Street,
+} from "@/lib/klanten";
 import { vooruitLabel } from "@/lib/overzichten";
 
 type Venster = "korting" | "bedrag" | "klacht" | "dossier" | "vooruit" | null;
+
+/** Wat het volledige klantdossier nodig heeft, vers opgehaald bij het openen. */
+interface VolDossier {
+  klant: Klant | null;
+  adres: Customer;
+  districts: District[];
+  streets: Street[];
+  customers: Customer[];
+  klanten: Klant[];
+  quickNotes: QuickNote[];
+}
 
 /**
  * Wat je ziet als je een adres aantikt: bovenin wat je leest (wie, wat er
  * open staat en waarvoor), onderin wat je aantikt — eerst de rij van vier
  * (Korting, Deel betaald, Klacht en Dossier), dan Niet thuis, Geen geld en
- * Niet gewassen, en helemaal onderaan de grote saliegroene Betaald.
+ * Niet gewassen, dan Vooruit betalen, en helemaal onderaan de grote
+ * saliegroene Betaald.
  *
  * Op de telefoon schuift het van onderen omhoog, zodat alles onder je duim
  * zit. Op de computer is dat onhandig: daar staat hetzelfde als een venster
@@ -70,10 +107,14 @@ export function BetaalPaneel({
   onVolgende?: (() => void) | undefined;
 }) {
   const { employee } = useAuth();
+  const qc = useQueryClient();
   const mobiel = useIsMobile();
   const bevestig = useBevestig();
   const isEigenaar = employee?.rol === "eigenaar";
   const [venster, setVenster] = useState<Venster>(null);
+  // Het volledige dossier (alleen de eigenaar): eerst laden, dan openen.
+  const [dossierLaden, setDossierLaden] = useState(false);
+  const [volDossier, setVolDossier] = useState<VolDossier | null>(null);
   // Het laatst gekozen adres vasthouden terwijl het paneel dichtschuift.
   const [a, setA] = useState<GeldloopAdres | null>(adres);
   useEffect(() => {
@@ -140,6 +181,49 @@ export function BetaalPaneel({
   // heeft, en niet zolang de beurten van een vorige bewoner nog terug moeten.
   const vooruitKan =
     !!a && a.vooruit_p !== null && a.methode === "contant" && !a.gestopt && a.vooruit_vast === 0;
+
+  /**
+   * De dossierknop. Een geldloper krijgt het kleine dossier (zonder
+   * betaalwijze); de eigenaar het volledige klantdossier, zodat hij aan de
+   * deur ook contant of overmaken kan omzetten. Klanten en adressen vers
+   * ophalen: het dossier schrijft bij opslaan alles terug, en met een oude
+   * versie zou je een net toegevoegd nummer stil weer wissen (zie DossierKnop).
+   */
+  async function openDossier() {
+    if (!a) return;
+    if (!isEigenaar) {
+      setVenster("dossier");
+      return;
+    }
+    setDossierLaden(true);
+    try {
+      const vers = <T,>(queryKey: string[], queryFn: () => Promise<T>) =>
+        qc.fetchQuery({ queryKey, queryFn, staleTime: 0 });
+      const [districts, streets, customers, klanten, quickNotes] = await Promise.all([
+        vers(["districts"], fetchDistricts),
+        vers(["streets"], fetchStreets),
+        vers(["customers"], fetchCustomers),
+        vers(["klanten"], fetchKlanten),
+        vers(["quick_notes"], fetchQuickNotes),
+      ]);
+      const pand = customers.find((c) => c.id === a.id);
+      if (!pand) {
+        toast.error("Dit adres staat er niet (meer).");
+        return;
+      }
+      const klant = klanten.find((k) => k.id === pand.klant_id) ?? null;
+      setVolDossier({ klant, adres: pand, districts, streets, customers, klanten, quickNotes });
+    } catch {
+      toast.error("Het dossier kon niet geladen worden. Probeer het zo nog eens.");
+    } finally {
+      setDossierLaden(false);
+    }
+  }
+
+  /** Na het dossier: een andere betaalwijze of prijs meteen in de lijst. */
+  function ververs() {
+    void qc.invalidateQueries({ queryKey: ["geldloop-lijst", vrijgave.id] });
+  }
 
   function betaalAlles() {
     if (!a || !open || !kanTikken) return;
@@ -313,38 +397,24 @@ export function BetaalPaneel({
               ))}
               <div className="mt-1 flex items-baseline justify-between border-t border-border pt-1.5 text-[15px] font-semibold">
                 <span>Totaal</span>
-                <span className="tabular-nums">{formatPrice(a.open)}</span>
+                <span className="tabular-nums">
+                  {keerOpen(a.open_wassen) && (
+                    <span className="mr-1.5 text-[12.5px] font-medium text-muted-foreground">
+                      {keerOpen(a.open_wassen)}
+                    </span>
+                  )}
+                  {formatPrice(a.open)}
+                </span>
               </div>
             </>
           )}
         </div>
 
-        {/* Vooruit: wat er nog staat, en de knop om te boeken. Bewust hier,
-            bij wat je leest, en niet onderin tussen Betaald en Niet thuis:
-            het is een gesprek aan de deur, geen snelle tik. */}
+        {/* Vooruit: wat er nog staat. De knop om te boeken staat onderin. */}
         {vooruitOver > 0 && (
           <p className="mt-2 rounded-[14px] bg-tint-groen px-3 py-2 text-[13px] text-tint-groen-ink">
             Nog {beurtenTekst(vooruitOver)} vooruit betaald, t/m ongeveer {vooruitTotVan(a)}.
           </p>
-        )}
-        {kanTikken && (
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              type="button"
-              disabled={!vooruitKan}
-              onClick={() => setVenster("vooruit")}
-              className="min-h-10 rounded-full border border-border bg-card px-3.5 text-[13.5px] font-medium shadow-card active:bg-surface disabled:opacity-50"
-            >
-              Vooruit betalen
-            </button>
-            {!vooruitKan && a.methode === "contant" && !a.gestopt && (
-              <span className="text-[12px] text-muted-foreground">
-                {a.vooruit_vast > 0
-                  ? "Eerst de beurten van de vorige bewoner teruggeven (kantoor)"
-                  : "Geen prijs bekend"}
-              </span>
-            )}
-          </div>
         )}
       </div>
 
@@ -405,37 +475,68 @@ export function BetaalPaneel({
             <DeurKnop
               kleur="amber"
               smal
-              icoon={<Folder className="size-[18px]" />}
-              onClick={() => setVenster("dossier")}
+              icoon={
+                dossierLaden ? (
+                  <Loader2 className="size-[18px] animate-spin" />
+                ) : (
+                  <Folder className="size-[18px]" />
+                )
+              }
+              disabled={dossierLaden}
+              onClick={() => void openDossier()}
             >
               Dossier
             </DeurKnop>
           </div>
           {open && (
+            <div className="mb-2 grid grid-cols-3 gap-2">
+              <DeurKnop
+                kleur="rood"
+                icoon={<DoorOff className="size-[18px]" />}
+                onClick={() => void tik({ soort: "niet_thuis" }, "Niet thuis", true)}
+              >
+                Niet thuis
+              </DeurKnop>
+              <DeurKnop
+                kleur="rood"
+                icoon={<WalletOff className="size-[18px]" />}
+                onClick={() => void tik({ soort: "geen_geld" }, "Geen geld", true)}
+              >
+                Geen geld
+              </DeurKnop>
+              <DeurKnop
+                kleur="grafiet"
+                icoon={<Kruis className="size-[18px]" />}
+                onClick={() => void meldNietGewassen()}
+              >
+                Niet gewassen
+              </DeurKnop>
+            </div>
+          )}
+          {/* Vooruit opent eerst een venster om het aantal beurten te kiezen:
+              een verkeerde tik boekt dus nog niets. Ook als er niets open
+              staat: dan zijn het allemaal komende beurten. */}
+          {a.methode === "contant" && !a.gestopt && (
+            <div className={open ? "mb-2" : ""}>
+              <DeurKnop
+                kleur="paars"
+                icoon={<CalendarDollar className="size-[18px]" />}
+                disabled={!vooruitKan}
+                onClick={() => setVenster("vooruit")}
+              >
+                Vooruit betalen
+              </DeurKnop>
+              {!vooruitKan && (
+                <p className="pt-1 text-center text-[12px] text-muted-foreground">
+                  {a.vooruit_vast > 0
+                    ? "Eerst de beurten van de vorige bewoner teruggeven (kantoor)"
+                    : "Geen prijs bekend"}
+                </p>
+              )}
+            </div>
+          )}
+          {open && (
             <>
-              <div className="mb-2 grid grid-cols-3 gap-2">
-                <DeurKnop
-                  kleur="rood"
-                  icoon={<DoorOff className="size-[18px]" />}
-                  onClick={() => void tik({ soort: "niet_thuis" }, "Niet thuis", true)}
-                >
-                  Niet thuis
-                </DeurKnop>
-                <DeurKnop
-                  kleur="rood"
-                  icoon={<WalletOff className="size-[18px]" />}
-                  onClick={() => void tik({ soort: "geen_geld" }, "Geen geld", true)}
-                >
-                  Geen geld
-                </DeurKnop>
-                <DeurKnop
-                  kleur="grafiet"
-                  icoon={<Kruis className="size-[18px]" />}
-                  onClick={() => void meldNietGewassen()}
-                >
-                  Niet gewassen
-                </DeurKnop>
-              </div>
               <DeurKnop
                 kleur="salie"
                 icoon={<Check className="size-[22px]" />}
@@ -502,6 +603,14 @@ export function BetaalPaneel({
             open={venster === "vooruit"}
             subtitel={`Nr ${a.house_number}${a.addition}${a.naam ? ` · ${a.naam}` : ""}`}
             delen={a.delen}
+            vanaf={a.vooruit_vanaf}
+            maandenVoor={(aantal) => {
+              // Zoals vooruitTotVan: wacht er geen beurt meer, dan is die van
+              // deze maand al gedaan en tellen nieuwe beurten vanaf volgende maand.
+              const hier = maandVanNu();
+              const start = a.wacht_op_wasbeurt ? hier : volgendeMaand(hier);
+              return vooruitNieuweMaanden(a, aantal, a.delen, a.vooruit_vanaf, vooruitOver, start);
+            }}
             prijs={a.vooruit_p ?? 0}
             prijsAanpassen={isEigenaar}
             onSluit={() => setVenster(null)}
@@ -527,6 +636,34 @@ export function BetaalPaneel({
             onVeranderd={onVeranderd}
           />
         </>
+      )}
+      {volDossier && (
+        <KlantgegevensDialog
+          open
+          onOpenChange={(o) => {
+            if (o) return;
+            setVolDossier(null);
+            ververs();
+          }}
+          klant={volDossier.klant}
+          voorstelCustomer={volDossier.adres}
+          districts={volDossier.districts}
+          streets={volDossier.streets}
+          customers={volDossier.customers}
+          klanten={volDossier.klanten}
+          quickNotes={volDossier.quickNotes}
+          onAddQuickNote={(label) => {
+            void addQuickNote(label).then(() =>
+              qc.invalidateQueries({ queryKey: ["quick_notes"] }),
+            );
+          }}
+          standaardWijkId={a?.wijk_id ?? null}
+          onSaved={() => {
+            ververs();
+            void qc.invalidateQueries({ queryKey: ["klanten"] });
+            void qc.invalidateQueries({ queryKey: ["customers"] });
+          }}
+        />
       )}
     </>
   );
@@ -558,7 +695,7 @@ function Chip({
  * knoppen lijkt die alleen in betekenis verschilt. De kleur zegt wat er
  * gebeurt: amber is opzoeken of aanpassen, groen is er komt een deel binnen,
  * kastanje is een klacht, rood is er kwam geen geld, grafiet is de wasbeurt
- * gaat eraf, en salie is helemaal betaald. De vier bovenste staan op een rij
+ * gaat eraf, paars is vooruit betalen, en salie is helemaal betaald. De vier bovenste staan op een rij
  * en zijn daarom half zo breed.
  */
 const SMAL = "min-h-14 flex-col gap-1 px-1 text-[11.5px] leading-tight";
@@ -575,6 +712,10 @@ const DEURKLEUR = {
   // de centen maar over het werk. De wasbeurt gaat eraf en het adres komt
   // terug in de planning.
   grafiet: "min-h-14 text-[13.5px] bg-tint-grafiet text-tint-grafiet-ink",
+  // Paars voor vooruit: geld voor beurten die nog moeten komen. Een eigen
+  // kleur, los van het groen en salie van nu betalen en het lichtblauw van
+  // overmaken.
+  paars: "min-h-14 text-[13.5px] bg-tint-paars text-tint-paars-ink",
   // Salie met bijna zwarte tekst. Het lichte groen haalde met witte letters de
   // leesnorm niet; deze kleur staat in elk thema hetzelfde op het scherm.
   salie: "min-h-16 text-[19px] bg-tint-salie text-tint-salie-ink",

@@ -31,7 +31,7 @@ import {
 import { aantalOpenAanmeldingen } from "@/lib/aanmeldingen";
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { fetchAfmeldstatus } from "@/lib/dagklaar";
-import { naarDagBijOpstarten } from "@/lib/dagslot";
+import { startBijOpstarten } from "@/lib/dagslot";
 import { adresgeldMap, contantVan, teltMee, useGeldfilter } from "@/lib/geldfilter";
 import {
   fetchCustomers,
@@ -51,8 +51,12 @@ import { fetchWasdag, fetchWasdagen, vandaag } from "@/lib/wasdag";
 export const Route = createFileRoute("/home")({
   beforeLoad: async () => {
     await requireSession();
-    // Dagplanning vastgezet op dit toestel: de app opent meteen op vandaag.
-    if (typeof window !== "undefined" && naarDagBijOpstarten()) throw redirect({ to: "/dag" });
+    // Dagplanning of geldlopen vastgezet op dit toestel: de app opent meteen
+    // op vandaag, of op het loopscherm van de avond.
+    if (typeof window === "undefined") return;
+    const start = startBijOpstarten();
+    if (start === "dag") throw redirect({ to: "/dag" });
+    if (start === "lopen") throw redirect({ to: "/betalingen", search: { tab: "lopen" } });
   },
   head: () => ({ meta: [{ title: "Home — Paaltje Systems" }] }),
   component: Home,
@@ -106,10 +110,13 @@ function Home() {
   // Nieuwe klant maken gebeurt op de klantenpagina, en die moet je kunnen zien.
   const magNieuw = magKlanten && magKlantenZien;
 
-  // Vangnet voor het slot op de dag: kwam de eerste pagina van de server,
-  // dan zag beforeLoad geen localStorage en gebeurt het hier alsnog.
+  // Vangnet voor de sloten: kwam de eerste pagina van de server, dan zag
+  // beforeLoad geen localStorage en gebeurt het hier alsnog.
   useEffect(() => {
-    if (naarDagBijOpstarten()) void navigate({ to: "/dag", replace: true });
+    const start = startBijOpstarten();
+    if (start === "dag") void navigate({ to: "/dag", replace: true });
+    if (start === "lopen")
+      void navigate({ to: "/betalingen", search: { tab: "lopen" }, replace: true });
     // Alleen bij het openen van de pagina.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

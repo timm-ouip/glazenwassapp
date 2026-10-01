@@ -7,8 +7,11 @@ import {
   omrekenen,
   terugBedrag,
   terugTekst,
+  vooruitEerst,
   vooruitMaanden,
+  vooruitNieuweMaanden,
   vooruitStart,
+  keerOpen,
   vooruitTot,
   type GeldDeel,
 } from "@/lib/betalingen";
@@ -58,6 +61,22 @@ describe("rekening", () => {
     expect(r[0]!.wanneer).toBe("jul, aug");
   });
 
+  test("een beginstand met een letter of + van de kaart", () => {
+    const r = rekening([
+      {
+        soort: "beginstand",
+        datum: "2026-09-30",
+        bedrag: 25.5,
+        rest: 25.5,
+        aantal: 1,
+        omschrijving: "2026-07,2026-08,2026-09,2026-08=v,2026-09=+",
+      },
+    ]);
+    expect(r[0]!.label).toBe("Van de kaart");
+    expect(r[0]!.wanneer).toBe("jul, aug v, sep +");
+    expect(r[0]!.bedrag).toBe(25.5);
+  });
+
   test("een deels betaalde wasbeurt staat apart als rest", () => {
     const r = rekening([wassen("2026-08-10", 15, 5), wassen("2026-09-10", 15)]);
     expect(r.map((x) => [x.label, x.bedrag])).toEqual([
@@ -98,6 +117,8 @@ const adres = (extra: Partial<GeldloopAdres> = {}): GeldloopAdres => ({
   vooruit_eigen_waarde: 0,
   vooruit_waarde: 0,
   vooruit_p: 15,
+  // Geen beurt van nu bekend: de open beurten tellen vanaf de oudste.
+  vooruit_vanaf: "2026-07-10",
   klachten: [],
   vaste_kortingen: [],
   kortingen_vanavond: [],
@@ -170,7 +191,39 @@ describe("wachtrij: een tik in de lijst", () => {
 });
 
 describe("wachtrij: vooruit betalen", () => {
-  test("de open beurten tellen als eerste, de rest blijft over", () => {
+  test("de beurt van nu is beurt 1; oudere pof blijft pof", () => {
+    // Juli, augustus en september open; de database zegt: vanaf september.
+    const a = pasToeOpAdres(
+      adres({ vooruit_vanaf: "2026-09-10" }),
+      tik({ soort: "vooruit", aantal: 4, prijs_per_beurt: 15, bedrag: 60 }),
+    );
+    expect(a.open).toBe(30);
+    expect(a.delen.map((d) => d.datum)).toEqual(["2026-07-10", "2026-08-10"]);
+    expect(a.open_wassen).toBe(2);
+    expect(a.vooruit_over).toBe(3);
+    expect(a.vooruit_waarde).toBe(45);
+    expect(a.vanavond?.soort).toBe("vooruit");
+    expect(a.vanavond?.aantal).toBe(4);
+  });
+
+  test("nog beurten vooruit: een nieuwe betaling laat de pof staan", () => {
+    const a = pasToeOpAdres(
+      // De laatste beurt (september) is al met vooruit betaald: vanaf de dag erna.
+      adres({
+        open: 15,
+        delen: [wassen("2026-07-10", 15)],
+        vooruit_over: 1,
+        vooruit_waarde: 15,
+        vooruit_vanaf: "2026-09-11",
+      }),
+      tik({ soort: "vooruit", aantal: 2, prijs_per_beurt: 15, bedrag: 30 }),
+    );
+    expect(a.open).toBe(15);
+    expect(a.delen).toHaveLength(1);
+    expect(a.vooruit_over).toBe(3);
+  });
+
+  test("geen beurt van nu open: de open beurten tellen als eerste, oudste eerst", () => {
     const a = pasToeOpAdres(
       adres(),
       tik({ soort: "vooruit", aantal: 4, prijs_per_beurt: 15, bedrag: 60 }),
@@ -180,8 +233,6 @@ describe("wachtrij: vooruit betalen", () => {
     expect(a.open_wassen).toBe(0);
     expect(a.vooruit_over).toBe(1);
     expect(a.vooruit_waarde).toBe(15);
-    expect(a.vanavond?.soort).toBe("vooruit");
-    expect(a.vanavond?.aantal).toBe(4);
   });
 
   test("de papieren kaart en een klus gebruiken geen beurt", () => {
@@ -250,6 +301,7 @@ describe("wachtrij: vooruit betalen", () => {
         open: 25,
         delen: [wassen("2026-08-10", 15, 10), wassen("2026-09-10", 15)],
       }),
+      // Vanaf augustus (de oudste): augustus gebruikt de beurt.
       tik({ soort: "vooruit", aantal: 1, prijs_per_beurt: 15, bedrag: 15 }),
     );
     expect(a.open).toBe(10);
@@ -323,6 +375,83 @@ describe("vooruit: welke maanden", () => {
   });
 });
 
+describe("vooruit: vanaf welke beurt (van de database)", () => {
+  const elkeMaand = { interval_maanden: 1, ritme: 1 };
+
+  test("de open beurten vanaf de datum tellen als eerste; oudere pof niet", () => {
+    const delen = [wassen("2026-08-10", 15), wassen("2026-09-28", 15)];
+    expect(vooruitEerst(delen, "2026-09-28").map((d) => d.datum)).toEqual(["2026-09-28"]);
+  });
+
+  test("vanaf de oudste: alle open beurten, oudste eerst", () => {
+    const delen = [wassen("2026-07-10", 15), wassen("2026-06-10", 15)];
+    expect(vooruitEerst(delen, "2026-06-10").map((d) => d.datum)).toEqual([
+      "2026-06-10",
+      "2026-07-10",
+    ]);
+  });
+
+  test("de dag na de laatste beurt: geen open beurt telt", () => {
+    // Alle beurten op, of de laatste betaald met een 1 van de kaart: juli blijft pof.
+    expect(vooruitEerst([wassen("2026-07-10", 15)], "2026-09-29")).toEqual([]);
+  });
+
+  test("twee open beurten op die dag: allebei", () => {
+    const delen = [wassen("2026-09-28", 15), wassen("2026-09-28", 10)];
+    expect(vooruitEerst(delen, "2026-09-28")).toHaveLength(2);
+  });
+
+  test("al vooruit betaald (alleen de meerprijs open) telt niet", () => {
+    const meer = { ...wassen("2026-09-28", 20, 5, "serre"), vooruit: 15 };
+    expect(vooruitEerst([meer], "2026-09-28")).toEqual([]);
+  });
+
+  test("zonder datum (oude lijst): alle open beurten", () => {
+    expect(vooruitEerst([wassen("2026-07-10", 15)], null)).toHaveLength(1);
+  });
+
+  test("4 beurten met de beurt van nu open: sep, okt, nov, dec", () => {
+    const delen = [wassen("2026-09-28", 15)];
+    expect(vooruitNieuweMaanden(elkeMaand, 4, delen, "2026-09-28", 0, "2026-11")).toEqual([
+      "2026-09",
+      "2026-10",
+      "2026-11",
+      "2026-12",
+    ]);
+  });
+
+  test("met de frequentie: om de maand", () => {
+    const delen = [wassen("2026-09-28", 15)];
+    expect(
+      vooruitNieuweMaanden({ interval_maanden: 2, ritme: 1 }, 3, delen, "2026-09-28", 0, "2026-11"),
+    ).toEqual(["2026-09", "2026-11", "2027-01"]);
+  });
+
+  test("al betaald: alleen komende beurten, vanaf start", () => {
+    expect(vooruitNieuweMaanden(elkeMaand, 2, [], "2026-09-29", 0, "2026-11")).toEqual([
+      "2026-11",
+      "2026-12",
+    ]);
+  });
+
+  test("enen van de kaart in okt en nov, september open: sep, dan na de enen", () => {
+    const delen = [wassen("2026-09-28", 15)];
+    expect(vooruitNieuweMaanden(elkeMaand, 3, delen, "2026-09-28", 2, "2026-11")).toEqual([
+      "2026-09",
+      "2026-12",
+      "2027-01",
+    ]);
+  });
+
+  test("oude pof en nog beurten vooruit: de pof telt niet, de beurten gaan voor", () => {
+    const delen = [wassen("2026-07-10", 15)];
+    expect(vooruitNieuweMaanden(elkeMaand, 2, delen, "2026-09-29", 1, "2026-11")).toEqual([
+      "2026-12",
+      "2027-01",
+    ]);
+  });
+});
+
 describe("terug te geven", () => {
   const leeg = { vorige: 0, vorigeWaarde: 0, eigen: 0, eigenWaarde: 0, open: 0, gestopt: true };
   test("gestopt: eigen beurten plus tegoed in één regel", () => {
@@ -331,7 +460,9 @@ describe("terug te geven", () => {
     );
   });
   test("gestopt: alleen beurten", () => {
-    expect(terugTekst({ ...leeg, eigen: 1, eigenWaarde: 12.5 })).toBe(`1 beurt = ${formatPrice(12.5)}`);
+    expect(terugTekst({ ...leeg, eigen: 1, eigenWaarde: 12.5 })).toBe(
+      `1 beurt = ${formatPrice(12.5)}`,
+    );
   });
   test("gestopt: alleen tegoed", () => {
     expect(terugTekst({ ...leeg, open: -5 })).toBe(`tegoed ${formatPrice(5)}`);
@@ -393,5 +524,17 @@ describe("omrekenen na een prijsverhoging", () => {
   });
   test("minder dan één beurt: alles tegoed", () => {
     expect(omrekenen(10, 15)).toEqual({ beurten: 0, tegoed: 10 });
+  });
+});
+
+describe("keerOpen", () => {
+  test("hele en halve beurten", () => {
+    expect(keerOpen(3)).toBe("3×");
+    expect(keerOpen(1.5)).toBe("1,5×");
+    expect(keerOpen(1.4)).toBe("1,5×");
+  });
+  test("niets open is leeg", () => {
+    expect(keerOpen(0)).toBe("");
+    expect(keerOpen(0.2)).toBe("");
   });
 });

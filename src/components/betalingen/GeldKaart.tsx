@@ -15,21 +15,22 @@ import {
   BeginstandStarten,
 } from "@/components/betalingen/Beginstand";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { useBevestig } from "@/components/Bevestig";
 import { useAuth } from "@/lib/auth";
+import { effectieveMethode, fetchGeldStandWijk, frequentieKaart, zetKaart } from "@/lib/betalingen";
 import {
-  effectieveMethode,
-  fetchGeldStandWijk,
-  frequentieKaart,
-  zetBeginstand,
-} from "@/lib/betalingen";
-import {
-  beginMaandenVan,
+  kaartDelen,
+  kaartVakjesVan,
+  leesVakInvoer,
   maandVan,
   vakjeVan,
   vakTeken,
+  vakUitleg,
   vakVoor,
   vooruitGepland,
+  type KaartVakje,
 } from "@/lib/geldkaart";
 import { fetchVrijgaven } from "@/lib/geldlopen";
 import {
@@ -96,10 +97,12 @@ const FREQUENTIE_KOLOM = "w-[7.5rem] sm:w-auto sm:max-w-[10rem]";
  * vakje en je ziet wie wanneer wat intikte.
  *
  * Hier zit ook het invullen van de beginstand, want dat hoort bij dezelfde
- * kaart: met "Pofjes invullen" tik je de maanden aan die op de papieren kaart
- * nog open stonden, en met de wisselknop typ je ze desgewenst als bedrag per
- * adres. Met het toetsenbord kan het aanvinken ook: pijltjes om te lopen, 0
- * voor pof en Backspace om hem weg te halen.
+ * kaart: met "Pofjes invullen" zet je per maand wat er op de papieren kaart
+ * stond (0, x, een letter met bedrag, +bedrag, en na de start een 1 voor
+ * vooruit betaald), en met de wisselknop typ je de pof desgewenst als bedrag
+ * per adres. Een vakje aantikken geeft een klein keuzemenu; met het
+ * toetsenbord gaat het meteen: pijltjes om te lopen, 0, x of 1, een letter of
+ * + en dan het bedrag, en Backspace om te wissen.
  *
  * Zodra de beginstand klaar is én er daarna een keer geld gelopen is, hoeft er
  * nooit meer iets ingevuld te worden: de grote knop maakt dan plaats voor een
@@ -137,12 +140,12 @@ export function GeldKaart({
   const [zoek, setZoek] = useState("");
   const [markeer, setMarkeer] = useState<string | null>(null);
   const [alleStraten, setAlleStraten] = useState(false);
-  // De pof-maanden die nog bewaard worden, per adres, zodat je door kunt tikken.
-  const [concept, setConcept] = useState<Record<string, string[]>>({});
+  // De ingevulde vakjes die nog bewaard worden, per adres, zodat je door kunt tikken.
+  const [concept, setConcept] = useState<Record<string, KaartVakje[]>>({});
   // Dezelfde stand, maar meteen bij: tik je sneller dan het scherm bijwerkt,
   // dan bouwt de volgende tik toch voort op de vorige.
   const conceptNu = useRef(concept);
-  function wijzigConcept(adres: string, lijst: string[] | null) {
+  function wijzigConcept(adres: string, lijst: KaartVakje[] | null) {
     const rest = { ...conceptNu.current };
     if (lijst) rest[adres] = lijst;
     else delete rest[adres];
@@ -152,6 +155,17 @@ export function GeldKaart({
   const opslag = useRef(new Map<string, { keten: Promise<void>; versie: number }>());
   // Het vakje waar het toetsenbord staat (rij, maand).
   const [cursor, setCursor] = useState({ r: 0, k: 0 });
+  // Het keuzemenu van één vakje, met wat je in het tekstvak typt.
+  const [menu, setMenu] = useState<{
+    adres: string;
+    maand: string;
+    invoer: string;
+    fout: string | null;
+  } | null>(null);
+  const anker = useRef<HTMLButtonElement | null>(null);
+  // Waar het menu voor openging: daar gaat het toetsenbord weer heen als hij sluit.
+  const menuPlek = useRef({ r: 0, k: 0 });
+  const menuInvoer = useRef<HTMLInputElement>(null);
   const tabel = useRef<HTMLTableElement>(null);
   const bevestig = useBevestig();
 
@@ -233,46 +247,66 @@ export function GeldKaart({
     void qc.invalidateQueries({ queryKey: ["geld-kaart"] });
   };
 
-  /** Zet een maand aan of uit als pof van vóór de start (of wissel hem). */
-  async function zetBegin(c: Customer, maand: string, aan: boolean | "wissel") {
+  /**
+   * Vul één vakje in zoals op de papieren kaart, of wis het (null). Vóór en
+   * in de startmaand gaat het om de beginstand, daarna om een 1 (vooruit
+   * betaald). Bewaard wordt per adres de hele rij vakjes.
+   */
+  async function zetVak(
+    c: Customer,
+    maand: string,
+    nieuw: { teken: string; bedrag: number } | null,
+  ) {
     // Vers uit de cache: net na het bewaren is de kaart op het scherm nog van ervoor.
     const vers = qc.getQueryData<Kaart>(["geld-kaart", straatId, jaar]);
     const data = vers?.adressen.find((a) => a.id === c.id) ?? perAdres.get(c.id);
-    const begin = (data?.posten ?? []).find((p) => p.soort === "beginstand");
-    const nu = new Set(conceptNu.current[c.id] ?? beginMaandenVan(data));
-    const wordtAan = aan === "wissel" ? !nu.has(maand) : aan;
-    // Een ingetypt bedrag (zonder maanden) staat als 0 in de startmaand.
-    const ingetypt =
-      !conceptNu.current[c.id] && begin && begin.bedrag > 0 && nu.size === 0 ? begin : null;
-    if (ingetypt && !wordtAan) {
-      if (maand !== peilMaand) return;
-      const ja = await bevestig({
-        titel: "Ingetypte beginstand weghalen?",
-        tekst: `Hier staat nu ${formatPrice(ingetypt.bedrag)} als beginstand, ingetypt zonder maanden.`,
-        bevestigLabel: "Weghalen",
-      });
-      if (!ja) return;
-    } else {
-      if (wordtAan === nu.has(maand)) return;
-      // Aanvinken vervangt een ingetypt bedrag door maanden × prijs.
-      if (ingetypt) {
-        const ja = await bevestig({
-          titel: "Ingetypte beginstand vervangen?",
-          tekst: `Hier staat nu ${formatPrice(ingetypt.bedrag)} als beginstand. Met aanvinken wordt dat het aantal maanden × ${formatPrice(c.price)}.`,
-          bevestigLabel: "Vervangen",
-        });
-        if (!ja) return;
-      }
+    const nu = conceptNu.current[c.id] ?? kaartVakjesVan(data, peilMaand);
+    const oud = nu.find((v) => v.maand === maand);
+    if (!nieuw && !oud) return;
+    if (
+      nieuw &&
+      oud &&
+      !oud.ingetypt &&
+      oud.teken === nieuw.teken &&
+      (nieuw.teken === "0" || Math.abs(oud.bedrag - nieuw.bedrag) < 0.005)
+    ) {
+      return;
     }
-    if (wordtAan) nu.add(maand);
-    else nu.delete(maand);
-    const lijst = [...nu].sort();
-    if (c.price <= 0 && lijst.length > 0) {
+    const voorStart = !!peilMaand && maand <= peilMaand;
+    // Een ingetypt bedrag (zonder maanden) staat als 0 in de startmaand.
+    const ingetypt = voorStart ? nu.find((v) => v.ingetypt) : undefined;
+    if (ingetypt) {
+      const ja = await bevestig(
+        nieuw
+          ? {
+              titel: "Ingetypte beginstand vervangen?",
+              tekst: `Hier staat nu ${formatPrice(ingetypt.bedrag)} als beginstand. Met invullen per maand wordt het wat je op de kaart zet.`,
+              bevestigLabel: "Vervangen",
+            }
+          : {
+              titel: "Ingetypte beginstand weghalen?",
+              tekst: `Hier staat nu ${formatPrice(ingetypt.bedrag)} als beginstand, ingetypt zonder maanden.`,
+              bevestigLabel: "Weghalen",
+            },
+      );
+      if (!ja) return;
+    }
+    if (nieuw && (nieuw.teken === "0" || nieuw.teken === "1") && c.price <= 0) {
       toast.error(
         "Dit adres heeft nog geen prijs, dus Paaltje Systems weet niet wat een maand kost.",
       );
       return;
     }
+    const lijst = nu.filter((v) => v.maand !== maand && !(voorStart && v.ingetypt));
+    if (nieuw) {
+      lijst.push({
+        maand,
+        teken: nieuw.teken,
+        // Een 0 is de prijs van nu (dat rekent de database ook zo).
+        bedrag: nieuw.teken === "0" ? c.price : nieuw.bedrag,
+      });
+    }
+    lijst.sort((a, b) => a.maand.localeCompare(b.maand));
     wijzigConcept(c.id, lijst);
     // Per adres op volgorde bewaren; tik je snel door, dan telt alleen de laatste stand.
     const vorige = opslag.current.get(c.id);
@@ -281,15 +315,68 @@ export function GeldKaart({
     const keten = (vorige?.keten ?? Promise.resolve()).then(async () => {
       if (!laatste()) return;
       try {
-        await zetBeginstand(c.id, lijst.length * c.price, Math.max(1, lijst.length), lijst);
-        await qc.invalidateQueries({ queryKey: ["geld-kaart", straatId] });
-        void qc.invalidateQueries({ queryKey: ["geld-stand"] });
+        // Alleen wat echt anders is dan wat er nu bewaard staat.
+        const bewaard =
+          qc
+            .getQueryData<Kaart>(["geld-kaart", straatId, jaar])
+            ?.adressen.find((a) => a.id === c.id) ?? data;
+        const delen = kaartDelen(lijst, kaartVakjesVan(bewaard, peilMaand));
+        if (delen.begin || delen.vooruit) {
+          await zetKaart(c.id, delen.begin, delen.vooruit);
+          await qc.invalidateQueries({ queryKey: ["geld-kaart", straatId] });
+          void qc.invalidateQueries({ queryKey: ["geld-stand"] });
+          void qc.invalidateQueries({ queryKey: ["geld-pof"] });
+          void qc.invalidateQueries({ queryKey: ["geld-adres", c.id] });
+        }
       } catch (e) {
         toast.error((e as Error).message);
       }
       if (laatste()) wijzigConcept(c.id, null);
     });
     opslag.current.set(c.id, { keten, versie });
+  }
+
+  /** Het keuzemenu van een vakje openen; `start` staat al in het tekstvak. */
+  function openMenu(
+    el: HTMLButtonElement,
+    r: number,
+    k: number,
+    c: Customer,
+    maand: string,
+    start = "",
+  ) {
+    anker.current = el;
+    menuPlek.current = { r, k };
+    setMenu({ adres: c.id, maand, invoer: start, fout: null });
+  }
+
+  /** Wat er in het menu gekozen of getypt is, invullen en het menu dicht. */
+  function kiesInMenu(nieuw: { teken: string; bedrag: number } | null) {
+    const m = menu;
+    const c = m && adressen.find((a) => a.id === m.adres);
+    if (!m || !c) return;
+    setMenu(null);
+    void zetVak(c, m.maand, nieuw);
+  }
+
+  function typInMenu() {
+    if (!menu) return;
+    const uit = leesVakInvoer(menu.invoer);
+    if ("fout" in uit) {
+      setMenu({ ...menu, fout: uit.fout });
+      return;
+    }
+    const voorStart = !!peilMaand && menu.maand <= peilMaand;
+    if (voorStart === (uit.teken === "1")) {
+      setMenu({
+        ...menu,
+        fout: voorStart
+          ? "Een 1 (vooruit betaald) kan alleen na de start."
+          : "Na de start kun je alleen een 1 invullen: vooruit betaald.",
+      });
+      return;
+    }
+    kiesInMenu(uit);
   }
 
   function naarVak(r: number, k: number) {
@@ -300,25 +387,42 @@ export function GeldKaart({
     tabel.current?.querySelector<HTMLButtonElement>(`[data-vak="${rij}-${kol}"]`)?.focus();
   }
 
+  /**
+   * Het toetsenbord op de kaart: pijltjes om te lopen; bij invullen 0, x of
+   * 1 meteen, een letter of + opent het menu met dat teken al ingetypt (dan
+   * het bedrag en Enter), en Backspace wist. Enter of spatie opent het menu.
+   */
   function opToets(
-    e: KeyboardEvent,
+    e: KeyboardEvent<HTMLButtonElement>,
     r: number,
     k: number,
     c: Customer,
     maand: string,
-    kanAanvinken: boolean,
+    zone: "begin" | "vooruit" | null,
   ) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const stap = PIJLEN[e.key];
     if (stap) {
       e.preventDefault();
       naarVak(r + stap[0], k + stap[1]);
-    } else if (kanAanvinken && e.key === "0") {
+      return;
+    }
+    if (!zone) return;
+    const toets = e.key.toLowerCase();
+    if (toets === "backspace" || toets === "delete") {
       e.preventDefault();
-      void zetBegin(c, maand, true);
-    } else if (kanAanvinken && (e.key === "Backspace" || e.key === "Delete")) {
+      void zetVak(c, maand, null);
+    } else if (zone === "vooruit") {
+      if (toets === "1") {
+        e.preventDefault();
+        void zetVak(c, maand, { teken: "1", bedrag: 0 });
+      }
+    } else if (toets === "0" || toets === "x") {
       e.preventDefault();
-      void zetBegin(c, maand, false);
+      void zetVak(c, maand, { teken: toets, bedrag: 0 });
+    } else if (toets === "+" || /^[a-z]$/.test(toets)) {
+      e.preventDefault();
+      openMenu(e.currentTarget, r, k, c, maand, toets === "+" ? "+" : `${toets} `);
     }
   }
 
@@ -333,6 +437,18 @@ export function GeldKaart({
 
   const details = gekozen ? perAdres.get(gekozen.adres) : undefined;
   const detailAdres = gekozen ? adressen.find((c) => c.id === gekozen.adres) : undefined;
+  const detailVakje = gekozen
+    ? kaartVakjesVan(details, peilMaand).find((v) => v.maand === gekozen.maand)
+    : undefined;
+
+  // Het vakje van het keuzemenu.
+  const menuAdres = menu ? adressen.find((c) => c.id === menu.adres) : undefined;
+  const menuVoorStart = !!menu && !!peilMaand && menu.maand <= peilMaand;
+  const menuVakje = menu
+    ? (concept[menu.adres] ?? kaartVakjesVan(perAdres.get(menu.adres), peilMaand)).find(
+        (v) => v.maand === menu.maand,
+      )
+    : undefined;
 
   // Zoeken: straatnaam, huisnummer of klantnaam, door alle wijken heen.
   const zoekTerm = zoek.trim().toLowerCase();
@@ -484,7 +600,7 @@ export function GeldKaart({
                               : "text-muted-foreground hover:text-foreground",
                           )}
                         >
-                          {w === "kaart" ? "Aanvinken" : "Bedragen"}
+                          {w === "kaart" ? "Kaart" : "Bedragen"}
                         </button>
                       ))}
                     </div>
@@ -580,12 +696,15 @@ export function GeldKaart({
 
       {invullen && weergave === "kaart" && peil && (
         <p className="text-[12.5px] text-muted-foreground">
-          Tik de maanden tot en met {MAANDNAMEN[Number(peil.slice(5, 7)) - 1]} {peil.slice(0, 4)}{" "}
-          aan die op de kaart nog open stonden (een 0). Paaltje Systems rekent de beginstand uit met
-          de prijs van nu.
+          Tik een maand aan en zet wat er op de kaart staat. Tot en met{" "}
+          {MAANDNAMEN[Number(peil.slice(5, 7)) - 1]} {peil.slice(0, 4)}: 0 = hele beurt open (de
+          prijs van nu), x = niet gewassen, een letter met bedrag (v 8 = alleen de voorkant, € 8
+          open) of + met bedrag (+5 = te weinig betaald, € 5 open). Daarna: 1 = al vooruit betaald
+          van vóór de app; dat telt niet als opgehaald geld.
           <span className="hidden sm:inline">
             {" "}
-            Met het toetsenbord: pijltjes om te lopen, 0 voor pof, Backspace om weg te halen.
+            Met het toetsenbord: pijltjes om te lopen, 0, x of 1 meteen, een letter of + en dan het
+            bedrag met Enter, Backspace om te wissen.
           </span>
         </p>
       )}
@@ -678,6 +797,10 @@ export function GeldKaart({
                   const data = perAdres.get(c.id);
                   const overmaken = effectieveMethode(c, wijk) === "overmaken";
                   const gepland = vooruitGepland(c, data);
+                  // De maanden met een 1 van de kaart: die kun je altijd wissen.
+                  const enen = (concept[c.id] ?? kaartVakjesVan(data, peilMaand))
+                    .filter((v) => v.teken === "1")
+                    .map((v) => v.maand);
                   return (
                     <tr
                       key={c.id}
@@ -729,8 +852,23 @@ export function GeldKaart({
                       {maanden.map((maand, k) => {
                         const vak = vakVoor(c, data, maand, peilMaand, concept[c.id], gepland);
                         const beginZone = !!peilMaand && maand <= peilMaand;
-                        const kanAanvinken = invullen && beginZone && !overmaken;
+                        // Wat je hier kunt invullen: vóór de start de beginstand,
+                        // daarna een 1 (niet bij een gestopt adres, en niet waar
+                        // de beurt al betaald is: dan zou dat geld verschuiven).
+                        const alBetaald =
+                          vak.soort === "betaald" || (vak.soort === "vooruit" && !vak.kaart);
+                        const zone =
+                          !invullen || overmaken || !peilMaand
+                            ? null
+                            : beginZone
+                              ? "begin"
+                              : c.inactief_op || (alBetaald && !enen.includes(maand))
+                                ? null
+                                : "vooruit";
+                        const kanAanvinken = zone === "begin";
                         const aan = gekozen?.adres === c.id && gekozen.maand === maand;
+                        const teken = vakTeken(vak);
+                        const uitleg = vakUitleg(vak);
                         return (
                           <td
                             key={maand}
@@ -750,19 +888,19 @@ export function GeldKaart({
                               data-vak={`${r}-${k}`}
                               tabIndex={r === cursorRij && k === cursor.k ? 0 : -1}
                               onFocus={() => setCursor({ r, k })}
-                              onKeyDown={(e) => opToets(e, r, k, c, maand, kanAanvinken)}
-                              aria-label={`${c.house_number}${c.addition}, ${MAANDNAMEN[k]}`}
-                              aria-pressed={
-                                kanAanvinken
-                                  ? (concept[c.id] ?? beginMaandenVan(data)).includes(maand)
-                                  : undefined
-                              }
-                              onClick={() =>
-                                kanAanvinken
-                                  ? void zetBegin(c, maand, "wissel")
+                              onKeyDown={(e) => opToets(e, r, k, c, maand, zone)}
+                              aria-label={`${c.house_number}${c.addition}, ${MAANDNAMEN[k]}${uitleg ? `: ${uitleg}` : ""}`}
+                              aria-haspopup={zone ? "dialog" : undefined}
+                              title={uitleg || undefined}
+                              onClick={(e) =>
+                                zone
+                                  ? openMenu(e.currentTarget, r, k, c, maand)
                                   : setGekozen(aan ? null : { adres: c.id, maand })
                               }
-                              className={`flex h-8 w-full items-center justify-center rounded-[8px] text-[13px] font-semibold tabular-nums outline-none transition-colors ${
+                              className={`flex h-8 w-full items-center justify-center rounded-[8px] ${
+                                // Een langer bedrag (+12,5) moet in het vakje passen.
+                                teken.length > 3 ? "text-[10.5px]" : "text-[13px]"
+                              } font-semibold tabular-nums outline-none transition-colors ${
                                 // Bij aanvinken ook na een muisklik zien waar de 0 terechtkomt.
                                 invullen
                                   ? "focus:ring-2 focus:ring-foreground/70"
@@ -787,7 +925,7 @@ export function GeldKaart({
                                         : "text-muted-foreground/70 hover:bg-surface"
                               }`}
                             >
-                              {vakTeken(vak)}
+                              {teken}
                             </button>
                           </td>
                         );
@@ -808,9 +946,11 @@ export function GeldKaart({
 
           <p className="text-[12px] text-muted-foreground">
             1, 2 = zoveel wasbeurten betaald die maand · 0 = niet betaald (rood zolang het nog open
-            staat) · paars = met korting afgeboekt · B = betaald, vooruit (licht: die beurt komt
-            nog; rode rand: extra werk nog open) · × = overgeslagen · % = niet aan de beurt · $ =
-            maakt over · geel = de maand van nu · grijs = vóór de start (de beginstand)
+            staat) · een letter of +5 = een deel open, van de kaart (aanwijzen voor het bedrag) ·
+            paars = met korting afgeboekt · B = betaald, vooruit (licht: die beurt komt nog; rode
+            rand: extra werk nog open) · licht groene 1 = vooruit betaald van de papieren kaart · ×
+            = overgeslagen of niet gewassen · % = niet aan de beurt · $ = maakt over · geel = de
+            maand van nu · grijs = vóór de start (de beginstand)
           </p>
         </>
       )}
@@ -823,6 +963,16 @@ export function GeldKaart({
             {gekozen.maand.slice(0, 4)}
           </h3>
           <div className="mt-2 space-y-1 text-[13px]">
+            {detailVakje && (
+              <p>
+                Op de kaart: {detailVakje.teken === "x" ? "×" : detailVakje.teken}
+                {detailVakje.teken === "1"
+                  ? " · vooruit betaald, van vóór de app"
+                  : detailVakje.teken === "x"
+                    ? " · niet gewassen"
+                    : ` · ${formatPrice(detailVakje.bedrag)} open`}
+              </p>
+            )}
             {(details?.posten ?? [])
               .filter((p) => vakjeVan(p) === gekozen.maand && p.soort !== "beginstand")
               .map((p, i) => (
@@ -854,15 +1004,163 @@ export function GeldKaart({
                   {g.ongedaan && ` · teruggedraaid door ${g.ongedaan.door_naam}`}
                 </p>
               ))}
-            {(details?.posten ?? []).every(
-              (p) => vakjeVan(p) !== gekozen.maand || p.soort === "beginstand",
-            ) &&
+            {!detailVakje &&
+              (details?.posten ?? []).every(
+                (p) => vakjeVan(p) !== gekozen.maand || p.soort === "beginstand",
+              ) &&
               (details?.gebeurtenissen ?? []).every((g) => maandVan(g.op) !== gekozen.maand) && (
                 <p className="text-muted-foreground">Niets gebeurd in deze maand.</p>
               )}
           </div>
         </section>
       )}
+
+      {/* Het keuzemenu van één vakje: op de telefoon tik je zo in, op de
+          computer opent hij met Enter of met een letter of +. */}
+      <Popover open={!!menu} onOpenChange={(open) => !open && setMenu(null)}>
+        <PopoverAnchor virtualRef={anker} />
+        <PopoverContent
+          className="w-72 p-3"
+          onOpenAutoFocus={(e) => {
+            // Begon je met een letter of +, dan meteen verder typen.
+            const veld = menuInvoer.current;
+            if (menu?.invoer && veld) {
+              e.preventDefault();
+              veld.focus();
+              veld.setSelectionRange(veld.value.length, veld.value.length);
+            }
+          }}
+          onCloseAutoFocus={(e) => {
+            // Terug naar het vakje, zodat je met de pijltjes verder kunt.
+            e.preventDefault();
+            naarVak(menuPlek.current.r, menuPlek.current.k);
+          }}
+        >
+          {menu && menuAdres && (
+            <div className="space-y-2.5">
+              <p className="font-display text-[14px] font-semibold">
+                {menuAdres.house_number}
+                {menuAdres.addition} · {MAANDNAMEN[Number(menu.maand.slice(5, 7)) - 1]}{" "}
+                {menu.maand.slice(0, 4)}
+              </p>
+              {menuVoorStart ? (
+                <>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <KeuzeKnop
+                      teken="0"
+                      uitleg="hele beurt open"
+                      aan={menuVakje?.teken === "0" && !menuVakje.ingetypt}
+                      onKies={() => kiesInMenu({ teken: "0", bedrag: 0 })}
+                    />
+                    <KeuzeKnop
+                      teken="×"
+                      uitleg="niet gewassen"
+                      aan={menuVakje?.teken === "x"}
+                      onKies={() => kiesInMenu({ teken: "x", bedrag: 0 })}
+                    />
+                  </div>
+                  <form
+                    className="flex gap-1.5"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      typInMenu();
+                    }}
+                  >
+                    <Input
+                      ref={menuInvoer}
+                      className="h-9 min-w-0 flex-1 rounded-full"
+                      placeholder="v 8 of +5"
+                      aria-label="Letter met bedrag, of + met bedrag"
+                      autoCapitalize="off"
+                      autoComplete="off"
+                      value={menu.invoer}
+                      onChange={(e) => setMenu({ ...menu, invoer: e.target.value, fout: null })}
+                    />
+                    <Button type="submit" size="sm" className="h-9 rounded-full">
+                      Zet
+                    </Button>
+                  </form>
+                  {menu.fout ? (
+                    <p className="text-[12px] text-tint-rood-ink">{menu.fout}</p>
+                  ) : (
+                    <p className="text-[11.5px] text-muted-foreground">
+                      Een letter met wat er open staat (v 8 = alleen de voorkant, € 8), of + met wat
+                      er te weinig betaald is (+5). De B kan niet: die is al vooruit betaald.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <KeuzeKnop
+                    teken="1"
+                    uitleg="al vooruit betaald"
+                    aan={menuVakje?.teken === "1"}
+                    onKies={() => kiesInMenu({ teken: "1", bedrag: 0 })}
+                  />
+                  <p className="text-[11.5px] text-muted-foreground">
+                    Op de papieren kaart al betaald, van vóór de app. Die beurt staat dan niet open,
+                    en het telt niet als opgehaald geld.
+                  </p>
+                </>
+              )}
+              <div className="flex items-center justify-between gap-2 pt-0.5">
+                {menuVakje ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full"
+                    onClick={() => kiesInMenu(null)}
+                  >
+                    Wissen
+                  </Button>
+                ) : (
+                  <span />
+                )}
+                <button
+                  type="button"
+                  className="text-[12.5px] text-muted-foreground underline-offset-2 hover:underline"
+                  onClick={() => {
+                    setGekozen({ adres: menu.adres, maand: menu.maand });
+                    setMenu(null);
+                  }}
+                >
+                  Wat gebeurde er?
+                </button>
+              </div>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
     </div>
+  );
+}
+
+/** Eén keuze in het menu van een vakje: het teken groot, de uitleg klein. */
+function KeuzeKnop({
+  teken,
+  uitleg,
+  aan,
+  onKies,
+}: {
+  teken: string;
+  uitleg: string;
+  aan: boolean;
+  onKies: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={aan}
+      onClick={onKies}
+      className={cn(
+        "flex min-h-11 w-full items-center gap-2 rounded-[12px] border px-3 text-left transition-colors",
+        aan
+          ? "border-transparent bg-primary text-primary-foreground"
+          : "border-border bg-card hover:bg-surface",
+      )}
+    >
+      <span className="font-display text-[17px] font-semibold tabular-nums">{teken}</span>
+      <span className="text-[12.5px]">{uitleg}</span>
+    </button>
   );
 }

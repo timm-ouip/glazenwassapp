@@ -1,7 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { IconCash as Cash, IconChevronLeft as ChevronLeft } from "@tabler/icons-react";
+import {
+  IconCash as Cash,
+  IconChevronLeft as ChevronLeft,
+  IconLock as Lock,
+} from "@tabler/icons-react";
+import { toast } from "sonner";
 
 import { AppLayout } from "@/components/AppLayout";
 import { Avondoverzicht } from "@/components/betalingen/Avondoverzicht";
@@ -10,7 +15,9 @@ import { PofLijst } from "@/components/betalingen/PofLijst";
 import { FacturenLijst } from "@/components/betalingen/FacturenLijst";
 import { GeldloopScherm } from "@/components/betalingen/GeldloopScherm";
 import { LoperStart } from "@/components/betalingen/LoperStart";
+import { Button } from "@/components/ui/button";
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
+import { useGeldloopVast, zetGeldloopVast } from "@/lib/dagslot";
 import { TABBLADEN, TABNAAM, type BetalingenTab as Tab } from "@/lib/betalingen";
 import { fetchMijnGeldloop, type Vrijgave } from "@/lib/geldlopen";
 import { probeerOpnieuw, useWachtrij, vergeetMislukt } from "@/lib/geldloop-wachtrij";
@@ -145,8 +152,16 @@ function Lopen({
   });
   const [gekozen, setGekozen] = useState<string | null>(null);
   // Je komt binnen op je eigen cijfers en gaat van daaruit de straat in; de
-  // knop linksboven brengt je er weer terug.
-  const [begonnen, setBegonnen] = useState(false);
+  // knop linksboven brengt je er weer terug. Staat het geldlopen vast op dit
+  // toestel, dan sla je die cijfers over en sta je meteen in de straat.
+  const vast = useGeldloopVast();
+  const [gekozenBegonnen, setBegonnen] = useState<boolean | null>(null);
+  const begonnen = gekozenBegonnen ?? vast;
+  // Maak je het slot onderweg los, dan blijf je gewoon in de straat staan:
+  // losmaken geldt pas voor de volgende keer dat de app opent.
+  useEffect(() => {
+    if (vast) setBegonnen((was) => was ?? true);
+  }, [vast]);
   const lijst = avonden.data ?? [];
   const nu = Date.now();
   // Wat nu loopt, niet wat pas later begint.
@@ -202,6 +217,9 @@ function Lopen({
 
   return (
     <GeldloopScherm
+      // Een andere avond is een ander scherm: met zijn eigen open straat,
+      // die dan ook weer in beeld schuift.
+      key={vrijgave.id}
       vrijgave={vrijgave}
       titel={titel}
       bovenaan={
@@ -268,6 +286,9 @@ function GeenVrijgave({
   komt?: Vrijgave | undefined;
   onVrijgeven?: (() => void) | undefined;
 }) {
+  // Staat het geldlopen vast, dan opent de app ook overdag hier. Het
+  // loopscherm met de slotknop is er dan niet, dus losmaken kan hier.
+  const vast = useGeldloopVast();
   return (
     <div className="mx-auto mt-10 max-w-sm rounded-[18px] border border-border bg-card p-6 text-center shadow-card">
       <div className="mx-auto mb-3 flex size-11 items-center justify-center rounded-[14px] bg-tint-groen text-tint-groen-ink">
@@ -287,6 +308,25 @@ function GeenVrijgave({
         >
           Een wijk vrijgeven
         </button>
+      )}
+      {vast && (
+        <div className="mt-4 border-t border-border pt-4">
+          <p className="text-[12.5px] text-muted-foreground">
+            De app opent op deze telefoon op het geldlopen.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2 rounded-full"
+            onClick={() => {
+              zetGeldloopVast(false);
+              toast.success("Losgemaakt: de app opent weer op Home.");
+            }}
+          >
+            <Lock className="size-4" />
+            Losmaken
+          </Button>
+        </div>
       )}
     </div>
   );

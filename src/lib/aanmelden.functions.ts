@@ -18,7 +18,7 @@
  *     "is dit adres klant bij jullie". Zou de pagina dat verschil laten zien,
  *     dan kan iedereen met een postcodeboek de klantenlijst nalopen.
  */
-import { netjesEmail, netjesPostcode, netjesStraat } from "@/lib/schoonschrift";
+import { netjesEmail, netjesPostcode, netjesStraat, netjesToevoeging } from "@/lib/schoonschrift";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -96,7 +96,7 @@ function postcodeSleutel(postcode: string) {
 function splitsNummer(tekst: string) {
   const m = tekst.trim().match(/^(\d+)\s*(.*)$/);
   if (!m) return null;
-  return { nummer: Number(m[1]), toevoeging: (m[2] ?? "").trim() };
+  return { nummer: Number(m[1]), toevoeging: netjesToevoeging(m[2] ?? "") };
 }
 
 /**

@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
 import { jaarVakken, volgendeBeurtMaand } from "@/lib/dossier";
-import { vakTeken, vakVoor, vooruitGepland } from "@/lib/geldkaart";
+import {
+  kaartDelen,
+  kaartVakjesVan,
+  leesVakInvoer,
+  vakTeken,
+  vakVoor,
+  vooruitGepland,
+  type KaartVakje,
+} from "@/lib/geldkaart";
 import type { Customer } from "@/lib/klanten";
 import type { KaartAdres, KaartPost } from "@/lib/overzichten";
 
@@ -30,12 +38,19 @@ const beurt = (ronde: string, p: Partial<KaartPost> = {}): KaartPost => ({
   ...p,
 });
 
-const kaart = (posten: KaartPost[], vooruit_over = 0): KaartAdres => ({
+const kaart = (
+  posten: KaartPost[],
+  vooruit_over = 0,
+  extra: Partial<KaartAdres> = {},
+): KaartAdres => ({
   id: "a",
   posten,
   vooruit_over,
   vooruit_vast: 0,
+  begin_vakjes: null,
+  kaart_vooruit: null,
   gebeurtenissen: [],
+  ...extra,
 });
 
 const teken = (data: KaartAdres | undefined, maand: string, gepland: string[] = []) =>
@@ -99,5 +114,135 @@ describe("vooruitGepland", () => {
   test("een gestopt adres gebruikt ze niet meer", () => {
     const gestopt = { ...adres, inactief_op: "2026-09-01" } as Customer;
     expect(vooruitGepland(gestopt, kaart([], 2))).toEqual([]);
+  });
+});
+
+describe("de kaart invullen: 0, x, letter, + en 1", () => {
+  const begin = (bedrag: number, aantal: number, omschrijving: string, gedekt = 0): KaartPost => ({
+    ...beurt("2026-09"),
+    soort: "beginstand",
+    datum: "2026-09-30",
+    ronde: null,
+    bedrag,
+    aantal,
+    omschrijving,
+    gedekt,
+  });
+  const vakjes: KaartVakje[] = [
+    { maand: "2026-06", teken: "0", bedrag: 12.5 },
+    { maand: "2026-07", teken: "x", bedrag: 0 },
+    { maand: "2026-08", teken: "v", bedrag: 8 },
+    { maand: "2026-09", teken: "+", bedrag: 12.5 },
+  ];
+  const data = kaart([begin(33, 1, "2026-06,2026-08,2026-09,2026-08=v,2026-09=+")], 2, {
+    begin_vakjes: vakjes,
+    kaart_vooruit: { maanden: ["2026-10", "2026-12"], aantal: 2, over: 2 },
+  });
+  const t = (maand: string) => vakTeken(vakVoor(adres, data, maand, "2026-09"));
+
+  test("elk vakje komt terug zoals het is ingevuld", () => {
+    expect(t("2026-06")).toBe("0");
+    expect(t("2026-07")).toBe("×");
+    expect(t("2026-08")).toBe("v");
+    expect(t("2026-09")).toBe("+12,5");
+    expect(t("2026-10")).toBe("1");
+    expect(t("2026-12")).toBe("1");
+    expect(vakVoor(adres, data, "2026-10", "2026-09")).toEqual({
+      soort: "vooruit",
+      gepland: true,
+      kaart: true,
+    });
+  });
+
+  test("een 1 blijft alleen licht zolang er beurten van over zijn", () => {
+    // November overgeslagen, december gewassen: die ene beurt is op.
+    const op = kaart(
+      [beurt("2026-12", { gedekt: 12.5, betaald_soort: "vooruit", vooruit: 12.5 })],
+      0,
+      {
+        kaart_vooruit: { maanden: ["2026-11"], aantal: 1, over: 0 },
+      },
+    );
+    expect(vakVoor(adres, op, "2026-11", "2026-09").soort === "vooruit").toBe(false);
+    expect(vakTeken(vakVoor(adres, op, "2026-12", "2026-09"))).toBe("B");
+    // Net ingevuld (nog niet bewaard) staat hij er wel.
+    const concept: KaartVakje[] = [{ maand: "2026-11", teken: "1", bedrag: 0 }];
+    expect(vakTeken(vakVoor(adres, op, "2026-11", "2026-09", concept))).toBe("1");
+  });
+
+  test("de enen van de kaart tellen niet nog eens als geplande B", () => {
+    expect(vooruitGepland(adres, data)).toEqual([]);
+  });
+
+  test("een oude beginstand (alleen maanden) is een rij nullen", () => {
+    const oud = kaart([begin(25, 2, "2026-07,2026-08")]);
+    expect(kaartVakjesVan(oud, "2026-09").map((v) => `${v.maand}${v.teken}`)).toEqual([
+      "2026-070",
+      "2026-080",
+    ]);
+  });
+
+  test("een ingetypt bedrag staat als 0 in de startmaand", () => {
+    const getypt = kaart([begin(40, 3, "")]);
+    expect(kaartVakjesVan(getypt, "2026-09")).toEqual([
+      { maand: "2026-09", teken: "0", bedrag: 40, ingetypt: true },
+    ]);
+  });
+
+  test("een beginstand van alleen +5 die betaald is, telt als één keer betaald", () => {
+    const betaald = kaart(
+      [
+        {
+          ...begin(5, 0, "2026-09,2026-09=+", 5),
+          betaald_soort: "betaald",
+          betaald_op: "2026-10-12T19:00:00Z",
+        },
+      ],
+      0,
+      { begin_vakjes: [{ maand: "2026-09", teken: "+", bedrag: 5 }] },
+    );
+    expect(vakTeken(vakVoor(adres, betaald, "2026-10", "2026-09"))).toBe("1");
+  });
+});
+
+describe("leesVakInvoer", () => {
+  test("de tekens van de papieren kaart", () => {
+    expect(leesVakInvoer("0")).toEqual({ teken: "0", bedrag: 0 });
+    expect(leesVakInvoer("X")).toEqual({ teken: "x", bedrag: 0 });
+    expect(leesVakInvoer("1")).toEqual({ teken: "1", bedrag: 0 });
+    expect(leesVakInvoer("v 8")).toEqual({ teken: "v", bedrag: 8 });
+    expect(leesVakInvoer("A12,50")).toEqual({ teken: "a", bedrag: 12.5 });
+    expect(leesVakInvoer("+5")).toEqual({ teken: "+", bedrag: 5 });
+    expect(leesVakInvoer("+ € 7.25")).toEqual({ teken: "+", bedrag: 7.25 });
+  });
+  test("wat niet kan, met uitleg", () => {
+    expect("fout" in leesVakInvoer("b 8")).toBe(true);
+    expect("fout" in leesVakInvoer("v")).toBe(true);
+    expect("fout" in leesVakInvoer("+0")).toBe(true);
+    expect("fout" in leesVakInvoer("x 5")).toBe(true);
+    expect("fout" in leesVakInvoer("vv 8")).toBe(true);
+  });
+});
+
+describe("kaartDelen", () => {
+  const nul = (maand: string, bedrag = 12.5): KaartVakje => ({ maand, teken: "0", bedrag });
+  test("alleen het deel dat verandert gaat mee", () => {
+    const was = [nul("2026-07"), { maand: "2026-10", teken: "1", bedrag: 0 }];
+    expect(kaartDelen([...was, { maand: "2026-12", teken: "1", bedrag: 0 }], was)).toEqual({
+      begin: null,
+      vooruit: ["2026-10", "2026-12"],
+    });
+    expect(kaartDelen([nul("2026-07"), nul("2026-08")], was)).toEqual({
+      begin: [nul("2026-07"), nul("2026-08")],
+      vooruit: [],
+    });
+  });
+  test("een 0 met een andere (oude) prijs is niet anders", () => {
+    expect(kaartDelen([nul("2026-07", 15)], [nul("2026-07", 12.5)]).begin).toBeNull();
+  });
+  test("een ingetypt bedrag blijft staan tot je het vervangt of wist", () => {
+    const getypt: KaartVakje = { ...nul("2026-09", 40), ingetypt: true };
+    expect(kaartDelen([getypt], [getypt]).begin).toBeNull();
+    expect(kaartDelen([], [getypt]).begin).toEqual([]);
   });
 });

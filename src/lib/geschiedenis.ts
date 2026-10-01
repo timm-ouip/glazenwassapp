@@ -210,7 +210,8 @@ function geldTitel(g: Gebeurtenis): string {
     case "geen_geld":
       return `Geen geld${avond}`;
     case "vooruit":
-      return `${hoofdletter(vooruitLabel(g.aantal))} betaald${bedrag}`;
+      // Een 1 op de geldkaart: al betaald van vóór de app, geen geld dat binnenkwam.
+      return `${hoofdletter(vooruitLabel(g.aantal))} betaald${bedrag}${g.bron === "kaart" ? " · van de papieren kaart" : ""}`;
     case "korting":
       return `Korting${bedrag}`;
     case "terugbetaald":

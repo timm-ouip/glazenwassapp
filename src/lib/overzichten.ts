@@ -5,6 +5,7 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import { beurtenTekst, type GeldDeel } from "@/lib/betalingen";
+import type { KaartVakje } from "@/lib/geldkaart";
 
 export interface Gebeurtenis {
   id: string;
@@ -23,7 +24,8 @@ export interface Gebeurtenis {
   reden: string;
   aantal: number | null;
   maanden: string[];
-  bron: "geldloop" | "dag" | "kantoor";
+  /** "kaart": een 1 op de geldkaart, vooruit betaald van vóór de app (geen geld van een avond). */
+  bron: "geldloop" | "dag" | "kantoor" | "kaart";
   door: string | null;
   door_naam: string;
   op: string;
@@ -223,6 +225,12 @@ export interface KaartAdres {
   posten: KaartPost[];
   vooruit_over: number;
   vooruit_vast: number;
+  /** Hoe de beginstand per maand is ingevuld; leeg bij een oude beginstand
+   *  (dan gelden de maanden in de omschrijving) of zonder beginstand. */
+  begin_vakjes: KaartVakje[] | null;
+  /** De enen na de start (vooruit betaald van de papieren kaart); `over` =
+   *  de beurten die er nog niet van gebruikt zijn. */
+  kaart_vooruit: { maanden: string[]; aantal: number; over: number } | null;
   gebeurtenissen: Gebeurtenis[];
 }
 
@@ -248,6 +256,20 @@ export async function fetchKaart(straat: string, jaar: number): Promise<Kaart> {
       })),
       vooruit_over: Number(a.vooruit_over ?? 0),
       vooruit_vast: Number(a.vooruit_vast ?? 0),
+      begin_vakjes: Array.isArray(a.begin_vakjes)
+        ? a.begin_vakjes.map((v) => ({
+            maand: String(v.maand),
+            teken: String(v.teken),
+            bedrag: Number(v.bedrag ?? 0),
+          }))
+        : null,
+      kaart_vooruit: a.kaart_vooruit
+        ? {
+            maanden: a.kaart_vooruit.maanden ?? [],
+            aantal: Number(a.kaart_vooruit.aantal ?? 0),
+            over: Number(a.kaart_vooruit.over ?? 0),
+          }
+        : null,
       gebeurtenissen: leesGebeurtenissen(a.gebeurtenissen),
     })),
   };
@@ -279,6 +301,8 @@ export interface GeldAdres {
   terug: number;
   /** De prijs per beurt voor een nieuwe vooruitbetaling; leeg zonder prijs. */
   vooruit_p: number | null;
+  /** Vanaf welke wasbeurt een nieuwe vooruitbetaling telt (zie vooruitEerst). */
+  vooruit_vanaf: string | null;
   wissel: Betaalwissel | null;
   gebeurtenissen: Gebeurtenis[];
   vaste_kortingen: { id: string; naam: string; bedrag: number; door_naam: string; op: string }[];
@@ -308,6 +332,7 @@ export async function fetchGeldAdres(adres: string): Promise<GeldAdres> {
     vooruit_eigen_waarde: Number(x.vooruit_eigen_waarde ?? 0),
     terug: Number(x.terug ?? 0),
     vooruit_p: x.vooruit_p == null ? null : Number(x.vooruit_p),
+    vooruit_vanaf: x.vooruit_vanaf ?? null,
     wissel: x.wissel ?? null,
     gebeurtenissen: leesGebeurtenissen(x.gebeurtenissen),
     vaste_kortingen: (x.vaste_kortingen ?? []).map((k) => ({ ...k, bedrag: Number(k.bedrag) })),

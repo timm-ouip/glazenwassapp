@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ElementType } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { IconAlertTriangle as AlertTriangle } from "@tabler/icons-react";
@@ -47,7 +47,7 @@ import { toonDatum, vandaag } from "@/lib/wasdag";
 
 /** De vorm van de twee brede vakken bovenaan, zoals de vakken op Home. */
 const GROOT_VAK =
-  "col-span-2 h-[156px] rounded-[28px] px-5 py-4 md:h-[240px] md:px-[26px] md:py-[22px] zak:h-[136px] zak:md:h-[180px] zak:md:px-5 zak:md:py-4";
+  "col-span-2 h-[166px] rounded-[28px] px-5 py-4 md:h-[240px] md:px-[26px] md:py-[22px] zak:h-[136px] zak:md:h-[180px] zak:md:px-5 zak:md:py-4";
 
 function tijd(iso: string): string {
   return new Date(iso).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
@@ -184,6 +184,25 @@ export function Avondoverzicht({
   const nogTeGaan = vanavond.filter((r) => !gelopenIds.has(r.id)).length;
   const samenAdressen = gelopen + nogTeGaan;
   const procentGelopen = samenAdressen > 0 ? Math.round((gelopen / samenAdressen) * 100) : 0;
+  // Hoeveel van het geld van vanavond is binnen: wat er is opgehaald, tegen wat
+  // er nog open staat in de wijken van vanavond. Bij een oudere dag is die
+  // tweede helft de stand van nu, dus dan zegt het procent niets.
+  // Alleen wat bij een vrijgave van vanavond hoort telt mee: een boeking op
+  // kantoor of een jaar vooruit betaald op kantoor staat niet tegenover wat er
+  // nog op te halen is. Vooruit betaald aan de deur telt wel.
+  const opgehaaldVanavond = geldig
+    .filter(
+      (g) =>
+        (g.soort === "betaald" || g.soort === "vooruit") &&
+        g.vrijgave_id !== null &&
+        avondIds.has(g.vrijgave_id),
+    )
+    .reduce((t, g) => t + g.bedrag, 0);
+  const geldTotaal = opgehaaldVanavond + som(vanavond);
+  const procentGeld =
+    datum === vandaag() && avond.data && pofQuery.data && districts.data && geldTotaal > 0.005
+      ? Math.round((opgehaaldVanavond / geldTotaal) * 100)
+      : null;
   const eindTijd = lopendeVrijgaven[0] ? tijd(lopendeVrijgaven[0].eind_op) : "";
   const lopersVanavond = [...new Set(lopendeVrijgaven.flatMap((v) => v.lopers.map((l) => l.naam)))];
 
@@ -197,6 +216,12 @@ export function Avondoverzicht({
   const mijnAvond = begonnenAvonden.find((v) => v.lopers.some((l) => l.id === employee?.id));
   const ikLoopMee = Boolean(mijnAvond);
   const loopId = (mijnAvond ?? begonnenAvonden[0])?.id;
+  // Het loopscherm laat de avond alleen zien aan de eigenaar en aan wie zelf
+  // loopt, en alleen die van vandaag; voor een ander zijn de twee grote vakken
+  // gewoon cijfers.
+  const naarLopen = (isEigenaar || ikLoopMee) && datum === vandaag();
+  const GrootVak: ElementType = naarLopen ? "button" : "div";
+  const grootVakProps = naarLopen ? { type: "button" as const, onClick: onLopen } : {};
   // De database geeft deze lijst alleen aan de eigenaar en aan wie die avond
   // zelf loopt; een ander zou er een geweigerde vraag per minuut aan
   // overhouden, dus die vragen we niet eens.
@@ -210,6 +235,16 @@ export function Avondoverzicht({
   const samenTotaal = (o?.samen_open ?? 0) + (o?.samen_gedaan ?? 0);
   const samenProcent =
     samenTotaal > 0 ? Math.round(((o?.samen_gedaan ?? 0) / samenTotaal) * 100) : 0;
+  // De kleine vakken vullen het rooster (2 breed op de telefoon, 4 op de
+  // computer). Hoeveel er zijn hangt af van wie je bent. Eén vak rekt op zodat
+  // de laatste rij niet half leeg blijft: "Samen nog te gaan" (dat staat
+  // vooraan), en zonder dat vak Korting (achteraan).
+  const toonSamen = isEigenaar || ikLoopMee;
+  const kleineVakken = 4 + (onFacturen ? 1 : 0) + (ikLoopMee ? 1 : 0) + (toonSamen ? 1 : 0);
+  const vulRooster = cn(
+    kleineVakken % 2 === 1 && "col-span-2",
+    ["", "md:col-span-2", "md:col-span-3", "md:col-span-4"][(4 - (kleineVakken % 4)) % 4],
+  );
   // Wat de eigenaar moet zien: korting, mogelijk dubbel, laat binnengekomen,
   // en wat teruggedraaid is.
   // Vooruit hoort er ook bij: dat is een afspraak voor maanden, die wil de
@@ -319,34 +354,55 @@ export function Avondoverzicht({
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3">
         {/* De twee vakken die er het meest toe doen zijn breed, in de vorm
             van Home: het bedrag groot, en eronder hoe ver de avond is. */}
-        <div className={cn(TEGEL_VAK, TEGEL_KLEUR.groen, GROOT_VAK)}>
-          <TegelKop label="Opgehaald" pijl={false} />
+        {/* Beide vakken gaan naar het loopscherm, voor wie dat mag zien. */}
+        <GrootVak
+          {...grootVakProps}
+          className={cn(
+            TEGEL_VAK,
+            naarLopen && [TEGEL_KLIKBAAR, "text-left"],
+            TEGEL_KLEUR.groen,
+            GROOT_VAK,
+          )}
+        >
+          <TegelKop label="Opgehaald" pijl={naarLopen} />
           <span className="mt-2.5 whitespace-nowrap font-display text-[44px] font-semibold leading-none tracking-[-0.05em] tabular-nums md:mt-[18px] md:text-[72px] zak:mt-2 zak:text-[30px] zak:tracking-[-0.02em] zak:md:mt-3 zak:md:text-[42px]">
             {avond.data ? <TelBedrag key={datum} bedrag={opgehaald} /> : streep}
           </span>
-          <div className="mt-auto flex flex-col gap-[7px] md:gap-2.5">
+          <span className="mt-auto flex flex-col gap-[7px] md:gap-2.5">
             <span className="truncate text-[13px] opacity-80 md:text-[14.5px] zak:text-[12px] zak:text-muted-foreground zak:opacity-100 zak:md:text-[12.5px]">
               {geldig.filter((g) => g.soort === "betaald").length} keer betaald
               {vooruitBeurten > 0 && ` · ${beurtenTekst(vooruitBeurten)} vooruit`}
-              {samenAdressen > 0 &&
-                ` · ${gelopen} van de ${samenAdressen} adressen gelopen (${procentGelopen}%)`}
+              {procentGeld !== null && ` · ${procentGeld}% van het geld`}
             </span>
             {samenAdressen > 0 && (
-              <span
-                role="img"
-                aria-label={`${procentGelopen} procent van de adressen gelopen`}
-                className="block h-1.5 overflow-hidden rounded-full bg-current/20 md:h-2"
-              >
+              <span className="flex flex-col gap-1 md:gap-1.5">
+                <span className="truncate text-[13px] opacity-80 md:text-[14.5px] zak:text-[12px] zak:text-muted-foreground zak:opacity-100 zak:md:text-[12.5px]">
+                  {gelopen} van de {samenAdressen} adressen gelopen ({procentGelopen}%)
+                </span>
                 <span
-                  className="block h-full rounded-full bg-current"
-                  style={{ width: `${procentGelopen}%` }}
-                />
+                  role="img"
+                  aria-label={`${procentGelopen} procent van de adressen gelopen`}
+                  className="block h-1.5 overflow-hidden rounded-full bg-current/20 md:h-2"
+                >
+                  <span
+                    className="block h-full rounded-full bg-current"
+                    style={{ width: `${procentGelopen}%` }}
+                  />
+                </span>
               </span>
             )}
-          </div>
-        </div>
-        <div className={cn(TEGEL_VAK, TEGEL_KLEUR.oranje, GROOT_VAK)}>
-          <TegelKop label="Nog op te halen" pijl={false} />
+          </span>
+        </GrootVak>
+        <GrootVak
+          {...grootVakProps}
+          className={cn(
+            TEGEL_VAK,
+            naarLopen && [TEGEL_KLIKBAAR, "text-left"],
+            TEGEL_KLEUR.oranje,
+            GROOT_VAK,
+          )}
+        >
+          <TegelKop label="Nog op te halen" pijl={naarLopen} />
           <span className="mt-2.5 whitespace-nowrap font-display text-[44px] font-semibold leading-none tracking-[-0.05em] tabular-nums md:mt-[18px] md:text-[72px] zak:mt-2 zak:text-[30px] zak:tracking-[-0.02em] zak:md:mt-3 zak:md:text-[42px]">
             {pofQuery.data && districts.data ? (
               <TelBedrag key={datum} bedrag={som(vanavond)} />
@@ -354,7 +410,7 @@ export function Avondoverzicht({
               streep
             )}
           </span>
-          <div className="mt-auto flex flex-col gap-[7px] md:gap-2.5">
+          <span className="mt-auto flex flex-col gap-[7px] md:gap-2.5">
             <span className="truncate text-[13px] opacity-80 md:text-[14.5px] zak:text-[12px] zak:text-muted-foreground zak:opacity-100 zak:md:text-[12.5px]">
               {idsVanavond.size === 0
                 ? "geen wijk vrijgegeven"
@@ -367,34 +423,13 @@ export function Avondoverzicht({
                 bij {nogTeGaan} {nogTeGaan === 1 ? "adres is" : "adressen is"} nog niemand geweest
               </span>
             )}
-          </div>
-        </div>
+          </span>
+        </GrootVak>
         {/* De avond in adressen, zoals de geldlopers hem zien. Alleen vandaag,
-            en de vakken over jezelf alleen als je zelf loopt. */}
-        {ikLoopMee && (
-          <div className={cn(TEGEL_VAK, TEGEL_KLEUR.aqua, TEGEL_GEWOON, "md:h-[150px]")}>
-            <TegelKop label="Jij nog te doen" pijl={false} />
-            <TegelGetal klein>{o ? <TelGetal waarde={o.mijn_open} /> : streep}</TegelGetal>
-            <TegelOnder>
-              {o
-                ? `${o.mijn_open === 1 ? "adres" : "adressen"} in ${o.mijn_straten_open} ${
-                    o.mijn_straten_open === 1 ? "straat" : "straten"
-                  } · ${o.mijn_gedaan} gelopen`
-                : "\u00a0"}
-            </TegelOnder>
-          </div>
-        )}
-        {(isEigenaar || ikLoopMee) && (
+            en het vak over jezelf alleen als je zelf loopt. */}
+        {toonSamen && (
           <div
-            className={cn(
-              TEGEL_VAK,
-              TEGEL_KLEUR.creme,
-              TEGEL_GEWOON,
-              "md:h-[150px]",
-              // Loopt er niemand naast je, dan vult dit vak de plek van het
-              // vak ernaast op, zodat de rij niet half leeg blijft.
-              !ikLoopMee && "col-span-2",
-            )}
+            className={cn(TEGEL_VAK, TEGEL_KLEUR.creme, TEGEL_GEWOON, "md:h-[150px]", vulRooster)}
           >
             <TegelKop label="Samen nog te gaan" pijl={false} />
             <TegelGetal klein>{o ? <TelGetal waarde={o.samen_open} /> : streep}</TegelGetal>
@@ -407,30 +442,18 @@ export function Avondoverzicht({
             </TegelOnder>
           </div>
         )}
-        {/* Het vak waarmee je de straat in gaat: Lopen staat niet meer in
-            het menu, je gaat er hiervandaan heen. */}
         {ikLoopMee && (
-          <button
-            type="button"
-            onClick={onLopen}
-            className={cn(
-              TEGEL_VAK,
-              TEGEL_KLIKBAAR,
-              TEGEL_KLEUR.petrol,
-              TEGEL_GEWOON,
-              "col-span-2 text-left md:h-[150px]",
-            )}
-          >
-            <TegelKop label="Jouw avond" />
-            <TegelGetal klein knippen={false}>
-              {o ? <TelBedrag key={loopId} bedrag={o.mij} /> : streep}
-            </TegelGetal>
+          <div className={cn(TEGEL_VAK, TEGEL_KLEUR.aqua, TEGEL_GEWOON, "md:h-[150px]")}>
+            <TegelKop label="Jij nog te doen" pijl={false} />
+            <TegelGetal klein>{o ? <TelGetal waarde={o.mijn_open} /> : streep}</TegelGetal>
             <TegelOnder>
               {o
-                ? `${o.mij_aantal} keer afgerekend · ${o.mijn_gedaan > 0 ? "verder lopen" : "beginnen"}`
+                ? `${o.mijn_open === 1 ? "adres" : "adressen"} in ${o.mijn_straten_open} ${
+                    o.mijn_straten_open === 1 ? "straat" : "straten"
+                  } · ${o.mijn_gedaan} gelopen`
                 : "\u00a0"}
             </TegelOnder>
-          </button>
+          </div>
         )}
         <button
           type="button"
@@ -518,7 +541,15 @@ export function Avondoverzicht({
             </TegelOnder>
           </button>
         )}
-        <div className={cn(TEGEL_VAK, TEGEL_KLEUR.paars, TEGEL_GEWOON, "md:h-[150px]")}>
+        <div
+          className={cn(
+            TEGEL_VAK,
+            TEGEL_KLEUR.paars,
+            TEGEL_GEWOON,
+            "md:h-[150px]",
+            !toonSamen && vulRooster,
+          )}
+        >
           <TegelKop label="Korting" pijl={false} />
           <TegelGetal klein knippen={false}>
             {avond.data ? <TelBedrag key={datum} bedrag={korting} /> : streep}

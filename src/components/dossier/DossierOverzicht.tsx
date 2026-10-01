@@ -489,10 +489,10 @@ function AdresKiezen({ d }: { d: Dossier }) {
         <VeldLabel label="Toevoeging">
           <input
             className={dossierInvoer}
-            placeholder="a, bis…"
+            placeholder="A, BIS…"
             value={k.toevoeging}
             disabled={uit}
-            onChange={(e) => d.zetKeuze({ toevoeging: e.target.value })}
+            onChange={(e) => d.zetKeuze({ toevoeging: e.target.value.toUpperCase() })}
           />
         </VeldLabel>
         <VeldLabel label="Postcode">

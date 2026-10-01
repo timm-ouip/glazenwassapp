@@ -328,6 +328,7 @@ function KantoorBetalen({
         open={venster === "vooruit"}
         subtitel={adresTekst}
         delen={stand.delen}
+        vanaf={g.vooruit_vanaf}
         prijs={g.vooruit_p}
         prijsAanpassen
         onSluit={() => setVenster(null)}

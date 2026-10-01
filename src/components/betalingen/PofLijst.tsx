@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { IconArrowLeft as ArrowLeft } from "@tabler/icons-react";
 
 import { ROOD_VANAF } from "@/components/betalingen/GeldloopScherm";
-import { rekening, terugTekst } from "@/lib/betalingen";
+import { keerOpen, rekening, terugTekst } from "@/lib/betalingen";
 import { fetchDistricts, formatPrice } from "@/lib/klanten";
 import { fetchPof, type PofRegel } from "@/lib/overzichten";
 import { toonDatum } from "@/lib/wasdag";
@@ -163,12 +163,10 @@ function Regel({ r, onKaart }: { r: PofRegel; onKaart: (straat: string) => void 
       type="button"
       onClick={() => onKaart(r.straat_id)}
       title="Op de kaart bekijken"
-      className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface ${
-        rood ? "bg-tint-rood/50" : ""
-      }`}
+      className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface"
     >
       <span className="min-w-0 flex-1">
-        <span className={`block truncate text-[14px] ${rood ? "text-tint-rood-ink" : ""}`}>
+        <span className="block truncate text-[14px]">
           <b className="font-semibold">
             {r.straat} {r.house_number}
             {r.addition}
@@ -186,11 +184,16 @@ function Regel({ r, onKaart }: { r: PofRegel; onKaart: (straat: string) => void 
           {r.laatst_betaald && ` · laatst betaald ${datumVan(r.laatst_betaald)}`}
         </span>
       </span>
-      {rood && (
-        <span className="shrink-0 rounded-full bg-tint-rood px-2 py-0.5 text-[11.5px] font-medium text-tint-rood-ink">
-          {r.open_wassen}× open
-        </span>
-      )}
+      {/* Hoe vaak het open staat, naast het bedrag; vanaf drie keer kleurt
+          alleen het bedrag rood. */}
+      <span
+        title="Wasbeurten open"
+        className={`w-10 shrink-0 text-right text-[12.5px] tabular-nums ${
+          rood ? "font-medium text-tint-rood-ink" : "text-muted-foreground"
+        }`}
+      >
+        {keerOpen(r.open_wassen)}
+      </span>
       <span
         className={`w-20 shrink-0 text-right font-display text-[16px] font-semibold tabular-nums ${
           rood ? "text-tint-rood-ink" : ""

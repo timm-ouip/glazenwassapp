@@ -27,9 +27,9 @@ import { SortableContext, useSortable, type SortingStrategy } from "@dnd-kit/sor
 import { CSS } from "@dnd-kit/utilities";
 import { createPortal } from "react-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { netjesStraat } from "@/lib/schoonschrift";
+import { netjesStraat, netjesToevoeging } from "@/lib/schoonschrift";
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
-import { naarDagBijOpstarten } from "@/lib/dagslot";
+import { startBijOpstarten } from "@/lib/dagslot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -210,8 +210,12 @@ interface IndexSearch {
 export const Route = createFileRoute("/")({
   beforeLoad: async () => {
     await requireSession();
-    // Dagplanning vastgezet op dit toestel: de app opent meteen op vandaag.
-    if (typeof window !== "undefined" && naarDagBijOpstarten()) throw redirect({ to: "/dag" });
+    // Dagplanning of geldlopen vastgezet op dit toestel: de app opent meteen
+    // op vandaag, of op het loopscherm van de avond.
+    if (typeof window === "undefined") return;
+    const start = startBijOpstarten();
+    if (start === "dag") throw redirect({ to: "/dag" });
+    if (start === "lopen") throw redirect({ to: "/betalingen", search: { tab: "lopen" } });
   },
   validateSearch: (search: Record<string, unknown>): IndexSearch => ({
     ...(typeof search["wijk"] === "string" && search["wijk"] ? { wijk: search["wijk"] } : {}),
@@ -294,10 +298,13 @@ function Index() {
   const navigate = useNavigate();
   const { wijk, dag } = Route.useSearch();
   const mobiel = useIsMobile();
-  // Vangnet voor het slot op de dag: kwam de eerste pagina van de server,
-  // dan zag beforeLoad geen localStorage en gebeurt het hier alsnog.
+  // Vangnet voor de sloten: kwam de eerste pagina van de server, dan zag
+  // beforeLoad geen localStorage en gebeurt het hier alsnog.
   useEffect(() => {
-    if (naarDagBijOpstarten()) void navigate({ to: "/dag", replace: true });
+    const start = startBijOpstarten();
+    if (start === "dag") void navigate({ to: "/dag", replace: true });
+    if (start === "lopen")
+      void navigate({ to: "/betalingen", search: { tab: "lopen" }, replace: true });
     // Alleen bij het openen van de pagina.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -4045,7 +4052,10 @@ const KlantRijInhoud = memo(function KlantRijInhoud({
           onCommit={(v) => {
             const m = /^(\d+)\s*(.*)$/.exec(v.trim());
             if (!m) return;
-            onPatch(c, { house_number: parseInt(m[1]!, 10), addition: (m[2] ?? "").trim() });
+            onPatch(c, {
+              house_number: parseInt(m[1]!, 10),
+              addition: netjesToevoeging(m[2] ?? ""),
+            });
           }}
         />
       </div>

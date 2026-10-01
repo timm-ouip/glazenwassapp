@@ -20,6 +20,7 @@ import {
   dagKort,
   maandenVanDeKaart,
   maandKort,
+  vooruitEerst,
   type GeldDeel,
 } from "@/lib/betalingen";
 import { klachtAanDeDeur, maakVasteKorting, type GeldloopAdres } from "@/lib/geldlopen";
@@ -458,6 +459,8 @@ export function VooruitDialoog({
   delen,
   prijs,
   prijsAanpassen = false,
+  vanaf,
+  maandenVoor,
   onSluit,
   onVooruit,
 }: {
@@ -466,6 +469,14 @@ export function VooruitDialoog({
   subtitel: string;
   /** Wat er nu open staat. */
   delen: GeldDeel[];
+  /** Vanaf welke wasbeurt de betaling telt, van de database (zie vooruitEerst). */
+  vanaf: string | null | undefined;
+  /**
+   * Voor welke maanden zoveel beurten ongeveer betalen ("2026-09", ...; zie
+   * vooruitNieuweMaanden). Zonder dit, of zonder frequentie om mee te
+   * rekenen, staan alleen de open beurten erbij die als eerste tellen.
+   */
+  maandenVoor?: ((aantal: number) => string[]) | undefined;
   /** De prijs per beurt zoals de database hem voorstelt; leeg zonder gewone prijs. */
   prijs: number | null;
   prijsAanpassen?: boolean;
@@ -483,13 +494,15 @@ export function VooruitDialoog({
 
   const perBeurt = prijsAanpassen ? leesBedrag(prijsTekst) : prijs;
   const totaal = perBeurt ? Math.round(aantal * perBeurt * 100) / 100 : null;
-  // De open wasbeurten die als eerste een beurt gebruiken, oudste eerst.
-  const openBeurten = delen
-    .filter((d) => d.soort === "wassen" && d.rest > 0.005 && (d.vooruit ?? 0) <= 0.005)
-    .sort((x, y) => x.datum.localeCompare(y.datum))
-    .slice(0, aantal)
-    .map((d) => maandKort(d.datum));
-  const apart = delen.filter((d) => d.soort !== "wassen").reduce((t, d) => t + d.rest, 0);
+  // De open wasbeurten die als eerste een beurt gebruiken: de beurt van nu,
+  // of anders de open beurten, oudste eerst (zoals de database).
+  const telt = vooruitEerst(delen, vanaf).slice(0, aantal);
+  const openBeurten = telt.map((d) => maandKort(d.datum));
+  // Wat er daarnaast open blijft: oudere pof, de papieren kaart, een klus.
+  const apart = delen.filter((d) => !telt.includes(d)).reduce((t, d) => t + d.rest, 0);
+  const maanden = maandenVoor?.(aantal) ?? [];
+  const maandenTekst =
+    maanden.length === aantal ? lijstTekst(maanden.map((m) => maandKort(`${m}-01`))) : "";
 
   async function boek() {
     if (!perBeurt || perBeurt > 1000) {
@@ -508,7 +521,7 @@ export function VooruitDialoog({
     <Dialog open={open} onOpenChange={(o) => !o && onSluit()}>
       <PopupKader className="sm:max-w-sm">
         <PopupKop
-          kleur="groen"
+          kleur="paars"
           icoon={<CalendarDollar className="size-[22px]" />}
           titel="Vooruit betalen"
           subtitel={subtitel}
@@ -563,6 +576,11 @@ export function VooruitDialoog({
               ? `${beurtenTekst(aantal)} × ${formatPrice(perBeurt)} = ${formatPrice(totaal)}`
               : "Vul een prijs per beurt in"}
           </p>
+          {maandenTekst && (
+            <p className="text-center text-[13.5px]">
+              Betaald voor <span className="font-semibold">{maandenTekst}</span>
+            </p>
+          )}
           {openBeurten.length > 0 && (
             <p className="text-[13px] text-muted-foreground">
               {openBeurten.length === 1
@@ -572,8 +590,8 @@ export function VooruitDialoog({
           )}
           {apart > 0.005 && (
             <p className="text-[13px] text-muted-foreground">
-              Nog {formatPrice(apart)} open van de papieren kaart of een klus: dat gaat hier niet
-              af, dat betaalt hij apart.
+              Nog {formatPrice(apart)} open van eerder, de papieren kaart of een klus: dat gaat hier
+              niet af, dat betaalt hij apart.
             </p>
           )}
         </PopupBody>
@@ -592,6 +610,12 @@ export function VooruitDialoog({
       </PopupKader>
     </Dialog>
   );
+}
+
+/** "sep", "sep en okt", "sep, okt, nov en dec". */
+function lijstTekst(woorden: string[]): string {
+  if (woorden.length <= 1) return woorden.join("");
+  return `${woorden.slice(0, -1).join(", ")} en ${woorden[woorden.length - 1]}`;
 }
 
 /** Een klacht aan de deur: komt in het dossier van de klant, kastanje. */

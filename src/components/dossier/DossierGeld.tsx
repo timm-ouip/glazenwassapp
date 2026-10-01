@@ -50,7 +50,7 @@ import {
   type GeldDeel,
 } from "@/lib/betalingen";
 import { bronTekst, korteDatum, opsomming, volgendeBeurtMaand } from "@/lib/dossier";
-import { vakTeken, vakVoor, vooruitGepland, type Vak } from "@/lib/geldkaart";
+import { vakTeken, vakUitleg, vakVoor, vooruitGepland, type Vak } from "@/lib/geldkaart";
 import { boek, haalVasteKortingWeg, maakVasteKorting, nieuweTik, type Tik } from "@/lib/geldlopen";
 import { formatPrice, toonMaand, type Customer } from "@/lib/klanten";
 import {
@@ -122,10 +122,13 @@ function watTekst(e: Gebeurtenis): string {
   switch (e.soort) {
     case "betaald":
       return `Betaald ${bronTekst(e.bron)}${reden}`;
-    case "vooruit":
+    case "vooruit": {
+      // Een 1 op de geldkaart: al betaald van vóór de app, niet opgehaald.
+      const kaart = e.bron === "kaart" ? " · van de papieren kaart" : "";
       return e.aantal && e.prijs_per_beurt
-        ? `${soortLabel(e.soort)} · ${e.aantal} × ${formatPrice(e.prijs_per_beurt)}`
-        : soortLabel(e.soort);
+        ? `${soortLabel(e.soort)} · ${e.aantal} × ${formatPrice(e.prijs_per_beurt)}${kaart}`
+        : `${soortLabel(e.soort)}${kaart}`;
+    }
     case "omgerekend": {
       if (!e.prijs_per_beurt) return soortLabel(e.soort);
       const tegoed = Math.round((e.bedrag - (e.aantal ?? 0) * e.prijs_per_beurt) * 100) / 100;
@@ -173,15 +176,6 @@ function vakKleur(vak: Vak, volgende: boolean): string {
       return volgende ? "border-primary" : "ring-1 ring-inset ring-border";
   }
 }
-
-const VAK_UITLEG: Record<Vak["soort"], string> = {
-  betaald: "betaald",
-  open: "niet betaald",
-  vooruit: "vooruit betaald",
-  overgeslagen: "overgeslagen",
-  niet_aan_de_beurt: "niet aan de beurt",
-  leeg: "",
-};
 
 // ---------------------------------------------------------------------------
 // Het tabblad
@@ -380,6 +374,7 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
               g.open > 0.005 ? `Op kantoor · nog open ${formatPrice(g.open)}` : "Op kantoor"
             }
             delen={g.delen}
+            vanaf={g.vooruit_vanaf}
             prijs={g.vooruit_p}
             prijsAanpassen
             onSluit={() => setVenster(null)}
@@ -789,8 +784,9 @@ function Kaart({ d, adres }: { d: Dossier; adres: Customer }) {
           </button>
         </div>
         <div className="text-[12px] text-muted-foreground">
-          1 = betaald · 0 = niet betaald · % = niet aan de beurt · × = overgeslagen · B = vooruit
-          betaald · oranje rand = volgende beurt
+          1 = betaald · 0 = niet betaald · letter of + = een deel open (van de kaart) · % = niet aan
+          de beurt · × = overgeslagen · B = vooruit betaald (lichte 1: van de papieren kaart) ·
+          oranje rand = volgende beurt
         </div>
       </div>
       {kaart.isError ? (
@@ -823,7 +819,7 @@ function Kaart({ d, adres }: { d: Dossier; adres: Customer }) {
                   <span
                     title={[
                       `${toonMaand(maand)} ${jaar}`,
-                      VAK_UITLEG[vak.soort],
+                      vakUitleg(vak),
                       isVolgende ? "volgende beurt" : "",
                     ]
                       .filter(Boolean)

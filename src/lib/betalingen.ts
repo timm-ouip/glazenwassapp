@@ -164,6 +164,24 @@ export async function zetBeginstand(
   if (error) throw error;
 }
 
+/**
+ * De kaart van één adres bewaren (zie geld_kaart_zetten): de vakjes van de
+ * beginstand en de maanden met een 1 (vooruit betaald, van vóór de app).
+ * null = dat deel laten staan; een lege lijst = weghalen.
+ */
+export async function zetKaart(
+  adres: string,
+  begin: { maand: string; teken: string; bedrag: number }[] | null,
+  vooruit: string[] | null,
+) {
+  const { error } = await supabase.rpc("geld_kaart_zetten", {
+    adres_id: adres,
+    begin_vakjes: begin,
+    vooruit_maanden: vooruit,
+  });
+  if (error) throw error;
+}
+
 export async function zetWijkKlaar(wijk: string, klaar: boolean) {
   const { error } = await supabase.rpc("geld_wijk_klaar", { wijk, klaar });
   if (error) throw error;
@@ -253,8 +271,18 @@ export function rekening(delen: GeldDeel[]): RekeningRegel[] {
     if (d.soort === "beginstand") {
       const deels = d.rest < d.bedrag - 0.005;
       const maanden = maandenVanDeKaart(d);
+      // Met een letter of + erin is het geen rij hele beurten meer.
+      const metTekens = d.omschrijving.includes("=");
       vanDeKaart.push({
-        label: deels ? "Wasbeurt, rest" : d.aantal > 1 ? `${d.aantal}× wasbeurt` : "Wasbeurt",
+        label: metTekens
+          ? deels
+            ? "Van de kaart, rest"
+            : "Van de kaart"
+          : deels
+            ? "Wasbeurt, rest"
+            : d.aantal > 1
+              ? `${d.aantal}× wasbeurt`
+              : "Wasbeurt",
         // De maanden waar de pof voor staat, niet de dag waarop de kaart is
         // overgenomen: "sep" bij een stand van september is anders zo gelezen
         // als de wasbeurt van september zelf.
@@ -305,13 +333,20 @@ export function rekening(delen: GeldDeel[]): RekeningRegel[] {
 /**
  * De maanden waar een overgenomen kaartstand voor staat ("jul, aug"). Ze
  * komen als "2026-07,2026-08" mee uit de kaartweergave; staat er niets, dan
- * weten we alleen dat het van vóór de peildatum is.
+ * weten we alleen dat het van vóór de peildatum is. Een letter of + op de
+ * kaart komt erachter als merkje ("2026-08=v") en staat er dan bij: "aug v".
  */
 export function maandenVanDeKaart(d: GeldDeel): string[] {
-  return d.omschrijving
-    .split(",")
+  const delen = d.omschrijving.split(",");
+  const merk = new Map(
+    delen
+      .map((x) => /^(\d{4}-\d{2})=(.+)$/.exec(x))
+      .filter((m) => m !== null)
+      .map((m) => [m[1]!, m[2]!]),
+  );
+  return delen
     .filter((m) => /^\d{4}-\d{2}$/.test(m))
-    .map((m) => maandKort(`${m}-01`));
+    .map((m) => `${maandKort(`${m}-01`)}${merk.has(m) ? ` ${merk.get(m)}` : ""}`);
 }
 
 /** "2× € 28 = € 56" in één regel, voor een smalle rij. */
@@ -342,6 +377,50 @@ export function volgendeMaand(maand: string): string {
   const [jaar, m] = maand.split("-").map(Number);
   if (!jaar || !m) return maand;
   return m === 12 ? `${jaar + 1}-01` : `${jaar}-${String(m + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Welke open wasbeurten een nieuwe vooruitbetaling als eerste dekt: de open
+ * wasbeurten (niet al met vooruit betaald) vanaf `vanaf`, oudste eerst. Die
+ * datum rekent de database uit (geld_vooruit_vanaf, zie
+ * 20261017130000_vooruit_vanaf_een_regel.sql) en geeft hij mee als
+ * `vooruit_vanaf`; zo laat de app precies zien wat er geboekt wordt. Meestal
+ * is dat de beurt van nu, en blijft oudere pof gewone pof. Zonder datum (een
+ * oude lijst) de open wasbeurten, oudste eerst.
+ */
+export function vooruitEerst(delen: GeldDeel[], vanaf: string | null | undefined): GeldDeel[] {
+  return delen
+    .filter(
+      (d) =>
+        d.soort === "wassen" &&
+        d.rest > 0.005 &&
+        (d.vooruit ?? 0) <= 0.005 &&
+        (!vanaf || d.datum >= vanaf),
+    )
+    .sort((x, y) => x.datum.localeCompare(y.datum));
+}
+
+/**
+ * Voor welke maanden een nieuwe vooruitbetaling van `aantal` beurten
+ * ongeveer betaalt ("2026-09", "2026-10", ...): eerst de open beurten die hij
+ * dekt (zie vooruitEerst), dan de komende maanden van de frequentie. De
+ * beurten die er al vooruit staan (`over`) nemen de eerste komende maanden.
+ * De komende maanden beginnen na de laatste open beurt die hij dekt, of
+ * anders bij `start`.
+ */
+export function vooruitNieuweMaanden(
+  c: Pick<Customer, "interval_maanden" | "ritme"> & { overslaan?: string[] | undefined },
+  aantal: number,
+  delen: GeldDeel[],
+  vanaf: string | null | undefined,
+  over: number,
+  start: string,
+): string[] {
+  const eerst = vooruitEerst(delen, vanaf).map((d) => d.datum.slice(0, 7));
+  const laatste = eerst[eerst.length - 1];
+  const verder = laatste ? volgendeMaand(laatste) : start;
+  const komend = vooruitMaanden(c, over + Math.max(0, aantal - eerst.length), verder);
+  return [...eerst, ...komend.slice(over)].slice(0, aantal);
 }
 
 /**
@@ -464,7 +543,8 @@ export function terugTekst(t: TerugStand): string {
   const min = aftrek > 0.005 ? ` − nog open ${formatPrice(aftrek)}` : "";
   const enige = delen.length === 1 && !min ? delen[0] : undefined;
   // Eén deel: "1 beurt = € 12,50", of alleen "tegoed € 5".
-  if (enige) return enige.kort === enige.tekst ? enige.tekst : `${enige.kort} = ${formatPrice(terug)}`;
+  if (enige)
+    return enige.kort === enige.tekst ? enige.tekst : `${enige.kort} = ${formatPrice(terug)}`;
   return `${delen.map((d) => d.tekst).join(" + ")}${min} = ${formatPrice(terug)}`;
 }
 
@@ -532,4 +612,15 @@ export async function telVooruitInWijk(wijk: string): Promise<number> {
     }),
   );
   return standen.filter((n) => n > 0).length;
+}
+
+/**
+ * Hoe vaak een adres open staat, kort: "3×", of "1,5×" als een deel van de
+ * beginstand betaald is. Leeg als er geen beurt open staat (alleen een klus,
+ * of een restje van een beurt).
+ */
+export function keerOpen(openWassen: number): string {
+  const n = Math.round(openWassen * 2) / 2;
+  if (n <= 0) return "";
+  return `${n.toLocaleString("nl-NL")}×`;
 }

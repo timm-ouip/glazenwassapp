@@ -92,6 +92,11 @@ export interface GeldloopAdres {
   vooruit_eigen_waarde: number;
   /** De prijs per beurt voor een nieuwe vooruitbetaling; leeg zonder prijs. */
   vooruit_p: number | null;
+  /**
+   * Vanaf welke wasbeurt een nieuwe vooruitbetaling telt ("2026-09-28"),
+   * zoals de database het boekt (geld_vooruit_vanaf); zie vooruitEerst.
+   */
+  vooruit_vanaf: string | null;
   klachten: string[];
   vaste_kortingen: { id: string; naam: string; bedrag: number }[];
   /** De kortingen die vanavond gegeven zijn, om ze te kunnen herstellen. */

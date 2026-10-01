@@ -609,6 +609,7 @@ export type Database = {
           prijs_verwacht: number | null;
           reden: string;
           soort: string;
+          vakjes: Json | null;
           vanaf: string | null;
           vaste_korting_id: string | null;
           vrijgave_id: string | null;
@@ -636,6 +637,7 @@ export type Database = {
           prijs_verwacht?: number | null;
           reden?: string;
           soort: string;
+          vakjes?: Json | null;
           vanaf?: string | null;
           vaste_korting_id?: string | null;
           vrijgave_id?: string | null;
@@ -663,6 +665,7 @@ export type Database = {
           prijs_verwacht?: number | null;
           reden?: string;
           soort?: string;
+          vakjes?: Json | null;
           vanaf?: string | null;
           vaste_korting_id?: string | null;
           vrijgave_id?: string | null;
@@ -4206,6 +4209,14 @@ export type Database = {
         Returns: Json;
       };
       geld_kaart: { Args: { jaar: number; straat: string }; Returns: Json };
+      geld_kaart_zetten: {
+        Args: {
+          adres_id: string;
+          begin_vakjes?: Json | null;
+          vooruit_maanden?: string[] | null;
+        };
+        Returns: undefined;
+      };
       geld_krediet: {
         Args: { adressen: string[]; bedrijf: string };
         Returns: {
@@ -4286,6 +4297,7 @@ export type Database = {
         }[];
       };
       geld_stand_wijk: { Args: { wijk: string }; Returns: Json };
+      geld_vakjes_geldig: { Args: { v: Json }; Returns: boolean };
       geld_vaste_korting: {
         Args: { adres: string; bedrag: number; naam: string };
         Returns: string;
@@ -4301,6 +4313,13 @@ export type Database = {
           ref: string;
           soort: string;
           vooruit_id: string;
+        }[];
+      };
+      geld_vooruit_vanaf: {
+        Args: { adressen: string[]; bedrijf: string; moment?: string };
+        Returns: {
+          customer_id: string;
+          vanaf: string;
         }[];
       };
       geld_wijk_klaar: {

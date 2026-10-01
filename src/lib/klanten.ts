@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { QueryData } from "@supabase/supabase-js";
-import { netjesPostcode, netjesStraat, netjesVeld } from "@/lib/schoonschrift";
+import { netjesPostcode, netjesStraat, netjesToevoeging, netjesVeld } from "@/lib/schoonschrift";
 import type { Klanttype } from "@/lib/facturen";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { eenVan } from "@/lib/embed";
@@ -805,7 +805,7 @@ export function isGeenRecht(error: unknown): boolean {
 export function splitsHuisnummer(tekst: string): { house_number: number; addition: string } | null {
   const m = tekst.trim().match(/^(\d+)\s*(.*)$/);
   if (!m) return null;
-  return { house_number: Number(m[1]), addition: (m[2] ?? "").trim() };
+  return { house_number: Number(m[1]), addition: netjesToevoeging(m[2] ?? "") };
 }
 
 /**

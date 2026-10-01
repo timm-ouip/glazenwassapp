@@ -135,7 +135,8 @@ export function openOmschrijving(delen: GeldDeel[]): string {
       klussen += 1;
       continue;
     }
-    beurten += d.soort === "beginstand" ? Math.max(1, d.aantal) : 1;
+    // Een beginstand van alleen een letter of + van de kaart is geen beurt (aantal 0).
+    beurten += d.soort === "beginstand" ? d.aantal : 1;
     if (d.soort === "wassen") maanden.add(d.datum.slice(0, 7));
     // De beginstand zegt in zijn omschrijving voor welke maanden hij staat.
     else for (const m of d.omschrijving.split(",")) if (/^\d{4}-\d{2}$/.test(m)) maanden.add(m);

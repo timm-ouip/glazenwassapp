@@ -72,6 +72,7 @@ import {
   zoekRegisternamen,
 } from "@/lib/import-paaltje";
 import { isGeenRecht } from "@/lib/klanten";
+import { netjesToevoeging } from "@/lib/schoonschrift";
 
 export const Route = createFileRoute("/importeren")({
   beforeLoad: async () => {
@@ -117,7 +118,7 @@ function parseNummer(
     if (match) {
       return {
         nummer: parseInt(match[1]!, 10),
-        toevoeging: (match[2] ?? "").trim(),
+        toevoeging: netjesToevoeging(match[2] ?? ""),
         markering: (match[3] ?? "").trim(),
       };
     }
@@ -1835,7 +1836,7 @@ function ImportPagina() {
                             }
                             wijzig(r.id, {
                               huisnummer: parseInt(m[1]!, 10),
-                              toevoeging: m[2] ?? "",
+                              toevoeging: netjesToevoeging(m[2] ?? ""),
                             });
                           }}
                         />
