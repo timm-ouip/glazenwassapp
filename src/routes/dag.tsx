@@ -22,7 +22,7 @@ import {
   IconUsers as Users,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
-import { dagVast, zetDagVast } from "@/lib/dagslot";
+import { useDagVast, zetDagVast } from "@/lib/dagslot";
 
 import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
@@ -152,6 +152,100 @@ function vulStijl(erop: number, totaal: number) {
 
 /** Waar de keuze tussen "Lijst" en "Beide kanten" onthouden wordt. */
 const WEERGAVE_OPSLAG = "paaltje.dag-weergave";
+/** Per dag, in deze tab: bij welke straat je was. */
+const PLEK_OPSLAG = "wooshy.dag-plek.";
+/** Per dag, in deze tab: alleen je eigen team of alle teams ("1" of "0"). */
+const EIGEN_OPSLAG = "wooshy.dag-eigen.";
+
+/**
+ * Terug op de dag, op dezelfde plek: ga je naar een klant, een wijk of een
+ * andere pagina en kom je terug (met een link, de knop of de terugknop), dan
+ * sta je weer bij dezelfde straat. Bewaard wordt welke straat bovenin stond
+ * en hoe ver van de bovenrand; dat blijft kloppen als er intussen een adres
+ * bij of af kwam. Een andere dag heeft zijn eigen plek en begint bovenaan.
+ *
+ * De lijst scrolt met de pagina zelf mee (er is geen eigen scrollvak). Wat
+ * erboven staat (Dag klaar, de vergeten-strook) laadt soms later en duwt de
+ * lijst omlaag; daarom houden we de straat op zijn plek tot je zelf de
+ * pagina aanraakt, of tot er anderhalve tel niets meer verschoven is.
+ */
+function useZelfdePlek(datum: string, klaar: boolean) {
+  useEffect(() => {
+    if (!klaar) return;
+    const sleutel = PLEK_OPSLAG + datum;
+    let plek: { straat: string; boven: number } | null = null;
+    try {
+      plek = JSON.parse(sessionStorage.getItem(sleutel) ?? "null");
+    } catch {
+      // Geen opslag of iets onleesbaars: dan gewoon bovenaan.
+    }
+
+    let herstellen = plek !== null;
+    const begin = performance.now();
+    // Rust: na de laatste verschuiving. Hoe dan ook: na tien tellen stoppen.
+    let rust = begin + 2500;
+    let frame = 0;
+    const zet = () => {
+      const nu = performance.now();
+      if (!herstellen || nu > rust || nu > begin + 10_000) {
+        herstellen = false;
+        return;
+      }
+      const el = document.querySelector(`[data-dagstraat="${CSS.escape(plek!.straat)}"]`);
+      if (!el) {
+        // Nog niet te zien (de keuze "alleen mijn team" komt net terug), of
+        // hij staat er niet meer op: even blijven kijken, dan met rust laten.
+        frame = requestAnimationFrame(zet);
+        return;
+      }
+      const verschil = el.getBoundingClientRect().top - plek!.boven;
+      if (Math.abs(verschil) > 1) {
+        const was = window.scrollY;
+        window.scrollBy(0, verschil);
+        // Kon hij niet verder (de pagina is te kort), dan telt het niet als
+        // verschuiving: anders blijft hij het tot de tien tellen proberen.
+        if (window.scrollY !== was) rust = nu + 1500;
+      }
+      frame = requestAnimationFrame(zet);
+    };
+    if (herstellen) frame = requestAnimationFrame(zet);
+    const stop = () => {
+      herstellen = false;
+    };
+
+    let bewaarFrame = 0;
+    const bewaar = () => {
+      if (herstellen) return;
+      cancelAnimationFrame(bewaarFrame);
+      bewaarFrame = requestAnimationFrame(() => {
+        // De eerste straat die nog (deels) in beeld is.
+        for (const el of document.querySelectorAll<HTMLElement>("[data-dagstraat]")) {
+          const { top, bottom } = el.getBoundingClientRect();
+          if (bottom <= 0) continue;
+          try {
+            sessionStorage.setItem(
+              sleutel,
+              JSON.stringify({ straat: el.dataset["dagstraat"], boven: Math.round(top) }),
+            );
+          } catch {
+            // Niet te bewaren; dan begin je de volgende keer bovenaan.
+          }
+          return;
+        }
+      });
+    };
+
+    const invoer = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+    for (const soort of invoer) window.addEventListener(soort, stop, { passive: true });
+    window.addEventListener("scroll", bewaar, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(bewaarFrame);
+      for (const soort of invoer) window.removeEventListener(soort, stop);
+      window.removeEventListener("scroll", bewaar);
+    };
+  }, [datum, klaar]);
+}
 
 interface Straat {
   id: string;
@@ -215,7 +309,31 @@ function DagPagina() {
   });
   // Alleen om ⏰ te kunnen tonen bij een pand dat een tijdvak beloofd kreeg.
   const beloofdQuery = useAankondigingen(datum, datum);
-  const [alleenEigen, setAlleenEigen] = useState(true);
+  /**
+   * Per dag onthouden, net als de plek: keek je naar alle teams en stond je
+   * bij de straat van een ander team, dan kom je daar weer uit. De keuze
+   * hoort bij haar datum, zodat een andere dag niet even die van de vorige
+   * overneemt maar gewoon met je eigen team begint. Pas na het laden lezen:
+   * de server kent de opslag niet.
+   */
+  const [eigenKeuze, setEigenKeuze] = useState<{ datum: string; eigen: boolean } | null>(null);
+  useEffect(() => {
+    let bewaard: string | null = null;
+    try {
+      bewaard = sessionStorage.getItem(EIGEN_OPSLAG + datum);
+    } catch {
+      // Geen opslag: dan de standaard.
+    }
+    setEigenKeuze({ datum, eigen: bewaard !== "0" });
+  }, [datum]);
+  function kiesAlleenEigen(eigen: boolean) {
+    setEigenKeuze({ datum, eigen });
+    try {
+      sessionStorage.setItem(EIGEN_OPSLAG + datum, eigen ? "1" : "0");
+    } catch {
+      // Niet te onthouden; voor nu staat hij wel goed.
+    }
+  }
   /**
    * Eén lijst per straat, of de even en de oneven kant naast elkaar — net als
    * in de geldloop. Onthouden op dit toestel: wie op de telefoon de straat
@@ -258,6 +376,20 @@ function DagPagina() {
     queryFn: fetchCustomersMetInactief,
   });
   const groepenQuery = useQuery({ queryKey: ["straat_groepen"], queryFn: fetchStraatGroepen });
+  // Pas als alles er is wat bepaalt welke straten er staan, en in welke
+  // volgorde: anders zet je de plek terug in een lijst die nog verspringt.
+  useZelfdePlek(
+    datum,
+    ![
+      wasdagQuery,
+      adressenQuery,
+      streetsQuery,
+      districtsQuery,
+      groepenQuery,
+      ploegenQuery,
+      teamledenQuery,
+    ].some((q) => q.isPending),
+  );
   const qc = useQueryClient();
   const undoLabel = useLaatsteUndoLabel();
   // Openstaand werk plus wat er op deze dag afgevinkt is.
@@ -293,12 +425,9 @@ function DagPagina() {
    * hebben elk hun eigen mandje.
    */
   const [selecteren, setSelecteren] = useState(false);
-  // Pas na het laden lezen: de server kent de opslag van de telefoon niet.
-  const [vast, setVast] = useState(false);
-  useEffect(() => setVast(dagVast()), []);
+  const vast = useDagVast();
   function wisselVast() {
     zetDagVast(!vast);
-    setVast(!vast);
     toast.success(
       vast
         ? "Losgemaakt: de app opent weer op de wijken."
@@ -376,6 +505,9 @@ function DagPagina() {
    * staat, en dus blijven die straten los.
    */
   const dagPloegen = useMemo(() => ploegenQuery.data?.get(datum) ?? [], [ploegenQuery.data, datum]);
+  // Is er die dag maar één team, dan is er geen knop om terug te wisselen;
+  // dan geldt een eerder bewaarde "Alles" niet meer.
+  const alleenEigen = dagPloegen.length <= 1 || eigenKeuze?.datum !== datum || eigenKeuze.eigen;
   const eigenPloeg = useMemo(() => {
     const ik = eigenTeamlid(teamledenQuery.data ?? [], employee?.id);
     return ploegVan(dagPloegen, ik?.id);
@@ -1130,7 +1262,7 @@ function DagPagina() {
                   key={String(eigen)}
                   type="button"
                   aria-pressed={alleenEigen === eigen}
-                  onClick={() => setAlleenEigen(eigen)}
+                  onClick={() => kiesAlleenEigen(eigen)}
                   className={`rounded-full px-3 py-1 text-[12.5px] font-medium transition-colors ${
                     alleenEigen === eigen
                       ? "bg-foreground text-background"
@@ -1727,7 +1859,7 @@ function StraatRij({
   }
 
   return (
-    <div>
+    <div data-dagstraat={straat.id}>
       {/* De straatnaam ligt als een strookje in de kaart: hij hoort erbij,
           maar hij is niet zelf een kaart. */}
       <div

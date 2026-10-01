@@ -6,7 +6,11 @@
  * Het slot hoort bij het toestel (localStorage), niet bij het account: wie op
  * kantoor plant, wil gewoon op de wijken beginnen.
  */
+import { useSyncExternalStore } from "react";
+
 const SLEUTEL = "wooshy.dag-vast";
+/** Zelfde tab: het storage-event komt alleen bij de andere tabs aan. */
+const GEWISSELD = "wooshy:dag-vast";
 
 export function dagVast(): boolean {
   try {
@@ -24,6 +28,28 @@ export function zetDagVast(aan: boolean) {
   } catch {
     /* zie dagVast() */
   }
+  window.dispatchEvent(new Event(GEWISSELD));
+}
+
+function luister(veranderd: () => void) {
+  const opOpslag = (e: StorageEvent) => {
+    // key is null als de hele opslag gewist werd.
+    if (e.key === SLEUTEL || e.key === null) veranderd();
+  };
+  window.addEventListener(GEWISSELD, veranderd);
+  window.addEventListener("storage", opOpslag);
+  return () => {
+    window.removeEventListener(GEWISSELD, veranderd);
+    window.removeEventListener("storage", opOpslag);
+  };
+}
+
+/**
+ * Staat het slot aan? Volgt het meteen als het omgaat, ook vanuit een andere
+ * tab. Op de server (en bij het hydrateren) uit: die kent de opslag niet.
+ */
+export function useDagVast(): boolean {
+  return useSyncExternalStore(luister, dagVast, () => false);
 }
 
 /**

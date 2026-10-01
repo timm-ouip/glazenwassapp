@@ -4,12 +4,14 @@ import { WachtrijVerzender } from "@/components/betalingen/WachtrijVerzender";
 import { useRouterState } from "@tanstack/react-router";
 import { IconLock as Lock } from "@tabler/icons-react";
 
+import { NaarDagKnop } from "@/components/NaarDagKnop";
 import { Tabbalk } from "@/components/Tabbalk";
 import { Zijbalk } from "@/components/Zijbalk";
 import { PaaltjeKnop } from "@/components/paaltje/PaaltjeKnop";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useVerbergBijScrollen } from "@/hooks/use-verberg-bij-scrollen";
 import { useAuth } from "@/lib/auth";
+import { useDagVast } from "@/lib/dagslot";
 import { heeftRecht, rechtenVoorPad } from "@/lib/rechten";
 // Zet de golf onder je vinger aan; hij luistert zelf mee op de hele pagina.
 import "@/lib/golf";
@@ -71,6 +73,10 @@ export function AppLayout({
   const pad = useRouterState({ select: (st) => st.location.pathname });
   const nodig = rechtenVoorPad(pad);
   const mag = !employee || !nodig || nodig.some((r) => heeftRecht(employee, r));
+  // De knop terug naar de dag: alleen met het slot aan, niet op de dag zelf,
+  // en niet voor wie de dag niet mag zien.
+  const dagVast = useDagVast();
+  const dagKnop = dagVast && pad !== "/dag" && heeftRecht(employee, "planning");
 
   const mobiel = useIsMobile();
   const weg = useVerbergBijScrollen(verbergBijScrollen && mobiel);
@@ -167,7 +173,13 @@ export function AppLayout({
             knoppenbalk tussen, dan zorgen die er al voor; anders plakt de
             eerste tegel tegen de titelbalk aan. */}
         <main
-          className={`min-w-0 flex-1 px-3 pb-[calc(var(--onderrand,0px)+5rem)] md:px-6 md:pb-4 ${
+          className={`min-w-0 flex-1 px-3 md:px-6 ${
+            // Staat de dag-knop boven Paaltje, dan moet de laatste regel ook
+            // daar nog onderuit kunnen.
+            dagKnop
+              ? "pb-[calc(var(--onderrand,0px)+9.5rem)] md:pb-[calc(9.5rem+env(safe-area-inset-bottom))]"
+              : "pb-[calc(var(--onderrand,0px)+5rem)] md:pb-4"
+          } ${
             zonderTitelbalk || kop || (acties && actiePositie !== "titelbalk") ? "" : "pt-3 md:pt-4"
           }`}
         >
@@ -186,6 +198,8 @@ export function AppLayout({
         </main>
       </div>
       <Tabbalk boven={mag ? onderbalk : undefined} />
+      {/* Vóór Paaltje: gaat diens paneel open, dan ligt dat eroverheen. */}
+      {dagKnop && <NaarDagKnop />}
       {employee && <PaaltjeKnop />}
       {/* Tikken van een geldloper die nog op de telefoon staan: overal versturen. */}
       {employee && <WachtrijVerzender />}
