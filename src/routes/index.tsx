@@ -184,6 +184,7 @@ import {
   sortCustomers,
   splitEvenOdd,
   type Customer,
+  type Klant,
   type Kant,
   type District,
   verwijderStraatGroep,
@@ -382,9 +383,17 @@ function Index() {
   // Het dossier is een schermpje op déze pagina. Eerder sprong de rechter-
   // muisknop naar /klanten met het klant-id in de url; bij een adres zonder
   // klant was dat id leeg en gebeurde er niets.
-  const [dossier, setDossier] = useState<{ open: boolean; customer: Customer | null }>({
+  // De klant gaat als vaste kopie mee, net als op de dag en de klantenpagina:
+  // werd hij steeds vers opgezocht, dan zette een verversing (of een klant die
+  // na een verhuizing in de prullenbak belandt) het open dossier terug.
+  const [dossier, setDossier] = useState<{
+    open: boolean;
+    customer: Customer | null;
+    klant: Klant | null;
+  }>({
     open: false,
     customer: null,
+    klant: null,
   });
   const [hoek, setHoek] = useState<{ open: boolean; customer: Customer | null }>({
     open: false,
@@ -1834,7 +1843,13 @@ function Index() {
   const opPatch = useStabiel(patchKlant);
   // Het prullenbakje vraagt eerst waarom: verhuisd, gestopt, of echt weg.
   const opDelete = useStabiel((c: Customer) => setStop({ open: true, customer: c }));
-  const opDossier = useStabiel((c: Customer) => setDossier({ open: true, customer: c }));
+  const opDossier = useStabiel((c: Customer) =>
+    setDossier({
+      open: true,
+      customer: c,
+      klant: alleKlanten.find((k) => k.id === c.klant_id) ?? null,
+    }),
+  );
   const opHoekadres = useStabiel((c: Customer) => setHoek({ open: true, customer: c }));
   const opKlus = useStabiel((c: Customer) => setKlus({ open: true, customer: c }));
   const opStoppen = useStabiel((c: Customer) => setStop({ open: true, customer: c }));
@@ -2886,7 +2901,7 @@ function Index() {
       <KlantgegevensDialog
         open={dossier.open}
         onOpenChange={(open) => setDossier((d) => ({ ...d, open }))}
-        klant={alleKlanten.find((k) => k.id === dossier.customer?.klant_id) ?? null}
+        klant={dossier.klant}
         voorstelCustomer={dossier.customer}
         districts={districts}
         streets={alleStraten}

@@ -3898,6 +3898,88 @@ export type Database = {
           },
         ];
       };
+      wijzigingen: {
+        Row: {
+          bron: string;
+          company_id: string;
+          customer_id: string | null;
+          door: string | null;
+          door_naam: string;
+          herroept: string | null;
+          id: string;
+          klant_id: string | null;
+          na: Json;
+          op: string;
+          rij_id: string;
+          tabel: string;
+          teruggedraaid_door: string | null;
+          teruggedraaid_naam: string | null;
+          teruggedraaid_op: string | null;
+          veld: string;
+          voor: Json;
+        };
+        Insert: {
+          bron?: string;
+          company_id: string;
+          customer_id?: string | null;
+          door?: string | null;
+          door_naam?: string;
+          herroept?: string | null;
+          id?: string;
+          klant_id?: string | null;
+          na?: Json;
+          op?: string;
+          rij_id: string;
+          tabel: string;
+          teruggedraaid_door?: string | null;
+          teruggedraaid_naam?: string | null;
+          teruggedraaid_op?: string | null;
+          veld: string;
+          voor?: Json;
+        };
+        Update: {
+          bron?: string;
+          company_id?: string;
+          customer_id?: string | null;
+          door?: string | null;
+          door_naam?: string;
+          herroept?: string | null;
+          id?: string;
+          klant_id?: string | null;
+          na?: Json;
+          op?: string;
+          rij_id?: string;
+          tabel?: string;
+          teruggedraaid_door?: string | null;
+          teruggedraaid_naam?: string | null;
+          teruggedraaid_op?: string | null;
+          veld?: string;
+          voor?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "wijzigingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "wijzigingen_customer_id_company_id_fkey";
+            columns: ["customer_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "wijzigingen_klant_id_company_id_fkey";
+            columns: ["klant_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -4430,6 +4512,7 @@ export type Database = {
         }[];
       };
       wijk_overmaken_telling: { Args: { wijk: string }; Returns: Json };
+      wijzigingen_ongedaan: { Args: { ids: string[] }; Returns: number };
       zet_adressen_actief: {
         Args: { adressen: string[]; voor_bedrijf?: string | null };
         Returns: number;

@@ -1,12 +1,14 @@
 /**
- * WhatsApp in het klantdossier, onder de mail: het gesprek met deze klant,
- * met antwoorden erbij. Appte de klant vanaf meer nummers (de man en de
- * vrouw), dan kies je het nummer.
+ * Rechts in "Mail en klachten": het WhatsApp-gesprek met deze klant, met
+ * antwoorden erbij. Appte de klant vanaf meer nummers (de man en de vrouw),
+ * dan kies je het nummer. Nog nooit geappt: dan een eerste bericht via een
+ * template, als er een 06-nummer is.
+ *
+ * Los geladen (zie DossierBerichten), net als de mail.
  */
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { PopupBlok, PopupHint } from "@/components/Popup";
 import { ChatVenster } from "@/components/whatsapp/Chat";
 import { KlantKanaal, SjabloonBericht } from "@/components/whatsapp/Sjablonen";
 import { useRecht } from "@/lib/rechten";
@@ -14,12 +16,19 @@ import { fetchKlantNummers, toonNummer } from "@/lib/whatsapp";
 import type { Klant } from "@/lib/klanten";
 import { cn } from "@/lib/utils";
 
-export function DossierWhatsApp({ klant }: { klant: Klant }) {
+export function WhatsAppDetail({
+  klant,
+  nummer,
+}: {
+  klant: Klant;
+  /** Het nummer van het gekozen appje; anders het nummer van het laatste gesprek. */
+  nummer: string | null;
+}) {
   const nummers = useQuery({
     queryKey: ["dossier-whatsapp", klant.id],
     queryFn: () => fetchKlantNummers(klant.id),
   });
-  const [gekozen, setGekozen] = useState<string | null>(null);
+  const [gekozen, setGekozen] = useState<string | null>(nummer);
   const qc = useQueryClient();
   const magVersturen = useRecht("mail_versturen");
   // Een 06-nummer van de klant, als WhatsApp-nummer: daarheen kan een eerste bericht.
@@ -36,20 +45,23 @@ export function DossierWhatsApp({ klant }: { klant: Klant }) {
   const actief = gekozen && lijst.includes(gekozen) ? gekozen : (lijst[0] ?? null);
 
   return (
-    <PopupBlok label="WhatsApp">
-      <KlantKanaal klantId={klant.id} />
+    <div className="flex flex-col gap-2.5 rounded-[18px] bg-card p-[18px]">
+      <div className="text-[12px] text-muted-foreground">
+        WhatsApp{actief ? ` · ${toonNummer(actief)}` : ""}
+      </div>
+      <div className="font-display text-[18px] font-semibold">Appjes</div>
       {nummers.isLoading ? (
-        <PopupHint>Even ophalen…</PopupHint>
+        <p className="text-[13px] text-muted-foreground">Even ophalen…</p>
       ) : nummers.isError ? (
         <p className="text-[13px] text-tint-rood-ink">
           De WhatsApp-berichten konden niet geladen worden.
         </p>
       ) : !actief ? (
         <>
-          <PopupHint>
+          <p className="text-[13px] text-muted-foreground">
             Nog geen WhatsApp met deze klant. Appt hij vanaf een nummer dat bij hem staat, dan komt
             het hier vanzelf bij.
-          </PopupHint>
+          </p>
           {magVersturen && mobiel && (
             <div className="overflow-hidden rounded-[14px] border border-border">
               <SjabloonBericht
@@ -71,10 +83,8 @@ export function DossierWhatsApp({ klant }: { klant: Klant }) {
                   type="button"
                   onClick={() => setGekozen(n)}
                   className={cn(
-                    "rounded-full px-2.5 py-0.5 text-[12px]",
-                    n === actief
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground",
+                    "rounded-full px-3 py-[5px] text-[13px]",
+                    n === actief ? "bg-foreground text-background" : "border border-border",
                   )}
                 >
                   {toonNummer(n)}
@@ -85,10 +95,11 @@ export function DossierWhatsApp({ klant }: { klant: Klant }) {
           <ChatVenster
             key={actief}
             telefoon={actief}
-            className="h-[380px] overflow-hidden rounded-[14px] border border-border"
+            className="h-[440px] overflow-hidden rounded-[14px] border border-border"
           />
         </>
       )}
-    </PopupBlok>
+      <KlantKanaal klantId={klant.id} />
+    </div>
   );
 }

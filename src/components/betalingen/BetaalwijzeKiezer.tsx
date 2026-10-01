@@ -10,12 +10,15 @@ export function BetaalwijzeKiezer({
   onChange,
   wijk,
   disabled,
+  groot,
 }: {
   waarde: Betaalmethode | null;
   onChange: (m: Betaalmethode | null) => void;
   /** Wat de wijk doet. Alleen bij een adres: dan kun je die ook volgen. */
   wijk?: Betaalmethode | undefined;
   disabled?: boolean | undefined;
+  /** De maat van het klantdossier (zie Pillen). */
+  groot?: boolean | undefined;
 }) {
   const keuzes: { waarde: Betaalmethode | null; label: string }[] = [
     ...(wijk
@@ -30,6 +33,7 @@ export function BetaalwijzeKiezer({
       onChange={onChange}
       disabled={disabled}
       label="Betaalmethode"
+      groot={groot}
     />
   );
 }

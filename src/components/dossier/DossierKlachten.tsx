@@ -1,5 +1,6 @@
 /**
- * Tabblad Klachten in het klantdossier.
+ * Klachten in het klantdossier, rechts in "Mail en klachten": één klacht
+ * met de afhandeling, en het formulier om er zelf een te noteren.
  *
  * Een open klacht is rood, een afgehandelde grijs. Paaltje maakt klachten uit
  * mail; daar staat "door Paaltje" bij, met Ongedaan maken. Zelf invoeren kan
@@ -9,11 +10,10 @@
  * van de klant, en staat het rode stipje op de planning overal.
  */
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   IconCheck as Check,
   IconMail as Mail,
-  IconPlus as Plus,
   IconRotate as RotateCcw,
   IconSparkles as Sparkles,
   IconTrash as Trash2,
@@ -31,10 +31,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PopupBlok, PopupHint } from "@/components/Popup";
 import {
   BRON_LABEL,
-  fetchKlachtenVanKlant,
   legKlachtWeg,
   nieuweKlacht,
   zetKlachtAdres,
@@ -52,24 +50,9 @@ export interface AdresKeuze {
   label: string;
 }
 
-export function DossierKlachten({
-  klantId,
-  adressen,
-  onToonMail,
-}: {
-  klantId: string;
-  adressen: AdresKeuze[];
-  /** Naar het tabblad Mail; alleen als je mail mag lezen. */
-  onToonMail?: (() => void) | undefined;
-}) {
+/** Ververs alles wat klachten toont, en doe een actie met een melding. */
+function useKlachtActies(klantId: string) {
   const qc = useQueryClient();
-  const magBewerken = useRecht("klanten_bewerken");
-  const klachten = useQuery({
-    queryKey: ["klachten", klantId],
-    queryFn: () => fetchKlachtenVanKlant(klantId),
-  });
-  const [nieuwOpen, setNieuwOpen] = useState(false);
-
   const ververs = () => {
     void qc.invalidateQueries({ queryKey: ["klachten", klantId] });
     void qc.invalidateQueries({ queryKey: ["open-klachten"] });
@@ -100,161 +83,163 @@ export function DossierKlachten({
     });
   }
 
-  const lijst = klachten.data ?? [];
-  const aantalOpen = lijst.filter((k) => k.status === "open").length;
+  return { ververs, doe, weg };
+}
+
+/**
+ * Eén klacht, rechts in "Mail en klachten": wat er mis was, hoe en wanneer
+ * het binnenkwam, over welk adres, en de afhandeling.
+ */
+export function KlachtDetail({
+  klantId,
+  k,
+  adressen,
+  onToonMail,
+}: {
+  klantId: string;
+  k: Klacht;
+  adressen: AdresKeuze[];
+  /** Naar de mail die bij deze klacht hoort; alleen als je mail mag lezen. */
+  onToonMail?: ((berichtId: string) => void) | undefined;
+}) {
+  const magBewerken = useRecht("klanten_bewerken");
+  const { doe, weg } = useKlachtActies(klantId);
+  const open = k.status === "open";
 
   return (
-    <PopupBlok label="Klachten" terzijde={aantalOpen > 0 ? `${aantalOpen} open` : undefined}>
-      {klachten.isLoading ? (
-        <PopupHint>Even ophalen…</PopupHint>
-      ) : klachten.isError ? (
-        <p className="text-[13px] text-tint-rood-ink">De klachten konden niet geladen worden.</p>
-      ) : lijst.length === 0 && !nieuwOpen ? (
-        <PopupHint>
-          Geen klachten. Klaagt deze klant per mail, dan zet Paaltje het hier neer. Een klacht via
-          de telefoon of aan de deur voer je zelf in.
-        </PopupHint>
+    <div className="flex flex-col gap-2.5 rounded-[18px] bg-card p-[18px]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+        <span>
+          {datum(k.ontvangen_op)} · {BRON_LABEL[k.bron].toLowerCase()}
+        </span>
+        {k.door_paaltje && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-tint-paars px-2 py-px">
+            <Sparkles className="size-3" /> door Paaltje
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1 font-display text-[18px] font-semibold">Klacht</div>
+        <span
+          className={cn(
+            "shrink-0 rounded-full px-2.5 py-1 text-[12px] font-semibold",
+            open ? "bg-tint-rood" : "bg-muted text-muted-foreground",
+          )}
+        >
+          {open
+            ? "staat open"
+            : `afgehandeld${k.afgehandeld_op ? ` ${datum(k.afgehandeld_op)}` : ""}`}
+        </span>
+      </div>
+      <p className="whitespace-pre-wrap break-words text-[14px] leading-[1.55]">{k.omschrijving}</p>
+
+      {adressen.length > 1 || (adressen.length === 1 && k.customer_id === null) ? (
+        <Select
+          value={k.customer_id ?? ALLE}
+          disabled={!magBewerken}
+          onValueChange={(v) => void doe(() => zetKlachtAdres(k.id, v === ALLE ? null : v))}
+        >
+          <SelectTrigger
+            aria-label="Over welk adres"
+            className="h-9 w-auto min-w-0 max-w-full self-start rounded-full px-3 text-[13px]"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALLE}>Alle adressen</SelectItem>
+            {adressen.map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                {a.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {lijst.map((k) => {
-            const open = k.status === "open";
-            return (
-              <li
-                key={k.id}
-                className={cn(
-                  "rounded-xl px-3 py-2.5 text-[13px]",
-                  open ? "bg-tint-rood text-tint-rood-ink" : "bg-muted/60 text-muted-foreground",
-                )}
-              >
-                <p
-                  className={cn(
-                    "whitespace-pre-wrap break-words leading-snug",
-                    open && "font-medium",
-                  )}
-                >
-                  {k.omschrijving}
-                </p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px]">
-                  <span>{datum(k.ontvangen_op)}</span>
-                  <span aria-hidden>·</span>
-                  <span>{BRON_LABEL[k.bron]}</span>
-                  {k.door_paaltje && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-background/60 px-2 py-px">
-                      <Sparkles className="size-3" /> door Paaltje
-                    </span>
-                  )}
-                  {k.bericht_ids.length > 0 && onToonMail && (
-                    <button
-                      type="button"
-                      onClick={onToonMail}
-                      className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
-                    >
-                      <Mail className="size-3" />
-                      {k.bericht_ids.length === 1 ? "1 mail" : `${k.bericht_ids.length} mails`}
-                    </button>
-                  )}
-                  {!open && k.afgehandeld_op && (
-                    <span>· afgehandeld {datum(k.afgehandeld_op)}</span>
-                  )}
-                </div>
-
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  {adressen.length > 1 || (adressen.length === 1 && k.customer_id === null) ? (
-                    <Select
-                      value={k.customer_id ?? ALLE}
-                      disabled={!magBewerken}
-                      onValueChange={(v) =>
-                        void doe(() => zetKlachtAdres(k.id, v === ALLE ? null : v))
-                      }
-                    >
-                      <SelectTrigger
-                        aria-label="Over welk adres"
-                        className="h-7 w-auto min-w-0 max-w-[220px] rounded-full border-current/20 bg-background/60 px-2.5 text-[12px]"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={ALLE}>Alle adressen</SelectItem>
-                        {adressen.map((a) => (
-                          <SelectItem key={a.id} value={a.id}>
-                            {a.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    adressen[0] && <span className="text-[12px]">{adressen[0].label}</span>
-                  )}
-
-                  {magBewerken && (
-                    <>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={open ? "default" : "outline"}
-                        className="ml-auto h-7 rounded-full px-3 text-[12px]"
-                        onClick={() =>
-                          void doe(
-                            () => zetKlachtStatus(k.id, open ? "afgehandeld" : "open"),
-                            open ? "Klacht afgehandeld." : "Klacht staat weer open.",
-                          )
-                        }
-                      >
-                        {open ? <Check className="size-3.5" /> : <RotateCcw className="size-3.5" />}
-                        {open ? "Afgehandeld" : "Weer open"}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 rounded-full px-2.5 text-[12px] text-current hover:bg-background/60"
-                        onClick={() => void weg(k)}
-                        title={k.door_paaltje ? "Paaltje zag het verkeerd" : "Weggooien"}
-                      >
-                        {k.door_paaltje ? (
-                          <Undo2 className="size-3.5" />
-                        ) : (
-                          <Trash2 className="size-3.5" />
-                        )}
-                        {k.door_paaltje ? "Ongedaan maken" : ""}
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        adressen[0] && <div className="text-[13px] text-muted-foreground">{adressen[0].label}</div>
       )}
 
-      {magBewerken &&
-        (nieuwOpen ? (
-          <NieuweKlacht
-            adressen={adressen}
-            onAnnuleer={() => setNieuwOpen(false)}
-            onOpslaan={async (k) => {
-              try {
-                await nieuweKlacht({ ...k, klant_id: klantId });
-                ververs();
-                setNieuwOpen(false);
-                toast.success("Klacht genoteerd.");
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : String(e));
-              }
-            }}
-          />
-        ) : (
-          <Button
+      {k.bericht_ids.length > 0 && onToonMail && (
+        <button
+          type="button"
+          onClick={() => onToonMail(k.bericht_ids[0]!)}
+          className="inline-flex items-center gap-1.5 self-start text-[13px] text-tint-oranje-mid underline underline-offset-2 hover:text-tint-oranje-ink"
+        >
+          <Mail className="size-3.5" />
+          {k.bericht_ids.length === 1
+            ? "De mail erbij"
+            : `De mails erbij (${k.bericht_ids.length})`}
+        </button>
+      )}
+
+      {magBewerken && (
+        <div className="flex flex-wrap gap-2">
+          <button
             type="button"
-            size="sm"
-            variant="outline"
-            className="self-start rounded-full"
-            onClick={() => setNieuwOpen(true)}
+            onClick={() =>
+              void doe(
+                () => zetKlachtStatus(k.id, open ? "afgehandeld" : "open"),
+                open ? "Klacht afgehandeld." : "Klacht staat weer open.",
+              )
+            }
+            className={cn(
+              "inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[13px] transition-colors",
+              open
+                ? "bg-foreground font-semibold text-background hover:opacity-90"
+                : "border border-border bg-card hover:bg-accent",
+            )}
           >
-            <Plus className="size-4" /> Klacht toevoegen
-          </Button>
-        ))}
-    </PopupBlok>
+            {open ? <Check className="size-3.5" /> : <RotateCcw className="size-3.5" />}
+            {open ? "Afgehandeld" : "Weer open"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void weg(k)}
+            title={k.door_paaltje ? "Paaltje zag het verkeerd" : "Weggooien"}
+            className="inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            {k.door_paaltje ? <Undo2 className="size-3.5" /> : <Trash2 className="size-3.5" />}
+            {k.door_paaltje ? "Ongedaan maken" : "Weggooien"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "Klacht noteren": het formulier, in een witte kaart. */
+export function KlachtNoteren({
+  klantId,
+  adressen,
+  onKlaar,
+}: {
+  klantId: string;
+  adressen: AdresKeuze[];
+  /** Na opslaan of annuleren. */
+  onKlaar: () => void;
+}) {
+  const { ververs } = useKlachtActies(klantId);
+  return (
+    <div className="flex flex-col gap-2.5 rounded-[18px] bg-card p-[18px]">
+      <div className="font-display text-[18px] font-semibold">Klacht noteren</div>
+      <p className="text-[13px] text-muted-foreground">
+        Na een telefoontje, aan de deur of via een appje. Klaagt de klant per mail, dan zet Paaltje
+        het er zelf bij.
+      </p>
+      <NieuweKlacht
+        adressen={adressen}
+        onAnnuleer={onKlaar}
+        onOpslaan={async (k) => {
+          try {
+            await nieuweKlacht({ ...k, klant_id: klantId });
+            ververs();
+            onKlaar();
+            toast.success("Klacht genoteerd.");
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : String(e));
+          }
+        }}
+      />
+    </div>
   );
 }
 

@@ -72,8 +72,14 @@ const VELDEN =
  * laatste voor de bedragen van een maand die je terugkijkt. Zonder periode
  * komt alleen het openstaande werk mee.
  */
-export async function fetchKlussen(vanaf?: string, tot?: string): Promise<Klus[]> {
-  const open = supabase.from("klussen").select(VELDEN).is("deleted_at", null).is("gedaan_op", null);
+export async function fetchKlussen(
+  vanaf?: string,
+  tot?: string,
+  /** Alleen het werk van dit ene adres (het dossier). */
+  customerId?: string,
+): Promise<Klus[]> {
+  let open = supabase.from("klussen").select(VELDEN).is("deleted_at", null).is("gedaan_op", null);
+  if (customerId) open = open.eq("customer_id", customerId);
   const vragen = [open];
   if (vanaf && tot) {
     vragen.push(

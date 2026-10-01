@@ -59,6 +59,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   /** Aangeroepen als er een concept klaarstaat, zodat de lijst bijwerkt. */
   onKlaar: () => void;
+  /** Deze klant staat al gekozen (vanuit het klantdossier); "anders" kan nog. */
+  klantId?: string | null | undefined;
 }
 
 /** Een regel zoals hij in het scherm staat: alles nog als getypte tekst. */
@@ -67,7 +69,7 @@ interface Invoer {
   aantal: string;
   eenheid: string;
   prijs: string;
-  /** Leeg = het standaardtarief van het bedrijf. */
+  /** Leeg = het eigen tarief van de klant, anders dat van het bedrijf. */
   btw: string;
   /** Een kortingsregel: je typt het bedrag gewoon positief, eraf gaat het toch. */
   korting?: boolean;
@@ -114,9 +116,11 @@ function adresVan(k: Klant, adressen: string[]): string {
   return eigen || adressen[0] || "";
 }
 
-export function LosseFactuurDialog({ open, onOpenChange, onKlaar }: Props) {
+export function LosseFactuurDialog({ open, onOpenChange, onKlaar, klantId }: Props) {
   const [zoek, setZoek] = useState("");
-  const [klant, setKlant] = useState<Klant | null>(null);
+  const [gekozenKlant, setKlant] = useState<Klant | null>(null);
+  /** Op "anders" gedrukt: dan geldt de meegegeven klant niet meer. */
+  const [anders, setAnders] = useState(false);
   const [regels, setRegels] = useState<Invoer[]>([{ ...NIEUWE_REGEL }]);
   const [datum, setDatum] = useState(vandaag());
   /** Leeg = volgt het klanttype, tot je zelf kiest. */
@@ -130,13 +134,18 @@ export function LosseFactuurDialog({ open, onOpenChange, onKlaar }: Props) {
   const klanten = useQuery({
     queryKey: ["klanten"],
     queryFn: fetchKlanten,
-    enabled: open && !klant,
+    enabled: open && !gekozenKlant,
     staleTime: 5 * 60_000,
   });
+  const klant =
+    gekozenKlant ??
+    (klantId && !anders ? (klanten.data?.find((k) => k.id === klantId) ?? null) : null);
+  /** De meegegeven klant komt nog: de klantenlijst wordt nog opgehaald. */
+  const wachtOpKlant = !!klantId && !anders && !klant && klanten.isLoading;
   const adressen = useQuery({
     queryKey: ["klant-adressen"],
     queryFn: fetchKlantAdressen,
-    enabled: open && !klant,
+    enabled: open && !klant && !wachtOpKlant,
     staleTime: 5 * 60_000,
   });
   const standaard = useQuery({
@@ -145,7 +154,10 @@ export function LosseFactuurDialog({ open, onOpenChange, onKlaar }: Props) {
     enabled: open,
   });
 
-  const standaardProcent = standaard.data?.btwProcent ?? 21;
+  // Heeft de klant een eigen btw-tarief, dan is dat de standaard; net als op
+  // een gewone factuur (factuur_btw_procent in de database).
+  const standaardProcent =
+    klant?.btw_procent != null ? Number(klant.btw_procent) : (standaard.data?.btwProcent ?? 21);
   const inclusief = inclusiefGekozen ?? (klant?.klanttype ?? "particulier") === "particulier";
   const klantTermijn = klant?.betalingstermijn_dagen ?? standaard.data?.termijn ?? 14;
   const dagen = termijn === "" ? klantTermijn : Number(termijn);
@@ -237,6 +249,7 @@ export function LosseFactuurDialog({ open, onOpenChange, onKlaar }: Props) {
   function sluit() {
     setZoek("");
     setKlant(null);
+    setAnders(false);
     setRegels([{ ...NIEUWE_REGEL }]);
     setDatum(vandaag());
     setInclusiefGekozen(null);
@@ -346,12 +359,17 @@ export function LosseFactuurDialog({ open, onOpenChange, onKlaar }: Props) {
                   <button
                     type="button"
                     className="shrink-0 text-xs underline underline-offset-2"
-                    onClick={() => setKlant(null)}
+                    onClick={() => {
+                      setKlant(null);
+                      setAnders(true);
+                    }}
                   >
                     anders
                   </button>
                 </div>
               </div>
+            ) : wachtOpKlant ? (
+              <p className="px-1 text-[13px] text-muted-foreground">Even de klant ophalen…</p>
             ) : (
               <>
                 <PopupVeld icoon={<Zoek className="size-4" />}>
@@ -619,8 +637,7 @@ export function LosseFactuurDialog({ open, onOpenChange, onKlaar }: Props) {
               {totalen.tarieven.map(([procent, t]) => (
                 <div key={procent} className="flex justify-between text-muted-foreground">
                   <span>
-                    Btw {procent}%
-                    {totalen.tarieven.length > 1 && ` over ${formatPrice(t.over)}`}
+                    Btw {procent}%{totalen.tarieven.length > 1 && ` over ${formatPrice(t.over)}`}
                   </span>
                   <span className="tabular-nums">{formatPrice(t.btw)}</span>
                 </div>

@@ -171,6 +171,96 @@ export async function fetchFactuurregels(factuurId: string): Promise<Factuurrege
   }));
 }
 
+/** Van een factuurregel alleen wat nodig is om te zeggen waar de factuur over gaat. */
+export type OverRegel = Pick<Factuurregel, "soort" | "datum" | "omschrijving">;
+
+const maandKort = (iso: string) =>
+  new Date(`${iso.slice(0, 7)}-15T12:00:00`)
+    .toLocaleDateString("nl-NL", { month: "short" })
+    .replace(".", "");
+
+/**
+ * Waar een factuur over gaat, in een paar woorden: "Losse factuur · dakgoot",
+ * "Wasbeurt · sep", "3 wasbeurten · jul – sep". Voor de lijst in het
+ * klantdossier, waar de klant al vaststaat en je zoekt naar het werk.
+ */
+export function factuurOver(soort: FactuurSoort, onderwerp: string, regels: OverRegel[]): string {
+  const tel = (s: Factuurregel["soort"]) => regels.filter((r) => r.soort === s).length;
+  const was = tel("wasbeurt");
+  const klus = tel("klus");
+  const los = tel("los");
+  const allesLos = los > 0 && was === 0 && klus === 0;
+  const delen = [
+    was === 1 ? "wasbeurt" : was > 1 ? `${was} wasbeurten` : "",
+    klus === 1 ? "klus" : klus > 1 ? `${klus} klussen` : "",
+    !allesLos && los > 0 ? (los === 1 ? "losse regel" : `${los} losse regels`) : "",
+  ].filter(Boolean);
+  let wat = soort === "credit" ? "creditfactuur" : allesLos ? "losse factuur" : delen.join(" en ");
+  if (!wat) wat = "factuur";
+  wat = wat.charAt(0).toUpperCase() + wat.slice(1);
+
+  let over = onderwerp.trim();
+  if (!over && allesLos) over = regels[0]?.omschrijving.trim() ?? "";
+  if (!over && regels.length > 0) {
+    const data = regels.map((r) => r.datum).sort();
+    const van = data[0]!;
+    const tot = data[data.length - 1]!;
+    over =
+      van.slice(0, 7) === tot.slice(0, 7)
+        ? maandKort(van)
+        : van.slice(0, 4) === tot.slice(0, 4)
+          ? `${maandKort(van)} – ${maandKort(tot)}`
+          : `${maandKort(van)} ${van.slice(0, 4)} – ${maandKort(tot)} ${tot.slice(0, 4)}`;
+  }
+  return over ? `${wat} · ${over}` : wat;
+}
+
+/**
+ * Per factuur van deze klant waar hij over gaat (zie `factuurOver`). Alleen
+ * met het recht facturen; anders laat de database niets zien.
+ */
+export async function fetchFactuurOver(klantId: string): Promise<Map<string, string>> {
+  // De regels in stukken: een VvE met veel adressen heeft er al snel meer
+  // dan 1000.
+  const [facturen, regels] = await Promise.all([
+    supabase
+      .from("facturen")
+      .select("id,soort,onderwerp")
+      .eq("klant_id", klantId)
+      .is("deleted_at", null),
+    haalAllePaginas((van, tot) =>
+      supabase
+        .from("factuurregels")
+        .select("id,factuur_id,soort,datum,omschrijving")
+        .eq("klant_id", klantId)
+        .not("factuur_id", "is", null)
+        .is("deleted_at", null)
+        // Op volgorde, zodat "de eerste regel" ook echt de eerste is.
+        .order("datum", { ascending: true })
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(van, tot),
+    ),
+  ]);
+  if (facturen.error) throw facturen.error;
+  const perFactuur = new Map<string, OverRegel[]>();
+  for (const r of regels) {
+    const lijst = perFactuur.get(r.factuur_id!) ?? [];
+    lijst.push({
+      soort: r.soort as Factuurregel["soort"],
+      datum: r.datum,
+      omschrijving: r.omschrijving,
+    });
+    perFactuur.set(r.factuur_id!, lijst);
+  }
+  return new Map(
+    (facturen.data ?? []).map((f) => [
+      f.id,
+      factuurOver(f.soort as FactuurSoort, f.onderwerp ?? "", perFactuur.get(f.id) ?? []),
+    ]),
+  );
+}
+
 /** Hoeveel regels er nog op geen enkele factuur staan. Voor het gele vakje. */
 export async function fetchLosseRegels(): Promise<number> {
   const { count, error } = await supabase

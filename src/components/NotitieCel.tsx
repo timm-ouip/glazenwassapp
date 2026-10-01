@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -70,6 +76,21 @@ function naarMaandwerk(regels: Regel[]): Maandwerk[] {
   );
 }
 
+/** Het maandwerk om te vergelijken: vaste volgorde, lege waarden gelijk. */
+function kern(werk: Maandwerk[]): string {
+  return JSON.stringify(
+    werk.map((w) => [
+      w.id ?? null,
+      [...w.maanden].sort(),
+      w.jaar ?? null,
+      w.notitie.trim(),
+      w.extra ?? null,
+      w.duur ?? null,
+      w.duur_zelf ?? false,
+    ]),
+  );
+}
+
 /** Voor de tooltip: "serre in mrt/sep — € 15 extra", of "in okt 2026" als het
  *  eenmalig is. Zonder recht op prijzen zonder bedrag. */
 function omschrijf(w: Maandwerk, prijzenZien: boolean): string {
@@ -86,13 +107,19 @@ interface Props {
   /** Werk dat er alleen in bepaalde maanden bij komt. Laat weg waar dat niet
    *  speelt, zoals in het importscherm. */
   maandwerk?: Maandwerk[] | undefined;
-  onChangeMaandwerk?: ((werk: Maandwerk[]) => void) | undefined;
+  /** `vorige` is de lijst zoals hij was toen het schermpje openging: zo kan
+   *  de aanroeper zien of iemand anders hem intussen veranderde. */
+  onChangeMaandwerk?: ((werk: Maandwerk[], vorige: Maandwerk[]) => void) | undefined;
   /** De kalendermaanden ("01"-"12") waarin dit adres sowieso langskomt. De
    *  andere maanden kun je wel aanvinken — dan komt hij een keer extra — maar
    *  ze horen er anders uit te zien. */
   beurtMaanden?: string[] | undefined;
   /** Alleen tonen, zonder schermpje: voor wie dit niet mag bijwerken. */
   alleenLezen?: boolean;
+  /** Wat er op de knop staat, in plaats van de notitie zelf (bijv. "+ Extra werk"). */
+  knop?: ReactNode;
+  /** Bij openen meteen een lege regel voor nieuw maandwerk klaarzetten. */
+  metNieuweRegel?: boolean;
 }
 
 /** Notitieveld met meervoudige snelkeuzes en de mogelijkheid nieuwe toe te voegen. */
@@ -106,10 +133,14 @@ export function NotitieCel({
   onChangeMaandwerk,
   beurtMaanden,
   alleenLezen = false,
+  knop,
+  metNieuweRegel = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [tekst, setTekst] = useState(value);
   const [werk, setWerk] = useState<Regel[]>(() => naarRegels(maandwerk));
+  /** Het maandwerk zoals het was bij het openen. */
+  const beginWerk = useRef<Maandwerk[]>(maandwerk ?? []);
   const [nieuw, setNieuw] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const prijzenZien = useRecht("prijzen_zien");
@@ -139,8 +170,10 @@ export function NotitieCel({
   function bewaarMaandwerk() {
     if (!onChangeMaandwerk) return;
     const volgende = naarMaandwerk(werk);
-    if (JSON.stringify(volgende) !== JSON.stringify(maandwerk ?? [])) {
-      onChangeMaandwerk(volgende);
+    // Tegen wat er bij het openen stond, en zonder de volgorde van de velden
+    // of wat de database leeg laat: alleen kijken is geen wijziging.
+    if (kern(volgende) !== kern(beginWerk.current)) {
+      onChangeMaandwerk(volgende, beginWerk.current);
     }
   }
 
@@ -230,7 +263,14 @@ export function NotitieCel({
         // useEffect dat, dan wiste elke hervalidatie van de lijst je invoer.
         if (o) {
           weggooien.current = false;
-          setWerk(naarRegels(maandwerk));
+          beginWerk.current = maandwerk ?? [];
+          // Een regel zonder maanden valt bij het bewaren vanzelf weg.
+          setWerk([
+            ...naarRegels(maandwerk),
+            ...(metNieuweRegel
+              ? [{ maanden: [], notitie: "", extra: "", duur: "", duurZelf: false }]
+              : []),
+          ]);
           return;
         }
         if (weggooien.current) {
@@ -250,10 +290,14 @@ export function NotitieCel({
             "w-full truncate px-1 py-0.5 text-left hover:bg-accent/60 focus:bg-accent focus:outline-none"
           }
         >
-          {value || <span className="text-muted-foreground/50">—</span>}
-          {/* Kleine stip als er in bepaalde maanden werk bij hoort; anders zie
-              je dat pas als je het veld opent. */}
-          {stip}
+          {knop ?? (
+            <>
+              {value || <span className="text-muted-foreground/50">—</span>}
+              {/* Kleine stip als er in bepaalde maanden werk bij hoort; anders zie
+                  je dat pas als je het veld opent. */}
+              {stip}
+            </>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { QueryData } from "@supabase/supabase-js";
 import { netjesPostcode, netjesStraat, netjesVeld } from "@/lib/schoonschrift";
 import type { Klanttype } from "@/lib/facturen";
 import type { Database, Json } from "@/integrations/supabase/types";
@@ -243,6 +244,8 @@ export interface Klant {
   /** Elke beurt een factuur, of alles van een maand, kwartaal, half jaar of
    *  jaar op één factuur. Dat zijn vaste kalenderperiodes (jan–mrt enz.). */
   factuur_per: FactuurPer;
+  /** Eigen btw-tarief op de factuur. Leeg = het tarief van het bedrijf. */
+  btw_procent: number | null;
 }
 
 export type FactuurPer = "beurt" | "maand" | "kwartaal" | "halfjaar" | "jaar";
@@ -266,7 +269,7 @@ export type KlantVelden = Omit<Klant, "id">;
  */
 export type KlantTekstVeld = Exclude<
   keyof KlantVelden,
-  "betalingstermijn_dagen" | "klanttype" | "factuur_per"
+  "betalingstermijn_dagen" | "klanttype" | "factuur_per" | "btw_procent"
 >;
 
 export interface QuickNote {
@@ -588,14 +591,7 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
   // Een bedrijf heeft al snel meer dan 1000 adressen; in één opvraging vielen
   // de laatste stil weg (na een import waren dat de hoge huisnummers).
   const data = await haalAllePaginas((van, tot) => {
-    let vraag = supabase
-      .from("customers")
-      // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
-      // met een samengestelde string lukt dat niet meer.
-      .select(
-        "id,street_id,house_number,addition,note,note_even,note_oneven,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op,inactief_op,inactief_reden,duur_min,duur_zelf,eigen_blok,betaalmethode,adres_prijzen(prijs,maandwerk_extra)",
-      )
-      .is("deleted_at", null);
+    let vraag = vraagAdressen();
     // Inactief (gestopt of verhuisd) hoort niet op de wijklijst, de planning
     // of in de omzet; die staan apart, zie lib/stoppen.
     if (!metInactief) vraag = vraag.is("inactief_op", null);
@@ -605,7 +601,40 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
       .order("id", { ascending: true })
       .range(van, tot);
   });
-  return data.map((c) => ({
+  return data.map(alsCustomer);
+}
+
+/** Wat vraagAdressen() per rij teruggeeft. */
+type AdresRij = QueryData<ReturnType<typeof vraagAdressen>>[number];
+
+/** De adressen die niet weggegooid zijn, met de kolommen die de app gebruikt. */
+function vraagAdressen() {
+  return (
+    supabase
+      .from("customers")
+      // Eén letterlijke string: supabase-js leidt de rijtypes hieruit af, en
+      // met een samengestelde string lukt dat niet meer.
+      .select(
+        "id,street_id,house_number,addition,note,note_even,note_oneven,frequency,interval_maanden,ritme,maandwerk,sort_order,klant_id,postcode,markering,overslaan,start_maand,created_at,hoek_straat,hoek_straat_volledig,hoek_kant,geimporteerd,aangemeld_op,inactief_op,inactief_reden,duur_min,duur_zelf,eigen_blok,betaalmethode,adres_prijzen(prijs,maandwerk_extra)",
+      )
+      .is("deleted_at", null)
+  );
+}
+
+/**
+ * Eén adres vers uit de database, met dezelfde vertaling als de lijsten.
+ * Voor het dossier: een lijst (overslaan, extra werk) rekent daarmee, zodat
+ * het geen wijziging van een collega of Paaltje van net daarvoor wist.
+ */
+export async function fetchCustomer(id: string): Promise<Customer | null> {
+  const { data, error } = await vraagAdressen().eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data ? alsCustomer(data) : null;
+}
+
+/** Een rij uit customers zoals de app hem gebruikt. */
+function alsCustomer(c: AdresRij): Customer {
+  return {
     ...c,
     // Prijzen staan in hun eigen tabel (stap D). Zonder het recht "prijzen
     // zien" komt die leeg terug, en dan is het hier 0.
@@ -626,13 +655,13 @@ async function haalCustomers(metInactief: boolean): Promise<Customer[]> {
     duur_zelf: c.duur_zelf ?? false,
     eigen_blok: c.eigen_blok ?? null,
     betaalmethode: c.betaalmethode ?? null,
-  })) as Customer[];
+  } as Customer;
 }
 
 // Eén letterlijke tekst, niet opgeknipt met +: Supabase leidt het rijtype af
 // uit wat hier staat, en dat lukt alleen bij een losse string.
 // prettier-ignore
-const KLANT_VELDEN = "id,naam,email,email2,telefoon,telefoon2,straat,huisnummer,postcode,plaats,notitie,klanttype,bedrijfsnaam,kvk,btw_nummer,website,factuur_email,factuur_straat,factuur_huisnummer,factuur_postcode,factuur_plaats,betalingstermijn_dagen,factuur_omschrijving,factuur_per";
+const KLANT_VELDEN = "id,naam,email,email2,telefoon,telefoon2,straat,huisnummer,postcode,plaats,notitie,klanttype,bedrijfsnaam,kvk,btw_nummer,website,factuur_email,factuur_straat,factuur_huisnummer,factuur_postcode,factuur_plaats,betalingstermijn_dagen,factuur_omschrijving,factuur_per,btw_procent";
 
 /** Een lege klant: het startpunt van elk klantformulier. */
 export const LEEG_KLANT: KlantVelden = {
@@ -659,6 +688,7 @@ export const LEEG_KLANT: KlantVelden = {
   betalingstermijn_dagen: null,
   factuur_omschrijving: "",
   factuur_per: "beurt",
+  btw_procent: null,
 };
 
 export async function fetchKlanten(): Promise<Klant[]> {
@@ -701,6 +731,7 @@ export async function bewaarKlant(id: string | null, velden: KlantVelden): Promi
     betalingstermijn_dagen: velden.betalingstermijn_dagen,
     factuur_omschrijving: velden.factuur_omschrijving.trim(),
     factuur_per: velden.factuur_per,
+    btw_procent: velden.btw_procent,
   };
   const query = id
     ? supabase.from("klanten").update(payload).eq("id", id)

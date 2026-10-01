@@ -194,6 +194,8 @@ export function MailOpstellen({
       void qc.invalidateQueries({ queryKey: ["berichten"] });
       void qc.invalidateQueries({ queryKey: ["mail-mappen"] });
       void qc.invalidateQueries({ queryKey: ["dossier-mail"] });
+      // "Laatste mail" op het Overzicht van het dossier.
+      void qc.invalidateQueries({ queryKey: ["dossier-laatste-mail"] });
       onSluit();
     } catch (err) {
       if (err instanceof MogelijkVerstuurdFout) {

@@ -45,11 +45,18 @@ export function PaaltjeKaart({
   b,
   kanSchrijven,
   onBeantwoord,
+  dossier = false,
 }: {
   b: Bericht;
   kanSchrijven: boolean;
   /** Het concept van Paaltje als begin van het antwoord. */
   onBeantwoord: (begin: string) => void;
+  /**
+   * Het paarse kaartje onder de mail in het klantdossier: "Paaltje stelt
+   * voor", met Gebruiken en Niet nodig. Zonder de categorieën en de
+   * samenvatting, en leeg als er niets meer te doen is.
+   */
+  dossier?: boolean;
 }) {
   const qc = useQueryClient();
   const bevestig = useBevestig();
@@ -67,6 +74,9 @@ export function PaaltjeKaart({
     void qc.invalidateQueries({ queryKey: ["bericht", b.id] });
     void qc.invalidateQueries({ queryKey: ["berichten"] });
     void qc.invalidateQueries({ queryKey: ["mail-wacht"] });
+    // Het dossier van de klant toont ook of er een antwoord klaarligt.
+    void qc.invalidateQueries({ queryKey: ["dossier-mail"] });
+    void qc.invalidateQueries({ queryKey: ["dossier-laatste-mail"] });
   };
 
   async function doe(naam: string, actie: () => Promise<unknown>, gelukt?: string) {
@@ -84,8 +94,9 @@ export function PaaltjeKaart({
 
   if (b.richting !== "in" || b.paaltje_status === "overslaan") return null;
 
-  const kader =
-    "mx-5 mt-3 rounded-[14px] border border-tint-paars-ink/15 bg-tint-paars/60 px-3.5 py-3 text-[13px]";
+  const kader = dossier
+    ? "gap-2.5 rounded-[18px] bg-tint-paars p-[18px] text-[14px] [&_.paaltje-regel]:text-[12px]"
+    : "mx-5 mt-3 rounded-[14px] border border-tint-paars-ink/15 bg-tint-paars/60 px-3.5 py-3 text-[13px]";
 
   if (b.paaltje_status === "wacht" || b.paaltje_status === "bezig") {
     return (
@@ -143,42 +154,65 @@ export function PaaltjeKaart({
     .filter((i) => i >= 0)
     .map((i) => ({ c: lijst[i]!, i }));
   const o = b.voorstel.overslaan;
+  // In het dossier is "Niet nodig" afhandelen: daarna hoort het voorstel weg.
+  const conceptOpen = !!b.concept.trim() && !b.beantwoord_op && !(dossier && b.afgehandeld_op);
+  const bevestigingFout = b.voorstel.bevestiging_fout && !b.afgehandeld_op;
+
+  if (dossier) {
+    if (!o && !bevestigingFout && !b.voorstel.stoppen && !b.voorstel.aanmelding_id && !conceptOpen)
+      return null;
+  }
 
   return (
-    <div className={cn(kader, "space-y-2.5")}>
-      <div className="flex flex-wrap items-start gap-2">
-        <Sparkles className="mt-0.5 size-3.5 shrink-0 text-tint-paars-ink" />
-        <p className="min-w-0 flex-1 text-tint-paars-ink">
-          {b.samenvatting || "Paaltje las deze mail."}
-          {b.zekerheid !== null && (
-            <span className="ml-1.5 text-[11.5px] opacity-70">
-              {Math.round(b.zekerheid * 100)}% zeker
-            </span>
+    <div className={cn(kader, dossier ? "flex flex-col" : "space-y-2.5")}>
+      {dossier && (
+        <>
+          <div className="text-[12px] font-semibold">
+            {conceptOpen ? "Paaltje stelt voor" : "Paaltje"}
+          </div>
+          {/* Eerst het voorstel zelf, dan wat er verder bij hoort (12px), dan de knoppen. */}
+          {conceptOpen && (
+            <div className="whitespace-pre-wrap break-words leading-[1.55]">{b.concept.trim()}</div>
           )}
-        </p>
-      </div>
+        </>
+      )}
+      {!dossier && (
+        <>
+          <div className="flex flex-wrap items-start gap-2">
+            <Sparkles className="mt-0.5 size-3.5 shrink-0 text-tint-paars-ink" />
+            <p className="min-w-0 flex-1 text-tint-paars-ink">
+              {b.samenvatting || "Paaltje las deze mail."}
+              {b.zekerheid !== null && (
+                <span className="ml-1.5 text-[11.5px] opacity-70">
+                  {Math.round(b.zekerheid * 100)}% zeker
+                </span>
+              )}
+            </p>
+          </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        {mijnCategorieen.map(({ c, i }) => (
-          <span
-            key={c.id}
-            className={cn(
-              "rounded-full px-2 py-0.5 text-[11.5px] font-medium",
-              categorieTint(c, i),
-            )}
-          >
-            {c.naam}
-          </span>
-        ))}
-        <CategorieKiezer
-          alle={lijst}
-          gekozen={b.categorie_ids}
-          uit={!kanSchrijven}
-          onBewaar={(ids) =>
-            doe("categorie", () => zetCategorieen(b.id, ids), "Categorie aangepast.")
-          }
-        />
-      </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {mijnCategorieen.map(({ c, i }) => (
+              <span
+                key={c.id}
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[11.5px] font-medium",
+                  categorieTint(c, i),
+                )}
+              >
+                {c.naam}
+              </span>
+            ))}
+            <CategorieKiezer
+              alle={lijst}
+              gekozen={b.categorie_ids}
+              uit={!kanSchrijven}
+              onBewaar={(ids) =>
+                doe("categorie", () => zetCategorieen(b.id, ids), "Categorie aangepast.")
+              }
+            />
+          </div>
+        </>
+      )}
 
       {!b.klant_id && b.klant_gok_id && (
         <KlantGok
@@ -239,7 +273,7 @@ export function PaaltjeKaart({
         </Regel>
       )}
 
-      {b.voorstel.bevestiging_fout && !b.afgehandeld_op && (
+      {bevestigingFout && (
         <Regel>
           <AlertTriangle className="size-3.5 text-tint-amber-ink" />
           <span>Bevestiging niet zelf verstuurd: {b.voorstel.bevestiging_fout}</span>
@@ -316,7 +350,7 @@ export function PaaltjeKaart({
       )}
 
       {/* Paaltjes prijsvergelijking alleen voor wie prijzen mag zien. */}
-      {b.voorstel.prijs && prijzenZien && (
+      {b.voorstel.prijs && prijzenZien && !dossier && (
         <Regel>
           <span className="text-[12px]">
             {b.voorstel.prijs.eigen?.length
@@ -328,7 +362,41 @@ export function PaaltjeKaart({
         </Regel>
       )}
 
-      {b.concept && !b.beantwoord_op && (
+      {dossier && conceptOpen && (
+        <>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={!kanSchrijven || bezig !== null}
+              onClick={() => onBeantwoord(b.concept)}
+              className="h-10 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              Gebruiken
+            </button>
+            <button
+              type="button"
+              disabled={!kanSchrijven || bezig !== null}
+              onClick={() =>
+                void doe("af", async () => {
+                  await handelAf(b.id, true);
+                  toast.success("Afgehandeld.", {
+                    action: {
+                      label: "Ongedaan maken",
+                      onClick: () => void doe("af", () => handelAf(b.id, false)),
+                    },
+                  });
+                })
+              }
+              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-tint-paars-mid bg-transparent px-4 text-[13px] transition-colors hover:bg-card/40 disabled:opacity-50"
+            >
+              {bezig === "af" && <Loader2 className="size-3.5 animate-spin" />}
+              Niet nodig
+            </button>
+          </div>
+        </>
+      )}
+
+      {!dossier && b.concept && !b.beantwoord_op && (
         <div className="rounded-[14px] bg-surface p-3">
           <p className="line-clamp-6 whitespace-pre-wrap text-[13px] leading-relaxed">
             {b.concept}
@@ -346,47 +414,53 @@ export function PaaltjeKaart({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 pt-0.5 text-[12px] text-tint-paars-ink">
-        {b.beantwoord_op ? (
-          <span className="flex items-center gap-1">
-            <CircleCheck className="size-3.5" /> Beantwoord
-          </span>
-        ) : b.afgehandeld_op ? (
+      {!dossier && (
+        <div className="flex flex-wrap items-center gap-2 pt-0.5 text-[12px] text-tint-paars-ink">
+          {b.beantwoord_op ? (
+            <span className="flex items-center gap-1">
+              <CircleCheck className="size-3.5" /> Beantwoord
+            </span>
+          ) : b.afgehandeld_op ? (
+            <button
+              type="button"
+              className="underline-offset-2 hover:underline disabled:opacity-50"
+              disabled={!kanSchrijven || bezig !== null}
+              onClick={() => void doe("af", () => handelAf(b.id, false))}
+            >
+              Afgehandeld — weer openzetten
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="underline-offset-2 hover:underline disabled:opacity-50"
+              disabled={!kanSchrijven || bezig !== null}
+              onClick={() => void doe("af", () => handelAf(b.id, true), "Afgehandeld.")}
+            >
+              Klaar, hier hoeft niets mee
+            </button>
+          )}
           <button
             type="button"
-            className="underline-offset-2 hover:underline disabled:opacity-50"
+            className="ml-auto underline-offset-2 hover:underline disabled:opacity-50"
             disabled={!kanSchrijven || bezig !== null}
-            onClick={() => void doe("af", () => handelAf(b.id, false))}
+            onClick={() =>
+              void doe("lezen", () => laatOpnieuwLezen(b.id), "Paaltje leest hem zo opnieuw.")
+            }
           >
-            Afgehandeld — weer openzetten
+            Opnieuw laten lezen
           </button>
-        ) : (
-          <button
-            type="button"
-            className="underline-offset-2 hover:underline disabled:opacity-50"
-            disabled={!kanSchrijven || bezig !== null}
-            onClick={() => void doe("af", () => handelAf(b.id, true), "Afgehandeld.")}
-          >
-            Klaar, hier hoeft niets mee
-          </button>
-        )}
-        <button
-          type="button"
-          className="ml-auto underline-offset-2 hover:underline disabled:opacity-50"
-          disabled={!kanSchrijven || bezig !== null}
-          onClick={() =>
-            void doe("lezen", () => laatOpnieuwLezen(b.id), "Paaltje leest hem zo opnieuw.")
-          }
-        >
-          Opnieuw laten lezen
-        </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function Regel({ children }: { children: React.ReactNode }) {
-  return <div className="flex flex-wrap items-center gap-2 text-tint-paars-ink">{children}</div>;
+  return (
+    <div className="paaltje-regel flex flex-wrap items-center gap-2 text-tint-paars-ink">
+      {children}
+    </div>
+  );
 }
 
 function KlantGok({

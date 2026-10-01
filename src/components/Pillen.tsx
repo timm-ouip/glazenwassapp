@@ -11,12 +11,15 @@ export function Pillen<T>({
   onChange,
   disabled,
   label,
+  groot = false,
 }: {
   keuzes: { waarde: T; label: string }[];
   waarde: T;
   onChange: (w: T) => void;
   disabled?: boolean | undefined;
   label: string;
+  /** De maat van het klantdossier: iets groter, en wat uit staat in gewone tekst. */
+  groot?: boolean | undefined;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={label}>
@@ -30,11 +33,19 @@ export function Pillen<T>({
             aria-checked={aan}
             disabled={disabled}
             onClick={() => onChange(k.waarde)}
-            className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60 ${
-              aan
-                ? "border-transparent bg-tint-amber text-tint-amber-ink"
-                : "border-border bg-card text-muted-foreground hover:bg-accent"
-            }`}
+            className={
+              groot
+                ? `rounded-full border px-3 py-[5px] text-[13px] transition-colors disabled:opacity-60 ${
+                    aan
+                      ? "border-transparent bg-tint-amber font-semibold text-tint-amber-ink"
+                      : "border-border bg-transparent text-foreground hover:bg-accent"
+                  }`
+                : `rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60 ${
+                    aan
+                      ? "border-transparent bg-tint-amber text-tint-amber-ink"
+                      : "border-border bg-card text-muted-foreground hover:bg-accent"
+                  }`
+            }
           >
             {k.label}
           </button>

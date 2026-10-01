@@ -1,6 +1,9 @@
 /**
- * Tabblad Mail in het klantdossier: het hele gesprek met deze klant, heen en
- * terug, nieuwste bovenaan.
+ * Rechts in "Mail en klachten": de gekozen mail, en daaronder wat Paaltje
+ * voorstelt (het paarse kaartje). "Gebruiken" zet zijn antwoord klaar in het
+ * opstelscherm; "Niet nodig" handelt de mail af.
+ *
+ * Los geladen (zie DossierBerichten): dit trekt het mailprogramma mee.
  *
  * Mail die je in het postvak weggooide of die op de telefoon gewist is, blijft
  * hier staan: het dossier is een archief. Alleen de eigenaar haalt een mail
@@ -9,54 +12,81 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  IconArrowDownLeft as ArrowDownLeft,
-  IconArrowUpRight as ArrowUpRight,
   IconLoader2 as Loader2,
   IconPaperclip as Paperclip,
   IconCornerUpLeft as Reply,
-  IconEdit as SquarePen,
   IconTrash as Trash2,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import { PopupBlok, PopupHint } from "@/components/Popup";
 import { MailOpstellen, type Opzet } from "@/components/mail/MailOpstellen";
+import { PaaltjeKaart } from "@/components/mail/PaaltjeKaart";
 import { antwoordOpzet, MailHtml } from "@/components/mail/Postvak";
-import {
-  fetchBericht,
-  fetchDossierMails,
-  lijstDatum,
-  type DossierMail as Regel,
-} from "@/lib/berichten";
+import { fetchBericht, type Bericht, type DossierMail as DossierMailRegel } from "@/lib/berichten";
 import { fetchMailbox } from "@/lib/mailbox";
 import { zetUitDossier } from "@/lib/mailacties";
 import { useAuth } from "@/lib/auth";
 import { useRecht } from "@/lib/rechten";
-import type { Klant } from "@/lib/klanten";
-import { cn } from "@/lib/utils";
 
-export function DossierMail({ klant }: { klant: Klant }) {
+/** "30 september", met het jaar erbij als het niet dit jaar was. */
+function langeDatum(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString("nl-NL", {
+    day: "numeric",
+    month: "long",
+    ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
+export function MailDetail({
+  id,
+  klantId,
+  nietInMailbox,
+  onWeg,
+}: {
+  id: string;
+  klantId: string;
+  /** Weggegooid in het postvak of gewist op de telefoon; het dossier bewaart hem. */
+  nietInMailbox: boolean;
+  /** De mail is uit het dossier gehaald. */
+  onWeg: () => void;
+}) {
   const qc = useQueryClient();
-  const { employee } = useAuth();
-  const isEigenaar = employee?.rol === "eigenaar";
+  const isEigenaar = useAuth().employee?.rol === "eigenaar";
   const magVersturen = useRecht("mail_versturen");
   const mailbox = useQuery({ queryKey: ["mailbox"], queryFn: fetchMailbox });
-  const kanVersturen = magVersturen && mailbox.data?.status === "actief";
-
-  const mails = useQuery({
-    queryKey: ["dossier-mail", klant.id],
-    queryFn: () => fetchDossierMails(klant.id),
+  const kanSchrijven = mailbox.data?.status === "actief";
+  const bericht = useQuery({
+    queryKey: ["bericht", id, "dossier"],
+    queryFn: () => fetchBericht(id, true),
+    // Leest Paaltje hem nog, dan verschijnt zijn voorstel vanzelf.
+    refetchInterval: (q) =>
+      ["wacht", "bezig"].includes(q.state.data?.paaltje_status ?? "") ? 30_000 : false,
   });
-  const [open, setOpen] = useState<string | null>(null);
   const [opzet, setOpzet] = useState<Opzet | null>(null);
 
-  const ververs = () => void qc.invalidateQueries({ queryKey: ["dossier-mail", klant.id] });
+  function beantwoord(b: Bericht, begin = "") {
+    if (!magVersturen || !kanSchrijven) {
+      toast("Antwoorden kan alleen met een gekoppelde mailbox en het recht om mail te versturen.");
+      return;
+    }
+    setOpzet({ ...antwoordOpzet(b, begin), klantId });
+  }
 
-  async function uitDossier(id: string) {
+  async function uitDossier() {
+    const ververs = () => {
+      void qc.invalidateQueries({ queryKey: ["dossier-mail", klantId] });
+      void qc.invalidateQueries({ queryKey: ["dossier-ongelezen", klantId] });
+      void qc.invalidateQueries({ queryKey: ["dossier-laatste-mail", klantId] });
+    };
     try {
       await zetUitDossier(id, true);
-      setOpen((o) => (o === id ? null : o));
+      // Eerst uit de lijst in het geheugen: anders opent het dossier meteen
+      // weer deze mail, als bovenste van de lijst die nog niet ververst is.
+      qc.setQueryData<DossierMailRegel[]>(["dossier-mail", klantId], (oud) =>
+        oud?.filter((m) => m.id !== id),
+      );
+      onWeg();
       ververs();
       toast.success("Uit het dossier gehaald. Hij ligt in de prullenbak.", {
         action: {
@@ -72,194 +102,100 @@ export function DossierMail({ klant }: { klant: Klant }) {
     }
   }
 
-  const adres = klant.email.trim() || klant.email2.trim();
-  const lijst = mails.data ?? [];
+  const b = bericht.data;
+  if (bericht.isLoading) {
+    return (
+      <div className="flex items-center gap-1.5 rounded-[18px] bg-card p-[18px] text-[13px] text-muted-foreground">
+        <Loader2 className="size-3.5 animate-spin" /> Even ophalen…
+      </div>
+    );
+  }
+  if (!b) {
+    return (
+      <div className="rounded-[18px] bg-card p-[18px] text-[13px] text-tint-rood-ink">
+        Deze mail kon niet geladen worden.
+      </div>
+    );
+  }
+
+  const uit = b.richting === "uit";
+  const naar = b.aan.map((a) => a.naam || a.email).join(", ");
 
   return (
-    <PopupBlok
-      label="Correspondentie"
-      terzijde={
-        lijst.length > 0 ? `${lijst.length} ${lijst.length === 1 ? "mail" : "mails"}` : undefined
-      }
-    >
-      {mails.isLoading ? (
-        <PopupHint>Even ophalen…</PopupHint>
-      ) : mails.isError ? (
-        <p className="text-[13px] text-tint-rood-ink">De mails konden niet geladen worden.</p>
-      ) : lijst.length === 0 ? (
-        <PopupHint>
-          Nog geen mail met deze klant. Mail van en aan{" "}
-          {adres ? <span className="font-medium">{adres}</span> : "zijn mailadres"} komt hier
-          vanzelf bij.
-        </PopupHint>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {lijst.map((m) => (
-            <MailRegel
-              key={m.id}
-              m={m}
-              open={open === m.id}
-              onToggle={() => setOpen((o) => (o === m.id ? null : m.id))}
-              kanVersturen={kanVersturen}
-              isEigenaar={isEigenaar}
-              onBeantwoord={(opz) => setOpzet({ ...opz, klantId: klant.id })}
-              onUitDossier={() => void uitDossier(m.id)}
-            />
-          ))}
-        </ul>
-      )}
+    <>
+      <div className="flex flex-col gap-2.5 rounded-[18px] bg-card p-[18px]">
+        <div className="text-[12px] text-muted-foreground">
+          {langeDatum(b.ontvangen_op)} · {uit ? `aan ${naar || "?"}` : `van ${b.van_email}`}
+        </div>
+        <div className="break-words font-display text-[18px] font-semibold">
+          {b.onderwerp || "(geen onderwerp)"}
+        </div>
+        {b.afgekapt && (
+          <p className="rounded-[10px] bg-tint-geel px-3 py-1.5 text-[12px]">
+            Deze mail is groot; Paaltje Systems toont alleen het begin.
+          </p>
+        )}
+        {b.html ? (
+          // Op een groot scherm een vaste hoogte (de mail heeft een eigen
+          // venstertje); kleiner groeit hij mee met de inhoud.
+          <div className="flex overflow-hidden rounded-[12px] border border-border lg:h-[360px]">
+            <MailHtml html={b.html} meegroeien />
+          </div>
+        ) : (
+          <div className="whitespace-pre-wrap break-words text-[14px] leading-[1.55]">
+            {b.tekst || <span className="text-muted-foreground">(lege mail)</span>}
+          </div>
+        )}
+        {(b.bijlagen.length > 0 || nietInMailbox) && (
+          <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
+            {b.bijlagen.length > 0 && (
+              <span className="inline-flex min-w-0 items-center gap-1">
+                <Paperclip className="size-3.5 shrink-0" />
+                <span className="truncate">{b.bijlagen.map((x) => x.naam).join(", ")}</span>
+              </span>
+            )}
+            {nietInMailbox && (
+              <span
+                className="rounded-full bg-muted px-2 py-px"
+                title="Weggegooid in het postvak of gewist op de telefoon; Paaltje Systems bewaart hem voor het dossier."
+              >
+                niet meer in de mailbox
+              </span>
+            )}
+          </div>
+        )}
+        {((!uit && magVersturen && kanSchrijven) || isEigenaar) && (
+          <div className="flex flex-wrap gap-2">
+            {!uit && magVersturen && kanSchrijven && (
+              <button
+                type="button"
+                onClick={() => beantwoord(b)}
+                className="inline-flex h-10 items-center gap-1.5 rounded-full border border-border bg-card px-4 text-[13px] transition-colors hover:bg-accent"
+              >
+                <Reply className="size-3.5" /> Beantwoorden
+              </button>
+            )}
+            {isEigenaar && (
+              <button
+                type="button"
+                onClick={() => void uitDossier()}
+                className="ml-auto inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
+              >
+                <Trash2 className="size-3.5" /> Uit dossier
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
-      {kanVersturen && adres && (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="self-start rounded-full"
-          onClick={() =>
-            setOpzet({
-              aan: klant.naam ? `"${klant.naam.replace(/"/g, "")}" <${adres}>` : adres,
-              onderwerp: "",
-              tekst: "",
-              klantId: klant.id,
-            })
-          }
-        >
-          <SquarePen className="size-4" /> Nieuwe mail
-        </Button>
-      )}
+      <PaaltjeKaart
+        b={b}
+        kanSchrijven={kanSchrijven}
+        onBeantwoord={(begin) => beantwoord(b, begin)}
+        dossier
+      />
 
       <MailOpstellen open={opzet !== null} opzet={opzet} onSluit={() => setOpzet(null)} />
-    </PopupBlok>
-  );
-}
-
-function MailRegel({
-  m,
-  open,
-  onToggle,
-  kanVersturen,
-  isEigenaar,
-  onBeantwoord,
-  onUitDossier,
-}: {
-  m: Regel;
-  open: boolean;
-  onToggle: () => void;
-  kanVersturen: boolean;
-  isEigenaar: boolean;
-  onBeantwoord: (opzet: Opzet) => void;
-  onUitDossier: () => void;
-}) {
-  const uit = m.richting === "uit";
-  const bericht = useQuery({
-    queryKey: ["bericht", m.id, "dossier"],
-    queryFn: () => fetchBericht(m.id, true),
-    enabled: open,
-  });
-  const naar = m.aan.map((a) => a.naam || a.email).join(", ");
-
-  return (
-    <li
-      className={cn(
-        "rounded-xl border text-[13px]",
-        uit ? "ml-6 border-transparent bg-tint-blauw/60" : "mr-6 border-input bg-background/70",
-      )}
-    >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex w-full items-start gap-2 px-3 py-2.5 text-left"
-      >
-        <span
-          className={cn("mt-0.5 shrink-0", uit ? "text-tint-blauw-ink" : "text-muted-foreground")}
-        >
-          {uit ? <ArrowUpRight className="size-4" /> : <ArrowDownLeft className="size-4" />}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-baseline gap-2">
-            <span className="min-w-0 flex-1 truncate font-medium">
-              {m.onderwerp || "(geen onderwerp)"}
-            </span>
-            <span className="shrink-0 text-[11.5px] text-muted-foreground">
-              {lijstDatum(m.ontvangen_op)}
-            </span>
-          </span>
-          <span className="block truncate text-[12px] text-muted-foreground">
-            {uit ? `Jij aan ${naar || "?"}` : m.van_naam || m.van_email}
-            {!open && m.fragment ? ` · ${m.fragment}` : ""}
-          </span>
-          {(m.heeft_bijlagen || !m.op_server) && (
-            <span className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-              {m.heeft_bijlagen && (
-                <span className="inline-flex items-center gap-1">
-                  <Paperclip className="size-3" /> bijlage
-                </span>
-              )}
-              {!m.op_server && (
-                <span
-                  className="rounded-full bg-muted px-2 py-px"
-                  title="Weggegooid in het postvak of gewist op de telefoon; Paaltje Systems bewaart hem voor het dossier."
-                >
-                  niet meer in mailbox
-                </span>
-              )}
-            </span>
-          )}
-        </span>
-      </button>
-
-      {open && (
-        <div className="border-t border-border/60 px-3 pb-3 pt-2">
-          {bericht.isLoading ? (
-            <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
-              <Loader2 className="size-3.5 animate-spin" /> Even ophalen…
-            </p>
-          ) : !bericht.data ? (
-            <p className="text-[12.5px] text-tint-rood-ink">Deze mail kon niet geladen worden.</p>
-          ) : (
-            <>
-              {bericht.data.afgekapt && (
-                <p className="mb-2 rounded-[10px] bg-tint-geel px-3 py-1.5 text-[12px] text-tint-geel-ink">
-                  Deze mail is groot; Paaltje Systems toont alleen het begin.
-                </p>
-              )}
-              {bericht.data.html ? (
-                <div className="flex h-[320px] overflow-hidden rounded-lg border border-border/60">
-                  <MailHtml html={bericht.data.html} />
-                </div>
-              ) : (
-                <p className="max-h-[320px] overflow-y-auto whitespace-pre-wrap break-words text-[13.5px] leading-relaxed">
-                  {bericht.data.tekst || <span className="text-muted-foreground">(lege mail)</span>}
-                </p>
-              )}
-              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                {!uit && kanVersturen && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="rounded-full"
-                    onClick={() => onBeantwoord(antwoordOpzet(bericht.data!))}
-                  >
-                    <Reply className="size-3.5" /> Beantwoorden
-                  </Button>
-                )}
-                {isEigenaar && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="ml-auto rounded-full text-muted-foreground hover:text-destructive"
-                    onClick={onUitDossier}
-                  >
-                    <Trash2 className="size-3.5" /> Uit dossier
-                  </Button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </li>
+    </>
   );
 }
