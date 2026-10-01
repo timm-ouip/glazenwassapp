@@ -65,12 +65,16 @@ export function KortingDialoog({
   onSluit,
   onKorting,
   onVeranderd,
+  meerDanOpen = false,
 }: {
   open: boolean;
   adres: DeurAdres;
   onSluit: () => void;
   onKorting: (bedrag: number, reden: string) => Promise<boolean>;
   onVeranderd: () => void;
+  /** Op kantoor mag de korting hoger zijn dan wat er openstaat (ook als er
+   *  niets openstaat): het verschil wordt tegoed. Aan de deur niet. */
+  meerDanOpen?: boolean;
 }) {
   const [bedrag, setBedrag] = useState("");
   const [totaal, setTotaal] = useState("");
@@ -115,7 +119,7 @@ export function KortingDialoog({
       toast.error("Zet erbij waarom.");
       return;
     }
-    if (waarde > adres.open + 0.005) {
+    if (!meerDanOpen && waarde > adres.open + 0.005) {
       toast.error(`Meer korting dan er open staat (${formatPrice(adres.open)}).`);
       return;
     }
@@ -152,7 +156,11 @@ export function KortingDialoog({
           kleur="amber"
           icoon={<Discount className="size-[22px]" />}
           titel="Korting"
-          subtitel={`Nr ${adres.house_number}${adres.addition} · open ${formatPrice(adres.open)}`}
+          subtitel={`Nr ${adres.house_number}${adres.addition} · ${
+            meerDanOpen && adres.open < -0.005
+              ? `tegoed ${formatPrice(-adres.open)}`
+              : `open ${formatPrice(adres.open)}`
+          }`}
         />
         {stap === "invullen" ? (
           <>
@@ -170,19 +178,31 @@ export function KortingDialoog({
                     onChange={(e) => zetKorting(e.target.value)}
                   />
                 </label>
-                <span className="pb-4 text-[18px] text-muted-foreground">→</span>
-                <label className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="text-[12.5px] text-muted-foreground">Nieuw totaal</span>
-                  <Input
-                    inputMode="decimal"
-                    aria-label="Nieuw totaalbedrag"
-                    className={groteInvoer}
-                    placeholder={formatPrice(adres.open)}
-                    value={totaal}
-                    onChange={(e) => zetTotaal(e.target.value)}
-                  />
-                </label>
+                {/* Staat er op kantoor niets open, dan is er ook geen nieuw totaal:
+                    de korting wordt tegoed. */}
+                {(!meerDanOpen || adres.open > 0.005) && (
+                  <>
+                    <span className="pb-4 text-[18px] text-muted-foreground">→</span>
+                    <label className="flex min-w-0 flex-1 flex-col gap-1">
+                      <span className="text-[12.5px] text-muted-foreground">Nieuw totaal</span>
+                      <Input
+                        inputMode="decimal"
+                        aria-label="Nieuw totaalbedrag"
+                        className={groteInvoer}
+                        placeholder={formatPrice(adres.open)}
+                        value={totaal}
+                        onChange={(e) => zetTotaal(e.target.value)}
+                      />
+                    </label>
+                  </>
+                )}
               </div>
+              {meerDanOpen && waarde !== null && waarde > Math.max(0, adres.open) + 0.005 && (
+                <p className="text-[12.5px] text-muted-foreground">
+                  {formatPrice(waarde - Math.max(0, adres.open))} hiervan wordt tegoed voor de
+                  volgende beurten.
+                </p>
+              )}
               <div className="flex flex-wrap gap-1.5">
                 {REDENEN.map((r) => (
                   <button

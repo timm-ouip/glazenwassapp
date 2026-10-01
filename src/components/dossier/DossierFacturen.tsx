@@ -264,13 +264,14 @@ function FacturenVanKlant({
   const [open, setOpen] = useState<string | null>(null);
   const klantId = d.klantId;
   const aan = magFacturen && !!klantId;
-  // Dezelfde opvraging als de facturenlijst, zodat die twee elkaar bijwerken.
+  // Alleen de facturen van deze klant. De sleutel begint met "facturen", zodat
+  // hij mee ververst als de facturenlijst iets verandert (en andersom).
   const facturen = useQuery({
-    queryKey: ["facturen"],
-    queryFn: () => fetchFacturen(),
+    queryKey: ["facturen", "klant", klantId],
+    queryFn: () => fetchFacturen(undefined, undefined, klantId!),
     enabled: aan,
   });
-  const lijst = klantId ? (facturen.data ?? []).filter((f) => f.klant_id === klantId) : [];
+  const lijst = klantId ? (facturen.data ?? []) : [];
   // Waar elke factuur over gaat; alleen als er iets te tonen is.
   const over = useQuery({
     queryKey: ["factuur-over", klantId],

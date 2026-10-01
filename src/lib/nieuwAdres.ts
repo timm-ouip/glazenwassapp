@@ -92,6 +92,16 @@ export interface NieuwAdresUitkomst {
   mislukt: string[];
 }
 
+/** Het adres staat al (actief) op de wijklijst; koppel dan aan dat adres. */
+export class AdresBestaatAl extends Error {
+  adresId: string;
+  constructor(adresId: string) {
+    super("Dit adres staat al in de lijst.");
+    this.adresId = adresId;
+    this.name = "AdresBestaatAl";
+  }
+}
+
 const reden = (e: unknown) =>
   e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
 
@@ -119,9 +129,8 @@ export async function maakNieuwAdres(invoer: NieuwAdresInvoer): Promise<NieuwAdr
     const dubbel = (zelfde ?? []).filter(
       (c) => (c.addition ?? "").trim().toLowerCase() === nr.addition.toLowerCase(),
     );
-    if (dubbel.some((c) => !c.inactief_op)) {
-      throw new Error("Dit adres staat al in de lijst.");
-    }
+    const actief = dubbel.find((c) => !c.inactief_op);
+    if (actief) throw new AdresBestaatAl(actief.id);
     if (dubbel.length > 0) {
       throw new Error(
         "Dit adres staat bij Inactief (gestopt of verhuisd). Zet het eerst weer actief via Klanten → Inactief; dan blijven prijs en notities bewaard.",

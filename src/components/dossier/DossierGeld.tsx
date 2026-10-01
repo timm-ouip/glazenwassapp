@@ -17,9 +17,12 @@ import { toast } from "sonner";
 import {
   IconChevronLeft as ChevronLeft,
   IconChevronRight as ChevronRight,
+  IconDiscount as Discount,
 } from "@tabler/icons-react";
 
+import { PopupBody, PopupKader, PopupKop, PopupVoet } from "@/components/Popup";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { useBevestig } from "@/components/Bevestig";
 import {
   BedragDialoog,
@@ -28,21 +31,27 @@ import {
   type DeurAdres,
 } from "@/components/betalingen/DeurDialogen";
 import { DossierKop, kopKnop, kopKnopPrimair } from "@/components/dossier/DossierKop";
-import { KolomKop, dossierLink } from "@/components/dossier/DossierVelden";
+import {
+  KolomKop,
+  VeldLabel,
+  dossierInvoer,
+  dossierLink,
+} from "@/components/dossier/DossierVelden";
 import {
   betaalmethodeLabel,
   beurtenTekst,
   draaiBetaalwisselTerug,
   fetchLaatsteRonde,
   maandKort,
+  rekening,
   terugTekst,
   vooruitStart,
   vooruitTot,
   type GeldDeel,
 } from "@/lib/betalingen";
-import { bronTekst, korteDatum, opsomming, volgendeFrequentieMaand } from "@/lib/dossier";
+import { bronTekst, korteDatum, opsomming, volgendeBeurtMaand } from "@/lib/dossier";
 import { vakTeken, vakVoor, vooruitGepland, type Vak } from "@/lib/geldkaart";
-import { boek, haalVasteKortingWeg, nieuweTik, type Tik } from "@/lib/geldlopen";
+import { boek, haalVasteKortingWeg, maakVasteKorting, nieuweTik, type Tik } from "@/lib/geldlopen";
 import { formatPrice, toonMaand, type Customer } from "@/lib/klanten";
 import {
   fetchGeldAdres,
@@ -178,7 +187,7 @@ const VAK_UITLEG: Record<Vak["soort"], string> = {
 // Het tabblad
 // ---------------------------------------------------------------------------
 
-type Venster = "korting" | "bedrag" | "vooruit" | null;
+type Venster = "korting" | "vast" | "bedrag" | "vooruit" | null;
 
 export function DossierGeldTab({ d }: { d: Dossier }) {
   const a = d.adres;
@@ -231,14 +240,24 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
   const acties =
     d.isEigenaar && a && g ? (
       <>
+        {/* Op kantoor ook als er niets openstaat: dan wordt de korting tegoed. */}
         <button
           type="button"
           className={kopKnop}
-          disabled={open <= 0.005 || bezig}
-          title={open <= 0.005 ? "Er staat niets open" : undefined}
+          disabled={bezig}
+          title="Korting of kwijtschelden"
           onClick={() => setVenster("korting")}
         >
           Korting…
+        </button>
+        <button
+          type="button"
+          className={kopKnop}
+          disabled={bezig}
+          title="Een korting die voortaan klaarstaat bij dit adres, zoals horren"
+          onClick={() => setVenster("vast")}
+        >
+          Vaste korting…
         </button>
         <button
           type="button"
@@ -318,6 +337,7 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
                 g={g}
                 onAnderBedrag={d.isEigenaar ? () => setVenster("bedrag") : undefined}
               />
+              <WatErOpenstaat g={g} />
               <Kaart d={d} adres={a} />
               <Betalingen d={d} adres={a} g={g} vernieuw={vernieuw} />
               <VasteKortingen d={d} g={g} vernieuw={vernieuw} />
@@ -335,6 +355,14 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
             onKorting={(bedrag, reden) =>
               tik({ soort: "korting", bedrag, reden }, `Korting −${formatPrice(bedrag)}`)
             }
+            onVeranderd={vernieuw}
+            meerDanOpen
+          />
+          <VasteKortingDialoog
+            open={venster === "vast"}
+            adresId={deurAdres.id}
+            bestaand={g.vaste_kortingen.map((k) => k.naam)}
+            onSluit={() => setVenster(null)}
             onVeranderd={vernieuw}
           />
           <BedragDialoog
@@ -562,6 +590,162 @@ function Tegels({
 }
 
 // ---------------------------------------------------------------------------
+// Wat er openstaat, per regel
+// ---------------------------------------------------------------------------
+
+/** De open posten als rekening: per regel wat, wanneer en waarom, en het totaal. */
+function WatErOpenstaat({ g }: { g: GeldAdres }) {
+  const regels = rekening(g.delen);
+  return (
+    <div className="flex flex-col gap-1 rounded-[18px] bg-card px-5 py-[18px]">
+      <div className="pb-2">
+        <KolomKop>Wat er openstaat</KolomKop>
+      </div>
+      {regels.length === 0 ? (
+        <p className="text-[14px] text-muted-foreground">
+          {g.open < -0.005
+            ? `Er staat niets open; ${formatPrice(-g.open)} tegoed.`
+            : "Er staat niets open."}
+        </p>
+      ) : (
+        <>
+          {regels.map((r, i) => (
+            <div
+              key={i}
+              className="flex items-baseline gap-3 border-t border-muted py-2.5 text-[14px]"
+            >
+              <span className="min-w-0 flex-1">
+                {r.label} <span className="text-[12px] text-muted-foreground">{r.wanneer}</span>
+                {r.uitleg && (
+                  <span className="block text-[12px] text-muted-foreground">{r.uitleg}</span>
+                )}
+              </span>
+              <span className="shrink-0 tabular-nums">{formatPrice(r.bedrag)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between gap-3 border-t border-border pt-2.5 text-[14px] font-semibold">
+            <span>Totaal</span>
+            <span className="tabular-nums">{formatPrice(g.open)}</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** "12,50" of "12.50" als bedrag; null als het geen bedrag boven nul is. */
+function leesBedrag(tekst: string): number | null {
+  const n = Number(tekst.replace(/[€\s]/g, "").replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+}
+
+/**
+ * Een vaste korting aanmaken zonder dat er nu iets af gaat: een naam en een
+ * bedrag, die daarna aan de deur en op kantoor als knop klaarstaan.
+ */
+function VasteKortingDialoog({
+  open,
+  adresId,
+  bestaand,
+  onSluit,
+  onVeranderd,
+}: {
+  open: boolean;
+  adresId: string;
+  /** De namen van de vaste kortingen die er al zijn: geen twee dezelfde knoppen. */
+  bestaand: string[];
+  onSluit: () => void;
+  onVeranderd: () => void;
+}) {
+  const [naam, setNaam] = useState("");
+  const [bedrag, setBedrag] = useState("");
+  const [bezig, setBezig] = useState(false);
+  // Bij elke keer openen leeg beginnen (tijdens het tekenen, niet in een effect).
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setNaam("");
+      setBedrag("");
+    }
+  }
+
+  async function bewaar() {
+    const waarde = leesBedrag(bedrag);
+    if (!naam.trim()) {
+      toast.error("Geef de korting een naam.");
+      return;
+    }
+    if (!waarde) {
+      toast.error("Vul een bedrag in.");
+      return;
+    }
+    if (bestaand.some((n) => n.trim().toLowerCase() === naam.trim().toLowerCase())) {
+      toast.error(`Er staat al een vaste korting ${naam.trim()} bij dit adres.`);
+      return;
+    }
+    setBezig(true);
+    try {
+      // Een knop heeft een korte naam; een lange past daar niet op.
+      await maakVasteKorting(adresId, naam.trim().slice(0, 40), waarde);
+      toast.success(`${naam.trim()} −${formatPrice(waarde)} staat voortaan klaar bij dit adres`);
+      onVeranderd();
+      onSluit();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onSluit()}>
+      <PopupKader className="sm:max-w-sm">
+        <PopupKop
+          kleur="amber"
+          icoon={<Discount className="size-[22px]" />}
+          titel="Vaste korting"
+          subtitel="Staat voortaan klaar bij dit adres"
+        />
+        <PopupBody className="gap-3">
+          <VeldLabel label="Naam">
+            <input
+              autoFocus
+              className={dossierInvoer}
+              placeholder="bijv. Horren"
+              maxLength={40}
+              value={naam}
+              onChange={(e) => setNaam(e.target.value)}
+            />
+          </VeldLabel>
+          <VeldLabel label="Bedrag">
+            <input
+              className={dossierInvoer}
+              inputMode="decimal"
+              placeholder="€ 0"
+              value={bedrag}
+              onChange={(e) => setBedrag(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void bewaar()}
+            />
+          </VeldLabel>
+          <p className="text-[12.5px] text-muted-foreground">
+            Er gaat nu niets af. De korting staat als knop klaar bij het afrekenen.
+          </p>
+        </PopupBody>
+        <PopupVoet>
+          <Button variant="outline" className="rounded-full" onClick={onSluit}>
+            Annuleren
+          </Button>
+          <Button className="rounded-full" disabled={bezig} onClick={() => void bewaar()}>
+            Bewaren
+          </Button>
+        </PopupVoet>
+      </PopupKader>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // De geldkaart van dit adres
 // ---------------------------------------------------------------------------
 
@@ -577,11 +761,8 @@ function Kaart({ d, adres }: { d: Dossier; adres: Customer }) {
   const peil = d.wijk?.geld_peildatum ?? kaart.data?.wijk.peildatum ?? null;
   const peilMaand = peil ? peil.slice(0, 7) : null;
   const gepland = vooruitGepland(adres, data);
-  // De volgende beurt volgt de ronde, net als het jaar op het Overzicht.
-  const volgende = adres.inactief_op
-    ? null
-    : (d.volgendeBeurt?.ronde ??
-      (adres.interval_maanden ? volgendeFrequentieMaand(adres, d.dezeMaand) : null));
+  // Dezelfde maand als de oranje rand in het jaar op het Overzicht.
+  const volgende = volgendeBeurtMaand(adres, d.volgendeBeurt, d.dezeMaand);
   const pijl =
     "flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground";
 
@@ -623,7 +804,13 @@ function Kaart({ d, adres }: { d: Dossier; adres: Customer }) {
         >
           {MAANDEN_KORT.map((naam, i) => {
             const maand = `${jaar}-${String(i + 1).padStart(2, "0")}`;
-            const vak = vakVoor(adres, data, maand, peilMaand, undefined, gepland);
+            const kaartVak = vakVoor(adres, data, maand, peilMaand, undefined, gepland);
+            // Een ingeplande beurt buiten de frequentie om is toch de volgende,
+            // zoals in het jaar op het Overzicht: dan geen %, maar een open plek.
+            const vak: Vak =
+              maand === volgende && kaartVak.soort === "niet_aan_de_beurt"
+                ? { soort: "leeg" }
+                : kaartVak;
             const isVolgende =
               maand === volgende && (vak.soort === "leeg" || vak.soort === "vooruit");
             const teken = vak.soort === "leeg" && isVolgende ? "·" : vakTeken(vak);

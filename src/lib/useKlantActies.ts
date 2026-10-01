@@ -31,6 +31,8 @@ export function useKlantActies() {
     qc.invalidateQueries({ queryKey: ["streets"] });
     qc.invalidateQueries({ queryKey: ["customers"] });
     qc.invalidateQueries({ queryKey: ["straat_groepen"] });
+    // Een verhuizing maakt het wijzigingslog van het adres leeg.
+    qc.invalidateQueries({ queryKey: ["dossier-wijzigingen"] });
   }
 
   function meldUndo(bericht: string) {

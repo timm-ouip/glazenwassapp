@@ -53,7 +53,12 @@ import {
 } from "@/lib/klanten";
 import { fetchKlussen, staatOpen } from "@/lib/klussen";
 import { fetchMailbox } from "@/lib/mailbox";
-import { heeftKlantGegevens, maakNieuwAdres, plekAchteraan } from "@/lib/nieuwAdres";
+import {
+  AdresBestaatAl,
+  heeftKlantGegevens,
+  maakNieuwAdres,
+  plekAchteraan,
+} from "@/lib/nieuwAdres";
 import { fetchGeldAdres } from "@/lib/overzichten";
 import { zoekAdres, zoekStraten } from "@/lib/postcode";
 import { useRecht } from "@/lib/rechten";
@@ -125,6 +130,7 @@ export type PandWaarden = Pick<
   | "betaalmethode"
   | "created_at"
   | "geimporteerd"
+  | "postcode"
 > & { inactief_op?: string | null; inactief_reden?: string | null };
 
 function leegPand(): PandWaarden {
@@ -145,6 +151,8 @@ function leegPand(): PandWaarden {
     betaalmethode: null,
     created_at: new Date().toISOString(),
     geimporteerd: false,
+    // De postcode van een nieuw adres staat in de keuze (zie AdresKeuze).
+    postcode: "",
   };
 }
 
@@ -382,6 +390,17 @@ export function useDossier(invoer: DossierInvoer) {
   const [wijkId, setWijkId] = useState("");
   const [postcodeZelf, setPostcodeZelf] = useState(false);
   const [straatSuggesties, setStraatSuggesties] = useState<string[]>([]);
+  // --- Het postadres: postcode opzoeken en officiële straatnamen -------------
+  /** De postcode die de app zelf bij het postadres opzocht (geel, met Ongedaan). */
+  const [postcodeOpgezocht, setPostcodeOpgezocht] = useState<string | null>(null);
+  /** Na Ongedaan of zelf typen zoekt de app de postcode niet meer op. */
+  const [postcodeNietZoeken, setPostcodeNietZoeken] = useState(false);
+  /** Pas zoeken als je hier straat, nummer of plaats wijzigde: alleen kijken
+   *  in een dossier schrijft niets weg. */
+  const [postadresGewijzigd, setPostadresGewijzigd] = useState(false);
+  /** Wat je nu in het straatveld van het postadres typt (voor de voorstellen). */
+  const [klantStraatTyp, setKlantStraatTyp] = useState("");
+  const [klantStraatSuggesties, setKlantStraatSuggesties] = useState<string[]>([]);
   const [toevoegenBezig, setToevoegenBezig] = useState(false);
   const toevoegenBezigRef = useRef(false);
   const beginConcept = useRef<string>("");
@@ -452,6 +471,11 @@ export function useDossier(invoer: DossierInvoer) {
       setPandConcept(p);
       beginConcept.current = JSON.stringify({ c: LEEG_KLANT, p: { ...p, created_at: "" }, k });
       setPostcodeZelf(false);
+      setPostcodeOpgezocht(null);
+      setPostcodeNietZoeken(false);
+      setPostadresGewijzigd(false);
+      setKlantStraatTyp("");
+      setKlantStraatSuggesties([]);
       setTab("overzicht");
       setDialoog(null);
       // Een nieuw adres heeft nog niets om door te bladeren: op de telefoon
@@ -473,6 +497,18 @@ export function useDossier(invoer: DossierInvoer) {
   const adresTekst = (c: Customer) =>
     `${streets.find((s) => s.id === c.street_id)?.name ?? ""} ${formatNumber(c)}`.trim();
   const methode = effectieveMethode(pand, wijk);
+  /** Het pand voluit, voor de kaart: de echte straatnaam (niet de werknaam
+   *  van de wijklijst), het nummer, de postcode en de plaats. */
+  const routeAdres = (() => {
+    if (!adres || !adresStraat) return "";
+    const r = adresVanRegel(adres, adresStraat, wijk);
+    return [
+      `${r.straat} ${r.huisnummer}`.trim(),
+      [adres.postcode.trim(), r.plaats].filter(Boolean).join(" "),
+    ]
+      .filter(Boolean)
+      .join(", ");
+  })();
 
   // --- Opvragen voor menu en Overzicht --------------------------------------
   const vandaag = vandaagSleutel();
@@ -630,6 +666,9 @@ export function useDossier(invoer: DossierInvoer) {
   /** Klantgegevens wijzigen. Bestaat de klant nog niet, dan komt hij er nu bij. */
   function zetKlant(patch: Partial<KlantVelden>): Promise<void> {
     if (!magBewerken) return Promise.resolve();
+    if ("straat" in patch || "huisnummer" in patch || "plaats" in patch) {
+      setPostadresGewijzigd(true);
+    }
     // Welke klant en welk adres: die van nú, niet die van als de rij aan de
     // beurt is (dan kan er al een ander adres open staan).
     const bijKlant = klantIdRef.current;
@@ -967,9 +1006,10 @@ export function useDossier(invoer: DossierInvoer) {
     setTab("overzicht");
   }
 
-  /** Nog een adres aan deze klant hangen: het samenvoegen van twee regels. */
-  function koppelAdres(c: Customer) {
-    if (!magBewerken) return Promise.resolve();
+  /** Nog een adres aan deze klant hangen: het samenvoegen van twee regels.
+   *  Geeft terug of het gelukt is. */
+  function koppelAdres(c: Customer): Promise<boolean> {
+    if (!magBewerken) return Promise.resolve(false);
     const bijKlant = klantIdRef.current;
     const bijAdres = adresIdRef.current;
     return inRij(async () => {
@@ -980,15 +1020,15 @@ export function useDossier(invoer: DossierInvoer) {
           (bijAdres ? await maakKlant(bijAdres, {}) : null);
       } catch (e) {
         toast.error("Koppelen mislukt: " + fout(e));
-        return;
+        return false;
       }
-      if (!id) return;
+      if (!id) return false;
       const vorige = c.klant_id;
       try {
         await koppelKlant([c.id], id);
       } catch (e) {
         toast.error("Koppelen mislukt: " + fout(e));
-        return;
+        return false;
       }
       const pas = (k: string | null) => (old: Customer[] | undefined) =>
         old?.map((x) => (x.id === c.id ? { ...x, klant_id: k } : x));
@@ -1016,6 +1056,7 @@ export function useDossier(invoer: DossierInvoer) {
           : `${adresTekst(c)} hoort nu bij deze klant.`,
         { duration: 8000 },
       );
+      return true;
     });
   }
 
@@ -1151,6 +1192,213 @@ export function useDossier(invoer: DossierInvoer) {
     };
   }, [open, nieuweStraat, keuze.naam, keuzePlaats]);
 
+  // De postcode van het postadres opzoeken zodra straat, nummer en plaats er
+  // zijn. Alleen in een leeg veld, of over wat de app er zelf in zette: wat je
+  // zelf typte blijft altijd staan. Wat de app invult is geel, met Ongedaan.
+  const postcodeVrij =
+    !velden.postcode.trim() ||
+    (postcodeOpgezocht !== null && velden.postcode === postcodeOpgezocht);
+  const zoekPostcode =
+    open && magBewerken && postadresGewijzigd && !postcodeNietZoeken && postcodeVrij;
+  // Wisselt de klant in het open dossier (koppelen, Toevoegen), dan begint
+  // het opzoeken voor hem opnieuw.
+  const [postcodeVoorKlant, setPostcodeVoorKlant] = useState(klantId);
+  if (postcodeVoorKlant !== klantId) {
+    setPostcodeVoorKlant(klantId);
+    setPostcodeOpgezocht(null);
+    setPostcodeNietZoeken(false);
+    setPostadresGewijzigd(false);
+  }
+  useEffect(() => {
+    if (!zoekPostcode) return;
+    const straat = velden.straat.trim();
+    const huisnummer = velden.huisnummer.trim();
+    const plaats = velden.plaats.trim();
+    if (!straat || !huisnummer || !plaats) return;
+    const ac = new AbortController();
+    const t = setTimeout(() => {
+      void zoekAdres({ straat, huisnummer, plaats }, ac.signal).then((treffer) => {
+        if (!treffer || ac.signal.aborted) return;
+        if (treffer.postcode === velden.postcode) return;
+        setPostcodeOpgezocht(treffer.postcode);
+        void zetKlant({ postcode: treffer.postcode });
+      });
+    }, 400);
+    return () => {
+      clearTimeout(t);
+      ac.abort();
+    };
+    // De postcode zelf hoort er niet bij: na het invullen opnieuw zoeken geeft
+    // hetzelfde antwoord (zoekPostcode zegt al of het veld vrij is).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoekPostcode, velden.straat, velden.huisnummer, velden.plaats]);
+
+  // Officiële straatnamen voorstellen bij het postadres, terwijl je typt: de
+  // wijklijst gebruikt werknamen, en daarmee vindt de postcode niets.
+  useEffect(() => {
+    const plaats = velden.plaats.trim();
+    if (!open || !plaats || klantStraatTyp.trim().length < 2) return;
+    const ac = new AbortController();
+    const t = setTimeout(() => {
+      void zoekStraten(klantStraatTyp, plaats, ac.signal).then((namen) => {
+        if (!ac.signal.aborted) setKlantStraatSuggesties(namen ?? []);
+      });
+    }, 300);
+    return () => {
+      clearTimeout(t);
+      ac.abort();
+    };
+  }, [open, klantStraatTyp, velden.plaats]);
+
+  /** De postcode van het postadres, zelf getypt: die zoekt de app niet meer op. */
+  function zetKlantPostcode(tekst: string) {
+    setPostcodeOpgezocht(null);
+    setPostcodeNietZoeken(true);
+    return zetKlant({ postcode: tekst });
+  }
+
+  /** De opgezochte postcode weer weghalen; daarna zoekt de app hem niet meer op. */
+  function postcodeTerug() {
+    const opgezocht = postcodeOpgezocht;
+    setPostcodeOpgezocht(null);
+    setPostcodeNietZoeken(true);
+    if (opgezocht !== null && velden.postcode === opgezocht) void zetKlant({ postcode: "" });
+  }
+
+  /** Het adres dat je in de nieuw-stand invulde, als het al op de wijklijst staat. */
+  const bestaandAdres = useMemo(() => {
+    if (adresId || nieuweStraat || !keuze.straat) return undefined;
+    const nr = splitsHuisnummer(`${keuze.nummer.trim()}${keuze.toevoeging.trim()}`);
+    if (!nr) return undefined;
+    return customers.find(
+      (c) =>
+        c.street_id === keuze.straat &&
+        c.house_number === nr.house_number &&
+        (c.addition ?? "").trim().toLowerCase() === nr.addition.toLowerCase(),
+    );
+  }, [adresId, nieuweStraat, keuze.straat, keuze.nummer, keuze.toevoeging, customers]);
+
+  /**
+   * De nieuw-stand aan een adres hangen dat al op de wijklijst staat, in plaats
+   * van een tweede regel voor hetzelfde huis. De klant van dit dossier (of een
+   * nieuwe, met wat je invulde) wordt de klant van dat adres. Prijs, frequentie
+   * en notitie van dat adres blijven zoals ze waren.
+   */
+  async function koppelAanBestaand(doelId: string) {
+    if (!magBewerken || toevoegenBezigRef.current || adresIdRef.current) return;
+    setToevoegenBezig(true);
+    toevoegenBezigRef.current = true;
+    try {
+      let vers: Customer | null;
+      try {
+        vers = await fetchCustomer(doelId);
+      } catch (e) {
+        toast.error("Koppelen mislukt: " + fout(e));
+        return;
+      }
+      const doel = vers;
+      if (!doel) {
+        toast.error("Dat adres bestaat niet meer.");
+        return;
+      }
+      if (doel.inactief_op) {
+        toast.error(
+          "Dit adres staat bij Inactief (gestopt of verhuisd). Zet het eerst weer actief via Klanten → Inactief; dan blijven prijs en notities bewaard.",
+        );
+        return;
+      }
+      const tekst = adresTekst(doel);
+      const bestaandeKlant = klantIdRef.current;
+      const metGegevens = !bestaandeKlant && heeftKlantGegevens(concept);
+      const vorige = doel.klant_id ?? null;
+      // Hoort het adres al bij iemand anders, dan neemt deze klant het over:
+      // dat is samenvoegen, en dat vragen we eerst.
+      if ((bestaandeKlant || metGegevens) && vorige && vorige !== bestaandeKlant) {
+        const naam = klanten.find((k) => k.id === vorige)?.naam || "een andere klant";
+        const ja = await bevestig({
+          titel: "Dit adres hoort al bij een klant",
+          tekst: `${tekst} hoort nu bij ${naam}. Koppel je het, dan hoort het adres bij deze klant. De gegevens van ${naam} blijven bewaard.`,
+          bevestigLabel: "Koppelen",
+        });
+        if (!ja) return;
+      }
+      let nieuweKlant: Klant | null = null;
+      if (metGegevens) {
+        const s = straatVan(doel);
+        const pa = s ? adresVanRegel(doel, s, wijkVanStraat(s)) : null;
+        try {
+          nieuweKlant = await bewaarKlant(null, {
+            ...concept,
+            straat: concept.straat.trim() ? concept.straat : (pa?.straat ?? ""),
+            huisnummer: concept.huisnummer.trim() ? concept.huisnummer : (pa?.huisnummer ?? ""),
+            postcode: concept.postcode.trim() ? concept.postcode : doel.postcode,
+            plaats: concept.plaats.trim() ? concept.plaats : (pa?.plaats ?? ""),
+          });
+        } catch (e) {
+          toast.error("Koppelen mislukt: " + fout(e));
+          return;
+        }
+      }
+      const nieuw = bestaandeKlant ?? nieuweKlant?.id ?? null;
+      if (nieuw && nieuw !== vorige) {
+        try {
+          await koppelKlant([doel.id], nieuw);
+        } catch (e) {
+          if (nieuweKlant) await deleteKlant(nieuweKlant.id).catch(() => undefined);
+          toast.error("Koppelen mislukt: " + fout(e));
+          return;
+        }
+        const gemaakt = nieuweKlant;
+        pushUndo({
+          label: `Koppelen ${tekst}`,
+          undo: async () => {
+            await koppelKlant([doel.id], vorige);
+            if (gemaakt) await deleteKlant(gemaakt.id);
+            // Kijk je nog naar de klant die net is gemaakt, dan is die weg:
+            // het adres hoort weer bij wie het had (zoals bij maakKlant).
+            if (gemaakt && klantIdRef.current === gemaakt.id) {
+              zetKlantId(vorige);
+              setGemaakteKlant(null);
+            }
+            void qc.invalidateQueries({ queryKey: ["klanten"] });
+            herlaad();
+          },
+        });
+      }
+      const klantNu = nieuw ?? vorige;
+      // Eerst de verse lijsten, dan pas overschakelen (zoals bij Toevoegen).
+      await Promise.all([
+        qc.fetchQuery({ queryKey: ["customers"], queryFn: fetchCustomers, staleTime: 0 }),
+        qc.fetchQuery({ queryKey: ["klanten"], queryFn: fetchKlanten, staleTime: 0 }),
+      ]).catch(() => undefined);
+      laatstBekend.current = { ...doel, klant_id: klantNu };
+      if (nieuweKlant) {
+        setGemaakteKlant(nieuweKlant);
+        klantGemaaktOp.current = Date.now();
+      }
+      zetAdresId(doel.id);
+      zetKlantId(klantNu);
+      const pandIngevuld =
+        pandConcept.price > 0 ||
+        Boolean(pandConcept.note.trim()) ||
+        pandConcept.interval_maanden > 0;
+      const nietAangepast = pandIngevuld
+        ? " Prijs, frequentie en notitie van dat adres zijn niet aangepast."
+        : "";
+      toast.success(
+        nieuw && nieuw !== vorige
+          ? `Gekoppeld aan ${tekst}, dat al op de wijklijst stond.${nietAangepast}`
+          : `${tekst} stond al op de wijklijst.${nietAangepast}`,
+        { duration: 8000 },
+      );
+      invoer.onSaved(doel.id);
+      bewaard.current = false;
+    } finally {
+      setToevoegenBezig(false);
+      toevoegenBezigRef.current = false;
+    }
+  }
+
   /** Het adres aanmaken; daarna gaat het dossier verder in de bewaar-meteen-stand. */
   async function toevoegen() {
     if (!magBewerken || toevoegenBezig || adresIdRef.current) return;
@@ -1174,6 +1422,12 @@ export function useDossier(invoer: DossierInvoer) {
       toast.error("Vul een huisnummer in.");
       return;
     }
+    // Staat dit huis al op de wijklijst, dan koppelen we aan dat adres; prijs
+    // en frequentie zijn dan niet nodig, want die heeft dat adres al.
+    if (bestaandAdres) {
+      await koppelAanBestaand(bestaandAdres.id);
+      return;
+    }
     if (prijzenZien && !(pandConcept.price > 0)) {
       toast.error("Vul een prijs in.");
       return;
@@ -1185,6 +1439,8 @@ export function useDossier(invoer: DossierInvoer) {
     setToevoegenBezig(true);
     toevoegenBezigRef.current = true;
     const bestaandeKlant = klantIdRef.current;
+    /** Bleek het adres toch al te bestaan (de lijst hier was nog niet bij). */
+    let alBestaand: string | null = null;
     try {
       const uit = await maakNieuwAdres({
         straat: nieuweStraat ? { wijkId, naam: keuze.naam.trim() } : { id: keuze.straat },
@@ -1259,10 +1515,20 @@ export function useDossier(invoer: DossierInvoer) {
       invoer.onSaved(uit.adresId);
       bewaard.current = false;
     } catch (e) {
-      toast.error("Toevoegen mislukt: " + fout(e));
+      if (e instanceof AdresBestaatAl) alBestaand = e.adresId;
+      else toast.error("Toevoegen mislukt: " + fout(e));
     } finally {
       setToevoegenBezig(false);
       toevoegenBezigRef.current = false;
+    }
+    if (alBestaand) {
+      const ja = await bevestig({
+        titel: "Dit adres staat al op de wijklijst",
+        tekst:
+          "Er komt geen tweede regel voor hetzelfde huis. Koppel aan dat adres; prijs, frequentie en notitie van dat adres blijven zoals ze zijn.",
+        bevestigLabel: "Koppel aan dat adres",
+      });
+      if (ja) await koppelAanBestaand(alBestaand);
     }
   }
 
@@ -1298,6 +1564,20 @@ export function useDossier(invoer: DossierInvoer) {
         if (bewaard.current) invoer.onSaved();
       });
     }, 0);
+  }
+
+  /** De nieuw-stand verlaten voor een ander adres: staat er iets ingevuld
+   *  dat nog niet is toegevoegd, dan eerst vragen (zoals bij Sluiten). */
+  async function magNieuwVerlaten(): Promise<boolean> {
+    if (!conceptGewijzigd || !magBewerken) return true;
+    return bevestig({
+      titel: "Nog niet toegevoegd",
+      tekst:
+        "Je hebt een adres ingevuld maar nog niet toegevoegd. Ga je verder, dan is wat je invulde weg.",
+      bevestigLabel: "Verder",
+      annuleerLabel: "Terug",
+      gevaarlijk: true,
+    });
   }
 
   function naarTab(t: DossierTab) {
@@ -1342,6 +1622,7 @@ export function useDossier(invoer: DossierInvoer) {
     telefoon,
     email,
     whatsappNummer,
+    routeAdres,
     kanMailen,
     kanBetalen,
     opRouteVandaag: volgendeBeurt.data?.datum === vandaag,
@@ -1367,10 +1648,19 @@ export function useDossier(invoer: DossierInvoer) {
     setDialoog,
     // bewaren
     zetKlant,
+    zetKlantPostcode,
+    postcodeOpgezocht:
+      postcodeOpgezocht !== null && velden.postcode === postcodeOpgezocht
+        ? postcodeOpgezocht
+        : null,
+    postcodeTerug,
+    typKlantStraat: setKlantStraatTyp,
+    klantStraatSuggesties,
     zetPand,
     zetOverslaan,
     zetMaandwerk,
     openAdres,
+    magNieuwVerlaten,
     koppelAdres,
     maakLos,
     stop,
@@ -1384,6 +1674,8 @@ export function useDossier(invoer: DossierInvoer) {
     nieuweStraat,
     dubbeleStraat,
     straatSuggesties,
+    bestaandAdres,
+    koppelAanBestaand,
     toevoegen,
     toevoegenBezig,
   };

@@ -16,6 +16,9 @@ export type WijzigingContext = {
   klantNamen?: Map<string, string>;
   /** markering-sleutel → naam (voor "Kleur gewijzigd naar Geel"). */
   markeringNamen?: Map<string, string>;
+  /** De klanten die van een adres verhuisden: de klant die daarna komt is
+   *  een nieuwe bewoner, en de naam van de vorige blijft weg. */
+  verhuisdeKlanten?: Set<string>;
 };
 
 export type WijzigingRegel = Wijziging & { tekst: string };
@@ -250,6 +253,8 @@ export function beschrijfWijziging(
   const b = waardeTekst(w.veld, na, ctx);
 
   if (w.veld === "verplaatst") return `Verplaatst van ${a} naar ${b}`;
+  // De klant verhuisde: alles van vóór die dag is verborgen (verhuizing_log_legen).
+  if (w.veld === "verhuisd") return "Verhuisd: geschiedenis van de vorige bewoner verborgen";
   if (w.herroept) {
     if (w.veld === "overslaan" || ZONDER_WAARDE.has(w.veld) || !b) return `${label} teruggezet`;
     return `${label} teruggezet naar ${b}`;
@@ -260,6 +265,7 @@ export function beschrijfWijziging(
   const hoe = w.bron === "systeem" ? "automatisch gewijzigd" : "gewijzigd";
   if (w.veld === "eigen_blok") return `Eigen blok ${b === "aan" ? "aangezet" : "uitgezet"}`;
   if (w.veld === "klant") {
+    if (b && ctx.verhuisdeKlanten?.has(tekst(voor.klant_id))) return `Nieuwe bewoner: ${b}`;
     if (!a) return `Klant gekoppeld: ${b}`;
     if (!b) return `Klant losgekoppeld (was ${a})`;
     return `Andere klant: ${b} (was ${a})`;
@@ -281,6 +287,13 @@ export function groepeerWijzigingen(
   rijen: Wijziging[],
   ctx: WijzigingContext = {},
 ): WijzigingGroep[] {
+  const verhuisdeKlanten = new Set(
+    rijen
+      .filter((w) => w.veld === "verhuisd" && !w.teruggedraaid_op)
+      .map((w) => tekst(alsObject(w.voor).klant_id))
+      .filter(Boolean),
+  );
+  const zinCtx = verhuisdeKlanten.size > 0 ? { ...ctx, verhuisdeKlanten } : ctx;
   const groepen = new Map<string, WijzigingGroep>();
   const gesorteerd = [...rijen].sort((x, y) => (x.op < y.op ? 1 : x.op > y.op ? -1 : 0));
   for (const w of gesorteerd) {
@@ -306,7 +319,7 @@ export function groepeerWijzigingen(
       };
       groepen.set(sleutel, g);
     }
-    g.regels.push({ ...w, tekst: beschrijfWijziging(w, ctx) });
+    g.regels.push({ ...w, tekst: beschrijfWijziging(w, zinCtx) });
     if (kanOngedaan(w)) g.ongedaanIds.push(w.id);
   }
   for (const g of groepen.values()) {
@@ -355,7 +368,13 @@ export async function fetchWijzigingen(
   customerId: string,
   klantId: string | null,
 ): Promise<WijzigingGroep[]> {
-  let vraag = supabase.from("wijzigingen").select("*").order("op", { ascending: false }).limit(500);
+  // Wat een verhuizing verborg (verborgen_door) hoort bij de vorige bewoner.
+  let vraag = supabase
+    .from("wijzigingen")
+    .select("*")
+    .is("verborgen_door", null)
+    .order("op", { ascending: false })
+    .limit(500);
   vraag = klantId
     ? vraag.or(`customer_id.eq.${customerId},klant_id.eq.${klantId}`)
     : vraag.eq("customer_id", customerId);

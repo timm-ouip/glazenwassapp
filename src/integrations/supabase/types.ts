@@ -3916,6 +3916,7 @@ export type Database = {
           teruggedraaid_naam: string | null;
           teruggedraaid_op: string | null;
           veld: string;
+          verborgen_door: string | null;
           voor: Json;
         };
         Insert: {
@@ -3935,6 +3936,7 @@ export type Database = {
           teruggedraaid_naam?: string | null;
           teruggedraaid_op?: string | null;
           veld: string;
+          verborgen_door?: string | null;
           voor?: Json;
         };
         Update: {
@@ -3954,6 +3956,7 @@ export type Database = {
           teruggedraaid_naam?: string | null;
           teruggedraaid_op?: string | null;
           veld?: string;
+          verborgen_door?: string | null;
           voor?: Json;
         };
         Relationships: [
@@ -3977,6 +3980,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "klanten";
             referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "wijzigingen_verborgen_door_fkey";
+            columns: ["verborgen_door"];
+            isOneToOne: false;
+            referencedRelation: "wijzigingen";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -4066,7 +4076,10 @@ export type Database = {
         Args: { bedrijf: string; nu_ook: boolean };
         Returns: number;
       };
-      facturen_lijst: { Args: { tot?: string | null; vanaf?: string | null }; Returns: Json };
+      facturen_lijst: {
+        Args: { klant?: string | null; tot?: string | null; vanaf?: string | null };
+        Returns: Json;
+      };
       facturen_maandconcepten: { Args: never; Returns: number };
       facturen_vangnet: {
         Args: never;
@@ -4483,6 +4496,14 @@ export type Database = {
       };
       wa_toestemming_bestaande_klanten_terug: {
         Args: { op: string };
+        Returns: number;
+      };
+      verhuizing_log_legen: {
+        Args: { adressen: string[]; voor_bedrijf?: string | null };
+        Returns: number;
+      };
+      verhuizing_log_terug: {
+        Args: { adressen: string[]; moment: string; voor_bedrijf?: string | null };
         Returns: number;
       };
       wa_toestemming_telling: {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { jaarVakken, volgendeBeurtMaand } from "@/lib/dossier";
 import { vakTeken, vakVoor, vooruitGepland } from "@/lib/geldkaart";
 import type { Customer } from "@/lib/klanten";
 import type { KaartAdres, KaartPost } from "@/lib/overzichten";
@@ -64,6 +65,29 @@ describe("vakVoor en vakTeken", () => {
     );
     expect(teken(data, "2026-08")).toBe("B");
     expect(teken(data, "2026-10", ["2026-10"])).toBe("B");
+  });
+});
+
+describe("geldkaart en het jaar op het Overzicht", () => {
+  test("1× per 3 maanden: % buiten de frequentie, de volgende beurt leeg", () => {
+    const kwartaal = {
+      ...adres,
+      interval_maanden: 3,
+      ritme: 3,
+      overslaan: [],
+      start_maand: "2026-09",
+    } as unknown as Customer;
+    const volgende = volgendeBeurtMaand(kwartaal, null, "2026-10");
+    const vak = (maand: string) => vakVoor(kwartaal, undefined, maand, "2026-09");
+    expect(volgende).toBe("2026-12");
+    // Het jaar op het Overzicht zet de oranje rand op dezelfde maand.
+    const jaar = jaarVakken(2026, kwartaal, [], volgende, "2026-10");
+    expect(jaar.find((v) => v.status === "volgende")?.maand).toBe(volgende!);
+    // Op de geldkaart is die maand nog open (daar komt de "·"), de rest %.
+    expect(vak("2026-12").soort).toBe("leeg");
+    expect(vakTeken(vak("2026-10"))).toBe("%");
+    expect(vakTeken(vak("2026-11"))).toBe("%");
+    expect(vakTeken(vak("2026-09"))).toBe("");
   });
 });
 

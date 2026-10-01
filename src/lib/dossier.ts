@@ -200,6 +200,21 @@ export function volgendeFrequentieMaand(
   return null;
 }
 
+/**
+ * De maand van de volgende beurt: de ronde van wat er op de planning staat,
+ * en anders de eerstvolgende maand van de frequentie. Geen bij een inactief
+ * adres. Het jaar op het Overzicht en de geldkaart op Geld gebruiken allebei
+ * deze, zodat de oranje rand altijd op dezelfde maand staat.
+ */
+export function volgendeBeurtMaand(
+  c: Parameters<typeof volgendeFrequentieMaand>[0] & { inactief_op?: string | null },
+  beurt: Pick<Beurt, "ronde"> | null,
+  dezeMaand: string,
+): string | null {
+  if (c.inactief_op) return null;
+  return beurt?.ronde ?? (c.interval_maanden ? volgendeFrequentieMaand(c, dezeMaand) : null);
+}
+
 export type JaarStatus = "gewassen" | "volgende" | "overslaan" | "beurt" | "geen";
 
 export interface JaarVak {

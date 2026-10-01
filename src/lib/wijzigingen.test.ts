@@ -28,6 +28,7 @@ const regel = (deel: Partial<Wijziging>): Wijziging => ({
   teruggedraaid_op: null,
   teruggedraaid_door: null,
   teruggedraaid_naam: null,
+  verborgen_door: null,
   ...deel,
 });
 
@@ -156,5 +157,41 @@ describe("extra werk en meerprijs", () => {
     const groepen = groepeerWijzigingen([werk, prijs]);
     expect(groepen).toHaveLength(2);
     for (const g of groepen) expect([...g.ongedaanIds].sort()).toEqual([werk.id, prijs.id].sort());
+  });
+});
+
+describe("verhuizing", () => {
+  const verhuisd = (deel: Partial<Wijziging> = {}) =>
+    regel({
+      veld: "verhuisd",
+      bron: "systeem",
+      voor: { klant_id: "k1" },
+      op: "2026-09-20T10:00:00+00:00",
+      ...deel,
+    });
+  const wissel = regel({
+    veld: "klant",
+    voor: { klant_id: "k1" },
+    na: { klant_id: "k2" },
+    op: "2026-09-25T10:00:00+00:00",
+  });
+  const klantNamen = new Map([
+    ["k1", "Jansen"],
+    ["k2", "De Vries"],
+  ]);
+  const teksten = (rijen: Wijziging[]) =>
+    groepeerWijzigingen(rijen, { klantNamen }).flatMap((g) => g.regels.map((r) => r.tekst));
+
+  test("de verhuisd-regel en de nieuwe bewoner, zonder de naam van de vorige", () => {
+    expect(teksten([verhuisd(), wissel])).toEqual([
+      "Nieuwe bewoner: De Vries",
+      "Verhuisd: geschiedenis van de vorige bewoner verborgen",
+    ]);
+  });
+
+  test("teruggedraaide verhuizing: weer een gewone klantwissel", () => {
+    expect(teksten([verhuisd({ teruggedraaid_op: "2026-09-21T10:00:00+00:00" }), wissel])[0]).toBe(
+      "Andere klant: De Vries (was Jansen)",
+    );
   });
 });

@@ -83,7 +83,7 @@ export function SluitKnop({ d, className }: { d: Dossier; className?: string }) 
 }
 
 /**
- * Bellen, Mailen, Appen en Betalen…: in de kop van het Overzicht en op de
+ * Bellen, Mailen, Appen, Route en Betalen…: in de kop van het Overzicht en op de
  * telefoon bovenaan het menu. Wat niet kan (geen nummer, geen mailbox) staat
  * uit, met de reden erbij als je er met de muis op staat.
  */
@@ -95,10 +95,10 @@ export function ContactKnoppen({
   telefoonMenu?: boolean;
 }) {
   const knop = telefoonMenu
-    ? "inline-flex h-11 flex-1 items-center justify-center rounded-full border border-border bg-card px-3 text-[14px] text-foreground active:bg-muted aria-disabled:pointer-events-none aria-disabled:opacity-50"
+    ? "inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-full border border-border bg-card px-1 text-[14px] text-foreground active:bg-muted aria-disabled:pointer-events-none aria-disabled:opacity-50"
     : `${kopKnop} aria-disabled:pointer-events-none aria-disabled:opacity-50`;
   const primair = telefoonMenu
-    ? "inline-flex h-11 flex-1 items-center justify-center rounded-full bg-primary px-3 text-[14px] font-semibold text-primary-foreground"
+    ? "inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-full bg-primary px-1 text-[14px] font-semibold text-primary-foreground"
     : kopKnopPrimair;
   return (
     <>
@@ -135,6 +135,22 @@ export function ContactKnoppen({
         className={knop}
       >
         Appen
+      </a>
+      {/* De route naar het pand, met de echte straatnaam en de postcode:
+          met de werknaam van de wijklijst vindt de kaart het adres niet. */}
+      <a
+        href={
+          d.routeAdres
+            ? `https://maps.google.com/?daddr=${encodeURIComponent(d.routeAdres)}`
+            : undefined
+        }
+        target="_blank"
+        rel="noreferrer"
+        aria-disabled={!d.routeAdres}
+        title={d.routeAdres ? `Route naar ${d.routeAdres}` : "Geen adres bekend"}
+        className={knop}
+      >
+        Route
       </a>
       {d.kanBetalen && (
         <button type="button" onClick={() => d.setDialoog("betalen")} className={primair}>

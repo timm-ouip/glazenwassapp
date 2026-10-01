@@ -372,15 +372,40 @@ const ZELFDE_MOMENT_MS = 2 * 60 * 1000;
  * bij de beurt).
  */
 export function maakGeschiedenis(
-  b: GeschiedenisBronnen,
+  bronnen: GeschiedenisBronnen,
   r: GeschiedenisRechten,
 ): GeschiedenisRegel[] {
+  // Na een verhuizing begint de nieuwe bewoner leeg: de beurten, het geld, de
+  // geldloper en Paaltje van vóór de verhuizing horen bij de vorige bewoner.
+  // Het log zelf laat de database al weg (verborgen_door). Draai je de
+  // verhuizing terug, dan is de regel teruggedraaid en komt alles terug.
+  const verhuisdOp = Math.max(
+    ...bronnen.wijzigingen
+      .flatMap((g) => g.regels)
+      .filter((x) => x.veld === "verhuisd" && !x.teruggedraaid_op)
+      .map((x) => Date.parse(x.op))
+      .filter((t) => !Number.isNaN(t)),
+  );
+  const verhuisdag = Number.isFinite(verhuisdOp) ? dagVan(new Date(verhuisdOp).toISOString()) : "";
+  const naVerhuizing = (iso: string) => !(Date.parse(iso) < verhuisdOp);
+  const b: GeschiedenisBronnen = verhuisdag
+    ? {
+        ...bronnen,
+        beurten: bronnen.beurten.filter((x) => x.datum > verhuisdag),
+        gebeurtenissen: bronnen.gebeurtenissen.filter((g) => naVerhuizing(g.op)),
+        geldloper: bronnen.geldloper.filter((w) => naVerhuizing(w.op)),
+        paaltje: bronnen.paaltje.filter((p) => naVerhuizing(p.created_at)),
+      }
+    : bronnen;
+
   // Ook het terugdraaien door Paaltje schrijft (via de server) in het log.
   const paaltjeMomenten = b.paaltje.flatMap((p) =>
     [p.created_at, p.teruggedraaid_op].filter((x): x is string => !!x).map((x) => Date.parse(x)),
   );
+  // De verhuisd-regel (het log is verborgen) is nooit dubbel: die blijft.
   const vanPaaltje = (g: WijzigingGroep) =>
     g.bron !== "app" &&
+    !g.regels.some((x) => x.veld === "verhuisd") &&
     paaltjeMomenten.some((t) => Math.abs(Date.parse(g.op) - t) <= ZELFDE_MOMENT_MS);
 
   // "Niet gewassen" van een geldloper: staat het nog, dan hoort het bij de

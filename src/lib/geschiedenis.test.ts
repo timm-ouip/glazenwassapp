@@ -66,6 +66,7 @@ const groep = (deel: Partial<WijzigingGroep>): WijzigingGroep => ({
       teruggedraaid_op: null,
       teruggedraaid_door: null,
       teruggedraaid_naam: null,
+      verborgen_door: null,
       tekst: "Prijs gewijzigd van € 11,50 naar € 12,50",
     },
   ],
@@ -251,5 +252,52 @@ describe("perMaand", () => {
       ["2026-09", 2],
       ["2026-07", 1],
     ]);
+  });
+});
+
+describe("verhuizing", () => {
+  const verhuisdGroep = (teruggedraaid_op: string | null) => {
+    const g = groep({ tabel: "customers", bron: "systeem", op: "2026-09-20T10:00:00Z" });
+    return {
+      ...g,
+      regels: [
+        {
+          ...g.regels[0]!,
+          id: "v1",
+          tabel: "customers",
+          veld: "verhuisd",
+          voor: { klant_id: "k1" },
+          na: {},
+          bron: "systeem",
+          teruggedraaid_op,
+          tekst: "Verhuisd: geschiedenis van de vorige bewoner verborgen",
+        },
+      ],
+      ongedaanIds: [],
+    };
+  };
+  const paaltje = (created_at: string) => ({
+    id: created_at,
+    created_at,
+    soort: "overslaan",
+    maanden: ["2026-10"],
+    automatisch: false,
+    teruggedraaid_op: null,
+  });
+  const bronnen = (teruggedraaid: string | null) =>
+    leeg({
+      wijzigingen: [verhuisdGroep(teruggedraaid)],
+      beurten: [beurt({ datum: "2026-09-20" }), beurt({ datum: "2026-09-25" })],
+      paaltje: [paaltje("2026-09-18T10:00:00Z"), paaltje("2026-09-22T10:00:00Z")],
+    });
+
+  test("wat van vóór de verhuizing is, staat er niet meer", () => {
+    const regels = maakGeschiedenis(bronnen(null), ALLES);
+    expect(regels.map((x) => x.datum)).toEqual(["2026-09-25", "2026-09-22", "2026-09-20"]);
+    expect(regels.filter((x) => x.soort === "beurt")).toHaveLength(1);
+  });
+
+  test("teruggedraaid: alles is er weer", () => {
+    expect(maakGeschiedenis(bronnen("2026-09-21T10:00:00Z"), ALLES)).toHaveLength(5);
   });
 });

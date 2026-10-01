@@ -118,10 +118,16 @@ function leesFactuur(x: Factuur): Factuur {
   };
 }
 
-export async function fetchFacturen(vanaf?: string, tot?: string): Promise<Factuur[]> {
+/** Alle facturen, of alleen die van één klant (`klantId`). */
+export async function fetchFacturen(
+  vanaf?: string,
+  tot?: string,
+  klantId?: string,
+): Promise<Factuur[]> {
   const { data, error } = await supabase.rpc("facturen_lijst", {
     vanaf: vanaf ?? null,
     tot: tot ?? null,
+    klant: klantId ?? null,
   });
   if (error) throw error;
   return ((data ?? []) as unknown as Factuur[]).map(leesFactuur);

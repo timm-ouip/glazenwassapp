@@ -161,6 +161,11 @@ export function DossierMenu({ d }: { d: Dossier }) {
 /** Op de telefoon: het menu als eerste scherm. */
 export function DossierMenuTelefoon({ d }: { d: Dossier }) {
   const notitie = [d.velden.notitie.trim(), d.pand.note.trim()].filter(Boolean).join(" · ");
+  const werk = d.openKlussen;
+  /** "2 open · € 45,00": het bedrag alleen voor wie prijzen mag zien. */
+  const werkInfo = `${werk.length} open${
+    d.prijzenZien ? ` · ${formatPrice(werk.reduce((som, k) => som + k.prijs, 0))}` : ""
+  }`;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div data-sleepgreep="" className="flex shrink-0 items-start gap-2 px-4 pb-3 pt-6">
@@ -201,6 +206,18 @@ export function DossierMenuTelefoon({ d }: { d: Dossier }) {
               <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
             </button>
           ))}
+          {/* Het openstaande werk staat op het Overzicht; hier alvast hoeveel. */}
+          {werk.length > 0 && (
+            <button
+              type="button"
+              onClick={() => d.naarTab("overzicht")}
+              className="flex h-14 w-full items-center gap-2 px-4 text-left text-[15px] active:bg-muted"
+            >
+              <span className="flex-1 truncate">Werk</span>
+              <span className="text-[13px] tabular-nums text-muted-foreground">{werkInfo}</span>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </button>
+          )}
         </div>
         <div className="grow" />
         <StopKnop d={d} className="w-full" />

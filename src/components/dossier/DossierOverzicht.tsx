@@ -7,7 +7,7 @@
  * indeling, met bovenaan de straat en het huisnummer, en rechtsonder één
  * knop "Toevoegen".
  */
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   IconCheck as Check,
@@ -69,9 +69,10 @@ import {
   korteDatum,
   laatsteBetaling,
   openOmschrijving,
-  volgendeFrequentieMaand,
+  volgendeBeurtMaand,
 } from "@/lib/dossier";
 import { KLANTTYPEN } from "@/lib/facturen";
+import { netjesPostcode } from "@/lib/schoonschrift";
 import {
   formatPrice,
   intervalLabels,
@@ -79,12 +80,14 @@ import {
   komendeMaanden,
   leesDuur,
   leesRitmeWaarde,
+  maandSleutel,
   maandwerkMaanden,
   ritmeLabel,
   ritmeMaanden,
   ritmeWaarde,
   tintStip,
   toonMaand,
+  toonMaandKort,
   vorigeMaand,
   type Maandwerk,
 } from "@/lib/klanten";
@@ -180,9 +183,31 @@ function KolomKlant({ d }: { d: Dossier }) {
   const zakelijk = v.klanttype !== "particulier";
   const geenMail =
     !v.email.trim() && !v.email2.trim() && !v.factuur_email.trim() && Boolean(d.klant);
+  // Sinds wanneer dit adres op de lijst staat. Bij een wijk die in één keer
+  // is geïmporteerd is dat de dag van de import; verder weet de app het niet.
+  const sinds = d.adres ? maandSleutel(new Date(d.adres.created_at)) : "";
+  const klantSinds = sinds
+    ? `${d.adres?.geimporteerd ? "geïmporteerd op" : "klant sinds"} ${toonMaandKort(sinds)} ${sinds.slice(0, 4)}`
+    : "";
+  const uitleg = KLANTTYPEN.find((k) => k.waarde === v.klanttype)?.uitleg;
+  // Plaatsen die al gebruikt worden, de meest voorkomende eerst: een
+  // glazenwasser werkt meestal in één stad.
+  const plaatsen = useMemo(() => {
+    const telling = new Map<string, number>();
+    for (const p of [...d.klanten.map((k) => k.plaats), ...d.districts.map((w) => w.plaats)]) {
+      const t = p.trim();
+      if (t) telling.set(t, (telling.get(t) ?? 0) + 1);
+    }
+    return [...telling.entries()].sort((a, b) => b[1] - a[1]).map(([p]) => p);
+  }, [d.klanten, d.districts]);
   return (
     <div className="flex min-w-0 flex-col gap-[14px]">
-      <KolomKop>De klant</KolomKop>
+      <div className="flex items-baseline justify-between gap-3">
+        <KolomKop>De klant</KolomKop>
+        {klantSinds && (
+          <span className="truncate text-[12px] text-muted-foreground">{klantSinds}</span>
+        )}
+      </div>
       {d.zonderAdres && <AdresKiezen d={d} />}
       <DossierKaart>
         <DossierVeld
@@ -229,14 +254,19 @@ function KolomKlant({ d }: { d: Dossier }) {
           disabled={uit}
           onBewaar={(t) => d.zetKlant({ email2: t })}
         />
-        <Pillen
-          groot
-          keuzes={KLANTTYPEN.map((k) => ({ waarde: k.waarde, label: k.label }))}
-          waarde={v.klanttype}
-          onChange={(w) => void d.zetKlant({ klanttype: w })}
-          disabled={uit}
-          label="Klanttype"
-        />
+        {/* Het klanttype bepaalt hoe de factuur rekent: een particulier ziet
+            prijzen inclusief btw, een bedrijf of VvE exclusief. */}
+        <div className="flex flex-col gap-1.5">
+          <Pillen
+            groot
+            keuzes={KLANTTYPEN.map((k) => ({ waarde: k.waarde, label: k.label }))}
+            waarde={v.klanttype}
+            onChange={(w) => void d.zetKlant({ klanttype: w })}
+            disabled={uit}
+            label="Klanttype"
+          />
+          {uitleg && <p className="text-[12px] text-muted-foreground">{uitleg}</p>}
+        </div>
         {geenMail && (
           <p className="rounded-[12px] bg-tint-geel px-3 py-2 text-[12.5px]">
             Nergens een e-mailadres: er kan geen aankondiging naartoe, en een factuur blijft als
@@ -246,7 +276,9 @@ function KolomKlant({ d }: { d: Dossier }) {
       </DossierKaart>
 
       {/* Zoals in het ontwerp direct onder de klant; de extra velden komen daarna. */}
-      {!d.zonderAdres && <OokVanDezeKlant d={d} />}
+      {/* In de nieuw-stand alleen als er al een klant is: die kun je dan aan
+          een adres hangen dat al op de wijklijst staat. */}
+      {(!d.zonderAdres || d.klantId) && <OokVanDezeKlant d={d} />}
 
       {zakelijk && (
         <DossierKaart>
@@ -294,6 +326,8 @@ function KolomKlant({ d }: { d: Dossier }) {
             label="Straat"
             waarde={v.straat}
             disabled={uit}
+            list="dossier-postadres-straten"
+            onTyp={d.typKlantStraat}
             onBewaar={(t) => d.zetKlant({ straat: t })}
           />
           <DossierVeld
@@ -309,15 +343,43 @@ function KolomKlant({ d }: { d: Dossier }) {
             placeholder="1234 AB"
             waarde={v.postcode}
             disabled={uit}
-            onBewaar={(t) => d.zetKlant({ postcode: t })}
+            onBewaar={(t) => d.zetKlantPostcode(t)}
           />
           <DossierVeld
             label="Plaats"
             waarde={v.plaats}
             disabled={uit}
+            list="dossier-plaatsen"
             onBewaar={(t) => d.zetKlant({ plaats: t })}
           />
         </div>
+        {/* Wat de app zelf opzocht: geel, en terug te draaien. */}
+        {d.postcodeOpgezocht && (
+          <p className="flex items-center gap-3 rounded-[12px] bg-tint-amber px-3 py-2 text-[12.5px] text-tint-amber-ink">
+            <span className="min-w-0 flex-1">
+              Postcode {d.postcodeOpgezocht} opgezocht bij het adres
+            </span>
+            {!uit && (
+              <button
+                type="button"
+                className="shrink-0 font-medium underline-offset-2 hover:underline"
+                onClick={d.postcodeTerug}
+              >
+                Ongedaan maken
+              </button>
+            )}
+          </p>
+        )}
+        <datalist id="dossier-postadres-straten">
+          {d.klantStraatSuggesties.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+        <datalist id="dossier-plaatsen">
+          {plaatsen.map((p) => (
+            <option key={p} value={p} />
+          ))}
+        </datalist>
       </DossierKaart>
     </div>
   );
@@ -443,6 +505,26 @@ function AdresKiezen({ d }: { d: Dossier }) {
           />
         </VeldLabel>
       </div>
+      {d.bestaandAdres && (
+        <p className="rounded-[12px] bg-tint-geel px-3 py-2 text-[12.5px]">
+          {d.adresTekst(d.bestaandAdres)} staat al op de wijklijst
+          {d.bestaandAdres.klant_id
+            ? `, bij ${d.klanten.find((x) => x.id === d.bestaandAdres?.klant_id)?.naam || "een andere klant"}`
+            : ""}
+          . Koppel aan dat adres in plaats van er een tweede regel van te maken; prijs en frequentie
+          van dat adres blijven staan.{" "}
+          {d.magBewerken && (
+            <button
+              type="button"
+              className="font-medium underline underline-offset-2 disabled:opacity-50"
+              disabled={d.toevoegenBezig}
+              onClick={() => void d.koppelAanBestaand(d.bestaandAdres!.id)}
+            >
+              Koppel aan dat adres
+            </button>
+          )}
+        </p>
+      )}
     </DossierKaart>
   );
 }
@@ -461,14 +543,20 @@ function OokVanDezeKlant({ d }: { d: Dossier }) {
     <DossierKaart className="gap-1.5">
       <KaartLabel>Ook van deze klant</KaartLabel>
       {d.andereAdressen.length === 0 && (
-        <div className="text-[14px] text-muted-foreground">Geen andere adressen</div>
+        <div className="text-[14px] text-muted-foreground">
+          {d.zonderAdres ? "Nog geen adres" : "Geen andere adressen"}
+        </div>
       )}
       {d.andereAdressen.map((c) => (
         <div key={c.id} className="flex items-center gap-2">
           <button
             type="button"
             className={cn(dossierLink, "min-w-0 flex-1 truncate text-[15px]")}
-            onClick={() => d.openAdres(c)}
+            onClick={() =>
+              void (async () => {
+                if (!d.zonderAdres || (await d.magNieuwVerlaten())) d.openAdres(c);
+              })()
+            }
           >
             {d.adresTekst(c)}
           </button>
@@ -492,7 +580,8 @@ function OokVanDezeKlant({ d }: { d: Dossier }) {
               type="button"
               className="mt-1 inline-flex items-center gap-1 self-start text-[13px] text-muted-foreground hover:text-foreground"
             >
-              <Link2 className="size-3.5" /> nog een adres koppelen
+              <Link2 className="size-3.5" />{" "}
+              {d.zonderAdres ? "een adres van de wijklijst koppelen" : "nog een adres koppelen"}
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-80 p-0" align="start">
@@ -507,7 +596,13 @@ function OokVanDezeKlant({ d }: { d: Dossier }) {
                       value={`${d.adresTekst(c)} ${wijkNaamVan(c.street_id)} ${c.id}`}
                       onSelect={() => {
                         setOpen(false);
-                        void d.koppelAdres(c);
+                        // In de nieuw-stand heeft het dossier nog geen adres:
+                        // dan opent het het adres dat je net koppelde.
+                        const zonderAdres = d.zonderAdres;
+                        void (async () => {
+                          if (zonderAdres && !(await d.magNieuwVerlaten())) return;
+                          if ((await d.koppelAdres(c)) && zonderAdres) d.openAdres(c);
+                        })();
                       }}
                     >
                       <span className="truncate">{d.adresTekst(c)}</span>
@@ -692,9 +787,40 @@ function KolomWassen({ d }: { d: Dossier }) {
         </div>
       </DossierKaart>
 
+      {!d.zonderAdres && (
+        <DossierKaart>
+          <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-2.5">
+            <VeldLabel label="Het pand">
+              <span
+                className="flex h-10 min-w-0 items-center truncate text-[15px] text-foreground"
+                title={d.routeAdres}
+              >
+                {d.routeAdres || "—"}
+              </span>
+            </VeldLabel>
+            {/* De postcode hoort bij het pand, niet bij de bewoner: hij staat
+                op de wijklijst en de route gebruikt hem. */}
+            <DossierVeld
+              label="Postcode"
+              placeholder="1234 AB"
+              waarde={p.postcode}
+              disabled={uit}
+              onBewaar={(t) => void d.zetPand({ postcode: netjesPostcode(t) })}
+            />
+          </div>
+        </DossierKaart>
+      )}
+
       {d.openKlussen.length > 0 && (
         <DossierKaart className="gap-2">
-          <KaartLabel>Openstaand werk</KaartLabel>
+          <div className="flex items-baseline justify-between gap-3">
+            <KaartLabel>Openstaand werk</KaartLabel>
+            {d.prijzenZien && (
+              <span className="text-[13px] font-semibold tabular-nums">
+                {formatPrice(d.openKlussen.reduce((som, k) => som + k.prijs, 0))}
+              </span>
+            )}
+          </div>
           {d.openKlussen.map((k) => (
             <div key={k.id} className="flex justify-between gap-3 text-[15px]">
               <span className="min-w-0 truncate">
@@ -725,7 +851,7 @@ function VolgendeBeurt({ d }: { d: Dossier }) {
   } else if (b) {
     tekst = `${beurtDatum(b.datum)}${b.ploeg_nr ? ` · team ${b.ploeg_nr}` : ""}`;
   } else {
-    const m = p.interval_maanden ? volgendeFrequentieMaand(p, d.dezeMaand) : null;
+    const m = volgendeBeurtMaand(p, null, d.dezeMaand);
     tekst = m
       ? `${hoofdletter(toonMaand(m))}${m.slice(0, 4) !== String(d.jaar) ? ` ${m.slice(0, 4)}` : ""}`
       : "—";
@@ -980,7 +1106,7 @@ function Onderbalk({ d }: { d: Dossier }) {
           onClick={() => void d.toevoegen()}
           className="inline-flex h-10 items-center rounded-full bg-primary px-[18px] text-[14px] font-semibold text-primary-foreground transition-[filter] hover:brightness-95 disabled:pointer-events-none disabled:opacity-50"
         >
-          {d.toevoegenBezig ? "Bezig…" : "Toevoegen"}
+          {d.toevoegenBezig ? "Bezig…" : d.bestaandAdres ? "Koppel aan dat adres" : "Toevoegen"}
         </button>
       ) : (
         <div className="text-[13px] text-muted-foreground">Alles wordt meteen bewaard</div>

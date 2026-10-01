@@ -4,7 +4,7 @@
  * frequentie is grijs. Tik op een maand om hem over te slaan (of weer niet);
  * een maand die gewassen is of al voorbij, tik je niet meer aan.
  */
-import { jaarVakken, volgendeFrequentieMaand } from "@/lib/dossier";
+import { jaarVakken, volgendeBeurtMaand } from "@/lib/dossier";
 import { toonMaand } from "@/lib/klanten";
 import type { Dossier } from "@/lib/useDossier";
 import { cn } from "@/lib/utils";
@@ -13,10 +13,7 @@ export function JaarVakjes({ d }: { d: Dossier }) {
   const p = d.pand;
   // De volgende beurt volgt de ronde, niet de datum; staat er nog niets op
   // de planning, dan de eerstvolgende maand van de frequentie.
-  const volgende = d.zonderAdres
-    ? null
-    : (d.volgendeBeurt?.ronde ??
-      (p.interval_maanden ? volgendeFrequentieMaand(p, d.dezeMaand) : null));
+  const volgende = d.zonderAdres ? null : volgendeBeurtMaand(p, d.volgendeBeurt, d.dezeMaand);
   const vakken = jaarVakken(d.jaar, p, d.zonderAdres ? [] : d.gewassen, volgende, d.dezeMaand);
   const mag = d.magPlanOfBewerken && !d.toevoegenBezig;
 

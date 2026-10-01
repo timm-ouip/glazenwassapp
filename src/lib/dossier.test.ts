@@ -7,6 +7,7 @@ import {
   laatsteBetaling,
   openOmschrijving,
   opsomming,
+  volgendeBeurtMaand,
   volgendeFrequentieMaand,
 } from "@/lib/dossier";
 import type { Gebeurtenis } from "@/lib/overzichten";
@@ -90,6 +91,30 @@ describe("volgendeFrequentieMaand", () => {
   });
   test("niet vóór de startmaand", () => {
     expect(volgendeFrequentieMaand({ ...even, start_maand: "2027-02" }, "2026-09")).toBe("2027-02");
+  });
+});
+
+describe("volgendeBeurtMaand", () => {
+  // 1× per 3 maanden, in maart, juni, september en december.
+  const kwartaal = {
+    interval_maanden: 3,
+    ritme: 3,
+    overslaan: [] as string[],
+    start_maand: "2026-09",
+    created_at: "2026-09-22T10:00:00Z",
+    geimporteerd: false,
+    inactief_op: null,
+  };
+  test("zonder planning de eerstvolgende maand van de frequentie", () => {
+    expect(volgendeBeurtMaand(kwartaal, null, "2026-10")).toBe("2026-12");
+  });
+  test("wat op de planning staat gaat voor, op zijn ronde", () => {
+    expect(volgendeBeurtMaand(kwartaal, { ronde: "2026-09" }, "2026-10")).toBe("2026-09");
+  });
+  test("geen bij een inactief adres", () => {
+    expect(volgendeBeurtMaand({ ...kwartaal, inactief_op: "2026-10-01" }, null, "2026-10")).toBe(
+      null,
+    );
   });
 });
 

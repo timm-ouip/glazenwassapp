@@ -84,6 +84,7 @@ export function DossierVeld({
   className,
   autoFocus,
   list,
+  onTyp,
 }: {
   label: ReactNode;
   waarde: string;
@@ -97,6 +98,8 @@ export function DossierVeld({
   className?: string | undefined;
   autoFocus?: boolean | undefined;
   list?: string | undefined;
+  /** Bij elke toets, voor voorstellen terwijl je typt (bewaren blijft bij het verlaten). */
+  onTyp?: ((tekst: string) => void) | undefined;
 }) {
   const [tekst, setTekst] = useState(waarde);
   const erin = useRef(false);
@@ -149,7 +152,10 @@ export function DossierVeld({
         // nog onderweg is, springt die tekst niet terug.
         begin.current = tekst;
       }}
-      onChange={(e) => setTekst(e.target.value)}
+      onChange={(e) => {
+        setTekst(e.target.value);
+        onTyp?.(e.target.value);
+      }}
       onBlur={verlaat}
       onKeyDown={(e) => {
         if (e.key === "Enter") e.currentTarget.blur();
