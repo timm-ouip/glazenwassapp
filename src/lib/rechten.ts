@@ -52,6 +52,12 @@ export const RECHTEN = [
     uitleg:
       "Betalingen intikken via Betalingen en de wijklijst, zonder dat er een wijk is vrijgegeven. Gaat samen met Prijzen zien; geld teruggeven blijft bij de eigenaar",
   },
+  {
+    sleutel: "herstellen",
+    label: "Oude avonden herstellen",
+    uitleg:
+      "Een betaling terugdraaien die op een eerdere dag is opgehaald, op straat of overdag. Gaat samen met Afrekenen zonder vrijgave",
+  },
 ] as const;
 
 export type Recht = (typeof RECHTEN)[number]["sleutel"];
@@ -74,6 +80,16 @@ export function magAfrekenen(employee: Employee | null): boolean {
 export function useMagAfrekenen(): boolean {
   const { employee } = useAuth();
   return magAfrekenen(employee);
+}
+
+/**
+ * Mag hij iets terugdraaien dat op een voorbije avond of dag is opgehaald?
+ * De eigenaar altijd; een ander met "herstellen" bovenop afrekenen. Dezelfde
+ * regel als public.mag_herstellen() in de database.
+ */
+export function useMagHerstellen(): boolean {
+  const { employee } = useAuth();
+  return heeftRecht(employee, "herstellen") && magAfrekenen(employee);
 }
 
 /** Heeft de ingelogde gebruiker minstens één van deze rechten? */

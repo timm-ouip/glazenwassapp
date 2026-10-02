@@ -207,12 +207,7 @@ function RolKaart({
                 const aan = e.target.checked;
                 setRechten((was) => {
                   const nu = aan ? [...was, r.sleutel] : was.filter((x) => x !== r.sleutel);
-                  // Afrekenen zonder bedragen kan niet: het vinkt "Prijzen
-                  // zien" mee aan, en zonder prijzen gaat afrekenen mee uit.
-                  if (!nu.includes("afrekenen") || nu.includes("prijzen_zien")) return nu;
-                  return r.sleutel === "afrekenen"
-                    ? [...nu, "prijzen_zien"]
-                    : nu.filter((x) => x !== "afrekenen");
+                  return samenhang(nu, r.sleutel, aan);
                 });
               }}
             />
@@ -225,4 +220,17 @@ function RolKaart({
       </div>
     </div>
   );
+}
+
+/**
+ * Rechten die op elkaar bouwen: oude avonden herstellen vraagt afrekenen, en
+ * afrekenen vraagt prijzen zien (zonder bedragen kun je niet afrekenen). Aan
+ * zetten trekt wat eronder ligt mee aan; uitzetten haalt wat erop bouwt mee weg.
+ */
+function samenhang(rechten: Recht[], veranderd: Recht, aan: boolean): Recht[] {
+  const keten: Recht[] = ["prijzen_zien", "afrekenen", "herstellen"];
+  const plek = keten.indexOf(veranderd);
+  if (plek < 0) return rechten;
+  if (aan) return [...new Set([...rechten, ...keten.slice(0, plek)])];
+  return rechten.filter((x) => !keten.slice(plek + 1).includes(x));
 }

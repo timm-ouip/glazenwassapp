@@ -14,7 +14,7 @@ import { regelDatum } from "@/lib/dossier";
 import { boek, fetchEerder, nieuweTik, type EerdereBoeking } from "@/lib/geldlopen";
 import { formatPrice } from "@/lib/klanten";
 import { soortLabel, vooruitOngedaanTekst } from "@/lib/overzichten";
-import { useMagAfrekenen } from "@/lib/rechten";
+import { useMagAfrekenen, useMagHerstellen } from "@/lib/rechten";
 import { cn } from "@/lib/utils";
 
 /** Zoveel regels eerst; de rest achter "Meer tonen". */
@@ -100,6 +100,12 @@ export function Eerder({
   const { employee } = useAuth();
   const isEigenaar = employee?.rol === "eigenaar";
   const magTerug = useMagAfrekenen();
+  // Opgehaald op een voorbije avond of dag: dat geld kan al ingeleverd zijn.
+  const magOud = useMagHerstellen();
+  const vandaagNl = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Amsterdam" });
+  const vanVoorbijeAvond = (b: EerdereBoeking) =>
+    (b.bron === "geldloop" || b.bron === "dag") &&
+    new Date(b.op).toLocaleDateString("sv-SE", { timeZone: "Europe/Amsterdam" }) < vandaagNl;
   const [open, setOpen] = useState(false);
   const [alles, setAlles] = useState(false);
   const [meer, setMeer] = useState(false);
@@ -126,6 +132,7 @@ export function Eerder({
     !b.ongedaan &&
     b.soort !== "beginstand" &&
     b.bron !== "kaart" &&
+    (magOud || !vanVoorbijeAvond(b)) &&
     (isEigenaar ||
       (b.soort !== "terugbetaald" &&
         b.soort !== "omgerekend" &&
