@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 
 import { AppLayout } from "@/components/AppLayout";
+import { Afrekenen } from "@/components/betalingen/Afrekenen";
 import { Avondoverzicht } from "@/components/betalingen/Avondoverzicht";
 import { GeldKaart } from "@/components/betalingen/GeldKaart";
 import { PofLijst } from "@/components/betalingen/PofLijst";
@@ -21,7 +22,7 @@ import { useGeldloopVast, zetGeldloopVast } from "@/lib/dagslot";
 import { TABBLADEN, TABNAAM, type BetalingenTab as Tab } from "@/lib/betalingen";
 import { fetchMijnGeldloop, type Vrijgave } from "@/lib/geldlopen";
 import { probeerOpnieuw, useWachtrij, vergeetMislukt } from "@/lib/geldloop-wachtrij";
-import { heeftRecht } from "@/lib/rechten";
+import { heeftRecht, magAfrekenen } from "@/lib/rechten";
 
 interface BetalingenSearch {
   tab: Tab;
@@ -58,6 +59,7 @@ function Betalingen() {
   const { employee } = useAuth();
   const ziedBedragen = heeftRecht(employee, "prijzen_zien");
   const magFacturen = heeftRecht(employee, "facturen");
+  const kanAfrekenen = magAfrekenen(employee);
   const isEigenaar = employee?.rol === "eigenaar";
   const tab: Tab = gevraagd;
 
@@ -118,6 +120,7 @@ function Betalingen() {
           onLopen={() => naarTab("lopen")}
           onKaarten={() => naarTab("kaart")}
           onFacturen={magFacturen ? () => naarTab("facturen") : undefined}
+          onAfrekenen={kanAfrekenen ? () => naarTab("afrekenen") : undefined}
           vrijgeefVenster={vrijgeefVenster}
           onVrijgeefVenster={setVrijgeefVenster}
         />
@@ -129,6 +132,24 @@ function Betalingen() {
           <FacturenLijst onTerug={() => naarTab("vanavond")} />
         ) : (
           <p className="text-[13px] text-muted-foreground">Je rol mag de facturen niet zien.</p>
+        ))}
+      {tab === "afrekenen" &&
+        (kanAfrekenen ? (
+          <Afrekenen
+            wijkId={wijk}
+            onWijk={(id) =>
+              void navigate({
+                to: "/betalingen",
+                search: { tab: "afrekenen", wijk: id },
+                replace: true,
+              })
+            }
+            onTerug={() => naarTab("vanavond")}
+          />
+        ) : (
+          <p className="text-[13px] text-muted-foreground">
+            Je rol mag hier geen betalingen intikken.
+          </p>
         ))}
     </AppLayout>
   );

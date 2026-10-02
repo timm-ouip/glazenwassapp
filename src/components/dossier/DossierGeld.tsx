@@ -3,9 +3,10 @@
  * tegoed, de vooruitbetaalde beurten en hoe hij betaalt), de geldkaart van dit
  * ene adres, en elke betaling en korting met wie het intikte.
  *
- * Boeken kan alleen de eigenaar: betaald, een ander bedrag, korting, vooruit
- * betalen, teruggeven en ongedaan maken. Dat gaat met dezelfde vensters als aan
- * de deur; niets wordt gewist, ongedaan maken is een nieuwe regel.
+ * Boeken kan de eigenaar, en wie mag afrekenen: betaald, een ander bedrag,
+ * korting en vooruit betalen. Teruggeven, een andere prijs per beurt en
+ * ongedaan maken blijven bij de eigenaar. Dat gaat met dezelfde vensters als
+ * aan de deur; niets wordt gewist, ongedaan maken is een nieuwe regel.
  *
  * Daarbij de vooruitbetaling: wat er terug moet als de klant stopt, en de
  * geplande wissel naar overmaken (geel, want die gebeurt vanzelf — en dus met
@@ -49,7 +50,7 @@ import {
   vooruitTot,
   type GeldDeel,
 } from "@/lib/betalingen";
-import { bronTekst, korteDatum, opsomming, volgendeBeurtMaand } from "@/lib/dossier";
+import { bronTekst, opsomming, regelDatum, volgendeBeurtMaand } from "@/lib/dossier";
 import { vakTeken, vakUitleg, vakVoor, vooruitGepland, type Vak } from "@/lib/geldkaart";
 import { boek, haalVasteKortingWeg, maakVasteKorting, nieuweTik, type Tik } from "@/lib/geldlopen";
 import { formatPrice, toonMaand, type Customer } from "@/lib/klanten";
@@ -84,12 +85,6 @@ const MAANDEN_KORT = [
 
 /** "€ 0" bij niets, anders het bedrag zoals overal in de app. */
 const bedragOfNul = (n: number) => (n > 0.005 ? formatPrice(n) : "€ 0");
-
-/** "22 jul", met het jaar erbij als het niet dit jaar was. */
-function regelDatum(iso: string): string {
-  const jaar = new Date(iso).getFullYear();
-  return jaar === new Date().getFullYear() ? korteDatum(iso) : `${korteDatum(iso)} ${jaar}`;
-}
 
 function moment(iso: string): string {
   return new Date(iso).toLocaleString("nl-NL", {
@@ -197,7 +192,9 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
 
   const gestopt = !!a?.inactief_op;
   const open = g?.open ?? 0;
-  const vooruitKan = !gestopt && (g?.vooruit_vast ?? 0) === 0;
+  // Zonder gewone prijs vult alleen de eigenaar zelf een prijs per beurt in.
+  const zonderPrijs = !d.isEigenaar && g?.vooruit_p == null;
+  const vooruitKan = !gestopt && (g?.vooruit_vast ?? 0) === 0 && !zonderPrijs;
 
   function vernieuw() {
     if (!a) return;
@@ -232,7 +229,7 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
   }
 
   const acties =
-    d.isEigenaar && a && g ? (
+    d.magAfrekenen && a && g ? (
       <>
         {/* Op kantoor ook als er niets openstaat: dan wordt de korting tegoed. */}
         <button
@@ -260,9 +257,11 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
           title={
             gestopt
               ? "Dit adres is gestopt"
-              : !vooruitKan
-                ? "Geef eerst de vooruitbetaalde beurten van de vorige bewoner terug"
-                : undefined
+              : zonderPrijs
+                ? "Dit adres heeft geen prijs; vooruit betalen boekt de eigenaar"
+                : !vooruitKan
+                  ? "Geef eerst de vooruitbetaalde beurten van de vorige bewoner terug"
+                  : undefined
           }
           onClick={() => setVenster("vooruit")}
         >
@@ -329,7 +328,7 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
                 d={d}
                 adres={a}
                 g={g}
-                onAnderBedrag={d.isEigenaar ? () => setVenster("bedrag") : undefined}
+                onAnderBedrag={d.magAfrekenen ? () => setVenster("bedrag") : undefined}
               />
               <WatErOpenstaat g={g} />
               <Kaart d={d} adres={a} />
@@ -340,7 +339,7 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
         </div>
       </div>
 
-      {d.isEigenaar && deurAdres && g && (
+      {d.magAfrekenen && deurAdres && g && (
         <>
           <KortingDialoog
             open={venster === "korting"}
@@ -350,7 +349,8 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
               tik({ soort: "korting", bedrag, reden }, `Korting −${formatPrice(bedrag)}`)
             }
             onVeranderd={vernieuw}
-            meerDanOpen
+            // Korting die tegoed wordt, geeft alleen de eigenaar.
+            meerDanOpen={d.isEigenaar}
           />
           <VasteKortingDialoog
             open={venster === "vast"}
@@ -376,7 +376,7 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
             delen={g.delen}
             vanaf={g.vooruit_vanaf}
             prijs={g.vooruit_p}
-            prijsAanpassen
+            prijsAanpassen={d.isEigenaar}
             onSluit={() => setVenster(null)}
             onVooruit={(aantal, prijs) =>
               tik(
@@ -1031,7 +1031,7 @@ function VasteKortingen({ d, g, vernieuw }: { d: Dossier; g: GeldAdres; vernieuw
               {k.door_naam} · {moment(k.op)}
             </span>
           </span>
-          {d.isEigenaar && (
+          {d.magAfrekenen && (
             <button
               type="button"
               className={cn(dossierLink, "disabled:opacity-50")}

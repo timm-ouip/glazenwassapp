@@ -1,5 +1,6 @@
 import {
   IconCalendarOff as CalendarOff,
+  IconCash as Cash,
   IconCheck as Check,
   IconCircleOff as CircleSlash,
   IconCornerDownRight as CornerDownRight,
@@ -64,6 +65,9 @@ interface Props {
   /** Wat er bij een adres op één dag hoort (van de dag halen, verplaatsen,
    *  betalen). Menu-items, direct onder het dossier. */
   dagItems?: ReactNode;
+  /** Een betaling intikken op kantoor (de eigenaar, of wie mag afrekenen).
+   *  Laat weg waar dat niet mag of waar dagItems het al aanbiedt. */
+  onBetalen?: (() => void) | undefined;
   /** De aangevinkte adressen van deze straat eruit lichten, in een nieuwe
    *  straat ernaast. Alleen in de selecteermodus, op een aangevinkt adres;
    *  laat het verder weg. */
@@ -156,6 +160,7 @@ function KlantMenuVol({
   onKlus,
   onStoppen,
   dagItems,
+  onBetalen,
   onSplitsen,
   markeringen,
   alleenLezen = false,
@@ -254,6 +259,11 @@ function KlantMenuVol({
         <ContextMenuItem onSelect={onDossier}>
           <FileText className="size-4" /> Dossier
         </ContextMenuItem>
+        {onBetalen && (
+          <ContextMenuItem onSelect={onBetalen}>
+            <Cash className="size-4" /> Betalen…
+          </ContextMenuItem>
+        )}
         {dagItems && (
           <>
             <ContextMenuSeparator />

@@ -980,7 +980,8 @@ function Tegel({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
   );
 }
 
-function AdresRij({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
+/** Eén adres als rij, met de kleur van wat er gebeurde; ook bij Afrekenen. */
+export function AdresRij({ a, onKies }: { a: GeldloopAdres; onKies: () => void }) {
   const d = deurVan(a);
   const vlak = vlakVan(d);
   const overmaken = a.methode === "overmaken";

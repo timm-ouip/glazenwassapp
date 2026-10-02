@@ -78,7 +78,7 @@ import {
   type Klant,
   type QuickNote,
 } from "@/lib/klanten";
-import { useRecht } from "@/lib/rechten";
+import { useMagAfrekenen, useRecht } from "@/lib/rechten";
 import { useBevestig } from "@/components/Bevestig";
 import { eigenTeamlid, fetchDagPloegen, fetchTeamleden, ploegNaam, ploegVan } from "@/lib/ploegen";
 import { useAankondigingen } from "@/lib/aankondigingen";
@@ -1052,7 +1052,7 @@ function DagPagina() {
   // in de wijken, met wat er bij een adres op deze dag hoort erbij.
   const magPlannen = useRecht("planning");
   const magKlanten = useRecht("klanten_bewerken");
-  const isEigenaar = employee?.rol === "eigenaar";
+  const kanAfrekenen = useMagAfrekenen();
   const { herlaad, patchKlant, maakKlus, stopKlant, verwijderKlant } = useKlantActies();
   const quickNotesQuery = useQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes });
   const markeringQuery = useQuery({ queryKey: ["markeringen"], queryFn: fetchMarkeringen });
@@ -1103,16 +1103,16 @@ function DagPagina() {
   }
 
   /**
-   * Mag je hier "Betalen…"? Alleen bij een contant adres. De eigenaar boekt
-   * op kantoor en mag dat altijd (is de wijk nog niet gestart, dan zegt het
-   * betaalmenu dat). Een medewerker met planning tikt alleen vandaag in wat
+   * Mag je hier "Betalen…"? Alleen bij een contant adres. De eigenaar (en wie
+   * mag afrekenen) boekt op kantoor en mag dat altijd (is de wijk nog niet
+   * gestart, dan zegt het betaalmenu dat). Een medewerker met planning tikt alleen vandaag in wat
    * hij kreeg, in een gestarte wijk en op de route van zijn eigen team —
    * dezelfde regels als de database (dag_geld_toegang).
    */
   function kanBetalen(c: Customer): boolean {
     const wijk = wijkOpId.get(straatOpId.get(c.street_id)?.district_id ?? "");
     if ((c.betaalmethode ?? wijk?.betaalmethode) !== "contant") return false;
-    if (isEigenaar) return true;
+    if (kanAfrekenen) return true;
     if (!magPlannen || datum !== vandaag() || !wijk?.geld_peildatum) return false;
     const ploeg = ploegVanAdres.get(c.id) ?? null;
     return ploeg === null || ploeg === eigenPloeg;

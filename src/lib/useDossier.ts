@@ -61,7 +61,7 @@ import {
 } from "@/lib/nieuwAdres";
 import { fetchGeldAdres } from "@/lib/overzichten";
 import { zoekAdres, zoekStraten } from "@/lib/postcode";
-import { useRecht } from "@/lib/rechten";
+import { useMagAfrekenen, useRecht } from "@/lib/rechten";
 import { geplandeDagen, zetActief, type StopReden } from "@/lib/stoppen";
 import { pushUndo } from "@/lib/undo";
 import { useKlantActies } from "@/lib/useKlantActies";
@@ -216,6 +216,8 @@ export function useDossier(invoer: DossierInvoer) {
   const magPlanOfBewerken = useRecht("planning", "klanten_bewerken");
   const magPlannen = useRecht("planning");
   const prijzenZien = useRecht("prijzen_zien");
+  /** Op kantoor boeken: de eigenaar, en wie mag afrekenen. */
+  const magAfrekenen = useMagAfrekenen();
   const magMailLezen = useRecht("mail_lezen");
   const magMailVersturen = useRecht("mail_versturen");
   const magKlachten = useRecht("klanten_bekijken", "klanten_bewerken", "planning");
@@ -577,7 +579,7 @@ export function useDossier(invoer: DossierInvoer) {
     // dit wordt ververst: bij elk openen vers, niet pas na een minuut.
     staleTime: 0,
     queryFn: () => fetchDagStand(adresId!),
-    enabled: open && !!adresId && !isEigenaar,
+    enabled: open && !!adresId && !magAfrekenen,
   });
   const mailbox = useQuery({
     queryKey: ["mailbox"],
@@ -600,7 +602,7 @@ export function useDossier(invoer: DossierInvoer) {
       .find((t) => t.startsWith("316")) ?? "";
   const kanMailen =
     Boolean(klant && email) && magMailVersturen && mailbox.data?.status === "actief";
-  const kanBetalen = Boolean(adres) && (isEigenaar || Boolean(dagStand.data));
+  const kanBetalen = Boolean(adres) && (magAfrekenen || Boolean(dagStand.data));
 
   // --- Bewaren -----------------------------------------------------------------
   /** Zet werk achteraan in de rij en onthoud dat er iets bewaard is. */
@@ -1658,6 +1660,7 @@ export function useDossier(invoer: DossierInvoer) {
     // rechten
     mobiel,
     isEigenaar,
+    magAfrekenen,
     magBewerken,
     /** Velden uit: geen recht, of het adres wordt net toegevoegd. */
     alleenLezen: !magBewerken || toevoegenBezig,

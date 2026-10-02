@@ -203,11 +203,18 @@ function RolKaart({
               type="checkbox"
               className="mt-0.5 size-4 accent-foreground"
               checked={rechten.includes(r.sleutel)}
-              onChange={(e) =>
-                setRechten((was) =>
-                  e.target.checked ? [...was, r.sleutel] : was.filter((x) => x !== r.sleutel),
-                )
-              }
+              onChange={(e) => {
+                const aan = e.target.checked;
+                setRechten((was) => {
+                  const nu = aan ? [...was, r.sleutel] : was.filter((x) => x !== r.sleutel);
+                  // Afrekenen zonder bedragen kan niet: het vinkt "Prijzen
+                  // zien" mee aan, en zonder prijzen gaat afrekenen mee uit.
+                  if (!nu.includes("afrekenen") || nu.includes("prijzen_zien")) return nu;
+                  return r.sleutel === "afrekenen"
+                    ? [...nu, "prijzen_zien"]
+                    : nu.filter((x) => x !== "afrekenen");
+                });
+              }}
             />
             <span>
               <span className="block text-[13px] font-medium leading-tight">{r.label}</span>

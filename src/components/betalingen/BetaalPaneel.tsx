@@ -22,6 +22,7 @@ import {
   KlachtDialoog,
   VooruitDialoog,
 } from "@/components/betalingen/DeurDialogen";
+import { Eerder } from "@/components/betalingen/Eerder";
 import { GeldloopDossier } from "@/components/betalingen/GeldloopDossier";
 import { useBevestig } from "@/components/Bevestig";
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
@@ -36,6 +37,7 @@ import {
   vooruitNieuweMaanden,
 } from "@/lib/betalingen";
 import { useAuth } from "@/lib/auth";
+import { useRecht } from "@/lib/rechten";
 import {
   geldloopNietGewassen,
   heeftIetsOpen,
@@ -88,6 +90,7 @@ export function BetaalPaneel({
   const mobiel = useIsMobile();
   const bevestig = useBevestig();
   const isEigenaar = employee?.rol === "eigenaar";
+  const magBedragen = useRecht("prijzen_zien");
   const [venster, setVenster] = useState<Venster>(null);
   // Het volledige dossier (alleen de eigenaar): eerst laden, dan openen.
   const [dossierLaden, setDossierLaden] = useState(false);
@@ -384,6 +387,22 @@ export function BetaalPaneel({
           <p className="mt-2 rounded-[14px] bg-tint-groen px-3 py-2 text-[13px] text-tint-groen-ink">
             Nog {beurtenTekst(vooruitOver)} vooruit betaald, t/m ongeveer {vooruitTotVan(a)}.
           </p>
+        )}
+
+        {/* Wat er eerder gebeurde, met wie het intikte; wie mag afrekenen kan
+            daar iets terugdraaien dat niet klopt. Een geldloper ziet het
+            alleen tijdens zijn avond (daarna weigert de database het ook). */}
+        {(!voorbij || magBedragen) && (
+          <Eerder
+            key={a.id}
+            adres={a.id}
+            verberg={[
+              ...(a.vanavond ? [a.vanavond.id] : []),
+              ...a.kortingen_vanavond.map((k) => k.id),
+            ]}
+            onTeruggedraaid={onVeranderd}
+            className="mt-3"
+          />
         )}
       </div>
 

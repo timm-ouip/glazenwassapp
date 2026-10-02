@@ -46,6 +46,12 @@ export const RECHTEN = [
     uitleg:
       "Contant geld ophalen in een wijk die de eigenaar voor die avond vrijgeeft; alleen dan ziet hij adressen en bedragen",
   },
+  {
+    sleutel: "afrekenen",
+    label: "Afrekenen zonder vrijgave",
+    uitleg:
+      "Betalingen intikken via Betalingen en de wijklijst, zonder dat er een wijk is vrijgegeven. Gaat samen met Prijzen zien; geld teruggeven blijft bij de eigenaar",
+  },
 ] as const;
 
 export type Recht = (typeof RECHTEN)[number]["sleutel"];
@@ -54,6 +60,20 @@ export function heeftRecht(employee: Employee | null, recht: Recht): boolean {
   if (!employee) return false;
   if (employee.rol === "eigenaar") return true;
   return employee.rechten.includes(recht);
+}
+
+/**
+ * Mag hij op kantoor afrekenen, zonder vrijgegeven wijk? De eigenaar altijd;
+ * een ander met "afrekenen" én "prijzen_zien" (zonder bedragen kun je niet
+ * afrekenen). Dezelfde regel als public.mag_afrekenen() in de database.
+ */
+export function magAfrekenen(employee: Employee | null): boolean {
+  return heeftRecht(employee, "afrekenen") && heeftRecht(employee, "prijzen_zien");
+}
+
+export function useMagAfrekenen(): boolean {
+  const { employee } = useAuth();
+  return magAfrekenen(employee);
 }
 
 /** Heeft de ingelogde gebruiker minstens één van deze rechten? */

@@ -170,6 +170,12 @@ export function korteDatum(iso: string): string {
   return d.toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
 }
 
+/** "22 jul", met het jaar erbij als het niet dit jaar was. */
+export function regelDatum(iso: string): string {
+  const jaar = new Date(iso).getFullYear();
+  return jaar === new Date().getFullYear() ? korteDatum(iso) : `${korteDatum(iso)} ${jaar}`;
+}
+
 /** "Do 15 oktober": de volgende beurt in het dossier. */
 export function beurtDatum(datum: string): string {
   const d = new Date(`${datum}T12:00:00`);

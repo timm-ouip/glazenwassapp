@@ -1,7 +1,7 @@
 import { useState, type ElementType } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { IconAlertTriangle as AlertTriangle } from "@tabler/icons-react";
+import { IconAlertTriangle as AlertTriangle, IconCashRegister as Kassa } from "@tabler/icons-react";
 
 import { VrijgeefVenster } from "@/components/betalingen/Vrijgeven";
 
@@ -68,6 +68,7 @@ export function Avondoverzicht({
   onLopen,
   onKaarten,
   onFacturen,
+  onAfrekenen,
   vrijgeefVenster,
   onVrijgeefVenster,
 }: {
@@ -76,6 +77,8 @@ export function Avondoverzicht({
   onKaarten: () => void;
   /** Alleen voor wie het recht "facturen" heeft. */
   onFacturen?: (() => void) | undefined;
+  /** Alleen voor de eigenaar en wie mag afrekenen: betalen zonder vrijgave. */
+  onAfrekenen?: (() => void) | undefined;
   /** Open het vrijgeefvenster, bijvoorbeeld vanuit het loopscherm. */
   vrijgeefVenster?: boolean;
   onVrijgeefVenster?: (open: boolean) => void;
@@ -240,7 +243,8 @@ export function Avondoverzicht({
   // de laatste rij niet half leeg blijft: "Samen nog te gaan" (dat staat
   // vooraan), en zonder dat vak Korting (achteraan).
   const toonSamen = isEigenaar || ikLoopMee;
-  const kleineVakken = 4 + (onFacturen ? 1 : 0) + (ikLoopMee ? 1 : 0) + (toonSamen ? 1 : 0);
+  const kleineVakken =
+    4 + (onFacturen ? 1 : 0) + (onAfrekenen ? 1 : 0) + (ikLoopMee ? 1 : 0) + (toonSamen ? 1 : 0);
   const vulRooster = cn(
     kleineVakken % 2 === 1 && "col-span-2",
     ["", "md:col-span-2", "md:col-span-3", "md:col-span-4"][(4 - (kleineVakken % 4)) % 4],
@@ -539,6 +543,27 @@ export function Avondoverzicht({
                     : `${concepten === 1 ? "concept" : "concepten"} klaar · ${formatPrice(nietBinnen)} nog niet binnen`
                 : "\u00a0"}
             </TegelOnder>
+          </button>
+        )}
+        {/* Een betaling intikken zonder dat er een wijk vrijgegeven is: de
+            klant die op kantoor of later aan de deur betaalt. */}
+        {onAfrekenen && (
+          <button
+            type="button"
+            onClick={onAfrekenen}
+            className={cn(
+              TEGEL_VAK,
+              TEGEL_KLIKBAAR,
+              TEGEL_KLEUR.goud,
+              TEGEL_GEWOON,
+              "text-left md:h-[150px]",
+            )}
+          >
+            <TegelKop label="Afrekenen" />
+            <TegelGetal klein>
+              <Kassa className="size-[30px] md:size-10 zak:size-[22px] zak:md:size-[26px]" />
+            </TegelGetal>
+            <TegelOnder>per wijk, zonder vrijgave</TegelOnder>
           </button>
         )}
         <div

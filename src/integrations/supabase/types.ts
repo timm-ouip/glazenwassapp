@@ -4224,6 +4224,7 @@ export type Database = {
       gebruiker_met_email: { Args: { adres: string }; Returns: string };
       geld_adres: { Args: { adres: string }; Returns: Json };
       geld_adres_tekst: { Args: { adres: string }; Returns: string };
+      geld_afrekenlijst: { Args: { wijk?: string }; Returns: Json };
       geld_avond: { Args: { datum: string }; Returns: Json };
       geld_beginstand_zetten: {
         Args: {
@@ -4251,6 +4252,7 @@ export type Database = {
         };
         Returns: Json;
       };
+      geld_eerder: { Args: { adres_id: string; alles?: boolean }; Returns: Json };
       geld_gebeurtenis_json: {
         Args: {
           g: Database["public"]["Tables"]["betaal_gebeurtenissen"]["Row"];
@@ -4482,6 +4484,7 @@ export type Database = {
       maandwerk_extra_van: { Args: { werk: Json }; Returns: Json };
       maandwerk_kern: { Args: { werk: Json }; Returns: Json };
       maandwerk_met_ids: { Args: { werk: Json }; Returns: Json };
+      mag_afrekenen: { Args: never; Returns: boolean };
       mail_tellingen: {
         Args: never;
         Returns: {

@@ -19,22 +19,27 @@ import {
   KortingDialoog,
   VooruitDialoog,
 } from "@/components/betalingen/DeurDialogen";
+import { Eerder } from "@/components/betalingen/Eerder";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/lib/auth";
 import { beurtenTekst, rekening } from "@/lib/betalingen";
 import { boek, nieuweTik, type Tik } from "@/lib/geldlopen";
 import { formatPrice, type Customer, type District } from "@/lib/klanten";
+import { useMagAfrekenen } from "@/lib/rechten";
 import { pushUndo, undoKnop } from "@/lib/undo";
 import { fetchGeldAdres, vooruitLabel } from "@/lib/overzichten";
+
+/** Wat dit venster van een adres nodig heeft; ook bij Afrekenen, zonder hele klantregel. */
+type Adres = Pick<Customer, "id" | "house_number" | "addition" | "inactief_op">;
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  customer: Customer | null;
+  customer: Adres | null;
   /** "Kerkstraat 12", voor in de kop. */
   adresTekst: string;
   /** De wijk van het adres: is die al gestart bij Betalingen? */
-  wijk: District | undefined;
+  wijk: Pick<District, "id" | "geld_peildatum"> | undefined;
   /** Staat het adres vandaag op de route? Dan telt de beurt van vandaag mee. */
   vandaag: boolean;
 }
@@ -43,9 +48,10 @@ interface Props {
  * Betalen vanaf de dag, bij een contant adres. Dezelfde knoppen als aan de
  * deur bij geldlopen, maar alleen wat jouw rol hier mag:
  *
- * - De eigenaar boekt op kantoor en mag alles: betaald, een ander bedrag,
- *   korting en vooruit betalen. Is de wijk nog niet gestart bij Betalingen,
- *   dan weet de app niet wat er openstaat; dan staat hier de weg erheen.
+ * - De eigenaar, en wie mag afrekenen, boekt op kantoor: betaald, een ander
+ *   bedrag, korting en vooruit betalen (een andere prijs per beurt alleen de
+ *   eigenaar). Is de wijk nog niet gestart bij Betalingen, dan weet de app
+ *   niet wat er openstaat; dan staat hier de weg erheen.
  * - Een medewerker tikt overdag alleen in wat hij vandaag kreeg (betaald of
  *   een ander bedrag, en dat weer ongedaan maken), op zijn eigen route.
  *
@@ -54,6 +60,7 @@ interface Props {
 export function DagBetalen({ open, onOpenChange, customer: c, adresTekst, wijk, vandaag }: Props) {
   const { employee } = useAuth();
   const isEigenaar = employee?.rol === "eigenaar";
+  const kantoor = useMagAfrekenen();
   const mobiel = useIsMobile();
   if (!c) return null;
   const gestart = !!wijk?.geld_peildatum;
@@ -65,15 +72,16 @@ export function DagBetalen({ open, onOpenChange, customer: c, adresTekst, wijk, 
           kleur="groen"
           icoon={<Cash className="size-[22px]" />}
           titel={adresTekst}
-          subtitel={isEigenaar ? "Betalen · geboekt op kantoor" : "Contant betaald vandaag"}
+          subtitel={kantoor ? "Betalen · geboekt op kantoor" : "Contant betaald vandaag"}
         />
         <PopupBody>
-          {isEigenaar && !gestart ? (
+          {kantoor && !gestart ? (
             <div className="flex flex-col gap-3">
               <p className="rounded-[12px] bg-tint-amber px-3 py-2 text-[13px] text-tint-amber-ink">
                 Deze wijk telt nog niet mee bij Betalingen: de app weet nog niet wat er openstaat.
               </p>
-              {wijk && (
+              {/* Een wijk starten doet de eigenaar. */}
+              {wijk && isEigenaar && (
                 <Button asChild className="self-start rounded-full">
                   <Link
                     to="/betalingen"
@@ -85,11 +93,12 @@ export function DagBetalen({ open, onOpenChange, customer: c, adresTekst, wijk, 
                 </Button>
               )}
             </div>
-          ) : isEigenaar ? (
+          ) : kantoor ? (
             <KantoorBetalen
               customer={c}
               adresTekst={adresTekst}
               vandaag={vandaag}
+              prijsAanpassen={isEigenaar}
               onKlaar={() => onOpenChange(false)}
             />
           ) : (
@@ -121,16 +130,19 @@ export function DagBetalen({ open, onOpenChange, customer: c, adresTekst, wijk, 
 
 type Venster = "korting" | "bedrag" | "vooruit" | null;
 
-/** De eigenaar, op kantoor: wat er openstaat en alles wat je kunt boeken. */
+/** Op kantoor: wat er openstaat en alles wat je kunt boeken. */
 function KantoorBetalen({
   customer: c,
   adresTekst,
   vandaag,
+  prijsAanpassen,
   onKlaar,
 }: {
-  customer: Customer;
+  customer: Adres;
   adresTekst: string;
   vandaag: boolean;
+  /** Een andere prijs per beurt bij vooruit betalen: alleen de eigenaar. */
+  prijsAanpassen: boolean;
   /** Alles betaald: het venster mag dicht. */
   onKlaar: () => void;
 }) {
@@ -159,6 +171,19 @@ function KantoorBetalen({
     void qc.invalidateQueries({ queryKey: ["dag-geld", c.id] });
     void qc.invalidateQueries({ queryKey: ["geld-pof"] });
     void qc.invalidateQueries({ queryKey: ["geld-kaart"] });
+    void qc.invalidateQueries({ queryKey: ["geld-afrekenen"] });
+    void qc.invalidateQueries({ queryKey: ["geld-eerder", c.id] });
+    void qc.invalidateQueries({ queryKey: ["laatste-ronde", c.id] });
+  }
+
+  /**
+   * Na "Klopt niet": terugdraaien kan een geplande wissel naar overmaken laten
+   * doorgaan of terugzetten, en dan verandert de betaalwijze van het adres
+   * zelf. Alleen dan de (grote) adressenlijst opnieuw ophalen.
+   */
+  function naTerugdraaien() {
+    vernieuw();
+    void qc.invalidateQueries({ queryKey: ["customers"] });
   }
 
   /** Een boeking terugdraaien; een fout gaat door naar de Ongedaan-melding. */
@@ -309,6 +334,9 @@ function KantoorBetalen({
         </button>
       )}
 
+      {/* Wat er eerder geboekt is, met wie; wat niet klopt draai je hier terug. */}
+      <Eerder key={c.id} adres={c.id} onTeruggedraaid={naTerugdraaien} />
+
       <KortingDialoog
         open={venster === "korting"}
         adres={adres}
@@ -330,7 +358,7 @@ function KantoorBetalen({
         delen={stand.delen}
         vanaf={g.vooruit_vanaf}
         prijs={g.vooruit_p}
-        prijsAanpassen
+        prijsAanpassen={prijsAanpassen}
         onSluit={() => setVenster(null)}
         onVooruit={(aantal, prijs) => {
           const bedrag = Math.round(aantal * prijs * 100) / 100;

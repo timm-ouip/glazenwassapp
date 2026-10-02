@@ -20,7 +20,8 @@ import { cn } from "@/lib/utils";
 
 type Vraag = {
   titel: string;
-  tekst?: string;
+  /** Meestal een zin; mag ook opmaak bevatten (vet, een kleine regel eronder). */
+  tekst?: ReactNode;
   bevestigLabel?: string;
   /** Tekst op de andere knop, als "Annuleren" niet zegt wat er dan gebeurt. */
   annuleerLabel?: string;

@@ -15,6 +15,7 @@ import {
   vooruitTot,
   type GeldDeel,
 } from "@/lib/betalingen";
+import type { Gebeurtenis } from "@/lib/overzichten";
 
 export interface Vrijgave {
   id: string;
@@ -238,39 +239,69 @@ export async function fetchGeldloopLijst(vrijgave: string): Promise<GeldloopLijs
       samen_gedaan: Number(x.opgehaald?.samen_gedaan ?? 0),
       samen_straten_open: Number(x.opgehaald?.samen_straten_open ?? 0),
     },
-    adressen: lijst<GeldloopAdres>(x.adressen).map((a) => ({
-      ...a,
-      wacht_op_wasbeurt: a.wacht_op_wasbeurt ?? false,
-      straat_lopers: a.straat_lopers ?? [],
-      open: Number(a.open ?? 0),
-      open_wassen: Number(a.open_wassen ?? 0),
-      delen: (a.delen ?? []).map((d) => ({
-        ...d,
-        bedrag: Number(d.bedrag),
-        rest: Number(d.rest),
-        aantal: Number(d.aantal ?? 1),
-        omschrijving: d.omschrijving ?? "",
-        vooruit: Number(d.vooruit ?? 0),
-      })),
-      // De server telt ook de beurten mee die niet meer opgemaakt worden.
-      vooruit_over: Math.max(0, Number(a.vooruit_over ?? 0) - Number(a.vooruit_vast ?? 0)),
-      vooruit_waarde: Number(a.vooruit_waarde ?? 0),
-      vooruit_vast: Number(a.vooruit_vast ?? 0),
-      vooruit_vorige_waarde: Number(a.vooruit_vorige_waarde ?? 0),
-      vooruit_eigen_waarde: Number(a.vooruit_eigen_waarde ?? 0),
-      vooruit_p: a.vooruit_p == null ? null : Number(a.vooruit_p),
-      vaste_kortingen: (a.vaste_kortingen ?? []).map((k) => ({ ...k, bedrag: Number(k.bedrag) })),
-      kortingen_vanavond: (a.kortingen_vanavond ?? []).map((k) => ({
-        ...k,
-        bedrag: Number(k.bedrag),
-      })),
-      vanavond: a.vanavond
-        ? {
-            ...a.vanavond,
-            bedrag: Number(a.vanavond.bedrag),
-            aantal: a.vanavond.aantal == null ? null : Number(a.vanavond.aantal),
-          }
-        : null,
+    adressen: lijst<GeldloopAdres>(x.adressen).map(leesAdres),
+  };
+}
+
+/** Een adres zoals de database het geeft, met getallen als getal. */
+function leesAdres(a: GeldloopAdres): GeldloopAdres {
+  return {
+    ...a,
+    wacht_op_wasbeurt: a.wacht_op_wasbeurt ?? false,
+    straat_lopers: a.straat_lopers ?? [],
+    open: Number(a.open ?? 0),
+    open_wassen: Number(a.open_wassen ?? 0),
+    delen: (a.delen ?? []).map((d) => ({
+      ...d,
+      bedrag: Number(d.bedrag),
+      rest: Number(d.rest),
+      aantal: Number(d.aantal ?? 1),
+      omschrijving: d.omschrijving ?? "",
+      vooruit: Number(d.vooruit ?? 0),
+    })),
+    // De server telt ook de beurten mee die niet meer opgemaakt worden.
+    vooruit_over: Math.max(0, Number(a.vooruit_over ?? 0) - Number(a.vooruit_vast ?? 0)),
+    vooruit_waarde: Number(a.vooruit_waarde ?? 0),
+    vooruit_vast: Number(a.vooruit_vast ?? 0),
+    vooruit_vorige_waarde: Number(a.vooruit_vorige_waarde ?? 0),
+    vooruit_eigen_waarde: Number(a.vooruit_eigen_waarde ?? 0),
+    vooruit_p: a.vooruit_p == null ? null : Number(a.vooruit_p),
+    vaste_kortingen: (a.vaste_kortingen ?? []).map((k) => ({ ...k, bedrag: Number(k.bedrag) })),
+    kortingen_vanavond: (a.kortingen_vanavond ?? []).map((k) => ({
+      ...k,
+      bedrag: Number(k.bedrag),
+    })),
+    vanavond: a.vanavond
+      ? {
+          ...a.vanavond,
+          bedrag: Number(a.vanavond.bedrag),
+          aantal: a.vanavond.aantal == null ? null : Number(a.vanavond.aantal),
+        }
+      : null,
+  };
+}
+
+export interface Afrekenlijst {
+  /** Zonder peildatum telt een wijk nog niet mee bij Betalingen. */
+  wijken: { id: string; naam: string; peildatum: string | null }[];
+  /**
+   * De adressen van de gekozen wijk, in dezelfde vorm als in het loopscherm.
+   * Zonder avond: geen lopers en geen kortingen van vanavond, en "vanavond"
+   * is hier de laatste tik van vandaag (van wie dan ook).
+   */
+  adressen: (GeldloopAdres & { inactief_op: string | null })[];
+}
+
+/** Afrekenen zonder vrijgave: de wijken, en van één wijk wat er openstaat. */
+export async function fetchAfrekenlijst(wijk: string | null): Promise<Afrekenlijst> {
+  const { data, error } = await supabase.rpc("geld_afrekenlijst", wijk ? { wijk } : {});
+  if (error) throw error;
+  const x = data as unknown as Afrekenlijst;
+  return {
+    wijken: lijst(x.wijken),
+    adressen: lijst<Afrekenlijst["adressen"][number]>(x.adressen).map((a) => ({
+      ...leesAdres(a),
+      inactief_op: a.inactief_op ?? null,
     })),
   };
 }
@@ -321,6 +352,53 @@ export async function boek(
     status: "nieuw" | "al_ontvangen";
     botsing: boolean;
     prijs_afwijkend?: boolean;
+  };
+}
+
+/**
+ * Een boeking van eerder op één adres, voor "Eerder" in het betaalvenster:
+ * wanneer, wat, en wie het intikte. Een teruggedraaide boeking blijft staan,
+ * met wie hem terugdraaide.
+ */
+export interface EerdereBoeking {
+  id: string;
+  soort: Gebeurtenis["soort"];
+  bedrag: number;
+  reden: string;
+  aantal: number | null;
+  prijs_per_beurt: number | null;
+  bron: Gebeurtenis["bron"];
+  door_naam: string;
+  op: string;
+  ongedaan: { door_naam: string; op: string } | null;
+  /** Bij vooruit: hoeveel beurten al gebruikt zijn. */
+  gebruikt?: number;
+  /** Bij omgerekend: hoeveel beurten er werden omgerekend. */
+  omgerekend_van?: number;
+}
+
+/**
+ * De boekingen van één adres, nieuwste eerst: het laatste jaar, of alles.
+ * "ouder" zegt hoeveel er nog voor dat jaar ligt. Mag wie het betaalvenster
+ * van dit adres mag openen (zie geld_eerder).
+ */
+export async function fetchEerder(
+  adres: string,
+  alles: boolean,
+): Promise<{ boekingen: EerdereBoeking[]; ouder: number }> {
+  const { data, error } = await supabase.rpc("geld_eerder", { adres_id: adres, alles });
+  if (error) throw error;
+  const x = (data ?? {}) as { boekingen?: EerdereBoeking[]; ouder?: number };
+  return {
+    ouder: Number(x.ouder ?? 0),
+    boekingen: lijst<EerdereBoeking>(x.boekingen).map((b) => ({
+      ...b,
+      bedrag: Number(b.bedrag ?? 0),
+      aantal: b.aantal == null ? null : Number(b.aantal),
+      prijs_per_beurt: b.prijs_per_beurt == null ? null : Number(b.prijs_per_beurt),
+      gebruikt: Number(b.gebruikt ?? 0),
+      omgerekend_van: Number(b.omgerekend_van ?? 0),
+    })),
   };
 }
 

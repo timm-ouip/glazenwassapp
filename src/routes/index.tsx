@@ -123,6 +123,7 @@ import { NotitieCel } from "@/components/NotitieCel";
 import { ZoekBalk } from "@/components/ZoekBalk";
 import { HoekadresDialog } from "@/components/HoekadresDialog";
 import { KlusDialog } from "@/components/KlusDialog";
+import { DagBetalen } from "@/components/betalingen/DagBetalen";
 import { KlantMenu } from "@/components/KlantMenu";
 import { Overgeslagen } from "@/components/Overgeslagen";
 import { PrijsCel } from "@/components/PrijsCel";
@@ -195,7 +196,7 @@ import {
   type StraatGroep,
   type Street,
 } from "@/lib/klanten";
-import { heeftRecht, useRecht } from "@/lib/rechten";
+import { heeftRecht, useMagAfrekenen, useRecht } from "@/lib/rechten";
 import { StopDialog } from "@/components/StopDialog";
 import { geplandeDagen } from "@/lib/stoppen";
 import { useKlantActies } from "@/lib/useKlantActies";
@@ -336,6 +337,7 @@ function Index() {
   const prijzenZien = useRecht("prijzen_zien");
   const magKlanten = useRecht("klanten_bewerken");
   const magPlannen = useRecht("planning");
+  const kanAfrekenen = useMagAfrekenen();
   const ookVandaag = useOokVandaag();
   const toonPrijzen = prijzenTonen && prijzenZien;
   const [selectie, setSelectie] = useState<string[]>([]);
@@ -414,6 +416,11 @@ function Index() {
     customer: null,
   });
   const [klus, setKlus] = useState<{ open: boolean; customer: Customer | null }>({
+    open: false,
+    customer: null,
+  });
+  /** "Betalen…" bij een adres: op kantoor, zonder vrijgegeven wijk. */
+  const [betalen, setBetalen] = useState<{ open: boolean; customer: Customer | null }>({
     open: false,
     customer: null,
   });
@@ -1862,6 +1869,15 @@ function Index() {
   const opHoekadres = useStabiel((c: Customer) => setHoek({ open: true, customer: c }));
   const opKlus = useStabiel((c: Customer) => setKlus({ open: true, customer: c }));
   const opStoppen = useStabiel((c: Customer) => setStop({ open: true, customer: c }));
+  const opBetalen = useStabiel((c: Customer) => setBetalen({ open: true, customer: c }));
+  // "Betalen…" in het menu van een regel: voor de eigenaar en wie mag
+  // afrekenen, en alleen bij een contant adres (zoals op de dag). De regel
+  // kent zijn wijk niet, dus de betaalwijze van de wijk gaat mee.
+  const wijkMethode = districts.find((d) => d.id === actieveWijk)?.betaalmethode;
+  const betalenBijRegel = useMemo(
+    () => (kanAfrekenen && wijkMethode ? { wijkMethode, open: opBetalen } : null),
+    [kanAfrekenen, wijkMethode, opBetalen],
+  );
   const opAddQuickNote = useStabiel(nieuweSnelkeuze);
   const opVerfStart = useStabiel(startVerf);
   const opKlantOpDag = useStabiel((c: Customer, aan: boolean) => {
@@ -2353,6 +2369,7 @@ function Index() {
       onHoekadres={opHoekadres}
       onKlus={opKlus}
       onStoppen={opStoppen}
+      betalen={betalenBijRegel}
       onNieuweRegel={opNieuweRegel}
       onEditStreet={opEditStreet}
       onDeleteStreet={opDeleteStreet}
@@ -2887,6 +2904,16 @@ function Index() {
           stop.customer ? verwijderKlant(stop.customer, planningWeg) : Promise.resolve()
         }
       />
+      <DagBetalen
+        open={betalen.open}
+        onOpenChange={(open) => setBetalen((b) => ({ ...b, open }))}
+        customer={betalen.customer}
+        adresTekst={betalen.customer ? adresLabel(betalen.customer.id) : ""}
+        wijk={districts.find((d) => d.id === actieveWijk)}
+        // Wat er openstaat zoals bij Betalingen, zonder de beurt van vandaag:
+        // die hangt af van het team van wie kijkt, en hoort bij de dag.
+        vandaag={false}
+      />
       <KlusDialog
         open={klus.open}
         onOpenChange={(open) => setKlus((k) => ({ ...k, open }))}
@@ -3220,6 +3247,8 @@ interface BlokProps {
   onHoekadres: (c: Customer) => void;
   onKlus: (c: Customer) => void;
   onStoppen: (c: Customer) => void;
+  /** "Betalen…" in het menu; leeg zonder het recht. */
+  betalen: BetalenBijRegel | null;
   onNieuweRegel: (streetId: string, nummer: string) => void;
   onEditStreet: (street: Street) => void;
   onDeleteStreet: (street: Street) => void;
@@ -3784,6 +3813,7 @@ const StraatKolom = memo(function StraatKolom({
             onHoekadres={p.onHoekadres}
             onKlus={p.onKlus}
             onStoppen={p.onStoppen}
+            betalen={p.betalen}
           />
         ))}
       </div>
@@ -3830,6 +3860,13 @@ interface RijProps {
   onHoekadres: (c: Customer) => void;
   onKlus: (c: Customer) => void;
   onStoppen: (c: Customer) => void;
+  betalen: BetalenBijRegel | null;
+}
+
+/** "Betalen…" bij een regel: de betaalwijze van de wijk, en het venster openen. */
+interface BetalenBijRegel {
+  wijkMethode: string;
+  open: (c: Customer) => void;
 }
 
 /**
@@ -4286,6 +4323,11 @@ const KlantRij = memo(function KlantRij(p: RijProps) {
       onHoekadres={() => p.onHoekadres(c)}
       onKlus={() => p.onKlus(c)}
       onStoppen={p.magKlanten ? () => p.onStoppen(c) : undefined}
+      onBetalen={
+        p.betalen && (c.betaalmethode ?? p.betalen.wijkMethode) === "contant"
+          ? () => p.betalen?.open(c)
+          : undefined
+      }
       onSplitsen={p.magPlannen && p.magSplitsen ? () => p.onSplitsen(c) : undefined}
       alleenLezen={!p.magPlannen}
       markeringen={p.markeringen}
