@@ -854,6 +854,7 @@ export type Database = {
           door_naam: string;
           factuurregel_id: string | null;
           id: string;
+          kaart_na: Json | null;
           kaart_was: Json | null;
           ongedaan_door: string | null;
           ongedaan_naam: string | null;
@@ -873,6 +874,7 @@ export type Database = {
           door_naam?: string;
           factuurregel_id?: string | null;
           id?: string;
+          kaart_na?: Json | null;
           kaart_was?: Json | null;
           ongedaan_door?: string | null;
           ongedaan_naam?: string | null;
@@ -892,6 +894,7 @@ export type Database = {
           door_naam?: string;
           factuurregel_id?: string | null;
           id?: string;
+          kaart_na?: Json | null;
           kaart_was?: Json | null;
           ongedaan_door?: string | null;
           ongedaan_naam?: string | null;
@@ -4356,6 +4359,10 @@ export type Database = {
           vooruit_maanden?: string[] | null;
         };
         Returns: undefined;
+      };
+      geld_klantkaart_zetten: {
+        Args: { adres_id: string; bedrag?: number; maand: string; teken: string };
+        Returns: string;
       };
       geld_krediet: {
         Args: { adressen: string[]; bedrijf: string };

@@ -728,10 +728,19 @@ export interface OvermaakBeurt {
   omzetting: { id: string; door_naam: string; op: string } | null;
 }
 
-/** Eén keer omgezet: het adres, of één beurt. Ook wat weer ongedaan is. */
+/** Hoe één maand op de kaart stond: het vakje van de beginstand, en of er een 1 stond. */
+export interface KaartMaandStand {
+  vakje: { maand: string; teken: string; bedrag: number } | null;
+  een: boolean;
+}
+
+/**
+ * Eén keer omgezet: het adres, één beurt, of één maand op de kaart van de
+ * klant (`kaart`, met hoe hij stond en hoe hij werd). Ook wat weer ongedaan is.
+ */
 export interface Omzetting {
   id: string;
-  soort: "adres" | "beurt";
+  soort: "adres" | "beurt" | "kaart";
   ronde: string | null;
   datum: string | null;
   vorige_methode: Betaalmethode | null;
@@ -739,6 +748,8 @@ export interface Omzetting {
   op: string;
   ongedaan_op: string | null;
   ongedaan_naam: string | null;
+  kaart_was?: KaartMaandStand | null;
+  kaart_na?: KaartMaandStand | null;
 }
 
 export interface Omzettingen {
@@ -776,6 +787,40 @@ export async function zetMaandNaarContant(adres: string, maand: string, teken: "
     teken,
   });
   if (error) throw error;
+}
+
+/**
+ * Eén maand op de kaart van één klant: 0, x, een letter of + (met bedrag),
+ * na de start een 1; null = leeg. Voor de eigenaar en wie mag afrekenen; de
+ * database onthoudt wie wat veranderde (terug te zetten met
+ * draaiOmzettingTerug).
+ */
+export async function zetKlantkaart(
+  adres: string,
+  maand: string,
+  teken: string | null,
+  bedrag = 0,
+) {
+  const { error } = await supabase.rpc("geld_klantkaart_zetten", {
+    adres_id: adres,
+    maand,
+    teken: teken as string,
+    bedrag,
+  });
+  if (error) throw error;
+}
+
+/** Hoe een maand op de kaart staat, kort: "0", "v 8", "+5", "1" of "leeg". */
+export function kaartStandTekst(s: KaartMaandStand | null | undefined): string {
+  if (!s) return "leeg";
+  const v = s.vakje;
+  if (v) {
+    if (v.teken === "x") return "×";
+    const b = String(Math.round(Number(v.bedrag) * 100) / 100).replace(".", ",");
+    if (v.teken === "0") return Number(v.bedrag) > 0 ? `0 (€ ${b})` : "0";
+    return v.teken === "+" ? `+${b}` : `${v.teken} ${b}`;
+  }
+  return s.een ? "1" : "leeg";
 }
 
 /** De omgezette beurten van één maand weer op overmaken. */

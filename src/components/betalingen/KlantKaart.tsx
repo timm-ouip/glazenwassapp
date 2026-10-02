@@ -20,15 +20,16 @@ import {
   effectieveMethode,
   fetchOmzettingen,
   isOmgezet,
+  kaartStandTekst,
   terugNaarOvermakenTekst,
-  zetKaart,
+  zetKlantkaart,
   zetMaandNaarContant,
   zetMaandTerug,
   zetNaarContant,
+  type Omzetting,
   type OvermaakBeurt,
 } from "@/lib/betalingen";
 import {
-  kaartDelen,
   kaartVakjesVan,
   leesVakInvoer,
   maandVan,
@@ -42,7 +43,6 @@ import {
 } from "@/lib/geldkaart";
 import { fetchCustomer, fetchDistricts, fetchStreets, formatPrice, toonMaand } from "@/lib/klanten";
 import { fetchKaart, soortLabel } from "@/lib/overzichten";
-import { useAuth } from "@/lib/auth";
 import { useMagAfrekenen } from "@/lib/rechten";
 import { cn } from "@/lib/utils";
 
@@ -97,11 +97,12 @@ const opFactuur = (b: OvermaakBeurt) => !!b.factuur && b.factuur !== "los";
  * zegt het venster wat je eerst moet doen. Een omgezette maand houdt een
  * klein pinpasje en kan terug naar overmaken.
  *
- * Omzetten (en terugzetten) kan de eigenaar en wie mag afrekenen, en alleen
- * als het adres nu contant betaalt (anders staat de knop "Omzetten naar
- * contant" er). De kaart verder invullen (0, ×, een letter, een 1) blijft
- * van de eigenaar, net als op de straatkaart. Wie alleen bedragen mag zien,
- * kijkt mee.
+ * Aanpassen (omzetten, terugzetten, en de kaart invullen met 0, ×, een
+ * letter of een 1) kan de eigenaar en wie mag afrekenen, en alleen als het
+ * adres nu contant betaalt (anders staat de knop "Omzetten naar contant"
+ * er). Elke wijziging komt onderaan te staan, met wie en wanneer, en is daar
+ * terug te zetten. De straatkaart blijft van de eigenaar. Wie alleen
+ * bedragen mag zien, kijkt mee.
  */
 export function KlantKaart({
   adresId,
@@ -120,9 +121,6 @@ export function KlantKaart({
   const qc = useQueryClient();
   const bevestig = useBevestig();
   const magAanpassen = useMagAfrekenen();
-  // De kaart zelf invullen (0, ×, een letter, een 1) blijft van de eigenaar,
-  // net als op de straatkaart; wie mag afrekenen zet alleen maanden om.
-  const isEigenaar = useAuth().employee?.rol === "eigenaar";
   const [jaar, setJaar] = useState(() => new Date().getFullYear());
   const [gekozen, setGekozen] = useState<string | null>(null);
   const [invoer, setInvoer] = useState("");
@@ -248,41 +246,21 @@ export function KlantKaart({
 
   /**
    * Een gewoon vakje zetten of wissen (null), zoals op de straatkaart: vóór
-   * en in de startmaand de beginstand, daarna een 1 (al betaald).
+   * en in de startmaand de beginstand, daarna een 1 (al betaald). Via de
+   * database van deze ene klant: die onthoudt wie wat veranderde, en dat zet
+   * je onderaan terug. Een ingetypte beginstand (een bedrag zonder maanden)
+   * vervang je hier niet; dat zegt de database dan.
    */
   async function zetVak(maand: string, nieuw: { teken: string; bedrag: number } | null) {
     if (!c || uit) return;
-    const was = kaartVakjesVan(data, peilMaand);
-    const voorStart = !!peilMaand && maand <= peilMaand;
-    // Een ingetypt bedrag (zonder maanden) staat als 0 in de startmaand.
-    const ingetypt = voorStart ? was.find((v) => v.ingetypt) : undefined;
-    if (ingetypt) {
-      const ja = await bevestig({
-        titel: "Ingetypte beginstand vervangen?",
-        tekst: `Hier staat nu ${formatPrice(ingetypt.bedrag)} als beginstand. Met invullen per maand wordt het wat je op de kaart zet.`,
-        bevestigLabel: "Vervangen",
-      });
-      if (!ja) return;
-    }
     if (nieuw && (nieuw.teken === "0" || nieuw.teken === "1") && c.price <= 0) {
       toast.error(
         "Dit adres heeft nog geen prijs, dus Paaltje Systems weet niet wat een maand kost.",
       );
       return;
     }
-    const lijst = was.filter((v) => v.maand !== maand && !(voorStart && v.ingetypt));
-    if (nieuw) {
-      lijst.push({
-        maand,
-        teken: nieuw.teken,
-        bedrag: nieuw.teken === "0" ? c.price : nieuw.bedrag,
-      });
-    }
-    lijst.sort((a, b) => a.maand.localeCompare(b.maand));
-    const delen = kaartDelen(lijst, was);
-    if (!delen.begin && !delen.vooruit) return;
     const ok = await doe(
-      () => zetKaart(c.id, delen.begin, delen.vooruit),
+      () => zetKlantkaart(c.id, maand, nieuw?.teken ?? null, nieuw?.bedrag ?? 0),
       nieuw ? `${toonMaand(maand)} op de kaart gezet` : `${toonMaand(maand)} gewist`,
     );
     if (ok) {
@@ -312,6 +290,18 @@ export function KlantKaart({
     });
     if (!ja) return;
     await doe(() => zetMaandTerug(adresId!, maand), `${toonMaand(maand)} maakt weer over`);
+  }
+
+  /** Eén wijziging op de kaart terugzetten, na een vraag: met één tik verandert er geld. */
+  async function kaartTerug(o: Omzetting) {
+    const maand = o.ronde ?? "";
+    const ja = await bevestig({
+      titel: "Wijziging op de kaart ongedaan maken?",
+      tekst: `${toonMaand(maand)} ${maand.slice(0, 4)} gaat terug van ${kaartStandTekst(o.kaart_na)} naar ${kaartStandTekst(o.kaart_was)}.`,
+      bevestigLabel: "Ongedaan maken",
+    });
+    if (!ja) return;
+    await doe(() => draaiOmzettingTerug(o.id), "Op de kaart teruggezet");
   }
 
   if (!adresId) return null;
@@ -627,7 +617,7 @@ export function KlantKaart({
                         onKies={() => void maandTerug(keuze.maand)}
                       />
                     )}
-                    {!isEigenaar ? null : keuze.voorStart ? (
+                    {keuze.voorStart ? (
                       <>
                         <div className="grid grid-cols-2 gap-1.5">
                           <KeuzeKnop
@@ -689,7 +679,7 @@ export function KlantKaart({
                         />
                       )
                     )}
-                    {isEigenaar && keuze.vakje && !keuze.vakje.ingetypt && (
+                    {keuze.vakje && !keuze.vakje.ingetypt && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -705,17 +695,33 @@ export function KlantKaart({
             </section>
           )}
 
-          {/* Wie het adres omzette, ook als de gele melding al weg is. */}
+          {/* Wie het adres omzette en wie wat op de kaart zette, nieuw naar
+              oud; een kaartwijziging zet je hier terug. */}
           {(omz.data?.omzettingen ?? [])
-            .filter((o) => o.soort === "adres")
+            .filter((o) => o.soort === "adres" || o.soort === "kaart")
             .map((o) => (
-              <p key={o.id} className="text-[12px] text-muted-foreground">
-                <span className={o.ongedaan_op ? "line-through" : ""}>
-                  Omgezet van overmaken naar contant door {o.door_naam || "?"} · {moment(o.op)}
-                </span>
-                {o.ongedaan_op &&
-                  ` · teruggedraaid door ${o.ongedaan_naam || "?"} · ${moment(o.ongedaan_op)}`}
-              </p>
+              <div key={o.id} className="flex items-start gap-2 text-[12px] text-muted-foreground">
+                <p className="min-w-0 flex-1">
+                  <span className={o.ongedaan_op ? "line-through" : ""}>
+                    {o.soort === "adres"
+                      ? "Omgezet van overmaken naar contant"
+                      : `${toonMaand(o.ronde ?? "")} ${(o.ronde ?? "").slice(0, 4)} op de kaart: ${kaartStandTekst(o.kaart_was)} → ${kaartStandTekst(o.kaart_na)}`}{" "}
+                    door {o.door_naam || "?"} · {moment(o.op)}
+                  </span>
+                  {o.ongedaan_op &&
+                    ` · teruggedraaid door ${o.ongedaan_naam || "?"} · ${moment(o.ongedaan_op)}`}
+                </p>
+                {o.soort === "kaart" && !o.ongedaan_op && kanAanpassen && (
+                  <button
+                    type="button"
+                    className="min-h-8 shrink-0 font-medium underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+                    disabled={uit}
+                    onClick={() => void kaartTerug(o)}
+                  >
+                    Ongedaan
+                  </button>
+                )}
+              </div>
             ))}
 
           <p className="text-[11.5px] leading-relaxed text-muted-foreground">
