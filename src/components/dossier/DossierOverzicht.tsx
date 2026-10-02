@@ -31,6 +31,7 @@ import {
   dossierLink,
 } from "@/components/dossier/DossierVelden";
 import { JaarVakjes } from "@/components/dossier/JaarVakjes";
+import { KlantInvulLink } from "@/components/dossier/KlantInvulLink";
 import { FrequentieKeuze } from "@/components/FrequentieKiezer";
 import { NotitieCel } from "@/components/NotitieCel";
 import { Pillen } from "@/components/Pillen";
@@ -273,6 +274,7 @@ function KolomKlant({ d }: { d: Dossier }) {
             concept liggen.
           </p>
         )}
+        <KlantInvulLink d={d} />
       </DossierKaart>
 
       {/* Zoals in het ontwerp direct onder de klant; de extra velden komen daarna. */}

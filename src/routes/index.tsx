@@ -13,7 +13,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   closestCenter,
   useDndContext,
@@ -113,6 +113,7 @@ import { DubbeleStraten } from "@/components/DubbeleStraten";
 
 import { WijkKiezer } from "@/components/WijkKiezer";
 import { useBevestig } from "@/components/Bevestig";
+import { useOokVandaag } from "@/lib/ookVandaag";
 import { DuurCel } from "@/components/DuurCel";
 import { InlineCel } from "@/components/InlineCel";
 import { laatsteUndo, pushUndo, undoKnop, undoMetMelding, useLaatsteUndoLabel } from "@/lib/undo";
@@ -335,6 +336,7 @@ function Index() {
   const prijzenZien = useRecht("prijzen_zien");
   const magKlanten = useRecht("klanten_bewerken");
   const magPlannen = useRecht("planning");
+  const ookVandaag = useOokVandaag();
   const toonPrijzen = prijzenTonen && prijzenZien;
   const [selectie, setSelectie] = useState<string[]>([]);
   /** Staat de selecteermodus aan? Dan vink je adressen aan zonder dat er al
@@ -1937,7 +1939,9 @@ function Index() {
   );
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    // Muis en vinger apart: een PointerSensor reageert ook op een vinger, en
+    // dan begint een veeg om te scrollen al als slepen.
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
@@ -2858,9 +2862,10 @@ function Index() {
         quickNotes={quickNotes}
         onAddQuickNote={nieuweSnelkeuze}
         standaardWijkId={actieveWijk}
-        onSaved={() => {
+        onSaved={(id) => {
           herlaad();
           qc.invalidateQueries({ queryKey: ["klanten"] });
+          void ookVandaag(id);
         }}
       />
       <StopDialog
@@ -2917,9 +2922,10 @@ function Index() {
         quickNotes={quickNotes}
         onAddQuickNote={nieuweSnelkeuze}
         standaardWijkId={actieveWijk}
-        onSaved={() => {
+        onSaved={(id) => {
           herlaad();
           qc.invalidateQueries({ queryKey: ["klanten"] });
+          void ookVandaag(id);
         }}
       />
       <StratenAanvullen

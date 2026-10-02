@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useBevestig } from "@/components/Bevestig";
+import { useOokVandaag } from "@/lib/ookVandaag";
 import { pushUndo, undoKnop } from "@/lib/undo";
 import { nieuweKlus, verwijderKlus } from "@/lib/klussen";
 import { useActieveWijk } from "@/lib/wijkgeheugen";
@@ -689,6 +690,7 @@ function Klanten() {
   // geen velden of knoppen staan die toch niets opslaan.
   const magKlanten = useRecht("klanten_bewerken");
   const magPlannen = useRecht("planning");
+  const ookVandaag = useOokVandaag();
   const magMail = useRecht("mail_lezen");
   const prijzenZien = useRecht("prijzen_zien");
 
@@ -1656,7 +1658,10 @@ function Klanten() {
           void addQuickNote(label).then(() => qc.invalidateQueries({ queryKey: ["quick_notes"] }));
         }}
         standaardWijkId={actieveWijk}
-        onSaved={herlaad}
+        onSaved={(id) => {
+          herlaad();
+          void ookVandaag(id);
+        }}
       />
     </AppLayout>
   );

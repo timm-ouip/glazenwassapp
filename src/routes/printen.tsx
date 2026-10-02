@@ -13,7 +13,7 @@ import {
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
@@ -738,7 +738,9 @@ function PrintPagina() {
   }, [sleepId]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    // Muis en vinger apart: een PointerSensor reageert ook op een vinger, en
+    // dan begint een veeg om te scrollen al als slepen.
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 

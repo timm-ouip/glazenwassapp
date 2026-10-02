@@ -13,26 +13,54 @@
 /** Zoveel rijen vragen we per stuk. */
 export const PAGINA = 1000;
 
+/** Zoveel stukken vragen we tegelijk, als het een lange lijst is. */
+const TEGELIJK = 3;
+
 /**
  * Een lijst in stukken van PAGINA ophalen tot hij op is. `pagina` maakt de
  * opvraging voor één stuk (met `.range(van, tot)`); die moet een volgorde
  * hebben die eindigt op iets unieks, zoals id. Anders kunnen rijen op de naad
  * tussen twee stukken wegvallen of dubbel komen.
  *
- * Pas stoppen bij een leeg stuk, niet bij een kort: staat de grens van de
- * server ooit lager dan PAGINA, dan zou een kort stuk er anders uitzien als
- * het laatste. Dat kost hooguit één opvraging extra.
+ * Is het eerste stuk vol, dan vragen we de volgende stukken tegelijk: na
+ * elkaar kostte een lijst van 2700 adressen op 4G vier keer wachten. Ze komen
+ * in dezelfde volgorde achter elkaar. Een vol eerste stuk bewijst ook dat de
+ * server er minstens PAGINA per keer geeft; een kort stuk is dan echt het
+ * laatste.
+ *
+ * Is het eerste stuk kort, dan stuk voor stuk, en pas stoppen bij een leeg
+ * stuk: staat de grens van de server ooit lager dan PAGINA, dan zou een kort
+ * stuk er anders uitzien als het laatste. Dat kost hooguit één opvraging
+ * extra.
  */
 export async function haalAllePaginas<T>(
   pagina: (van: number, tot: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
 ): Promise<T[]> {
-  const alles: T[] = [];
-  for (;;) {
-    const van = alles.length;
+  const stuk = async (van: number): Promise<T[]> => {
     const { data, error } = await pagina(van, van + PAGINA - 1);
     if (error) throw error;
-    const rijen = data ?? [];
-    if (rijen.length === 0) return alles;
-    alles.push(...rijen);
+    return data ?? [];
+  };
+
+  const alles = [...(await stuk(0))];
+  if (alles.length === 0) return alles;
+
+  if (alles.length < PAGINA) {
+    for (;;) {
+      const rijen = await stuk(alles.length);
+      if (rijen.length === 0) return alles;
+      alles.push(...rijen);
+    }
+  }
+
+  for (;;) {
+    const van = alles.length;
+    const stukken = await Promise.all(
+      Array.from({ length: TEGELIJK }, (_, i) => stuk(van + i * PAGINA)),
+    );
+    for (const rijen of stukken) {
+      alles.push(...rijen);
+      if (rijen.length < PAGINA) return alles;
+    }
   }
 }

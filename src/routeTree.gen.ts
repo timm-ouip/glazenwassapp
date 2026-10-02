@@ -16,6 +16,7 @@ import { Route as BerichtenRouteImport } from './routes/berichten'
 import { Route as BetalingenRouteImport } from './routes/betalingen'
 import { Route as DagRouteImport } from './routes/dag'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as GegevensRouteImport } from './routes/gegevens'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as ImporterenRouteImport } from './routes/importeren'
 import { Route as InstellingenRouteImport } from './routes/instellingen'
@@ -65,6 +66,11 @@ const DagRoute = DagRouteImport.update({
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GegevensRoute = GegevensRouteImport.update({
+  id: '/gegevens',
+  path: '/gegevens',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HomeRoute = HomeRouteImport.update({
@@ -151,6 +157,7 @@ export interface FileRoutesByFullPath {
   '/betalingen': typeof BetalingenRoute
   '/dag': typeof DagRoute
   '/dashboard': typeof DashboardRoute
+  '/gegevens': typeof GegevensRoute
   '/home': typeof HomeRoute
   '/importeren': typeof ImporterenRoute
   '/instellingen': typeof InstellingenRoute
@@ -175,6 +182,7 @@ export interface FileRoutesByTo {
   '/betalingen': typeof BetalingenRoute
   '/dag': typeof DagRoute
   '/dashboard': typeof DashboardRoute
+  '/gegevens': typeof GegevensRoute
   '/home': typeof HomeRoute
   '/importeren': typeof ImporterenRoute
   '/instellingen': typeof InstellingenRoute
@@ -200,6 +208,7 @@ export interface FileRoutesById {
   '/betalingen': typeof BetalingenRoute
   '/dag': typeof DagRoute
   '/dashboard': typeof DashboardRoute
+  '/gegevens': typeof GegevensRoute
   '/home': typeof HomeRoute
   '/importeren': typeof ImporterenRoute
   '/instellingen': typeof InstellingenRoute
@@ -226,6 +235,7 @@ export interface FileRouteTypes {
     | '/betalingen'
     | '/dag'
     | '/dashboard'
+    | '/gegevens'
     | '/home'
     | '/importeren'
     | '/instellingen'
@@ -250,6 +260,7 @@ export interface FileRouteTypes {
     | '/betalingen'
     | '/dag'
     | '/dashboard'
+    | '/gegevens'
     | '/home'
     | '/importeren'
     | '/instellingen'
@@ -274,6 +285,7 @@ export interface FileRouteTypes {
     | '/betalingen'
     | '/dag'
     | '/dashboard'
+    | '/gegevens'
     | '/home'
     | '/importeren'
     | '/instellingen'
@@ -299,6 +311,7 @@ export interface RootRouteChildren {
   BetalingenRoute: typeof BetalingenRoute
   DagRoute: typeof DagRoute
   DashboardRoute: typeof DashboardRoute
+  GegevensRoute: typeof GegevensRoute
   HomeRoute: typeof HomeRoute
   ImporterenRoute: typeof ImporterenRoute
   InstellingenRoute: typeof InstellingenRoute
@@ -365,6 +378,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gegevens': {
+      id: '/gegevens'
+      path: '/gegevens'
+      fullPath: '/gegevens'
+      preLoaderRoute: typeof GegevensRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/home': {
@@ -483,6 +503,7 @@ const rootRouteChildren: RootRouteChildren = {
   BetalingenRoute: BetalingenRoute,
   DagRoute: DagRoute,
   DashboardRoute: DashboardRoute,
+  GegevensRoute: GegevensRoute,
   HomeRoute: HomeRoute,
   ImporterenRoute: ImporterenRoute,
   InstellingenRoute: InstellingenRoute,

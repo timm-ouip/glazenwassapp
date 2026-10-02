@@ -38,7 +38,10 @@ export function useSlepen(eigen: Partial<SleepHandlers> = {}) {
   const handlers: SleepHandlers = {
     onPointerDown(e) {
       eigen.onPointerDown?.(e);
-      if (e.defaultPrevented || e.button !== 0) return;
+      // Met de vinger niet: op de telefoon schoof je zo het hele venster
+      // scheef als je de kop alleen maar aanraakte of wilde scrollen. Daar is
+      // het een blad dat je omlaag veegt (zie PopupKader).
+      if (e.defaultPrevented || e.button !== 0 || e.pointerType === "touch") return;
       const doel = e.target as HTMLElement;
       if (!doel.closest("[data-sleepgreep]") || doel.closest(NIET_SLEPEN)) return;
 
@@ -106,7 +109,11 @@ export function useSlepen(eigen: Partial<SleepHandlers> = {}) {
   return {
     // Verschuiven met de marge: de transform is al van het centreren en het
     // in- en uitzoomen, en die blijven zo gewoon werken.
-    stijl: { marginLeft: verschuiving.x, marginTop: verschuiving.y } as React.CSSProperties,
+    // Niet versleept: geen marges, anders wint een marge van 0 van mx-auto
+    // en staat een smal blad (zie PopupKader) tegen de linkerkant.
+    stijl: (verschuiving.x === 0 && verschuiving.y === 0
+      ? {}
+      : { marginLeft: verschuiving.x, marginTop: verschuiving.y }) as React.CSSProperties,
     handlers,
     reset: () => setVerschuiving({ x: 0, y: 0 }),
   };

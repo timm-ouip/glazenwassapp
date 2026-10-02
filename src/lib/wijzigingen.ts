@@ -8,7 +8,8 @@ import type { Database } from "@/integrations/supabase/types";
 import { formatPrice, ritmeMaanden, toonMaand, toonMaandKort } from "@/lib/klanten";
 
 export type Wijziging = Database["public"]["Tables"]["wijzigingen"]["Row"];
-export type WijzigingBron = "app" | "paaltje" | "systeem";
+/** "klant": de klant zelf, via zijn invul-linkje (/gegevens). */
+export type WijzigingBron = "app" | "paaltje" | "systeem" | "klant";
 
 /** Wat de zinnen nodig hebben buiten de regel zelf: namen bij de ids. */
 export type WijzigingContext = {
@@ -279,7 +280,9 @@ export function beschrijfWijziging(
 /** Kan deze regel hier terug? Paaltje en het systeem hebben hun eigen plek;
  *  een verplaatsing zet je terug in de planning. */
 export function kanOngedaan(w: Pick<Wijziging, "bron" | "tabel" | "teruggedraaid_op">): boolean {
-  return w.bron === "app" && w.tabel !== "wasdag_regels" && !w.teruggedraaid_op;
+  return (
+    (w.bron === "app" || w.bron === "klant") && w.tabel !== "wasdag_regels" && !w.teruggedraaid_op
+  );
 }
 
 /** Per opslag: dezelfde tijd en dezelfde rij. Nieuwste eerst. */
@@ -312,7 +315,9 @@ export function groepeerWijzigingen(
             ? "automatisch"
             : bron === "paaltje"
               ? "Paaltje"
-              : w.door_naam || "onbekend",
+              : bron === "klant"
+                ? "de klant zelf"
+                : w.door_naam || "onbekend",
         regels: [],
         ongedaanIds: [],
         teruggedraaid: null,

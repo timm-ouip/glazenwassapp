@@ -32,10 +32,13 @@ export function SelectieGreep({
       {...attributes}
       aria-label={`Sleep de selectie (${telAdressen(ids.length)})`}
       title={`Sleep de selectie (${telAdressen(ids.length)})`}
-      // Eerst de sleep van dnd-kit, en dan niet verder: anders begint de
-      // selecteerstand hier een streek en wist of kiest hij adressen.
-      onPointerDown={(e) => {
-        listeners?.["onPointerDown"]?.(e);
+      // Niet verder: anders begint de selecteerstand hier een streek en wist
+      // of kiest hij adressen.
+      onPointerDown={(e) => e.stopPropagation()}
+      // Eerst de sleep van dnd-kit (de muis en de vinger hebben elk hun eigen
+      // sensor, zie planning), en dan niet verder naar de kaart eromheen.
+      onMouseDown={(e) => {
+        listeners?.["onMouseDown"]?.(e);
         e.stopPropagation();
       }}
       onTouchStart={(e) => {

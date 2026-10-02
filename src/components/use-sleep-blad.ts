@@ -1,9 +1,23 @@
 /**
  * Eigen bestand: een bestand met onderdelen dat ook een losse functie deelt,
  * ververst tijdens het ontwikkelen niet meer vanzelf. Gebruikt door het
- * klantblad (KlantgegevensDialog) en door PopupKader als hij als blad opent.
+ * klantblad (KlantgegevensDialog), door PopupKader als hij als blad opent en
+ * door het bevestigvenster (Bevestig).
  */
 import { useRef } from "react";
+
+/** Het schermpje als blad dat van onderen omhoog schuift, zoals op de telefoon
+ *  hoort; dezelfde vorm als het klantblad (KlantgegevensDialog).
+ *
+ *  Voor PopupKader en het bevestigvenster (Bevestig).
+ *
+ *  De breedte volgt het scherm (PopupKader is een kolom); de voet slaat om als
+ *  de knoppen niet naast elkaar passen, zodat rechts niets meer wegvalt.
+ *  Links én rechts vast met mx-auto: zet een schermpje zelf een smalle breedte
+ *  (sm:max-w-sm, een liggende telefoon), dan staat het blad in het midden en
+ *  niet tegen de linkerkant. */
+export const BLAD =
+  "focus:outline-none bottom-0 left-0 right-0 mx-auto top-auto max-h-[90dvh] max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] sm:max-w-none sm:rounded-b-none sm:rounded-t-[24px] data-[state=open]:slide-in-from-bottom-10 data-[state=open]:zoom-in-100 data-[state=closed]:slide-out-to-bottom data-[state=closed]:zoom-out-100";
 
 /**
  * Een onderblad slepen met de vinger. Het blad gaat mee met de vinger;
@@ -33,7 +47,7 @@ export function useSleepBlad({
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
       // Het kruisje blijft gewoon een knop.
       if ((e.target as HTMLElement).closest("button")) return;
-      const blad = e.currentTarget.closest<HTMLElement>('[role="dialog"]');
+      const blad = e.currentTarget.closest<HTMLElement>('[role="dialog"], [role="alertdialog"]');
       if (!blad) return;
       start.current = { y: e.clientY, t: e.timeStamp, id: e.pointerId, blad };
       e.currentTarget.setPointerCapture(e.pointerId);

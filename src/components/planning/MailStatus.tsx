@@ -66,6 +66,8 @@ export function MailStatus({ status, klein = false }: { status: Mailstatus; klei
             aria-label={`${KOP[status.stand]}. ${status.uitleg}`}
             // Niet meeslepen en geen menu openen: dit icoontje is de uitleg.
             onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
               setOpen((o) => !o);

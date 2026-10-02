@@ -108,6 +108,7 @@ import {
 } from "@/lib/klussen";
 import { Checkbox } from "@/components/ui/checkbox";
 import { laatsteUndo, pushUndo, undoKnop, undoMetMelding, useLaatsteUndoLabel } from "@/lib/undo";
+import { haalDossierGegevens } from "@/lib/dossierOpenen";
 import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
 import { geplandeDagen, redenLabel } from "@/lib/stoppen";
 import { verplaatsWasdag } from "@/lib/wasdag";
@@ -1205,6 +1206,20 @@ function DagPagina() {
     }
   }
 
+  /** Na een nieuw adres: de vraag of het deze dag meegaat. */
+  async function ookOpDezeDag(id: string) {
+    // Stond het al op de dag (gekoppeld aan een bestaand adres), dan niets te vragen.
+    if ((wasdagQuery.data ?? []).some((r) => r.customer_id === id)) return;
+    const ja = await bevestig({
+      titel:
+        datum === vandaag() ? "Ook vandaag meewassen?" : `Ook op ${toonDatum(datum)} meewassen?`,
+      tekst: "Het adres is opgeslagen. Zal ik het op deze dag zetten?",
+      bevestigLabel: "Ja, erbij",
+      annuleerLabel: "Nee",
+    });
+    if (ja) await zetOpDag(id);
+  }
+
   /**
    * Niet gevonden bij "+ Adres": een nieuw adres maken. Wat je typte gaat mee,
    * zodat straat en huisnummer al klaarstaan als die eenduidig zijn.
@@ -1288,23 +1303,24 @@ function DagPagina() {
   }
 
   /**
-   * Het dossier, hier op de dag. Klanten en adressen vers ophalen: het
+   * Het dossier, hier op de dag. Dit adres en zijn klant vers ophalen: het
    * dossier schrijft bij opslaan alles terug, en met een oude versie zou je
-   * een net toegevoegd nummer stil weer wissen (zie DossierKnop).
+   * een net toegevoegd nummer stil weer wissen. De grote lijsten komen uit
+   * het geheugen (zie haalDossierGegevens).
    */
   async function openDossier(c: Customer) {
     try {
-      const [klanten, customers, notes] = await Promise.all([
-        qc.fetchQuery({ queryKey: ["klanten"], queryFn: fetchKlanten, staleTime: 0 }),
-        qc.fetchQuery({ queryKey: ["customers"], queryFn: fetchCustomers, staleTime: 0 }),
-        qc.fetchQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes, staleTime: 0 }),
-      ]);
+      const g = await haalDossierGegevens(qc, c.id, c.klant_id ?? undefined);
+      if (!g) {
+        toast.error("Dit adres staat er niet (meer).");
+        return;
+      }
       setDossier({
-        customer: customers.find((x) => x.id === c.id) ?? c,
-        klant: klanten.find((k) => k.id === c.klant_id) ?? null,
-        klanten,
-        customers,
-        quickNotes: notes,
+        customer: g.adres,
+        klant: g.klant,
+        klanten: g.klanten,
+        customers: g.customers,
+        quickNotes: g.quickNotes,
       });
     } catch {
       toast.error("Het dossier kon niet geladen worden. Probeer het zo nog eens.");
@@ -2038,8 +2054,8 @@ function DagPagina() {
           onSaved={(id) => {
             herlaad();
             qc.invalidateQueries({ queryKey: ["klanten"] });
-            // Meteen op deze dag: daarvoor maakte je hem hier aan.
-            if (id) void zetOpDag(id);
+            // Eerst vragen of hij deze dag meegaat; Ja zet hem erop.
+            if (id) void ookOpDezeDag(id);
           }}
         />
       )}

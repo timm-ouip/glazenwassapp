@@ -8,9 +8,10 @@
  * kennen, en zet daar het lege formulier op. Heeft een klant meer panden, dan
  * krijgt elk pand zijn eigen poppetje; er wordt niet gegokt.
  *
- * Het dossier heeft wijken, straten, adressen en klanten nodig. Die haalt hij
- * bij elke klik vers op (in dezelfde cache als de klantenpagina). Zodra alles
- * er is, legt hij het vast en opent het venster: een verversing daarna mag het
+ * Het dossier heeft wijken, straten, adressen en klanten nodig. Die komen uit
+ * het geheugen (dezelfde cache als de klantenpagina); alleen dit adres en deze
+ * klant haalt hij bij elke klik vers op (zie lib/dossierOpenen). Zodra dat er
+ * is, legt hij het vast en opent het venster: een verversing daarna mag het
  * formulier niet opnieuw vullen en je getypte tekst wissen.
  */
 import { useState } from "react";
@@ -19,30 +20,11 @@ import { IconLoader2 as Loader2, IconUser as User } from "@tabler/icons-react";
 import { toast } from "sonner";
 
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
-import {
-  addQuickNote,
-  fetchCustomers,
-  fetchDistricts,
-  fetchKlanten,
-  fetchQuickNotes,
-  fetchStreets,
-  type Customer,
-  type District,
-  type Klant,
-  type QuickNote,
-  type Street,
-} from "@/lib/klanten";
+import { haalDossierGegevens, type DossierGegevens } from "@/lib/dossierOpenen";
+import { addQuickNote, type Klant } from "@/lib/klanten";
 import { cn } from "@/lib/utils";
 
-interface Vast {
-  klant: Klant;
-  adres: Customer;
-  districts: District[];
-  streets: Street[];
-  customers: Customer[];
-  klanten: Klant[];
-  quickNotes: QuickNote[];
-}
+type Vast = DossierGegevens & { klant: Klant };
 
 export function DossierKnop({
   klantId,
@@ -61,29 +43,22 @@ export function DossierKnop({
   const [vast, setVast] = useState<Vast | null>(null);
 
   /**
-   * Bij elke klik vers ophalen, ook als het al in het geheugen staat: het
-   * dossier schrijft bij opslaan alle klantvelden terug, dus met een oude
-   * versie zou je een net toegevoegd nummer stil weer wissen.
+   * Het adres en de klant bij elke klik vers ophalen, ook als ze al in het
+   * geheugen staan: het dossier schrijft bij opslaan alle klantvelden terug,
+   * dus met een oude versie zou je een net toegevoegd nummer stil weer wissen.
+   * De lijsten komen uit het geheugen; die opnieuw ophalen duurde op 4G
+   * seconden.
    */
   async function open() {
     setLaden(true);
     try {
-      const vers = <T,>(queryKey: string[], queryFn: () => Promise<T>) =>
-        qc.fetchQuery({ queryKey, queryFn, staleTime: 0 });
-      const [districts, streets, customers, klanten, quickNotes] = await Promise.all([
-        vers(["districts"], fetchDistricts),
-        vers(["streets"], fetchStreets),
-        vers(["customers"], fetchCustomers),
-        vers(["klanten"], fetchKlanten),
-        vers(["quick_notes"], fetchQuickNotes),
-      ]);
-      const klant = klanten.find((k) => k.id === klantId);
-      const adres = customers.find((c) => c.id === customerId && c.klant_id === klantId);
-      if (!klant || !adres) {
+      const g = await haalDossierGegevens(qc, customerId, klantId);
+      const klant = g?.klant;
+      if (!g || !klant || g.adres.klant_id !== klantId) {
         toast.error("Deze klant of dit adres staat er niet (meer).");
         return;
       }
-      setVast({ klant, adres, districts, streets, customers, klanten, quickNotes });
+      setVast({ ...g, klant });
     } catch {
       toast.error("Het dossier kon niet geladen worden. Probeer het zo nog eens.");
     } finally {

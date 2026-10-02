@@ -1120,6 +1120,7 @@ function Eenheidkaart({
    *  dat vijftig menu's per keer dat er iets op het scherm verandert. */
   maakActies: () => Actie[];
 }) {
+  const mobiel = useIsMobile();
   const blok = eenheid.blok!;
   const losAdres = eenheid.soort === "adres";
   const adresId = eenheid.adresId;
@@ -1232,7 +1233,11 @@ function Eenheidkaart({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>{kaart}</ContextMenuTrigger>
+      {/* Op de telefoon niet: lang indrukken opende dan een menu voor de
+          computer. Daar is het ⋯-knopje op de kaart. */}
+      <ContextMenuTrigger asChild disabled={mobiel}>
+        {kaart}
+      </ContextMenuTrigger>
       <ContextMenuContent className="w-56">
         <MenuInhoud maakActies={maakActies} soort="context" />
       </ContextMenuContent>
@@ -1250,6 +1255,8 @@ function EenheidMenu({ maakActies, titel }: { maakActies: () => Actie[]; titel: 
           aria-label={`Menu voor ${titel}`}
           // Niet meeslepen: dit knopje is het menu.
           onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
           onClick={(e) => e.preventDefault()}
           className="shrink-0 rounded p-0.5 hover:bg-background/50"
         >

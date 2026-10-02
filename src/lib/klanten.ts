@@ -705,6 +705,22 @@ export async function fetchKlanten(): Promise<Klant[]> {
   return data as Klant[];
 }
 
+/**
+ * Eén klant vers uit de database, of null als hij er niet (meer) is (in de
+ * prullenbak). Voor het dossier, net als fetchCustomer: dat schrijft bij
+ * opslaan alle klantvelden terug, dus het moet de stand van nu hebben.
+ */
+export async function fetchKlant(id: string): Promise<Klant | null> {
+  const { data, error } = await supabase
+    .from("klanten")
+    .select(KLANT_VELDEN)
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  return data as Klant | null;
+}
+
 /** Nieuwe klant bij `id === null`, anders bijwerken. Geeft de rij terug. */
 export async function bewaarKlant(id: string | null, velden: KlantVelden): Promise<Klant> {
   const payload = {

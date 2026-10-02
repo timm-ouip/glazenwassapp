@@ -2257,6 +2257,51 @@ export type Database = {
           },
         ];
       };
+      klant_links: {
+        Row: {
+          aantal: number;
+          company_id: string;
+          created_at: string;
+          geldig_tot: string;
+          gezien_op: string | null;
+          klant_id: string;
+          token: string;
+        };
+        Insert: {
+          aantal?: number;
+          company_id?: string;
+          created_at?: string;
+          geldig_tot: string;
+          gezien_op?: string | null;
+          klant_id: string;
+          token: string;
+        };
+        Update: {
+          aantal?: number;
+          company_id?: string;
+          created_at?: string;
+          geldig_tot?: string;
+          gezien_op?: string | null;
+          klant_id?: string;
+          token?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "klant_links_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "klant_links_klant_bedrijf_fkey";
+            columns: ["klant_id", "company_id"];
+            isOneToOne: true;
+            referencedRelation: "klanten";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
       klanten: {
         Row: {
           bedrijfsnaam: string;
@@ -3998,6 +4043,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      klant_vult_gegevens_in: {
+        Args: { sleutel: string; velden: Json };
+        Returns: boolean;
+      };
       aankondigingen_voor: {
         Args: { tot: string; vanaf: string };
         Returns: {

@@ -46,34 +46,11 @@ import {
   type Vrijgave,
 } from "@/lib/geldlopen";
 import { zetInWachtrij } from "@/lib/geldloop-wachtrij";
-import {
-  addQuickNote,
-  fetchCustomers,
-  fetchDistricts,
-  fetchKlanten,
-  fetchQuickNotes,
-  fetchStreets,
-  formatPrice,
-  type Customer,
-  type District,
-  type Klant,
-  type QuickNote,
-  type Street,
-} from "@/lib/klanten";
+import { haalDossierGegevens, type DossierGegevens } from "@/lib/dossierOpenen";
+import { addQuickNote, formatPrice } from "@/lib/klanten";
 import { vooruitLabel } from "@/lib/overzichten";
 
 type Venster = "korting" | "bedrag" | "klacht" | "dossier" | "vooruit" | null;
-
-/** Wat het volledige klantdossier nodig heeft, vers opgehaald bij het openen. */
-interface VolDossier {
-  klant: Klant | null;
-  adres: Customer;
-  districts: District[];
-  streets: Street[];
-  customers: Customer[];
-  klanten: Klant[];
-  quickNotes: QuickNote[];
-}
 
 /**
  * Wat je ziet als je een adres aantikt: bovenin wat je leest (wie, wat er
@@ -114,7 +91,7 @@ export function BetaalPaneel({
   const [venster, setVenster] = useState<Venster>(null);
   // Het volledige dossier (alleen de eigenaar): eerst laden, dan openen.
   const [dossierLaden, setDossierLaden] = useState(false);
-  const [volDossier, setVolDossier] = useState<VolDossier | null>(null);
+  const [volDossier, setVolDossier] = useState<DossierGegevens | null>(null);
   // Het laatst gekozen adres vasthouden terwijl het paneel dichtschuift.
   const [a, setA] = useState<GeldloopAdres | null>(adres);
   useEffect(() => {
@@ -185,9 +162,11 @@ export function BetaalPaneel({
   /**
    * De dossierknop. Een geldloper krijgt het kleine dossier (zonder
    * betaalwijze); de eigenaar het volledige klantdossier, zodat hij aan de
-   * deur ook contant of overmaken kan omzetten. Klanten en adressen vers
+   * deur ook contant of overmaken kan omzetten. Dit adres en de klant vers
    * ophalen: het dossier schrijft bij opslaan alles terug, en met een oude
-   * versie zou je een net toegevoegd nummer stil weer wissen (zie DossierKnop).
+   * versie zou je een net toegevoegd nummer stil weer wissen (zie
+   * lib/dossierOpenen). De lijsten komen uit het geheugen; die opnieuw
+   * ophalen duurde aan de deur op 4G seconden.
    */
   async function openDossier() {
     if (!a) return;
@@ -197,22 +176,12 @@ export function BetaalPaneel({
     }
     setDossierLaden(true);
     try {
-      const vers = <T,>(queryKey: string[], queryFn: () => Promise<T>) =>
-        qc.fetchQuery({ queryKey, queryFn, staleTime: 0 });
-      const [districts, streets, customers, klanten, quickNotes] = await Promise.all([
-        vers(["districts"], fetchDistricts),
-        vers(["streets"], fetchStreets),
-        vers(["customers"], fetchCustomers),
-        vers(["klanten"], fetchKlanten),
-        vers(["quick_notes"], fetchQuickNotes),
-      ]);
-      const pand = customers.find((c) => c.id === a.id);
-      if (!pand) {
+      const g = await haalDossierGegevens(qc, a.id);
+      if (!g) {
         toast.error("Dit adres staat er niet (meer).");
         return;
       }
-      const klant = klanten.find((k) => k.id === pand.klant_id) ?? null;
-      setVolDossier({ klant, adres: pand, districts, streets, customers, klanten, quickNotes });
+      setVolDossier(g);
     } catch {
       toast.error("Het dossier kon niet geladen worden. Probeer het zo nog eens.");
     } finally {

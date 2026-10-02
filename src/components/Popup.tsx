@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { IconInfoCircle as Info } from "@tabler/icons-react";
 
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useSleepBlad } from "@/components/use-sleep-blad";
+import { BLAD, useSleepBlad } from "@/components/use-sleep-blad";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
@@ -19,34 +20,39 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
  * dan de rest.
  */
 
-/** Het schermpje als blad dat van onderen omhoog schuift, zoals op de telefoon
- *  hoort; dezelfde vorm als het klantblad (KlantgegevensDialog).
- *
- *  De breedte volgt het scherm (PopupKader is een kolom); de voet slaat om als
- *  de knoppen niet naast elkaar passen, zodat rechts niets meer wegvalt. */
-const BLAD =
-  "focus:outline-none bottom-0 left-0 top-auto max-h-[90dvh] max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[24px] pb-[env(safe-area-inset-bottom)] sm:max-w-none sm:rounded-b-none sm:rounded-t-[24px] data-[state=open]:slide-in-from-bottom-10 data-[state=open]:zoom-in-100 data-[state=closed]:slide-out-to-bottom data-[state=closed]:zoom-out-100";
-
 /** De buitenkant. Vervangt DialogContent: geen eigen vulling en geen rand,
  *  want de kop en de voet lopen tot aan de zijkant door.
  *
- *  Met `blad` (geef daar `useIsMobile()` aan) schuift hij van onderen omhoog
- *  in plaats van midden in beeld te zweven, en veeg je hem aan de kop omlaag
- *  weg — in plaats van hem als een computerpopup over het scherm te slepen. */
+ *  Op de telefoon is hij vanzelf een blad: hij schuift van onderen omhoog in
+ *  plaats van midden in beeld te zweven, en je veegt hem aan de kop omlaag
+ *  weg — in plaats van hem als een computerpopup over het scherm te slepen.
+ *  Wil een schermpje dat op de telefoon niet, geef dan `blad={false}`. */
 export function PopupKader({
   className,
   children,
-  blad = false,
+  blad: bladKeuze,
   onSluit,
   ...rest
 }: {
   className?: string;
   children: ReactNode;
+  /** Standaard: een blad op de telefoon, een zwevend venster op de computer. */
   blad?: boolean;
-  /** Wat omlaag vegen doet; nodig bij `blad`. */
+  /** Wat omlaag vegen doet. Zonder dit doet het hetzelfde als het kruisje. */
   onSluit?: () => void;
 } & React.ComponentPropsWithoutRef<typeof DialogContent>) {
-  const veeg = useSleepBlad({ onOmlaag: () => onSluit?.() });
+  const mobiel = useIsMobile();
+  const blad = bladKeuze ?? mobiel;
+  const kader = useRef<HTMLDivElement>(null);
+  const veeg = useSleepBlad({
+    onOmlaag: () => {
+      if (onSluit) return onSluit();
+      // Geen eigen sluiten meegegeven: dan het kruisje van de dialoog. Dat
+      // sluit via de onOpenChange die het schermpje al heeft, dus geen van de
+      // schermpjes hoeft hier iets extra voor te doen.
+      kader.current?.querySelector<HTMLButtonElement>("[data-sluitknop]")?.click();
+    },
+  });
   const bladHandlers = blad
     ? {
         onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
@@ -79,11 +85,14 @@ export function PopupKader({
         // het middenstuk (PopupBody, min-h-0). In een raster groeide dat
         // middenstuk mee met de inhoud en werd alles eronder afgeknipt; een
         // lange "Dag klaar" kon je daardoor niet scrollen.
-        "flex max-h-[90vh] flex-col gap-0 overflow-hidden border-0 bg-card p-0 shadow-[0_2px_6px_oklch(0.4_0.02_70/6%),0_24px_60px_oklch(0.35_0.02_70/14%)] sm:max-w-md sm:rounded-[22px]",
+        // dvh en geen vh: op de iPhone telt vh de adresbalk niet mee, en dan
+        // vielen de knoppen onderaan erachter.
+        "flex max-h-[90dvh] flex-col gap-0 overflow-hidden border-0 bg-card p-0 shadow-[0_2px_6px_oklch(0.4_0.02_70/6%),0_24px_60px_oklch(0.35_0.02_70/14%)] sm:max-w-md sm:rounded-[22px]",
         blad && BLAD,
         className,
       )}
       {...rest}
+      ref={kader}
       {...bladHandlers}
       // Op de telefoon niet meteen in het eerste vak gaan staan: dan schuift
       // het toetsenbord omhoog over de helft van het blad, nog voor je gezien

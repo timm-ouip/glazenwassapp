@@ -14,6 +14,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { BLAD, useSleepBlad } from "@/components/use-sleep-blad";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 
 type Vraag = {
   titel: string;
@@ -38,6 +41,9 @@ const Ctx = createContext<BevestigFn | null>(null);
  * Dezelfde vorm als de andere schermpjes (zie Popup.tsx): een kopstrook met
  * een icoontje en de vraag, en onderaan de knoppen. Bij iets onomkeerbaars is
  * het icoontje rood — dat is het enige verschil, en het valt meteen op.
+ *
+ * Op de telefoon is het, net als de andere schermpjes, een blad dat van
+ * onderen omhoog schuift; omlaag vegen telt als annuleren.
  */
 export function BevestigProvider({ children }: { children: ReactNode }) {
   const [vraag, setVraag] = useState<Vraag | null>(null);
@@ -57,6 +63,8 @@ export function BevestigProvider({ children }: { children: ReactNode }) {
   }
 
   const gevaarlijk = vraag?.gevaarlijk ?? false;
+  const mobiel = useIsMobile();
+  const veeg = useSleepBlad({ onOmlaag: () => sluit(false) });
 
   return (
     <Ctx.Provider value={bevestig}>
@@ -68,13 +76,31 @@ export function BevestigProvider({ children }: { children: ReactNode }) {
           if (!open) sluit(false);
         }}
       >
-        <AlertDialogContent className="gap-0 overflow-hidden border-0 bg-card p-0 shadow-[0_2px_6px_oklch(0.4_0.02_70/6%),0_24px_60px_oklch(0.35_0.02_70/14%)] sm:max-w-sm sm:rounded-[22px]">
-          {/* De hele gekleurde band is het handvat om het venster te verslepen. */}
+        <AlertDialogContent
+          className={cn(
+            "gap-0 overflow-hidden border-0 bg-card p-0 shadow-[0_2px_6px_oklch(0.4_0.02_70/6%),0_24px_60px_oklch(0.35_0.02_70/14%)] sm:max-w-sm sm:rounded-[22px]",
+            mobiel && BLAD,
+          )}
+        >
+          {/* De hele gekleurde band is het handvat: op de computer om het
+              venster te verslepen, op de telefoon om het blad weg te vegen. */}
           <div
             data-sleepgreep=""
             className={`cursor-grab touch-none px-6 py-5 active:cursor-grabbing ${
               gevaarlijk ? "bg-tint-rood text-tint-rood-ink" : "bg-accent text-accent-foreground"
             }`}
+            {...(mobiel
+              ? {
+                  onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+                    // Zo begint het venster er niet ook nog een gewone sleep mee.
+                    e.preventDefault();
+                    veeg.onPointerDown(e);
+                  },
+                  onPointerMove: veeg.onPointerMove,
+                  onPointerUp: veeg.onPointerUp,
+                  onPointerCancel: veeg.onPointerCancel,
+                }
+              : {})}
           >
             <AlertDialogHeader className="space-y-0 text-left">
               <div className="flex items-start gap-3.5">

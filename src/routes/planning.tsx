@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
   pointerWithin,
   TouchSensor,
   useDraggable,
@@ -154,6 +154,7 @@ import { fetchKlanten, duurVoorMaand, patchCustomer, toonMaand } from "@/lib/kla
 import { zetPloegEnRest } from "@/lib/wasdag";
 import { DagWeergave } from "@/components/planning/DagWeergave";
 import { WeekWeergave, type WeekDag } from "@/components/planning/WeekWeergave";
+import { WeekTelefoon } from "@/components/planning/WeekTelefoon";
 import { OverslaanKnop } from "@/components/OverslaanKnop";
 import { VerplaatsNaarKnop } from "@/components/VerplaatsNaarKnop";
 import { telAdressen, wisOverslaanVanSelectie, zetOverslaan } from "@/lib/overslaan-keuze";
@@ -988,13 +989,59 @@ function Planning() {
     [weekDagen, regelsPerDag, klussen, ploegenQuery.data],
   );
 
+  /**
+   * De week op de telefoon: de dagen waarop je werkt (Instellingen → Wijken),
+   * plus een andere dag als daar tóch iets op staat, plus altijd de dag die je
+   * bekijkt. Elke dag als dagkaartje bovenin, dus ook een werkdag zonder
+   * werk: daar sleep je juist iets naartoe.
+   */
+  const weekTelefoon: WeekDag[] = useMemo(() => {
+    if (!mobiel || weergave !== "week") return [];
+    const d = new Date(`${gekozenDag}T12:00:00`);
+    return eachDayOfInterval({
+      start: startOfWeek(d, { locale: nl }),
+      end: endOfWeek(d, { locale: nl }),
+    })
+      .filter((x) => {
+        const datum = sleutel(x);
+        return isWerkdag(datum, vasteWerkdagen) || perDag.has(datum) || datum === gekozenDag;
+      })
+      .map((x) => {
+        const datum = sleutel(x);
+        return {
+          datum,
+          regels: dagRegelsVan(datum),
+          klussen: klussenVanDag(klussen, datum),
+          ploegen: ploegenQuery.data?.get(datum) ?? [],
+        };
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    mobiel,
+    weergave,
+    gekozenDag,
+    vasteWerkdagen,
+    perDag,
+    regelsPerDag,
+    klussen,
+    ploegenQuery.data,
+  ]);
+
   /** Op de telefoon staan de extra opdrachten eerst ingeklapt tot één regel. */
   const [opdrachtenOpen, setOpdrachtenOpen] = useState(false);
   /** Waar een veeg over de kalender begon. */
   const veeg = useRef<{ x: number; y: number } | null>(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    // Muis en vinger apart: een PointerSensor reageert ook op een vinger, en
+    // dan begint een veeg om te scrollen al als slepen.
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 8 },
+      // Aan een greepje (de week op de telefoon) pak je meteen vast; de rest
+      // pas na even vasthouden, zodat vegen gewoon scrollen blijft.
+      bypassActivationConstraint: ({ event }) =>
+        event.target instanceof Element && event.target.closest("[data-greep]") !== null,
+    }),
   );
 
   /**
@@ -1602,7 +1649,9 @@ function Planning() {
         // — dat zou het dagbedrag en de notitie van die dag overschrijven.
         void weekNaarPloeg(datum, blok.adressen, ploegNr);
       } else if (blok.datum) {
-        void verplaatsNaarDag(blok.adressen, datum, ploegNr, blok.datum);
+        // Op de telefoon is "plek:<dag>:0" het hele dagkaartje, geen strook
+        // "nog niet ingedeeld": dan mag de app het team kiezen.
+        void verplaatsNaarDag(blok.adressen, datum, ploegNr, blok.datum, mobiel === true);
       } else {
         void zetStraatOpDag(blok.adressen, datum, ploegNr);
       }
@@ -2089,6 +2138,10 @@ function Planning() {
     naar: string,
     ploegNr: number | null,
     vanDag?: string,
+    /** Geen team gekozen en de dag heeft er precies één: dan meteen daar
+     *  (dagkaartje op de telefoon, "Verplaatsen naar"). Niet bij de strook
+     *  "nog niet ingedeeld", waar null juist de bedoeling is. */
+    zelfTeam = false,
   ) {
     const perDag = groepeerPerDag(ids, vanDag);
     perDag.delete(naar);
@@ -2106,8 +2159,21 @@ function Planning() {
         kenmerken.push(...uit.kenmerken);
         aantal += uit.verplaatst.length;
       }
-      if (ploegNr !== null && aantal > 0) {
-        await zetPloegEnRest(naar, ids, { ploeg_nr: ploegNr });
+      // Zonder gekozen team, en de dag heeft er precies één: dan meteen daar,
+      // in plaats van "nog niet ingedeeld" (gekozen door Timmie, 02-10-2026).
+      // De teams van een dag buiten de geladen maand apart ophalen.
+      let team = ploegNr;
+      if (team === null && zelfTeam && aantal > 0) {
+        const teamsDaar =
+          ploegenQuery.data?.get(naar) ?? (await fetchDagPloegen(naar, naar)).get(naar) ?? [];
+        if (teamsDaar.length === 1) team = teamsDaar[0]!.nr;
+      }
+      // Een zelf gekozen team geldt voor alles, zoals altijd. Een team dat de
+      // app koos alleen voor wat echt verhuisde: wat al op de doeldag stond,
+      // houdt zijn eigen plek.
+      const wie = ploegNr !== null ? ids : heen.flatMap((stuk) => stuk.ids);
+      if (team !== null && aantal > 0 && wie.length > 0) {
+        await zetPloegEnRest(naar, wie, { ploeg_nr: team });
       }
       if (aantal > 0) {
         pushUndo({
@@ -2740,6 +2806,10 @@ function Planning() {
         // overlapt. Standaard kijkt dnd-kit naar de rechthoek van wat je
         // sleept, en dan land je zomaar een vakje naast de dag die je aanwees.
         collisionDetection={pointerWithin}
+        // In de week op de telefoon plakt de rij dagkaartjes bovenin vast en
+        // schuift die rij zelf mee (WeekTelefoon). Liet dnd-kit dan de pagina
+        // scrollen, dan klopten de plekken van de vastgeplakte kaartjes niet.
+        autoScroll={!(mobiel && weergave === "week")}
         onDragStart={opSleepStart}
         onDragEnd={opSleepEinde}
         onDragCancel={() => {
@@ -2753,7 +2823,9 @@ function Planning() {
               Op de telefoon veeg je naar links of rechts voor de volgende of
               vorige maand. */}
           <div
-            className="overflow-hidden rounded-[18px] border border-border bg-card shadow-card max-md:order-1"
+            // overflow-clip in de week op de telefoon: met overflow-hidden kan
+            // de rij dagkaartjes daarbinnen niet bovenin blijven plakken.
+            className={`${mobiel && weergave === "week" ? "overflow-clip" : "overflow-hidden"} rounded-[18px] border border-border bg-card shadow-card max-md:order-1`}
             onTouchStart={(e) => {
               const t = e.touches[0];
               // Alleen op de telefoon, en niet vanuit het menu onder lang
@@ -2781,7 +2853,13 @@ function Planning() {
                   te bedienen, in plaats van drie losse knoppen naast elkaar.
                   Wat erin staat volgt de weergave, net als waar de pijltjes
                   je heen brengen. */}
-              <div className="flex items-center gap-0.5 rounded-full border border-border bg-card py-1 pl-1 pr-1 shadow-card">
+              {/* In de week op de telefoon staan de pijltjes bij de maand, boven
+                  de dagkaartjes; twee keer hoeft niet. */}
+              <div
+                className={`items-center gap-0.5 rounded-full border border-border bg-card py-1 pl-1 pr-1 shadow-card ${
+                  mobiel && weergave === "week" ? "hidden" : "flex"
+                }`}
+              >
                 <button
                   type="button"
                   className="flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
@@ -2939,7 +3017,9 @@ function Planning() {
                 <VerplaatsNaarKnop
                   aantal={gekozen.size}
                   huidigeDag={gekozenDag}
-                  onKies={(naar) => void verplaatsNaarDag([...gekozen], naar, null)}
+                  onKies={(naar) =>
+                    void verplaatsNaarDag([...gekozen], naar, null, undefined, true)
+                  }
                 />
                 <OverslaanKnop
                   aantal={gekozen.size}
@@ -3315,7 +3395,29 @@ function Planning() {
               </>
             )}
 
-            {weergave === "week" && (
+            {weergave === "week" && mobiel && (
+              <div className="p-2">
+                <WeekTelefoon
+                  dagen={weekTelefoon}
+                  omzet={perDag}
+                  instellingen={instellingen}
+                  bouwstenen={bouwstenen}
+                  prijzenZien={prijzenZien}
+                  sleepbaar={magPlannen}
+                  gekozenDag={gekozenDag}
+                  onKiesDag={(datum) =>
+                    void navigate({
+                      to: "/planning",
+                      search: { dag: datum, weergave: "week" },
+                      replace: true,
+                    })
+                  }
+                  onBlader={blader}
+                />
+              </div>
+            )}
+
+            {weergave === "week" && !mobiel && (
               <div className="p-2">
                 <WeekWeergave
                   selecteren={selecteren}

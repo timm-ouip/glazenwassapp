@@ -545,18 +545,27 @@ export function useDossier(invoer: DossierInvoer) {
   });
   const geld = useQuery({
     queryKey: ["geld-adres", adresId],
+    // Geld en planning veranderen elders (de geldloop, de planning) zonder dat
+    // dit wordt ververst: bij elk openen vers, niet pas na een minuut.
+    staleTime: 0,
     queryFn: () => fetchGeldAdres(adresId!),
     enabled: open && !!adresId && prijzenZien,
   });
   // De planning mag niet iedereen lezen; lukt het niet, dan is er gewoon niets.
   const volgendeBeurt = useQuery({
     queryKey: ["dossier-volgende", adresId, vandaag],
+    // Geld en planning veranderen elders (de geldloop, de planning) zonder dat
+    // dit wordt ververst: bij elk openen vers, niet pas na een minuut.
+    staleTime: 0,
     queryFn: () => fetchVolgendeBeurt(adresId!, vandaag).catch(() => null),
     enabled: open && !!adresId,
   });
   const gewassen =
     useQuery({
       queryKey: ["dossier-jaar", adresId, jaar],
+      // Geld en planning veranderen elders (de geldloop, de planning) zonder dat
+      // dit wordt ververst: bij elk openen vers, niet pas na een minuut.
+      staleTime: 0,
       queryFn: () => fetchGewassenRondes(adresId!, jaar).catch(() => [] as string[]),
       enabled: open && !!adresId,
     }).data ?? [];
@@ -564,6 +573,9 @@ export function useDossier(invoer: DossierInvoer) {
   // staat; de database zegt dat (leeg = niet).
   const dagStand = useQuery({
     queryKey: ["dag-geld", adresId],
+    // Geld en planning veranderen elders (de geldloop, de planning) zonder dat
+    // dit wordt ververst: bij elk openen vers, niet pas na een minuut.
+    staleTime: 0,
     queryFn: () => fetchDagStand(adresId!),
     enabled: open && !!adresId && !isEigenaar,
   });
@@ -727,6 +739,22 @@ export function useDossier(invoer: DossierInvoer) {
           void qc.invalidateQueries({ queryKey: ["klanten"] });
         },
       });
+    });
+  }
+
+  /**
+   * De klant van dit adres, en is er nog geen: nu een lege. Voor het
+   * invul-linkje, dat de klant zelf zijn naam laat invullen.
+   */
+  function zorgVoorKlant(): Promise<string | null> {
+    if (!magBewerken) return Promise.resolve(null);
+    return inRij(async () => {
+      const bijAdres = adresIdRef.current;
+      const id = await echteKlant(
+        klantIdRef.current ?? (bijAdres ? adresOp(bijAdres)?.klant_id : null),
+      );
+      if (id) return id;
+      return bijAdres ? maakKlant(bijAdres, {}) : null;
     });
   }
 
@@ -1648,6 +1676,7 @@ export function useDossier(invoer: DossierInvoer) {
     setDialoog,
     // bewaren
     zetKlant,
+    zorgVoorKlant,
     zetKlantPostcode,
     postcodeOpgezocht:
       postcodeOpgezocht !== null && velden.postcode === postcodeOpgezocht
