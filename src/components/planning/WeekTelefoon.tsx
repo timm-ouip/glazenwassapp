@@ -22,9 +22,11 @@ import {
   type Tijdlijn,
 } from "@/lib/dagplanning";
 import type { Bouwstenen } from "@/lib/dagbouwstenen";
+import { afmeldstandTekst, type DagAfmeldstand } from "@/lib/dagklaar";
 import { ploegNaam } from "@/lib/ploegen";
 import { formatPrice, wijkInkt, wijkKleur, wijkVlak } from "@/lib/klanten";
 import type { WeekDag } from "@/components/planning/WeekWeergave";
+import { AfmeldTeken } from "@/components/planning/AfmeldTeken";
 
 /** Wat een dag oplevert en welke wijken erop staan, zoals de maandkalender het telt. */
 export interface DagOmzet {
@@ -71,6 +73,7 @@ const datumVan = (datum: string) => new Date(`${datum}T12:00:00`);
  */
 export function WeekTelefoon({
   dagen,
+  afmeldstand,
   omzet,
   instellingen,
   bouwstenen,
@@ -81,6 +84,8 @@ export function WeekTelefoon({
   onBlader,
 }: {
   dagen: WeekDag[];
+  /** Hoe ver elke dag is met "Dag klaar": het vinkje op het dagkaartje. */
+  afmeldstand: Map<string, DagAfmeldstand>;
   omzet: ReadonlyMap<string, DagOmzet>;
   instellingen: PlanInstellingen;
   bouwstenen: Bouwstenen;
@@ -259,6 +264,7 @@ export function WeekTelefoon({
               teVol={d.teVol}
               werkMin={d.werkMin}
               omzet={omzet.get(d.datum)}
+              afmeldstand={afmeldstand.get(d.datum)}
               klussen={d.klussen.length > 0}
               bouwstenen={bouwstenen}
               prijzenZien={prijzenZien}
@@ -396,6 +402,7 @@ function DagKaartje({
   teVol,
   werkMin,
   omzet,
+  afmeldstand,
   klussen,
   bouwstenen,
   prijzenZien,
@@ -409,6 +416,7 @@ function DagKaartje({
   teVol: boolean;
   werkMin: number;
   omzet: DagOmzet | undefined;
+  afmeldstand: DagAfmeldstand | undefined;
   klussen: boolean;
   bouwstenen: Bouwstenen;
   prijzenZien: boolean;
@@ -437,7 +445,11 @@ function DagKaartje({
       data-datum={datum}
       onClick={onKies}
       aria-pressed={gekozen}
-      aria-label={`${format(d, "EEEE d MMMM", { locale: nl })}, ${leeg ? "niets gepland" : waarde}${teVol ? ", te vol" : ""}`}
+      aria-label={`${format(d, "EEEE d MMMM", { locale: nl })}, ${leeg ? "niets gepland" : waarde}${teVol ? ", te vol" : ""}${
+        afmeldstand && afmeldstand.klaar > 0
+          ? `, ${afmeldstandTekst(afmeldstand).toLowerCase()}`
+          : ""
+      }`}
       className={`relative flex shrink-0 select-none flex-col items-center gap-[3px] rounded-[22px] px-1 pb-2.5 pt-[11px] transition-[transform,width,height] duration-150 motion-reduce:transition-none ${
         gekozen
           ? "h-[122px] w-[74px] bg-primary text-primary-foreground"
@@ -450,6 +462,8 @@ function DagKaartje({
           : ""
       }`}
     >
+      {/* Rechtsboven op de hoek, zodat het niet botst met "vol" in het midden. */}
+      <AfmeldTeken stand={afmeldstand} datum={datum} className="absolute -right-1 -top-1" />
       {teVol && (
         <span className="absolute -top-[7px] left-1/2 -translate-x-1/2 rounded-full bg-tint-amber px-[7px] py-px text-[10px] font-bold tracking-[0.02em] text-tint-amber-ink">
           vol

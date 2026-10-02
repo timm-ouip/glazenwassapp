@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { IconUsers as Users } from "@tabler/icons-react";
+import { IconCircleCheck as CircleCheck, IconUsers as Users } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { AfmeldTeken } from "@/components/planning/AfmeldTeken";
 import { MailStatus } from "@/components/planning/MailStatus";
 import { SelectieGreep } from "@/components/planning/SelectieGreep";
 import { useVerfSelectie } from "@/components/planning/verfselectie";
@@ -33,6 +34,7 @@ import {
   verdeelOverAdressen,
 } from "@/lib/dagplanning";
 import { overslaanLabel, type Bouwstenen } from "@/lib/dagbouwstenen";
+import { afgemeldTekst, isAfgemeld, type Afmeldstatus, type DagAfmeldstand } from "@/lib/dagklaar";
 import {
   isGestuurd,
   samenvattingVan,
@@ -96,6 +98,8 @@ interface Post {
  */
 export function WeekWeergave({
   dagen,
+  afmeldstand,
+  afmeldstatus,
   instellingen,
   bouwstenen,
   prijzenZien,
@@ -117,6 +121,10 @@ export function WeekWeergave({
   staatOp,
 }: {
   dagen: WeekDag[];
+  /** Hoe ver elke dag is met "Dag klaar": het vinkje bij de datum. */
+  afmeldstand: Map<string, DagAfmeldstand>;
+  /** Dezelfde status per team, voor het vinkje bij elk team. */
+  afmeldstatus: Afmeldstatus[] | undefined;
   instellingen: PlanInstellingen;
   bouwstenen: Bouwstenen;
   prijzenZien: boolean;
@@ -183,6 +191,16 @@ export function WeekWeergave({
       }),
     [dagen, bouwstenen, instellingen],
   );
+  /** Per dag en team: heeft dat team Dag klaar gedaan? */
+  const teamKlaar = useMemo(
+    () =>
+      new Map(
+        (afmeldstatus ?? [])
+          .filter((s) => s.ploeg_nr !== null && isAfgemeld(s))
+          .map((s) => [`${s.datum}:${s.ploeg_nr}`, s]),
+      ),
+    [afmeldstatus],
+  );
 
   return (
     <div className="space-y-2">
@@ -224,6 +242,7 @@ export function WeekWeergave({
                     day: "numeric",
                   })}
                 </button>
+                <AfmeldTeken stand={afmeldstand.get(d.datum)} datum={d.datum} />
                 {sleepbaar && (
                   <button
                     type="button"
@@ -246,6 +265,7 @@ export function WeekWeergave({
                       setRef={setRef}
                       erboven={erboven}
                       ploeg={null}
+                      klaar={undefined}
                       datum={d.datum}
                       ploegenVanDag={d.ploegen}
                       blokken={d.los}
@@ -273,6 +293,13 @@ export function WeekWeergave({
                         setRef={setRef}
                         erboven={erboven}
                         ploeg={pl}
+                        // Alleen als de dag meer teams heeft: bij één team
+                        // zegt het vinkje bij de datum het al.
+                        klaar={
+                          (afmeldstand.get(d.datum)?.teams ?? 0) > 1
+                            ? teamKlaar.get(`${d.datum}:${pl.nr}`)
+                            : undefined
+                        }
                         datum={d.datum}
                         ploegenVanDag={d.ploegen}
                         blokken={blokken}
@@ -320,6 +347,7 @@ function Kaart({
   setRef,
   erboven,
   ploeg,
+  klaar,
   datum,
   ploegenVanDag,
   blokken,
@@ -337,6 +365,8 @@ function Kaart({
   setRef: (el: HTMLElement | null) => void;
   erboven: boolean;
   ploeg: Ploeg | null;
+  /** Dit team deed al Dag klaar; alleen op een dag met meer teams. */
+  klaar: Afmeldstatus | undefined;
   datum: string;
   ploegenVanDag: Ploeg[];
   blokken: Blok[];
@@ -386,8 +416,18 @@ function Kaart({
         ploeg ? "min-h-24" : "min-h-14 border-dashed"
       } ${erboven ? "border-primary bg-accent/60" : "border-border bg-card"}`}
     >
-      <p className="mb-1 truncate text-[11.5px] font-medium text-muted-foreground">
-        {ploeg ? ploegNaam(ploeg) : "Nog niet ingedeeld"}
+      <p className="mb-1 flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground">
+        <span className="min-w-0 truncate">{ploeg ? ploegNaam(ploeg) : "Nog niet ingedeeld"}</span>
+        {klaar && (
+          <CircleCheck
+            role="img"
+            aria-label="Afgemeld met Dag klaar"
+            title={
+              klaar.afmelding ? afgemeldTekst(klaar.afmelding, datum) : "Afgemeld met Dag klaar"
+            }
+            className="size-3.5 shrink-0 text-tint-groen-ink"
+          />
+        )}
       </p>
 
       {leeg && !ploeg && (

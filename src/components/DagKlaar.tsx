@@ -133,7 +133,7 @@ export function DagKlaar({
               <CircleCheck className="size-[18px] shrink-0" />
               <span className="min-w-0 flex-1">
                 {meer && <span className="font-semibold">{naam}: </span>}
-                {s.afmelding ? afgemeldTekst(s.afmelding) : "Gedaan"}
+                {s.afmelding ? afgemeldTekst(s.afmelding, s.datum) : "Gedaan"}
               </span>
               {magOpen && (
                 <button

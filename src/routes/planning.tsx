@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { fetchAfmeldstatus, isAfgemeld } from "@/lib/dagklaar";
+import { afmeldstandPerDag, fetchAfmeldstatus, isAfgemeld } from "@/lib/dagklaar";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
@@ -155,6 +155,7 @@ import { zetPloegEnRest } from "@/lib/wasdag";
 import { DagWeergave } from "@/components/planning/DagWeergave";
 import { WeekWeergave, type WeekDag } from "@/components/planning/WeekWeergave";
 import { WeekTelefoon } from "@/components/planning/WeekTelefoon";
+import { AfmeldTeken } from "@/components/planning/AfmeldTeken";
 import { OverslaanKnop } from "@/components/OverslaanKnop";
 import { VerplaatsNaarKnop } from "@/components/VerplaatsNaarKnop";
 import { telAdressen, wisOverslaanVanSelectie, zetOverslaan } from "@/lib/overslaan-keuze";
@@ -424,6 +425,9 @@ function Planning() {
     for (const s of afmeldQuery.data ?? []) if (!isAfgemeld(s)) dagen.add(s.datum);
     return dagen;
   }, [afmeldQuery.data]);
+  // En welke dagen (of welk deel van de teams) al wél klaar zijn: die
+  // krijgen een groen vinkje bij de datum.
+  const afmeldstand = useMemo(() => afmeldstandPerDag(afmeldQuery.data ?? []), [afmeldQuery.data]);
   // Deze twee staan meestal al in de cache van de wijkenpagina; ze zijn hier
   // alleen nodig om te laten zien wélke straten er op een dag staan.
   // Alle adressen, ook de gestopte en verhuisde: anders vallen hun regels uit
@@ -3177,11 +3181,27 @@ function Planning() {
                                     >
                                       {format(d, "d")}
                                     </span>
-                                    {k < nu && !buitenMaand && nietAfgemeld.has(k) && (
-                                      <span
-                                        className="absolute left-8 top-[13px] size-1.5 rounded-full bg-tint-oranje-ink"
-                                        title="Nog niet afgemeld met Dag klaar: dit werk staat nog niet open bij de klant"
-                                        aria-label="Nog niet afgemeld"
+                                    {/* Een deel van de teams klaar: dan zegt het
+                                        pilletje "1/2" op dezelfde plek het al. */}
+                                    {k < nu &&
+                                      !buitenMaand &&
+                                      nietAfgemeld.has(k) &&
+                                      !afmeldstand.get(k)?.klaar && (
+                                        <span
+                                          className="absolute left-8 top-[13px] size-1.5 rounded-full bg-tint-oranje-ink"
+                                          title="Nog niet afgemeld met Dag klaar: dit werk staat nog niet open bij de klant"
+                                          aria-label="Nog niet afgemeld"
+                                        />
+                                      )}
+                                    {!buitenMaand && (
+                                      // Naast het dagnummer, waar anders het oranje
+                                      // stipje staat. Rechtsboven liggen de knopjes
+                                      // Inplannen en Dagplanning.
+                                      <AfmeldTeken
+                                        stand={afmeldstand.get(k)}
+                                        datum={k}
+                                        kortOpTelefoon
+                                        className="absolute left-8 top-2"
                                       />
                                     )}
 
@@ -3399,6 +3419,7 @@ function Planning() {
               <div className="p-2">
                 <WeekTelefoon
                   dagen={weekTelefoon}
+                  afmeldstand={afmeldstand}
                   omzet={perDag}
                   instellingen={instellingen}
                   bouwstenen={bouwstenen}
@@ -3439,6 +3460,8 @@ function Planning() {
                   heeftContact={heeftContact}
                   staatOp={staatOp}
                   dagen={weekGegevens}
+                  afmeldstand={afmeldstand}
+                  afmeldstatus={afmeldQuery.data}
                   instellingen={instellingen}
                   bouwstenen={bouwstenen}
                   prijzenZien={prijzenZien}

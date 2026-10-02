@@ -15,6 +15,7 @@ import {
   IconCalendarPlus as CalendarPlus,
   IconCalendarUp as CalendarArrowUp,
   IconCash as Cash,
+  IconCircleCheck as CircleCheck,
   IconDots as MoreHorizontal,
   IconPencil as Pencil,
   IconPlus as Plus,
@@ -55,6 +56,12 @@ import { KlusDialog } from "@/components/KlusDialog";
 import { StopDialog } from "@/components/StopDialog";
 import { useKlantActies } from "@/lib/useKlantActies";
 import { DagKlaar } from "@/components/DagKlaar";
+import {
+  afgemeldTekst,
+  afmeldstandPerDag,
+  afmeldstandTekst,
+  fetchAfmeldstatus,
+} from "@/lib/dagklaar";
 import { Verdeling } from "@/components/Verdeling";
 import {
   addQuickNote,
@@ -1052,6 +1059,18 @@ function DagPagina() {
   // in de wijken, met wat er bij een adres op deze dag hoort erbij.
   const magPlannen = useRecht("planning");
   const magKlanten = useRecht("klanten_bewerken");
+  // Is de dag al met "Dag klaar" afgemeld? Dezelfde vraag (en dus dezelfde
+  // cache) als DagKlaar hieronder: geen extra verzoek. Onder "wasdagen", dus
+  // na Dag klaar, Weer openzetten of Ongedaan maken ververst hij vanzelf.
+  const afmeldQuery = useQuery({
+    queryKey: ["wasdagen", "afmeldstatus", datum, datum],
+    queryFn: () => fetchAfmeldstatus(datum, datum),
+    enabled: datum <= vandaag() && magPlannen,
+  });
+  const afmeldstand = useMemo(
+    () => afmeldstandPerDag(afmeldQuery.data ?? []).get(datum),
+    [afmeldQuery.data, datum],
+  );
   const kanAfrekenen = useMagAfrekenen();
   const { herlaad, patchKlant, maakKlus, stopKlant, verwijderKlant } = useKlantActies();
   const quickNotesQuery = useQuery({ queryKey: ["quick_notes"], queryFn: fetchQuickNotes });
@@ -1464,6 +1483,46 @@ function DagPagina() {
               <ChevronRight className="size-4" />
             </button>
           </div>
+
+          {/* Afgemeld met Dag klaar: een groene pil naast de datum, zodat je
+              het ziet zonder te scrollen. Wie en wanneer staat erbij (op de
+              telefoon alleen in de tooltip); per team staat het in de strook
+              boven de route. */}
+          {afmeldstand && afmeldstand.klaar > 0 && (
+            <span
+              title={[
+                afmeldstandTekst(afmeldstand),
+                ...afmeldstand.afmeldingen.map((a) => afgemeldTekst(a, datum)),
+              ].join("\n")}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-medium ${
+                afmeldstand.klaar >= afmeldstand.teams
+                  ? "bg-tint-groen text-tint-groen-ink"
+                  : "border border-tint-groen-ink/50 text-tint-groen-ink"
+              }`}
+            >
+              <CircleCheck className="size-4 shrink-0" aria-hidden />
+              {afmeldstand.klaar >= afmeldstand.teams ? (
+                <>
+                  <span className={afmeldstand.afmeldingen.length === 1 ? "md:hidden" : ""}>
+                    Afgemeld
+                  </span>
+                  {afmeldstand.afmeldingen.length === 1 ? (
+                    <span className="max-md:hidden">
+                      {afgemeldTekst(afmeldstand.afmeldingen[0]!, datum)}
+                    </span>
+                  ) : (
+                    afmeldstand.teams > 1 && (
+                      <span className="font-normal max-md:hidden">
+                        · alle {afmeldstand.teams} teams
+                      </span>
+                    )
+                  )}
+                </>
+              ) : (
+                `${afmeldstand.klaar} van ${afmeldstand.teams} teams afgemeld`
+              )}
+            </span>
+          )}
 
           {/* Direct naast de datum, zodat alles wat bij deze dag hoort bij
               elkaar staat: ronde knoppen en één donkere pil, want printen is
