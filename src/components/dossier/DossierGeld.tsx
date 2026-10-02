@@ -32,6 +32,7 @@ import {
   type DeurAdres,
 } from "@/components/betalingen/DeurDialogen";
 import { KlantKaart } from "@/components/betalingen/KlantKaart";
+import { VakTekst } from "@/components/betalingen/VakTekst";
 import { DossierKop, kopKnop, kopKnopPrimair } from "@/components/dossier/DossierKop";
 import {
   KolomKop,
@@ -56,7 +57,7 @@ import {
   type Omzetting,
 } from "@/lib/betalingen";
 import { bronTekst, opsomming, regelDatum, volgendeBeurtMaand } from "@/lib/dossier";
-import { vakKleur, vakTeken, vakUitleg, vakVoor, vooruitGepland, type Vak } from "@/lib/geldkaart";
+import { vakKleur, vakVoor, vakWoorden, vooruitGepland, type Vak } from "@/lib/geldkaart";
 import { boek, haalVasteKortingWeg, maakVasteKorting, nieuweTik, type Tik } from "@/lib/geldlopen";
 import { formatPrice, toonMaand, type Customer } from "@/lib/klanten";
 import {
@@ -166,7 +167,8 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
   const [venster, setVenster] = useState<Venster>(null);
   const [bezig, setBezig] = useState(false);
   // De geldkaart van dit adres, om (wie mag afrekenen) oude maanden aan te passen.
-  const [kaartOpen, setKaartOpen] = useState(false);
+  // Open: true, of de maand waarop hij opent ("2026-07").
+  const [kaartOpen, setKaartOpen] = useState<string | boolean>(false);
   // Omgezet naar contant (bijvoorbeeld aan de deur): geel bovenaan, met Ongedaan maken.
   const omz = useQuery({
     queryKey: ["geld-omzettingen", a?.id],
@@ -325,7 +327,7 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
                 onAnderBedrag={d.magAfrekenen ? () => setVenster("bedrag") : undefined}
               />
               <WatErOpenstaat g={g} />
-              <Kaart d={d} adres={a} onOpenen={() => setKaartOpen(true)} />
+              <Kaart d={d} adres={a} onOpenen={(maand) => setKaartOpen(maand ?? true)} />
               <Betalingen d={d} adres={a} g={g} vernieuw={vernieuw} />
               <VasteKortingen d={d} g={g} vernieuw={vernieuw} />
             </>
@@ -337,6 +339,7 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
         <KlantKaart
           adresId={a.id}
           titel={d.adresTekst(a)}
+          maand={typeof kaartOpen === "string" ? kaartOpen : undefined}
           onSluit={() => setKaartOpen(false)}
           onVeranderd={() => {
             vernieuw();
@@ -801,7 +804,16 @@ function VasteKortingDialoog({
 // De geldkaart van dit adres
 // ---------------------------------------------------------------------------
 
-function Kaart({ d, adres, onOpenen }: { d: Dossier; adres: Customer; onOpenen: () => void }) {
+function Kaart({
+  d,
+  adres,
+  onOpenen,
+}: {
+  d: Dossier;
+  adres: Customer;
+  /** De kaart van deze klant groot, eventueel meteen op één maand. */
+  onOpenen: (maand?: string) => void;
+}) {
   const [jaar, setJaar] = useState(d.jaar);
   // Dezelfde opvraging (en sleutel) als de geldkaart bij Betalingen: wat daar
   // al geladen is, staat hier meteen, en een boeking ververst ze allebei.
@@ -841,14 +853,13 @@ function Kaart({ d, adres, onOpenen }: { d: Dossier; adres: Customer; onOpenen: 
           </button>
           {/* Dezelfde kaart groot, met de maanden die als overmaken zijn
               afgemeld; wie mag afrekenen past daar oude maanden aan. */}
-          <button type="button" className={cn(dossierLink, "ml-2")} onClick={onOpenen}>
+          <button type="button" className={cn(dossierLink, "ml-2")} onClick={() => onOpenen()}>
             {d.magAfrekenen ? "Aanpassen" : "Openen"}
           </button>
         </div>
         <div className="text-[12px] text-muted-foreground">
-          1 = betaald · 0 = niet betaald · letter of + = een deel open (van de kaart) · % = niet aan
-          de beurt · × = overgeslagen · B = vooruit betaald (lichte 1: van de papieren kaart) ·
-          oranje rand = volgende beurt
+          Groen = betaald · rood = staat open · oranje rand = volgende beurt · tik een maand aan
+          voor wat er gebeurde{d.magAfrekenen ? " en om hem aan te passen" : ""}
         </div>
       </div>
       {kaart.isError ? (
@@ -857,7 +868,8 @@ function Kaart({ d, adres, onOpenen }: { d: Dossier; adres: Customer; onOpenen: 
         <div
           className={cn(
             "grid gap-1.5 text-center",
-            d.mobiel ? "grid-cols-6 gap-y-3" : "grid-cols-12",
+            // Vier per rij op de telefoon: de vakjes staan in woorden.
+            d.mobiel ? "grid-cols-4 gap-y-3" : "grid-cols-12",
           )}
         >
           {MAANDEN_KORT.map((naam, i) => {
@@ -871,28 +883,29 @@ function Kaart({ d, adres, onOpenen }: { d: Dossier; adres: Customer; onOpenen: 
                 : kaartVak;
             const isVolgende =
               maand === volgende && (vak.soort === "leeg" || vak.soort === "vooruit");
-            const teken = vak.soort === "leeg" && isVolgende ? "·" : vakTeken(vak);
             return (
               <div key={maand} className="flex flex-col gap-1">
                 <span className="text-[12px] text-muted-foreground">{naam}</span>
                 {kaart.isLoading ? (
                   <span className="h-11 animate-pulse rounded-[10px] bg-muted" />
                 ) : (
-                  <span
+                  <button
+                    type="button"
+                    onClick={() => onOpenen(maand)}
                     title={[
                       `${toonMaand(maand)} ${jaar}`,
-                      vakUitleg(vak),
+                      vakWoorden(vak).lang,
                       isVolgende ? "volgende beurt" : "",
                     ]
                       .filter(Boolean)
                       .join(" · ")}
                     className={cn(
-                      "flex h-11 items-center justify-center rounded-[10px] border-2 border-transparent text-[16px] tabular-nums",
+                      "flex h-11 items-center justify-center rounded-[10px] border-2 border-transparent px-0.5 text-[11px] tabular-nums",
                       vakKleur(vak, isVolgende),
                     )}
                   >
-                    {teken}
-                  </span>
+                    <VakTekst vak={vak} leeg={isVolgende ? "·" : ""} />
+                  </button>
                 )}
               </div>
             );

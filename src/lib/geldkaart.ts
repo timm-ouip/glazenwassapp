@@ -11,8 +11,10 @@ import { cn } from "@/lib/utils";
 
 export type Vak =
   | { soort: "betaald"; aantal: number; korting: boolean }
-  /** `kaart`: zo ingevuld op de kaart (0, een letter met bedrag of +bedrag). */
-  | { soort: "open"; nogOpen: boolean; kaart?: KaartVakje }
+  /** `kaart`: zo ingevuld op de kaart (0, een letter met bedrag of +bedrag).
+   *  `bedrag`: wat er (nog) open staat; als het niet meer open staat, wat
+   *  het was. */
+  | { soort: "open"; nogOpen: boolean; kaart?: KaartVakje; bedrag?: number }
   /** Met een vooruitbetaalde beurt betaald, of (gepland) daar straks mee.
    *  `meerOpen`: de beurt is vooruit betaald, maar het extra werk nog niet.
    *  `kaart`: een 1 van de papieren kaart, die beurt komt nog. */
@@ -257,13 +259,16 @@ export function vakVoor(
       soort: "open",
       nogOpen: !!concept || !begin || begin.gedekt < begin.bedrag - 0.005,
       kaart: vakje,
+      bedrag: vakje.bedrag,
     };
   }
   // Vanaf de startmaand: gewassen maar (nog) niet betaald.
   if (!peilMaand || maand >= peilMaand) {
     const gewassen = posten.filter((p) => p.soort === "wassen" && vakjeVan(p) === maand);
     if (gewassen.length > 0) {
-      return { soort: "open", nogOpen: gewassen.some((p) => p.gedekt < p.bedrag - 0.005) };
+      const nogOpen = gewassen.some((p) => p.gedekt < p.bedrag - 0.005);
+      const bedrag = gewassen.reduce((t, p) => t + (nogOpen ? p.bedrag - p.gedekt : p.bedrag), 0);
+      return { soort: "open", nogOpen, bedrag: Math.round(bedrag * 100) / 100 };
     }
   }
   // Na de start een 1 van de kaart: vooruit betaald, die beurt komt nog.
@@ -302,37 +307,6 @@ export function vakTeken(vak: Vak): string {
   }
 }
 
-/** Wat een vakje betekent, voor als je het aanwijst. */
-export function vakUitleg(vak: Vak): string {
-  switch (vak.soort) {
-    case "betaald":
-      return vak.korting ? "met korting afgeboekt" : "betaald";
-    case "open": {
-      const k = vak.kaart;
-      if (!k || k.teken === "0") {
-        return k?.ingetypt
-          ? `beginstand ${formatPrice(k.bedrag)}, ingetypt zonder maanden`
-          : "niet betaald";
-      }
-      return k.teken === "+"
-        ? `te weinig betaald: nog ${formatPrice(k.bedrag)} open`
-        : `${k.teken}: ${formatPrice(k.bedrag)} open`;
-    }
-    case "vooruit":
-      return vak.kaart
-        ? "vooruit betaald, van de papieren kaart"
-        : vak.gepland
-          ? "vooruit betaald, die beurt komt nog"
-          : "vooruit betaald";
-    case "overgeslagen":
-      return vak.kaart ? "niet gewassen" : "overgeslagen";
-    case "niet_aan_de_beurt":
-      return "niet aan de beurt";
-    case "leeg":
-      return "";
-  }
-}
-
 /**
  * De kleur van een vakje op de kaart van één adres (het dossier en de
  * geldkaart van één klant). Een open plek met een oranje rand: daar komt de
@@ -364,4 +338,117 @@ export function vakKleur(vak: Vak, volgende: boolean): string {
     case "leeg":
       return volgende ? "border-primary" : "ring-1 ring-inset ring-border";
   }
+}
+
+// ---------------------------------------------------------------------------
+// In woorden
+//
+// De codes (0, x, v 8, +5, 1) zijn alleen nog invoer: wat je op het scherm
+// ziet, staat in woorden. Eén plek voor die vertaling, zodat de straatkaart,
+// de kaart van één klant en het dossier hetzelfde zeggen.
+// ---------------------------------------------------------------------------
+
+/**
+ * Wat er gedaan is als een beurt maar deels gewassen is: de letter die op de
+ * kaart komt, en wat hij betekent. Op de papieren kaart staat v voor alleen
+ * de voorkant; a (achterkant) en d (iets anders) horen bij de knoppen van de
+ * kaart van één klant. Een andere letter (getypt op de straatkaart) heet
+ * gewoon "deels gewassen".
+ */
+export const DEELS_GEWASSEN = [
+  { teken: "v", label: "Alleen voorkant", kort: "Voorkant" },
+  { teken: "a", label: "Alleen achterkant", kort: "Achter" },
+  { teken: "d", label: "Deels gewassen", kort: "Deels" },
+] as const;
+
+function letterVan(teken: string): { label: string; kort: string } {
+  return (
+    DEELS_GEWASSEN.find((d) => d.teken === teken) ?? { label: "Deels gewassen", kort: "Deels" }
+  );
+}
+
+/** Een vakje van de kaart in woorden, voluit: "Alleen voorkant · € 8 open". */
+export function vakjeWoorden(v: Pick<KaartVakje, "teken" | "bedrag" | "ingetypt">): string {
+  if (v.teken === "x") return "Niet gewassen";
+  if (v.teken === "1") return "Al betaald (van de kaart)";
+  if (v.teken === "0") {
+    return v.ingetypt
+      ? `Beginstand ${formatPrice(v.bedrag)} open`
+      : v.bedrag > 0
+        ? `Open · ${formatPrice(v.bedrag)}`
+        : "Open";
+  }
+  if (v.teken === "+") return `${formatPrice(v.bedrag)} te weinig betaald`;
+  return `${letterVan(v.teken).label} · ${formatPrice(v.bedrag)} open`;
+}
+
+/**
+ * Wat er in één vakje staat, in woorden: `kort` in hooguit twee korte regels
+ * voor in het vakje zelf, `lang` voluit (voor als je het aanwijst, en voor
+ * een schermlezer). Leeg vakje: geen regels.
+ */
+export function vakWoorden(vak: Vak): { kort: string[]; lang: string } {
+  switch (vak.soort) {
+    case "betaald": {
+      if (vak.korting) return { kort: ["Korting"], lang: "Met korting afgeboekt" };
+      return vak.aantal > 1
+        ? { kort: [`${vak.aantal}×`, "betaald"], lang: `${vak.aantal} beurten betaald` }
+        : { kort: ["Betaald"], lang: "Betaald" };
+    }
+    case "open": {
+      const k = vak.kaart;
+      const bedrag = vak.bedrag ?? k?.bedrag ?? 0;
+      const geld = bedrag > 0 ? formatPrice(bedrag) : "";
+      if (!vak.nogOpen) {
+        return {
+          kort: ["Later", "betaald"],
+          lang: `Stond open${geld ? ` (${geld})` : ""}, later betaald`,
+        };
+      }
+      if (k && k.teken === "+") {
+        return { kort: ["Te weinig", geld], lang: vakjeWoorden(k) };
+      }
+      if (k && k.teken !== "0") {
+        // Het rood zegt al dat het open staat; zo blijft het bedrag heel.
+        return { kort: [letterVan(k.teken).kort, geld], lang: vakjeWoorden(k) };
+      }
+      return {
+        kort: geld ? ["Open", geld] : ["Open"],
+        lang: k?.ingetypt ? vakjeWoorden(k) : geld ? `Open · ${geld}` : "Open",
+      };
+    }
+    case "vooruit":
+      if (vak.kaart) {
+        return { kort: ["Al", "betaald"], lang: "Al betaald, van de papieren kaart" };
+      }
+      if (vak.gepland) {
+        return { kort: ["Vooruit", "betaald"], lang: "Vooruit betaald, die beurt komt nog" };
+      }
+      return vak.meerOpen
+        ? {
+            kort: ["Vooruit", "+ extra"],
+            lang: "Vooruit betaald, het extra werk staat nog open",
+          }
+        : { kort: ["Vooruit", "betaald"], lang: "Vooruit betaald" };
+    case "overgeslagen":
+      return vak.kaart
+        ? { kort: ["Niet", "gewassen"], lang: "Niet gewassen" }
+        : { kort: ["Over-", "geslagen"], lang: "Overgeslagen" };
+    case "niet_aan_de_beurt":
+      return { kort: ["Niet aan", "de beurt"], lang: "Niet aan de beurt" };
+    case "leeg":
+      return { kort: [], lang: "" };
+  }
+}
+
+/**
+ * Hoe één maand op de kaart stond, in woorden, voor het log onderaan de
+ * kaart van een klant: "Open · € 27", "Niet gewassen", "Al betaald (van de
+ * kaart)", of "Leeg".
+ */
+export function kaartStandWoorden(
+  s: { vakje: Pick<KaartVakje, "teken" | "bedrag"> | null; een: boolean } | null | undefined,
+): string {
+  if (s?.vakje) return vakjeWoorden({ ...s.vakje, bedrag: Number(s.vakje.bedrag) });
+  return s?.een ? "Al betaald (van de kaart)" : "Leeg";
 }

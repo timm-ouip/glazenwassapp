@@ -3,10 +3,13 @@ import { describe, expect, test } from "bun:test";
 import { jaarVakken, volgendeBeurtMaand } from "@/lib/dossier";
 import {
   kaartDelen,
+  kaartStandWoorden,
   kaartVakjesVan,
   leesVakInvoer,
+  vakjeWoorden,
   vakTeken,
   vakVoor,
+  vakWoorden,
   vooruitGepland,
   type KaartVakje,
 } from "@/lib/geldkaart";
@@ -244,5 +247,75 @@ describe("kaartDelen", () => {
     const getypt: KaartVakje = { ...nul("2026-09", 40), ingetypt: true };
     expect(kaartDelen([getypt], [getypt]).begin).toBeNull();
     expect(kaartDelen([], [getypt]).begin).toEqual([]);
+  });
+});
+
+describe("vakjes in woorden", () => {
+  // Spaties in een bedrag kunnen een harde spatie zijn; vergelijk zonder.
+  const plat = (t: string) => t.replace(/\s/g, " ");
+  const kort = (vak: Parameters<typeof vakWoorden>[0]) => vakWoorden(vak).kort.map(plat);
+  const lang = (vak: Parameters<typeof vakWoorden>[0]) => plat(vakWoorden(vak).lang);
+
+  test("betaald, korting, niet aan de beurt en leeg", () => {
+    expect(kort({ soort: "betaald", aantal: 1, korting: false })).toEqual(["Betaald"]);
+    expect(kort({ soort: "betaald", aantal: 2, korting: false })).toEqual(["2×", "betaald"]);
+    expect(lang({ soort: "betaald", aantal: 1, korting: true })).toBe("Met korting afgeboekt");
+    expect(lang({ soort: "niet_aan_de_beurt" })).toBe("Niet aan de beurt");
+    expect(vakWoorden({ soort: "leeg" })).toEqual({ kort: [], lang: "" });
+  });
+
+  test("open, met het bedrag", () => {
+    expect(kort({ soort: "open", nogOpen: true, bedrag: 30 })).toEqual(["Open", "€ 30"]);
+    expect(lang({ soort: "open", nogOpen: true, bedrag: 12.5 })).toBe("Open · € 12,50");
+    expect(lang({ soort: "open", nogOpen: false, bedrag: 30 })).toBe(
+      "Stond open (€ 30), later betaald",
+    );
+  });
+
+  test("wat er op de kaart staat", () => {
+    const v = { maand: "2026-07", teken: "v", bedrag: 8 };
+    expect(lang({ soort: "open", nogOpen: true, kaart: v })).toBe("Alleen voorkant · € 8 open");
+    expect(kort({ soort: "open", nogOpen: true, kaart: v })).toEqual(["Voorkant", "€ 8"]);
+    const q = { maand: "2026-07", teken: "q", bedrag: 8 };
+    expect(lang({ soort: "open", nogOpen: true, kaart: q })).toBe("Deels gewassen · € 8 open");
+    const plus = { maand: "2026-07", teken: "+", bedrag: 5 };
+    expect(lang({ soort: "open", nogOpen: true, kaart: plus })).toBe("€ 5 te weinig betaald");
+    expect(kort({ soort: "overgeslagen", kaart: true })).toEqual(["Niet", "gewassen"]);
+    expect(lang({ soort: "vooruit", gepland: true, kaart: true })).toBe(
+      "Al betaald, van de papieren kaart",
+    );
+    expect(lang({ soort: "vooruit", gepland: false })).toBe("Vooruit betaald");
+  });
+
+  // Een vakje op de straatkaart is op de telefoon zo'n 58 pixels breed:
+  // hooguit negen tekens per regel, en een bedrag tot € 999,99.
+  test("elke regel in een vakje is kort", () => {
+    const vakken: Parameters<typeof vakWoorden>[0][] = [
+      { soort: "betaald", aantal: 2, korting: false },
+      { soort: "open", nogOpen: true, bedrag: 123.45 },
+      { soort: "open", nogOpen: true, kaart: { maand: "2026-07", teken: "+", bedrag: 12.5 } },
+      { soort: "open", nogOpen: false, bedrag: 30 },
+      { soort: "overgeslagen", kaart: true },
+      { soort: "vooruit", gepland: true, kaart: true },
+      { soort: "open", nogOpen: true, kaart: { maand: "2026-07", teken: "a", bedrag: 12.5 } },
+      { soort: "vooruit", gepland: false, meerOpen: true },
+      { soort: "overgeslagen" },
+      { soort: "niet_aan_de_beurt" },
+    ];
+    for (const vak of vakken) {
+      const regels = vakWoorden(vak).kort;
+      expect(regels.length <= 2).toBe(true);
+      for (const r of regels) expect(r.length <= 9).toBe(true);
+    }
+  });
+
+  test("het log: hoe een maand stond", () => {
+    expect(plat(kaartStandWoorden({ vakje: { teken: "0", bedrag: 27 }, een: false }))).toBe(
+      "Open · € 27",
+    );
+    expect(kaartStandWoorden({ vakje: null, een: true })).toBe("Al betaald (van de kaart)");
+    expect(kaartStandWoorden({ vakje: null, een: false })).toBe("Leeg");
+    expect(kaartStandWoorden(null)).toBe("Leeg");
+    expect(vakjeWoorden({ teken: "x", bedrag: 0 })).toBe("Niet gewassen");
   });
 });

@@ -14,6 +14,7 @@ import {
   BeginstandBedragen,
   BeginstandStarten,
 } from "@/components/betalingen/Beginstand";
+import { VakTekst } from "@/components/betalingen/VakTekst";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -26,8 +27,8 @@ import {
   leesVakInvoer,
   maandVan,
   vakjeVan,
-  vakTeken,
-  vakUitleg,
+  vakjeWoorden,
+  vakWoorden,
   vakVoor,
   vooruitGepland,
   type KaartVakje,
@@ -760,7 +761,7 @@ export function GeldKaart({
             </div>
           )}
           <section className="overflow-x-auto rounded-[24px] border border-border bg-card shadow-card">
-            <table ref={tabel} className="w-full min-w-[640px] border-collapse text-[13px]">
+            <table ref={tabel} className="w-full min-w-[920px] border-collapse text-[13px]">
               <thead>
                 <tr className="text-[11.5px] text-muted-foreground">
                   {/* Het nummer met de prijs eronder, en die kolom blijft staan
@@ -777,7 +778,8 @@ export function GeldKaart({
                         // Een eigen minimumbreedte, anders houden deze kolommen
                         // niets over: het knopje erin heeft geen eigen breedte,
                         // en dan gaat alle ruimte naar de frequentiekolom.
-                        "min-w-[34px] py-2 text-center font-medium",
+                        // Breed genoeg voor twee korte regels: "Open" en "€ 30".
+                        "min-w-[58px] py-2 text-center font-medium",
                         maanden[i] === nuMaand
                           ? // De maand waar we nu in zitten: geel, met een lijntje
                             // dat de hele kolom door loopt.
@@ -867,8 +869,8 @@ export function GeldKaart({
                                 : "vooruit";
                         const kanAanvinken = zone === "begin";
                         const aan = gekozen?.adres === c.id && gekozen.maand === maand;
-                        const teken = vakTeken(vak);
-                        const uitleg = vakUitleg(vak);
+                        // In woorden; de codes zijn alleen nog wat je typt.
+                        const uitleg = vakWoorden(vak).lang;
                         return (
                           <td
                             key={maand}
@@ -897,10 +899,7 @@ export function GeldKaart({
                                   ? openMenu(e.currentTarget, r, k, c, maand)
                                   : setGekozen(aan ? null : { adres: c.id, maand })
                               }
-                              className={`flex h-8 w-full items-center justify-center rounded-[8px] ${
-                                // Een langer bedrag (+12,5) moet in het vakje passen.
-                                teken.length > 3 ? "text-[10.5px]" : "text-[13px]"
-                              } font-semibold tabular-nums outline-none transition-colors ${
+                              className={`flex h-10 w-full items-center justify-center rounded-[8px] px-0.5 text-[10.5px] tabular-nums outline-none transition-colors ${
                                 // Bij aanvinken ook na een muisklik zien waar de 0 terechtkomt.
                                 invullen
                                   ? "focus:ring-2 focus:ring-foreground/70"
@@ -925,7 +924,7 @@ export function GeldKaart({
                                         : "text-muted-foreground/70 hover:bg-surface"
                               }`}
                             >
-                              {teken}
+                              <VakTekst vak={vak} />
                             </button>
                           </td>
                         );
@@ -945,12 +944,10 @@ export function GeldKaart({
           </section>
 
           <p className="text-[12px] text-muted-foreground">
-            1, 2 = zoveel wasbeurten betaald die maand · 0 = niet betaald (rood zolang het nog open
-            staat) · een letter of +5 = een deel open, van de kaart (aanwijzen voor het bedrag) ·
-            paars = met korting afgeboekt · B = betaald, vooruit (licht: die beurt komt nog; rode
-            rand: extra werk nog open) · licht groene 1 = vooruit betaald van de papieren kaart · ×
-            = overgeslagen of niet gewassen · % = niet aan de beurt · $ = maakt over · geel = de
-            maand van nu · grijs = vóór de start (de beginstand)
+            Groen = betaald · rood = staat nog open (licht als het later betaald is) · paars = met
+            korting afgeboekt · Vooruit betaald (licht: die beurt komt nog; rode rand: extra werk
+            nog open) · $ = maakt over · geel = de maand van nu · grijs = vóór de start (de
+            beginstand)
           </p>
         </>
       )}
@@ -963,16 +960,7 @@ export function GeldKaart({
             {gekozen.maand.slice(0, 4)}
           </h3>
           <div className="mt-2 space-y-1 text-[13px]">
-            {detailVakje && (
-              <p>
-                Op de kaart: {detailVakje.teken === "x" ? "×" : detailVakje.teken}
-                {detailVakje.teken === "1"
-                  ? " · vooruit betaald, van vóór de app"
-                  : detailVakje.teken === "x"
-                    ? " · niet gewassen"
-                    : ` · ${formatPrice(detailVakje.bedrag)} open`}
-              </p>
-            )}
+            {detailVakje && <p>Op de kaart: {vakjeWoorden(detailVakje)}</p>}
             {(details?.posten ?? [])
               .filter((p) => vakjeVan(p) === gekozen.maand && p.soort !== "beginstand")
               .map((p, i) => (

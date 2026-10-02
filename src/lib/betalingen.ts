@@ -810,19 +810,6 @@ export async function zetKlantkaart(
   if (error) throw error;
 }
 
-/** Hoe een maand op de kaart staat, kort: "0", "v 8", "+5", "1" of "leeg". */
-export function kaartStandTekst(s: KaartMaandStand | null | undefined): string {
-  if (!s) return "leeg";
-  const v = s.vakje;
-  if (v) {
-    if (v.teken === "x") return "×";
-    const b = String(Math.round(Number(v.bedrag) * 100) / 100).replace(".", ",");
-    if (v.teken === "0") return Number(v.bedrag) > 0 ? `0 (€ ${b})` : "0";
-    return v.teken === "+" ? `+${b}` : `${v.teken} ${b}`;
-  }
-  return s.een ? "1" : "leeg";
-}
-
 /** De omgezette beurten van één maand weer op overmaken. */
 export async function zetMaandTerug(adres: string, maand: string) {
   const { error } = await supabase.rpc("geld_beurt_terug", { adres_id: adres, maand });

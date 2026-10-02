@@ -9,6 +9,8 @@ import {
   IconLayoutGrid as Raster,
 } from "@tabler/icons-react";
 
+import { DeurKnop } from "@/components/betalingen/DeurKnop";
+import { VakTekst } from "@/components/betalingen/VakTekst";
 import { PopupBody, PopupKader, PopupKop, PopupVoet } from "@/components/Popup";
 import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
@@ -20,7 +22,6 @@ import {
   effectieveMethode,
   fetchOmzettingen,
   isOmgezet,
-  kaartStandTekst,
   terugNaarOvermakenTekst,
   zetKlantkaart,
   zetMaandNaarContant,
@@ -30,14 +31,16 @@ import {
   type OvermaakBeurt,
 } from "@/lib/betalingen";
 import {
+  DEELS_GEWASSEN,
+  kaartStandWoorden,
   kaartVakjesVan,
   leesVakInvoer,
   maandVan,
   vakjeVan,
+  vakjeWoorden,
   vakKleur,
-  vakTeken,
-  vakUitleg,
   vakVoor,
+  vakWoorden,
   vooruitGepland,
   type Vak,
 } from "@/lib/geldkaart";
@@ -107,6 +110,7 @@ const opFactuur = (b: OvermaakBeurt) => !!b.factuur && b.factuur !== "los";
 export function KlantKaart({
   adresId,
   titel,
+  maand: startMaand,
   onSluit,
   onVeranderd,
 }: {
@@ -114,6 +118,8 @@ export function KlantKaart({
   adresId: string | null;
   /** "Kerkstraat 12 · Jansen", in de kop. */
   titel: string;
+  /** Meteen deze maand open ("2026-07"), bijvoorbeeld vanuit het dossier. */
+  maand?: string | undefined;
   onSluit: () => void;
   /** Na elke wijziging, voor de lijst eromheen (het betaalvenster). */
   onVeranderd?: (() => void) | undefined;
@@ -121,8 +127,14 @@ export function KlantKaart({
   const qc = useQueryClient();
   const bevestig = useBevestig();
   const magAanpassen = useMagAfrekenen();
-  const [jaar, setJaar] = useState(() => new Date().getFullYear());
-  const [gekozen, setGekozen] = useState<string | null>(null);
+  const [jaar, setJaar] = useState(() =>
+    startMaand ? Number(startMaand.slice(0, 4)) : new Date().getFullYear(),
+  );
+  // De maand waarvan het venster open staat.
+  const [gekozen, setGekozen] = useState<string | null>(startMaand ?? null);
+  // In het venster: de knoppen, of een bedrag invullen (deel betaald, deels gewassen).
+  const [stap, setStap] = useState<"knoppen" | "deel" | "deels">("knoppen");
+  const [deelsTeken, setDeelsTeken] = useState<string>(DEELS_GEWASSEN[0].teken);
   const [invoer, setInvoer] = useState("");
   const [fout, setFout] = useState<string | null>(null);
   const [bezig, setBezig] = useState(false);
@@ -131,11 +143,20 @@ export function KlantKaart({
   if (adresId !== wasAdres) {
     setWasAdres(adresId);
     if (adresId) {
-      setJaar(new Date().getFullYear());
-      setGekozen(null);
+      setJaar(startMaand ? Number(startMaand.slice(0, 4)) : new Date().getFullYear());
+      setGekozen(startMaand ?? null);
+      setStap("knoppen");
       setInvoer("");
       setFout(null);
     }
+  }
+
+  /** Het venster van een maand openen (of dicht met null). */
+  function kiesMaand(maand: string | null) {
+    setGekozen(maand);
+    setStap("knoppen");
+    setInvoer("");
+    setFout(null);
   }
 
   const adres = useQuery({
@@ -251,7 +272,11 @@ export function KlantKaart({
    * je onderaan terug. Een ingetypte beginstand (een bedrag zonder maanden)
    * vervang je hier niet; dat zegt de database dan.
    */
-  async function zetVak(maand: string, nieuw: { teken: string; bedrag: number } | null) {
+  async function zetVak(
+    maand: string,
+    nieuw: { teken: string; bedrag: number } | null,
+    melding = nieuw ? `${toonMaand(maand)} op de kaart gezet` : `${toonMaand(maand)} gewist`,
+  ) {
     if (!c || uit) return;
     if (nieuw && (nieuw.teken === "0" || nieuw.teken === "1") && c.price <= 0) {
       toast.error(
@@ -261,25 +286,31 @@ export function KlantKaart({
     }
     const ok = await doe(
       () => zetKlantkaart(c.id, maand, nieuw?.teken ?? null, nieuw?.bedrag ?? 0),
-      nieuw ? `${toonMaand(maand)} op de kaart gezet` : `${toonMaand(maand)} gewist`,
+      melding,
     );
-    if (ok) {
-      setInvoer("");
-      setFout(null);
-    }
+    if (ok) kiesMaand(null);
   }
 
-  function typVak(maand: string) {
-    const uit = leesVakInvoer(invoer);
-    if ("fout" in uit) {
-      setFout(uit.fout);
+  /** Een bedrag uit het venster: + (deel betaald) of een letter (deels gewassen). */
+  function zetBedrag(maand: string, teken: string) {
+    const gelezen = leesVakInvoer(`${teken} ${invoer.replace(/[€\s]/g, "")}`);
+    if ("fout" in gelezen) {
+      setFout("Vul in hoeveel er nog open staat, bijvoorbeeld 8 of 12,50.");
       return;
     }
-    if (uit.teken === "1") {
-      setFout("Een 1 (al betaald) kan alleen na de start.");
-      return;
-    }
-    void zetVak(maand, uit);
+    void zetVak(maand, gelezen);
+  }
+
+  /** Een overmaak-maand naar contant: open, of al betaald. */
+  async function maandNaarContant(maand: string, teken: "0" | "1") {
+    if (!c) return;
+    const ok = await doe(
+      () => zetMaandNaarContant(c.id, maand, teken),
+      teken === "0"
+        ? `${toonMaand(maand)} staat contant open`
+        : `${toonMaand(maand)} contant, al betaald`,
+    );
+    if (ok) kiesMaand(null);
   }
 
   async function maandTerug(maand: string) {
@@ -289,7 +320,11 @@ export function KlantKaart({
       bevestigLabel: "Terugzetten",
     });
     if (!ja) return;
-    await doe(() => zetMaandTerug(adresId!, maand), `${toonMaand(maand)} maakt weer over`);
+    const ok = await doe(
+      () => zetMaandTerug(adresId!, maand),
+      `${toonMaand(maand)} maakt weer over`,
+    );
+    if (ok) kiesMaand(null);
   }
 
   /** Eén wijziging op de kaart terugzetten, na een vraag: met één tik verandert er geld. */
@@ -297,7 +332,7 @@ export function KlantKaart({
     const maand = o.ronde ?? "";
     const ja = await bevestig({
       titel: "Wijziging op de kaart ongedaan maken?",
-      tekst: `${toonMaand(maand)} ${maand.slice(0, 4)} gaat terug van ${kaartStandTekst(o.kaart_na)} naar ${kaartStandTekst(o.kaart_was)}.`,
+      tekst: `${toonMaand(maand)} ${maand.slice(0, 4)} gaat terug van "${kaartStandWoorden(o.kaart_na)}" naar "${kaartStandWoorden(o.kaart_was)}".`,
       bevestigLabel: "Ongedaan maken",
     });
     if (!ja) return;
@@ -328,450 +363,536 @@ export function KlantKaart({
         const ov = overmaakVan(maand);
         const voorStart = !!peilMaand && maand <= peilMaand;
         const alBetaald = vak?.soort === "betaald" || (vak?.soort === "vooruit" && !vak.kaart);
-        return { maand, vak, vakje, ov, voorStart, alBetaald };
+        // Een beginstand die als bedrag is ingetypt (zonder maanden): die
+        // pas je op de straatkaart aan, niet per maand.
+        const ingetypt = voorStart && kaartVakjesVan(data, peilMaand).some((v) => v.ingetypt);
+        // Wie deze maand het laatst veranderde (op de kaart, of door omzetten).
+        const laatste = (omz.data?.omzettingen ?? []).find(
+          (o) => o.ronde === maand && (o.soort === "kaart" || o.soort === "beurt"),
+        );
+        // Een 1 kan niet waar al iets betaald is (zie geld_kaart_zetten).
+        const deelsBetaald = (data?.posten ?? []).some(
+          (p) => p.soort === "wassen" && vakjeVan(p) === maand && p.gedekt > 0.005,
+        );
+        return { maand, vak, vakje, ov, voorStart, alBetaald, deelsBetaald, ingetypt, laatste };
       })()
     : null;
 
-  return (
-    <Dialog open onOpenChange={(o) => !o && onSluit()}>
-      <PopupKader className="sm:max-w-xl">
+  // Het venster van één maand, in de stijl van het betaalvenster: bovenin hoe
+  // de maand nu staat en wie hem het laatst veranderde, onderin de knoppen
+  // die voor deze maand mogen.
+  const nuTekst = keuze
+    ? keuze.ov.nog.length > 0 &&
+      (keuze.vak?.soort === "leeg" || keuze.vak?.soort === "niet_aan_de_beurt")
+      ? `Als overmaken afgemeld${keuze.ov.nog.some((b) => b.factuur) ? `, ${factuurTekst(keuze.ov.nog.find((b) => b.factuur)?.factuur ?? null)}` : ""}`
+      : (keuze.vak && vakWoorden(keuze.vak).lang) || "Niets"
+    : "";
+  const venster = keuze && c && (
+    <Dialog open onOpenChange={(o) => !o && kiesMaand(null)}>
+      <PopupKader className="sm:max-w-md" onSluit={() => kiesMaand(null)}>
         <PopupKop
           kleur="groen"
           icoon={<Raster className="size-[22px]" />}
-          titel="Geldkaart"
+          titel={`${toonMaand(keuze.maand).replace(/^./, (l) => l.toUpperCase())} ${keuze.maand.slice(0, 4)}`}
           subtitel={titel}
         />
         <PopupBody className="gap-3">
-          {toonOmzetting && adresOmzetting && (
-            <div className="flex items-start gap-3 rounded-[14px] bg-tint-amber px-3.5 py-2.5 text-[13px] text-tint-amber-ink">
-              <span className="min-w-0 flex-1">
-                Omgezet naar contant door {adresOmzetting.door_naam || "?"} ·{" "}
-                {moment(adresOmzetting.op)}
-              </span>
-              {magAanpassen && (
-                <button
-                  type="button"
-                  className="min-h-9 shrink-0 font-medium underline-offset-2 hover:underline disabled:opacity-50"
-                  disabled={bezig}
-                  onClick={() => void adresTerug()}
-                >
-                  Ongedaan maken
-                </button>
-              )}
-            </div>
-          )}
-
-          {c && !contant && (
-            <div className="flex flex-wrap items-center gap-3 rounded-[14px] bg-tint-blauw px-3.5 py-2.5 text-[13px] text-tint-blauw-ink">
-              <span className="min-w-0 flex-1">
-                Deze klant maakt over.
-                {magAanpassen && !gestopt
-                  ? " Betaalt hij eigenlijk contant? Zet hem dan om; daarna kun je hier de maanden aanpassen."
-                  : ""}
-              </span>
-              {magAanpassen && !gestopt && (
-                <Button
-                  size="sm"
-                  className="rounded-full"
-                  disabled={bezig}
-                  onClick={() => void omzetten()}
-                >
-                  Omzetten naar contant
-                </Button>
-              )}
-            </div>
-          )}
-
-          {c && contant && !peilMaand && (
-            <p className="text-[13px] text-muted-foreground">
-              Deze wijk doet nog niet mee met Betalingen: er is nog geen kaart.
+          <div className="rounded-[14px] bg-surface px-3.5 py-2.5">
+            <p className="font-display text-[17px] font-semibold leading-snug">
+              {data
+                ? nuTekst
+                : kaart.isError || omz.isError || (kaart.isSuccess && !kaart.isFetching)
+                  ? "De kaart kon niet opgehaald worden."
+                  : "Laden…"}
             </p>
-          )}
-
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-display text-[15px] font-semibold">{jaar}</span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className={pijl}
-                aria-label="Vorig jaar"
-                onClick={() => {
-                  setJaar((j) => j - 1);
-                  setGekozen(null);
-                }}
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-              <button
-                type="button"
-                className={pijl}
-                aria-label="Volgend jaar"
-                onClick={() => {
-                  setJaar((j) => j + 1);
-                  setGekozen(null);
-                }}
-              >
-                <ChevronRight className="size-4" />
-              </button>
-            </div>
+            {keuze.laatste && (
+              <p className="mt-0.5 text-[12px] text-muted-foreground">
+                Laatst veranderd door {keuze.laatste.door_naam || "?"} · {moment(keuze.laatste.op)}
+                {keuze.laatste.ongedaan_op && " (teruggedraaid)"}
+              </p>
+            )}
           </div>
 
-          {kaart.isError || adres.isError || omz.isError ? (
-            <p className="text-[13px] text-tint-rood-ink">
-              De kaart kon niet opgehaald worden. Vraag de eigenaar of je bedragen mag zien.
-            </p>
-          ) : (
-            <div className="grid grid-cols-4 gap-1.5 text-center sm:grid-cols-6">
-              {maanden.map((maand, i) => {
-                const laden = !c || kaart.isLoading || omz.isLoading;
-                const vak: Vak = c
-                  ? vakVoor(c, data, maand, peilMaand, undefined, gepland)
-                  : { soort: "leeg" };
-                const ov = overmaakVan(maand);
-                // Een beurt die als overmaken is afgemeld en verder niets: groot
-                // het pinpasje (of de factuur, als hij daar al op staat).
-                const groot =
-                  ov.nog.length > 0 && (vak.soort === "leeg" || vak.soort === "niet_aan_de_beurt");
-                const gefactureerd = ov.nog.some(opFactuur);
-                const klein = !groot && (ov.nog.length > 0 || ov.omgezet.length > 0);
-                const uitleg = [
-                  `${toonMaand(maand)} ${jaar}`,
-                  groot
-                    ? gefactureerd
-                      ? "als overmaken afgemeld, staat op een factuur"
-                      : "als overmaken afgemeld"
-                    : vakUitleg(vak),
-                  ov.omgezet.length > 0 ? "omgezet van overmaken" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" · ");
-                return (
-                  <button
-                    key={maand}
-                    type="button"
-                    aria-pressed={gekozen === maand}
-                    aria-label={uitleg}
-                    title={uitleg}
-                    onClick={() => {
-                      setGekozen(gekozen === maand ? null : maand);
-                      setInvoer("");
-                      setFout(null);
-                    }}
-                    className="flex flex-col gap-1 rounded-[12px] p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-foreground/70"
+          <div className="space-y-1 text-[13px]">
+            {keuze.vakje && <p>Op de kaart: {vakjeWoorden(keuze.vakje)}</p>}
+            {(data?.posten ?? [])
+              .filter((p) => vakjeVan(p) === keuze.maand && p.soort !== "beginstand")
+              .map((p, i) => (
+                <p key={`p${i}`}>
+                  {p.soort === "klus" ? `Klus: ${p.omschrijving}` : "Gewassen"} op{" "}
+                  {dagKort(p.datum)} · {formatPrice(p.bedrag)}
+                  {p.gedekt >= p.bedrag - 0.005
+                    ? ` · ${p.betaald_soort === "vooruit" ? "vooruit betaald" : "betaald"}${p.betaald_door ? ` bij ${p.betaald_door}` : ""}`
+                    : ` · nog ${formatPrice(p.bedrag - p.gedekt)} open`}
+                </p>
+              ))}
+            {keuze.ov.nog.map((b) => (
+              <p key={b.regel_id} className="text-tint-blauw-ink">
+                Gewassen op {dagKort(b.datum)} · {formatPrice(b.prijs)} · als overmaken afgemeld
+                {b.factuur ? ` · ${factuurTekst(b.factuur)}` : ""}
+              </p>
+            ))}
+            {keuze.ov.omgezet.map((b) => (
+              <p key={b.regel_id}>
+                Beurt van {dagKort(b.datum)} omgezet van overmaken naar contant door{" "}
+                {b.omzetting?.door_naam || "?"}
+                {b.omzetting ? ` · ${moment(b.omzetting.op)}` : ""}
+              </p>
+            ))}
+            {(data?.gebeurtenissen ?? [])
+              .filter((g) => maandVan(g.op) === keuze.maand)
+              .map((g) => (
+                <p key={g.id} className={g.ongedaan ? "line-through opacity-60" : ""}>
+                  {soortLabel(g.soort)}
+                  {g.bedrag > 0 && ` ${formatPrice(g.bedrag)}`}
+                  {g.reden && ` (${g.reden})`} · {g.door_naam} · {moment(g.op)}
+                </p>
+              ))}
+          </div>
+
+          {!kanAanpassen || !data || omz.isLoading ? null : keuze.ov.nog.length > 0 ? (
+            keuze.ov.nog.some(opFactuur) ? (
+              <Uitleg>
+                {keuze.ov.nog.some((b) => b.factuur === "concept")
+                  ? "Deze beurt staat op een conceptfactuur. Gooi dat concept eerst weg bij Facturen; daarna kun je hem hier omzetten."
+                  : "Deze beurt staat op een factuur. Een gefactureerde beurt zet je niet om naar contant: crediteer eerst de factuur."}
+              </Uitleg>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <p className="text-[12px] text-muted-foreground">
+                  Deze beurt is als overmaken afgemeld.{" "}
+                  {keuze.ov.nog.some((b) => b.factuur === "los")
+                    ? "Zet je hem om naar contant, dan gaat hij ook van de facturen af."
+                    : "Zet je hem om, dan telt hij als contant."}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <DeurKnop
+                    kleur="rood"
+                    disabled={uit}
+                    onClick={() => void maandNaarContant(keuze.maand, "0")}
                   >
-                    <span
+                    Contant open
+                  </DeurKnop>
+                  <DeurKnop
+                    kleur="salie"
+                    disabled={uit}
+                    onClick={() => void maandNaarContant(keuze.maand, "1")}
+                  >
+                    Contant betaald
+                  </DeurKnop>
+                </div>
+              </div>
+            )
+          ) : stap !== "knoppen" ? (
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                zetBedrag(keuze.maand, stap === "deel" ? "+" : deelsTeken);
+              }}
+            >
+              {stap === "deels" && (
+                <div className="grid grid-cols-3 gap-1.5">
+                  {DEELS_GEWASSEN.map((d) => (
+                    <button
+                      key={d.teken}
+                      type="button"
+                      aria-pressed={deelsTeken === d.teken}
+                      onClick={() => setDeelsTeken(d.teken)}
                       className={cn(
-                        "text-[12px]",
-                        gekozen === maand
-                          ? "font-semibold text-foreground"
-                          : "text-muted-foreground",
+                        "min-h-11 rounded-[12px] border px-2 text-[13px] font-medium transition-colors",
+                        deelsTeken === d.teken
+                          ? "border-transparent bg-primary text-primary-foreground"
+                          : "border-border bg-card hover:bg-surface",
                       )}
                     >
-                      {MAANDEN_KORT[i]}
-                    </span>
-                    {laden ? (
-                      <span className="h-12 animate-pulse rounded-[10px] bg-muted" />
-                    ) : (
-                      <span
-                        className={cn(
-                          "relative flex h-12 items-center justify-center rounded-[10px] border-2 border-transparent text-[17px] tabular-nums",
-                          groot ? "bg-tint-blauw text-tint-blauw-ink" : vakKleur(vak, false),
-                          gekozen === maand && "ring-2 ring-foreground/60",
-                        )}
-                      >
-                        {groot ? (
-                          gefactureerd ? (
-                            <Factuur className="size-5" aria-hidden="true" />
-                          ) : (
-                            <Pinpas className="size-5" aria-hidden="true" />
-                          )
-                        ) : (
-                          vakTeken(vak)
-                        )}
-                        {klein && (
-                          <Pinpas
-                            aria-hidden="true"
-                            className={cn(
-                              "absolute right-1 top-1 size-3",
-                              ov.nog.length > 0 ? "text-tint-blauw-ink" : "opacity-50",
-                            )}
-                          />
-                        )}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {keuze && c && (
-            <section className="flex flex-col gap-2.5 rounded-[16px] bg-surface px-3.5 py-3">
-              <h3 className="font-display text-[15px] font-semibold">
-                {toonMaand(keuze.maand)} {keuze.maand.slice(0, 4)}
-              </h3>
-              <div className="space-y-1 text-[13px]">
-                {keuze.vakje && (
-                  <p>
-                    Op de kaart: {keuze.vakje.teken === "x" ? "×" : keuze.vakje.teken}
-                    {keuze.vakje.teken === "1"
-                      ? " · al betaald, van de kaart"
-                      : keuze.vakje.teken === "x"
-                        ? " · niet gewassen"
-                        : ` · ${formatPrice(keuze.vakje.bedrag)} open`}
-                  </p>
-                )}
-                {(data?.posten ?? [])
-                  .filter((p) => vakjeVan(p) === keuze.maand && p.soort !== "beginstand")
-                  .map((p, i) => (
-                    <p key={`p${i}`}>
-                      {p.soort === "klus" ? `Klus: ${p.omschrijving}` : "Gewassen"} op{" "}
-                      {dagKort(p.datum)} · {formatPrice(p.bedrag)}
-                      {p.gedekt >= p.bedrag - 0.005
-                        ? ` · ${p.betaald_soort === "vooruit" ? "vooruit betaald" : "betaald"}${p.betaald_door ? ` bij ${p.betaald_door}` : ""}`
-                        : ` · nog ${formatPrice(p.bedrag - p.gedekt)} open`}
-                    </p>
+                      {d.label}
+                    </button>
                   ))}
-                {keuze.ov.nog.map((b) => (
-                  <p key={b.regel_id} className="text-tint-blauw-ink">
-                    Gewassen op {dagKort(b.datum)} · {formatPrice(b.prijs)} · als overmaken afgemeld
-                    {b.factuur ? ` · ${factuurTekst(b.factuur)}` : ""}
-                  </p>
-                ))}
-                {keuze.ov.omgezet.map((b) => (
-                  <p key={b.regel_id}>
-                    Beurt van {dagKort(b.datum)} omgezet van overmaken naar contant door{" "}
-                    {b.omzetting?.door_naam || "?"}
-                    {b.omzetting ? ` · ${moment(b.omzetting.op)}` : ""}
-                  </p>
-                ))}
-                {(data?.gebeurtenissen ?? [])
-                  .filter((g) => maandVan(g.op) === keuze.maand)
-                  .map((g) => (
-                    <p key={g.id} className={g.ongedaan ? "line-through opacity-60" : ""}>
-                      {soortLabel(g.soort)}
-                      {g.bedrag > 0 && ` ${formatPrice(g.bedrag)}`}
-                      {g.reden && ` (${g.reden})`} · {g.door_naam} · {moment(g.op)}
-                    </p>
-                  ))}
-                {!keuze.vakje &&
-                  keuze.ov.nog.length === 0 &&
-                  keuze.ov.omgezet.length === 0 &&
-                  (data?.posten ?? []).every(
-                    (p) => vakjeVan(p) !== keuze.maand || p.soort === "beginstand",
-                  ) &&
-                  (data?.gebeurtenissen ?? []).every((g) => maandVan(g.op) !== keuze.maand) && (
-                    <p className="text-muted-foreground">Niets gebeurd in deze maand.</p>
-                  )}
+                </div>
+              )}
+              <label className="text-[13px] font-medium" htmlFor="klantkaart-bedrag">
+                {stap === "deel"
+                  ? "Hoeveel is er te weinig betaald? Dat bedrag staat nog open."
+                  : "Hoeveel staat er nog open?"}
+              </label>
+              <Input
+                id="klantkaart-bedrag"
+                autoFocus
+                inputMode="decimal"
+                placeholder="€ 0"
+                className="h-12 rounded-full text-[17px]"
+                value={invoer}
+                onChange={(e) => {
+                  setInvoer(e.target.value);
+                  setFout(null);
+                }}
+              />
+              {fout && <p className="text-[12px] text-tint-rood-ink">{fout}</p>}
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 rounded-full"
+                  onClick={() => {
+                    setStap("knoppen");
+                    setFout(null);
+                  }}
+                >
+                  Terug
+                </Button>
+                <Button type="submit" className="h-12 rounded-full" disabled={uit}>
+                  Zet op de kaart
+                </Button>
               </div>
-
-              {kanAanpassen &&
-                (keuze.ov.nog.length > 0 ? (
-                  keuze.ov.nog.some(opFactuur) ? (
-                    <p className="rounded-[12px] bg-tint-amber px-3 py-2 text-[12.5px] text-tint-amber-ink">
-                      {keuze.ov.nog.some((b) => b.factuur === "concept")
-                        ? "Deze beurt staat op een conceptfactuur. Gooi dat concept eerst weg bij Facturen; daarna kun je hem hier omzetten."
-                        : "Deze beurt staat op een factuur. Een gefactureerde beurt zet je niet om naar contant: crediteer eerst de factuur."}
-                    </p>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <KeuzeKnop
-                          teken="0"
-                          uitleg="contant, nog open"
-                          disabled={uit}
-                          onKies={() =>
-                            void doe(
-                              () => zetMaandNaarContant(c.id, keuze.maand, "0"),
-                              `${toonMaand(keuze.maand)} staat contant open`,
-                            )
-                          }
-                        />
-                        <KeuzeKnop
-                          teken="1"
-                          uitleg="contant, al betaald"
-                          disabled={uit}
-                          onKies={() =>
-                            void doe(
-                              () => zetMaandNaarContant(c.id, keuze.maand, "1"),
-                              `${toonMaand(keuze.maand)} contant, al betaald`,
-                            )
-                          }
-                        />
-                      </div>
-                      <p className="text-[11.5px] text-muted-foreground">
-                        Deze beurt is als overmaken afgemeld.{" "}
-                        {keuze.ov.nog.some((b) => b.factuur === "los")
-                          ? "Zet je hem om, dan gaat hij ook van de facturen af."
-                          : "Zet je hem om, dan telt hij als contant."}
-                      </p>
-                    </>
-                  )
+            </form>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {keuze.ov.omgezet.length > 0 && (
+                <DeurKnop kleur="blauw" disabled={uit} onClick={() => void maandTerug(keuze.maand)}>
+                  Terug naar overmaken
+                </DeurKnop>
+              )}
+              {keuze.voorStart ? (
+                keuze.ingetypt ? (
+                  <Uitleg>
+                    Deze klant heeft een beginstand die als bedrag is ingetypt, zonder maanden. Die
+                    pas je aan op de kaart van de straat bij Betalingen.
+                  </Uitleg>
                 ) : (
                   <>
-                    {keuze.ov.omgezet.length > 0 && (
-                      <KeuzeKnop
-                        teken={<Pinpas className="size-[18px]" aria-hidden="true" />}
-                        uitleg="terug naar overmaken"
-                        disabled={uit}
-                        onKies={() => void maandTerug(keuze.maand)}
-                      />
-                    )}
-                    {keuze.voorStart ? (
-                      <>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          <KeuzeKnop
-                            teken="0"
-                            uitleg="hele beurt open"
-                            aan={keuze.vakje?.teken === "0" && !keuze.vakje.ingetypt}
-                            disabled={uit}
-                            onKies={() => void zetVak(keuze.maand, { teken: "0", bedrag: 0 })}
-                          />
-                          <KeuzeKnop
-                            teken="×"
-                            uitleg="niet gewassen"
-                            aan={keuze.vakje?.teken === "x"}
-                            disabled={uit}
-                            onKies={() => void zetVak(keuze.maand, { teken: "x", bedrag: 0 })}
-                          />
-                        </div>
-                        <form
-                          className="flex gap-1.5"
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            typVak(keuze.maand);
-                          }}
-                        >
-                          <Input
-                            className="h-10 min-w-0 flex-1 rounded-full"
-                            placeholder="v 8 of +5"
-                            aria-label="Letter met bedrag, of + met bedrag"
-                            autoCapitalize="off"
-                            autoComplete="off"
-                            value={invoer}
-                            onChange={(e) => {
-                              setInvoer(e.target.value);
-                              setFout(null);
-                            }}
-                          />
-                          <Button type="submit" className="h-10 rounded-full" disabled={uit}>
-                            Zet
-                          </Button>
-                        </form>
-                        {fout ? (
-                          <p className="text-[12px] text-tint-rood-ink">{fout}</p>
-                        ) : (
-                          <p className="text-[11.5px] text-muted-foreground">
-                            Vóór de start van de wijk: zoals het op de papieren kaart stond. Geen
-                            vakje = betaald.
-                          </p>
-                        )}
-                      </>
-                    ) : (
-                      !gestopt &&
-                      (!keuze.alBetaald || keuze.vakje?.teken === "1") && (
-                        <KeuzeKnop
-                          teken="1"
-                          uitleg="al betaald"
-                          aan={keuze.vakje?.teken === "1"}
-                          disabled={uit || keuze.vakje?.teken === "1"}
-                          onKies={() => void zetVak(keuze.maand, { teken: "1", bedrag: 0 })}
-                        />
-                      )
-                    )}
-                    {keuze.vakje && !keuze.vakje.ingetypt && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 self-start rounded-full"
-                        disabled={uit}
-                        onClick={() => void zetVak(keuze.maand, null)}
+                    <div className="grid grid-cols-2 gap-2">
+                      <DeurKnop
+                        kleur="rood"
+                        disabled={uit || keuze.vakje?.teken === "0"}
+                        onClick={() => void zetVak(keuze.maand, { teken: "0", bedrag: 0 })}
                       >
-                        Wissen
-                      </Button>
+                        Nog open
+                      </DeurKnop>
+                      <DeurKnop
+                        kleur="groen"
+                        disabled={uit}
+                        onClick={() => {
+                          setStap("deel");
+                          setInvoer("");
+                        }}
+                      >
+                        Deel betaald…
+                      </DeurKnop>
+                      <DeurKnop
+                        kleur="grafiet"
+                        disabled={uit || keuze.vakje?.teken === "x"}
+                        onClick={() => void zetVak(keuze.maand, { teken: "x", bedrag: 0 })}
+                      >
+                        Niet gewassen
+                      </DeurKnop>
+                      <DeurKnop
+                        kleur="amber"
+                        disabled={uit}
+                        onClick={() => {
+                          setStap("deels");
+                          setInvoer("");
+                          // De letter die er al staat, anders alleen de voorkant.
+                          const al = DEELS_GEWASSEN.find((d) => d.teken === keuze.vakje?.teken);
+                          setDeelsTeken(al?.teken ?? DEELS_GEWASSEN[0].teken);
+                        }}
+                      >
+                        Deels gewassen…
+                      </DeurKnop>
+                    </div>
+                    {keuze.vakje && (
+                      <DeurKnop
+                        kleur="salie"
+                        disabled={uit}
+                        onClick={() =>
+                          void zetVak(
+                            keuze.maand,
+                            null,
+                            `${toonMaand(keuze.maand)} staat op betaald`,
+                          )
+                        }
+                      >
+                        Betaald
+                      </DeurKnop>
                     )}
+                    <p className="text-[12px] text-muted-foreground">
+                      Vóór de start van de wijk zet je hier wat er op de papieren kaart stond.
+                      {keuze.vakje ? " Betaald haalt wat er open stond weg." : ""}
+                    </p>
                   </>
-                ))}
-            </section>
+                )
+              ) : (
+                <>
+                  {!gestopt &&
+                    ((!keuze.alBetaald && !keuze.deelsBetaald) || keuze.vakje?.teken === "1") && (
+                      <DeurKnop
+                        kleur="salie"
+                        disabled={uit || keuze.vakje?.teken === "1"}
+                        onClick={() => void zetVak(keuze.maand, { teken: "1", bedrag: 0 })}
+                      >
+                        {keuze.vakje?.teken === "1" ? "Staat op betaald" : "Betaald"}
+                      </DeurKnop>
+                    )}
+                  {keuze.vakje && (
+                    <Button
+                      variant="outline"
+                      className="h-12 rounded-full"
+                      disabled={uit}
+                      onClick={() => void zetVak(keuze.maand, null)}
+                    >
+                      Wissen
+                    </Button>
+                  )}
+                  <p className="text-[12px] text-muted-foreground">
+                    Na de start rekent de app zelf. Betaald hier betekent: al betaald buiten de app
+                    om (telt niet als opgehaald geld). Staat er iets open, reken dat af in het
+                    betaalvenster; niet gewassen meld je aan de deur.
+                  </p>
+                </>
+              )}
+            </div>
           )}
-
-          {/* Wie het adres omzette en wie wat op de kaart zette, nieuw naar
-              oud; een kaartwijziging zet je hier terug. */}
-          {(omz.data?.omzettingen ?? [])
-            .filter((o) => o.soort === "adres" || o.soort === "kaart")
-            .map((o) => (
-              <div key={o.id} className="flex items-start gap-2 text-[12px] text-muted-foreground">
-                <p className="min-w-0 flex-1">
-                  <span className={o.ongedaan_op ? "line-through" : ""}>
-                    {o.soort === "adres"
-                      ? "Omgezet van overmaken naar contant"
-                      : `${toonMaand(o.ronde ?? "")} ${(o.ronde ?? "").slice(0, 4)} op de kaart: ${kaartStandTekst(o.kaart_was)} → ${kaartStandTekst(o.kaart_na)}`}{" "}
-                    door {o.door_naam || "?"} · {moment(o.op)}
-                  </span>
-                  {o.ongedaan_op &&
-                    ` · teruggedraaid door ${o.ongedaan_naam || "?"} · ${moment(o.ongedaan_op)}`}
-                </p>
-                {o.soort === "kaart" && !o.ongedaan_op && kanAanpassen && (
-                  <button
-                    type="button"
-                    className="min-h-8 shrink-0 font-medium underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
-                    disabled={uit}
-                    onClick={() => void kaartTerug(o)}
-                  >
-                    Ongedaan
-                  </button>
-                )}
-              </div>
-            ))}
-
-          <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-            1 = betaald · 0 = niet betaald · letter of + = een deel open (van de kaart) · B =
-            vooruit betaald (lichte 1: van de papieren kaart) · × = overgeslagen · % = niet aan de
-            beurt · pinpasje = als overmaken afgemeld · klein pinpasje = omgezet van overmaken ·
-            factuur = staat op een factuur
-          </p>
         </PopupBody>
         <PopupVoet>
-          <Button variant="outline" className="rounded-full" onClick={onSluit}>
+          <Button variant="outline" className="rounded-full" onClick={() => kiesMaand(null)}>
             Sluiten
           </Button>
         </PopupVoet>
       </PopupKader>
     </Dialog>
   );
+
+  return (
+    <>
+      <Dialog open onOpenChange={(o) => !o && onSluit()}>
+        <PopupKader className="sm:max-w-xl">
+          <PopupKop
+            kleur="groen"
+            icoon={<Raster className="size-[22px]" />}
+            titel="Geldkaart"
+            subtitel={titel}
+          />
+          <PopupBody className="gap-3">
+            {toonOmzetting && adresOmzetting && (
+              <div className="flex items-start gap-3 rounded-[14px] bg-tint-amber px-3.5 py-2.5 text-[13px] text-tint-amber-ink">
+                <span className="min-w-0 flex-1">
+                  Omgezet naar contant door {adresOmzetting.door_naam || "?"} ·{" "}
+                  {moment(adresOmzetting.op)}
+                </span>
+                {magAanpassen && (
+                  <button
+                    type="button"
+                    className="min-h-9 shrink-0 font-medium underline-offset-2 hover:underline disabled:opacity-50"
+                    disabled={bezig}
+                    onClick={() => void adresTerug()}
+                  >
+                    Ongedaan maken
+                  </button>
+                )}
+              </div>
+            )}
+
+            {c && !contant && (
+              <div className="flex flex-wrap items-center gap-3 rounded-[14px] bg-tint-blauw px-3.5 py-2.5 text-[13px] text-tint-blauw-ink">
+                <span className="min-w-0 flex-1">
+                  Deze klant maakt over.
+                  {magAanpassen && !gestopt
+                    ? " Betaalt hij eigenlijk contant? Zet hem dan om; daarna kun je hier de maanden aanpassen."
+                    : ""}
+                </span>
+                {magAanpassen && !gestopt && (
+                  <Button
+                    size="sm"
+                    className="rounded-full"
+                    disabled={bezig}
+                    onClick={() => void omzetten()}
+                  >
+                    Omzetten naar contant
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {c && contant && !peilMaand && (
+              <p className="text-[13px] text-muted-foreground">
+                Deze wijk doet nog niet mee met Betalingen: er is nog geen kaart.
+              </p>
+            )}
+
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-display text-[15px] font-semibold">{jaar}</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className={pijl}
+                  aria-label="Vorig jaar"
+                  onClick={() => {
+                    setJaar((j) => j - 1);
+                    setGekozen(null);
+                  }}
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  className={pijl}
+                  aria-label="Volgend jaar"
+                  onClick={() => {
+                    setJaar((j) => j + 1);
+                    setGekozen(null);
+                  }}
+                >
+                  <ChevronRight className="size-4" />
+                </button>
+              </div>
+            </div>
+
+            {kaart.isError || adres.isError || omz.isError ? (
+              <p className="text-[13px] text-tint-rood-ink">
+                De kaart kon niet opgehaald worden. Vraag de eigenaar of je bedragen mag zien.
+              </p>
+            ) : (
+              <div className="grid grid-cols-4 gap-1.5 text-center sm:grid-cols-6">
+                {maanden.map((maand, i) => {
+                  const laden = !c || kaart.isLoading || omz.isLoading;
+                  const vak: Vak = c
+                    ? vakVoor(c, data, maand, peilMaand, undefined, gepland)
+                    : { soort: "leeg" };
+                  const ov = overmaakVan(maand);
+                  // Een beurt die als overmaken is afgemeld en verder niets: groot
+                  // het pinpasje (of de factuur, als hij daar al op staat).
+                  const groot =
+                    ov.nog.length > 0 &&
+                    (vak.soort === "leeg" || vak.soort === "niet_aan_de_beurt");
+                  const gefactureerd = ov.nog.some(opFactuur);
+                  const klein = !groot && (ov.nog.length > 0 || ov.omgezet.length > 0);
+                  const uitleg = [
+                    `${toonMaand(maand)} ${jaar}`,
+                    groot
+                      ? gefactureerd
+                        ? "als overmaken afgemeld, staat op een factuur"
+                        : "als overmaken afgemeld"
+                      : vakWoorden(vak).lang,
+                    ov.omgezet.length > 0 ? "omgezet van overmaken" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
+                  return (
+                    <button
+                      key={maand}
+                      type="button"
+                      aria-pressed={gekozen === maand}
+                      aria-label={uitleg}
+                      title={uitleg}
+                      onClick={() => kiesMaand(maand)}
+                      className="flex flex-col gap-1 rounded-[12px] p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-foreground/70"
+                    >
+                      <span
+                        className={cn(
+                          "text-[12px]",
+                          gekozen === maand
+                            ? "font-semibold text-foreground"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {MAANDEN_KORT[i]}
+                      </span>
+                      {laden ? (
+                        <span className="h-12 animate-pulse rounded-[10px] bg-muted" />
+                      ) : (
+                        <span
+                          className={cn(
+                            "relative flex h-12 items-center justify-center rounded-[10px] border-2 border-transparent px-1 text-[12px] tabular-nums",
+                            groot ? "bg-tint-blauw text-tint-blauw-ink" : vakKleur(vak, false),
+                            gekozen === maand && "ring-2 ring-foreground/60",
+                          )}
+                        >
+                          {groot ? (
+                            <span className="flex flex-col items-center gap-0.5 leading-[1.15]">
+                              {gefactureerd ? (
+                                <Factuur className="size-4" aria-hidden="true" />
+                              ) : (
+                                <Pinpas className="size-4" aria-hidden="true" />
+                              )}
+                              <span className="font-semibold">
+                                {gefactureerd ? "Op factuur" : "Maakt over"}
+                              </span>
+                            </span>
+                          ) : (
+                            <VakTekst vak={vak} />
+                          )}
+                          {klein && (
+                            <Pinpas
+                              aria-hidden="true"
+                              className={cn(
+                                "absolute right-1 top-1 size-3",
+                                ov.nog.length > 0 ? "text-tint-blauw-ink" : "opacity-50",
+                              )}
+                            />
+                          )}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Wie het adres omzette en wie wat op de kaart zette, nieuw naar
+              oud; een kaartwijziging zet je hier terug. */}
+            {(omz.data?.omzettingen ?? [])
+              .filter((o) => o.soort === "adres" || o.soort === "kaart")
+              .map((o) => (
+                <div
+                  key={o.id}
+                  className="flex items-start gap-2 text-[12px] text-muted-foreground"
+                >
+                  <p className="min-w-0 flex-1">
+                    <span className={o.ongedaan_op ? "line-through" : ""}>
+                      {o.soort === "adres"
+                        ? "Omgezet van overmaken naar contant"
+                        : `${toonMaand(o.ronde ?? "")} ${(o.ronde ?? "").slice(0, 4)} op de kaart: ${kaartStandWoorden(o.kaart_was)} → ${kaartStandWoorden(o.kaart_na)}`}{" "}
+                      door {o.door_naam || "?"} · {moment(o.op)}
+                    </span>
+                    {o.ongedaan_op &&
+                      ` · teruggedraaid door ${o.ongedaan_naam || "?"} · ${moment(o.ongedaan_op)}`}
+                  </p>
+                  {o.soort === "kaart" && !o.ongedaan_op && kanAanpassen && (
+                    <button
+                      type="button"
+                      className="min-h-8 shrink-0 font-medium underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+                      disabled={uit}
+                      onClick={() => void kaartTerug(o)}
+                    >
+                      Ongedaan
+                    </button>
+                  )}
+                </div>
+              ))}
+
+            <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+              Tik een maand aan om te zien wat er gebeurde
+              {kanAanpassen ? " en om hem aan te passen" : ""}. Groen = betaald · rood = staat open
+              · pinpasje = als overmaken afgemeld · klein pinpasje = omgezet van overmaken
+            </p>
+          </PopupBody>
+          <PopupVoet>
+            <Button variant="outline" className="rounded-full" onClick={onSluit}>
+              Sluiten
+            </Button>
+          </PopupVoet>
+        </PopupKader>
+      </Dialog>
+      {venster}
+    </>
+  );
 }
 
-/** Eén keuze voor een maand: het teken groot, de uitleg klein. */
-function KeuzeKnop({
-  teken,
-  uitleg,
-  aan = false,
-  disabled,
-  onKies,
-}: {
-  teken: ReactNode;
-  uitleg: string;
-  aan?: boolean;
-  disabled?: boolean;
-  onKies: () => void;
-}) {
+/** Waarom iets hier niet kan, in het geel. */
+function Uitleg({ children }: { children: ReactNode }) {
   return (
-    <button
-      type="button"
-      aria-pressed={aan}
-      disabled={disabled}
-      onClick={onKies}
-      className={cn(
-        "flex min-h-12 w-full items-center gap-2 rounded-[12px] border px-3 text-left transition-colors disabled:opacity-50",
-        aan
-          ? "border-transparent bg-primary text-primary-foreground"
-          : "border-border bg-card hover:bg-surface",
-      )}
-    >
-      <span className="flex min-w-5 justify-center font-display text-[18px] font-semibold tabular-nums">
-        {teken}
-      </span>
-      <span className="text-[13px]">{uitleg}</span>
-    </button>
+    <p className="rounded-[12px] bg-tint-amber px-3 py-2 text-[12.5px] text-tint-amber-ink">
+      {children}
+    </p>
   );
 }
