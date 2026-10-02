@@ -139,6 +139,21 @@ const ContextMenuContent = React.forwardRef<
 ));
 ContextMenuContent.displayName = ContextMenuPrimitive.Content.displayName;
 
+/**
+ * Radix kiest een item al bij het lóslaten van de knop als je hem niet op dat
+ * item indrukte — bedoeld om te kunnen "slepen en loslaten". Maar opent het
+ * menu na een rechterklik zo dat er een item precies onder de muis ligt, dan
+ * kiest het loslaten van de rechterknop dat item meteen: zo ging er per
+ * ongeluk "Overslaan" aan. Alleen een echte klik (indrukken én loslaten op
+ * het item) telt daarom nog; die komt als gewone click binnen.
+ */
+function geenKeuzeBijLoslaten<E extends React.PointerEvent>(eigen?: (e: E) => void) {
+  return (e: E) => {
+    eigen?.(e);
+    e.preventDefault();
+  };
+}
+
 const ContextMenuItem = React.forwardRef<
   React.ElementRef<typeof ContextMenuPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Item> & {
@@ -153,6 +168,7 @@ const ContextMenuItem = React.forwardRef<
       className,
     )}
     {...props}
+    onPointerUp={geenKeuzeBijLoslaten(props.onPointerUp)}
   />
 ));
 ContextMenuItem.displayName = ContextMenuPrimitive.Item.displayName;
@@ -168,6 +184,7 @@ const ContextMenuCheckboxItem = React.forwardRef<
       className,
     )}
     {...props}
+    onPointerUp={geenKeuzeBijLoslaten(props.onPointerUp)}
   >
     {/* Een leeg hokje dat je ook ziet als er niets is aangevinkt: anders is
         niet te raden dat je er meer dan één mag kiezen. */}
@@ -192,6 +209,7 @@ const ContextMenuRadioItem = React.forwardRef<
       className,
     )}
     {...props}
+    onPointerUp={geenKeuzeBijLoslaten(props.onPointerUp)}
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <ContextMenuPrimitive.ItemIndicator>
