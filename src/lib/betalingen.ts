@@ -707,3 +707,100 @@ export function keerOpen(openWassen: number): string {
   if (n <= 0) return "";
   return `${n.toLocaleString("nl-NL")}×`;
 }
+
+// ---------------------------------------------------------------------------
+// Omzetten naar contant (zie de migratie omzetten_naar_contant)
+// ---------------------------------------------------------------------------
+
+/**
+ * Een wasbeurt die als overmaken is afgemeld, of die daarna is omgezet naar
+ * contant. `factuur`: null (niet bij de facturen), "los" (klaar om
+ * gefactureerd te worden), "concept", of het factuurnummer ("factuur" als je
+ * de facturen niet mag zien).
+ */
+export interface OvermaakBeurt {
+  regel_id: string;
+  ronde: string;
+  datum: string;
+  prijs: number;
+  betaalmethode: Betaalmethode | null;
+  factuur: string | null;
+  omzetting: { id: string; door_naam: string; op: string } | null;
+}
+
+/** Eén keer omgezet: het adres, of één beurt. Ook wat weer ongedaan is. */
+export interface Omzetting {
+  id: string;
+  soort: "adres" | "beurt";
+  ronde: string | null;
+  datum: string | null;
+  vorige_methode: Betaalmethode | null;
+  door_naam: string;
+  op: string;
+  ongedaan_op: string | null;
+  ongedaan_naam: string | null;
+}
+
+export interface Omzettingen {
+  beurten: OvermaakBeurt[];
+  omzettingen: Omzetting[];
+}
+
+export async function fetchOmzettingen(adres: string): Promise<Omzettingen> {
+  const { data, error } = await supabase.rpc("geld_omzettingen", { adres_id: adres });
+  if (error) throw error;
+  const x = (data ?? {}) as unknown as Partial<Omzettingen>;
+  return {
+    beurten: (x.beurten ?? []).map((b) => ({ ...b, prijs: Number(b.prijs ?? 0) })),
+    omzettingen: x.omzettingen ?? [],
+  };
+}
+
+/** Is deze beurt nu (nog) omgezet naar contant? */
+export function isOmgezet(b: OvermaakBeurt): boolean {
+  return !!b.omzetting && b.betaalmethode !== "overmaken";
+}
+
+/** Het adres blijvend op contant. Geeft het id terug, voor Ongedaan maken. */
+export async function zetNaarContant(adres: string): Promise<string> {
+  const { data, error } = await supabase.rpc("geld_naar_contant", { adres_id: adres });
+  if (error) throw error;
+  return data as string;
+}
+
+/** De overmaak-beurten van één maand naar contant: "0" open, "1" al betaald. */
+export async function zetMaandNaarContant(adres: string, maand: string, teken: "0" | "1") {
+  const { error } = await supabase.rpc("geld_beurt_naar_contant", {
+    adres_id: adres,
+    maand,
+    teken,
+  });
+  if (error) throw error;
+}
+
+/** De omgezette beurten van één maand weer op overmaken. */
+export async function zetMaandTerug(adres: string, maand: string) {
+  const { error } = await supabase.rpc("geld_beurt_terug", { adres_id: adres, maand });
+  if (error) throw error;
+}
+
+/**
+ * Een omzetting ongedaan maken (het adres, of één maand). Bij het adres: hoe
+ * het daarna betaalt. "gepland": er zijn nog vooruit betaalde beurten, het
+ * gaat pas overmaken als die op zijn; "contant": het volgt de wijk, en die
+ * is intussen contant.
+ */
+export async function draaiOmzettingTerug(id: string): Promise<Betaalmethode | "gepland" | null> {
+  const { data, error } = await supabase.rpc("geld_omzetting_ongedaan", { omzetting: id });
+  if (error) throw error;
+  return (data as Betaalmethode | "gepland" | null) ?? null;
+}
+
+/** De melding na het terugdraaien van een omzetting van het adres. */
+export function terugNaarOvermakenTekst(methode: Betaalmethode | "gepland" | null): string {
+  return methode === "gepland"
+    ? "Gaat weer overmaken zodra de vooruitbetaling op is"
+    : methode === "contant"
+      ? "Teruggezet; betaalt contant, zoals de wijk"
+      : "Maakt weer over";
+}

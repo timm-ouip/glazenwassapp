@@ -122,10 +122,16 @@ export function KlantgegevensDialog(props: Props) {
             <div className="flex min-h-0 flex-1 flex-col">{tabblad}</div>
           )
         ) : (
-          <>
+          // Op de computer alles op 90%, zoals Cmd − in de browser: zo past het
+          // Overzicht zonder scrollen (Timmie, 02-10-2026). Alleen de inhoud;
+          // het venster zelf blijft even groot. De inhoud krijgt 1/0,9 aan
+          // ruimte en wordt dan geschaald tot precies passend. Een schaal en
+          // geen CSS-zoom: met zoom meet Safari de plek van een knop anders,
+          // en dan klappen keuzemenu's naast hun knop open.
+          <div className="flex h-[calc(100%/0.9)] w-[calc(100%/0.9)] shrink-0 origin-top-left scale-90 flex-row">
             <DossierMenu d={d} />
             <div className="flex min-w-0 flex-1 flex-col">{tabblad}</div>
-          </>
+          </div>
         )}
       </PopupKader>
 

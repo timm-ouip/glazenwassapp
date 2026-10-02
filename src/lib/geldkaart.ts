@@ -7,6 +7,7 @@
 import { vooruitMaanden, vooruitStart } from "@/lib/betalingen";
 import { formatPrice, maandwerkVoor, ritmeMaanden, type Customer } from "@/lib/klanten";
 import type { KaartAdres, KaartPost } from "@/lib/overzichten";
+import { cn } from "@/lib/utils";
 
 export type Vak =
   | { soort: "betaald"; aantal: number; korting: boolean }
@@ -329,5 +330,38 @@ export function vakUitleg(vak: Vak): string {
       return "niet aan de beurt";
     case "leeg":
       return "";
+  }
+}
+
+/**
+ * De kleur van een vakje op de kaart van één adres (het dossier en de
+ * geldkaart van één klant). Een open plek met een oranje rand: daar komt de
+ * volgende beurt.
+ */
+export function vakKleur(vak: Vak, volgende: boolean): string {
+  switch (vak.soort) {
+    case "betaald":
+      return vak.korting
+        ? "bg-tint-paars font-semibold text-tint-paars-ink"
+        : "bg-tint-salie font-semibold text-tint-salie-ink";
+    case "open":
+      return vak.nogOpen
+        ? "bg-tint-rood font-semibold text-tint-rood-ink"
+        : "font-semibold text-tint-rood-ink/60 ring-1 ring-inset ring-border";
+    case "vooruit":
+      return vak.gepland
+        ? cn(
+            "border-dashed font-semibold text-tint-groen-ink/60",
+            volgende ? "border-primary" : "border-tint-groen-ink/40",
+          )
+        : vak.meerOpen
+          ? "bg-tint-groen font-semibold text-tint-groen-ink ring-2 ring-inset ring-tint-rood-ink/60"
+          : "bg-tint-groen font-semibold text-tint-groen-ink";
+    case "overgeslagen":
+      return "bg-tint-geel text-tint-geel-ink";
+    case "niet_aan_de_beurt":
+      return "bg-muted text-foreground";
+    case "leeg":
+      return volgende ? "border-primary" : "ring-1 ring-inset ring-border";
   }
 }

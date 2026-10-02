@@ -845,6 +845,81 @@ export type Database = {
         };
         Relationships: [];
       };
+      contant_omzettingen: {
+        Row: {
+          company_id: string;
+          customer_id: string;
+          datum: string | null;
+          door: string | null;
+          door_naam: string;
+          factuurregel_id: string | null;
+          id: string;
+          kaart_was: Json | null;
+          ongedaan_door: string | null;
+          ongedaan_naam: string | null;
+          ongedaan_op: string | null;
+          op: string;
+          regel_id: string | null;
+          ronde: string | null;
+          soort: string;
+          telt: boolean;
+          vorige_methode: string | null;
+        };
+        Insert: {
+          company_id: string;
+          customer_id: string;
+          datum?: string | null;
+          door?: string | null;
+          door_naam?: string;
+          factuurregel_id?: string | null;
+          id?: string;
+          kaart_was?: Json | null;
+          ongedaan_door?: string | null;
+          ongedaan_naam?: string | null;
+          ongedaan_op?: string | null;
+          op?: string;
+          regel_id?: string | null;
+          ronde?: string | null;
+          soort: string;
+          telt?: boolean;
+          vorige_methode?: string | null;
+        };
+        Update: {
+          company_id?: string;
+          customer_id?: string;
+          datum?: string | null;
+          door?: string | null;
+          door_naam?: string;
+          factuurregel_id?: string | null;
+          id?: string;
+          kaart_was?: Json | null;
+          ongedaan_door?: string | null;
+          ongedaan_naam?: string | null;
+          ongedaan_op?: string | null;
+          op?: string;
+          regel_id?: string | null;
+          ronde?: string | null;
+          soort?: string;
+          telt?: boolean;
+          vorige_methode?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "contant_omzettingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "contant_omzettingen_customer_id_company_id_fkey";
+            columns: ["customer_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
       contant_periodes: {
         Row: {
           company_id: string;
@@ -4235,6 +4310,12 @@ export type Database = {
         };
         Returns: undefined;
       };
+      geld_beurt_factuur: { Args: { regel: string }; Returns: string };
+      geld_beurt_naar_contant: {
+        Args: { adres_id: string; maand: string; teken?: string };
+        Returns: number;
+      };
+      geld_beurt_terug: { Args: { adres_id: string; maand: string }; Returns: number };
       geld_boeken: {
         Args: {
           aantal?: number | null;
@@ -4260,6 +4341,14 @@ export type Database = {
         Returns: Json;
       };
       geld_kaart: { Args: { jaar: number; straat: string }; Returns: Json };
+      geld_kaart_maand_stand: {
+        Args: { adres_id: string; maand: string };
+        Returns: Json;
+      };
+      geld_kaart_maand_zetten: {
+        Args: { adres_id: string; een: boolean; maand: string; vakje: Json };
+        Returns: boolean;
+      };
       geld_kaart_zetten: {
         Args: {
           adres_id: string;
@@ -4280,10 +4369,14 @@ export type Database = {
         }[];
       };
       geld_mijn_naam: { Args: never; Returns: string };
+      geld_naar_contant: { Args: { adres_id: string }; Returns: string };
       geld_niet_afgemeld: {
         Args: { bedrijf: string; wijken: string[] };
         Returns: Json;
       };
+      geld_omzetting_ongedaan: { Args: { omzetting: string }; Returns: string };
+      geld_omzetting_terug: { Args: { omzetting: string }; Returns: undefined };
+      geld_omzettingen: { Args: { adres_id: string }; Returns: Json };
       geld_periode_bijwerken: {
         Args: { adres: string; start?: string | null };
         Returns: undefined;

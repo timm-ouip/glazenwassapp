@@ -31,6 +31,7 @@ import {
   VooruitDialoog,
   type DeurAdres,
 } from "@/components/betalingen/DeurDialogen";
+import { KlantKaart } from "@/components/betalingen/KlantKaart";
 import { DossierKop, kopKnop, kopKnopPrimair } from "@/components/dossier/DossierKop";
 import {
   KolomKop,
@@ -42,16 +43,20 @@ import {
   betaalmethodeLabel,
   beurtenTekst,
   draaiBetaalwisselTerug,
+  draaiOmzettingTerug,
   fetchLaatsteRonde,
+  fetchOmzettingen,
   maandKort,
   rekening,
+  terugNaarOvermakenTekst,
   terugTekst,
   vooruitStart,
   vooruitTot,
   type GeldDeel,
+  type Omzetting,
 } from "@/lib/betalingen";
 import { bronTekst, opsomming, regelDatum, volgendeBeurtMaand } from "@/lib/dossier";
-import { vakTeken, vakUitleg, vakVoor, vooruitGepland, type Vak } from "@/lib/geldkaart";
+import { vakKleur, vakTeken, vakUitleg, vakVoor, vooruitGepland, type Vak } from "@/lib/geldkaart";
 import { boek, haalVasteKortingWeg, maakVasteKorting, nieuweTik, type Tik } from "@/lib/geldlopen";
 import { formatPrice, toonMaand, type Customer } from "@/lib/klanten";
 import {
@@ -143,35 +148,6 @@ function bedragTekst(e: Gebeurtenis): string {
     : formatPrice(e.bedrag);
 }
 
-/** Een open plek op de kaart met een oranje rand: daar komt de volgende beurt. */
-function vakKleur(vak: Vak, volgende: boolean): string {
-  switch (vak.soort) {
-    case "betaald":
-      return vak.korting
-        ? "bg-tint-paars font-semibold text-tint-paars-ink"
-        : "bg-tint-salie font-semibold text-tint-salie-ink";
-    case "open":
-      return vak.nogOpen
-        ? "bg-tint-rood font-semibold text-tint-rood-ink"
-        : "font-semibold text-tint-rood-ink/60 ring-1 ring-inset ring-border";
-    case "vooruit":
-      return vak.gepland
-        ? cn(
-            "border-dashed font-semibold text-tint-groen-ink/60",
-            volgende ? "border-primary" : "border-tint-groen-ink/40",
-          )
-        : vak.meerOpen
-          ? "bg-tint-groen font-semibold text-tint-groen-ink ring-2 ring-inset ring-tint-rood-ink/60"
-          : "bg-tint-groen font-semibold text-tint-groen-ink";
-    case "overgeslagen":
-      return "bg-tint-geel text-tint-geel-ink";
-    case "niet_aan_de_beurt":
-      return "bg-muted text-foreground";
-    case "leeg":
-      return volgende ? "border-primary" : "ring-1 ring-inset ring-border";
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Het tabblad
 // ---------------------------------------------------------------------------
@@ -189,6 +165,17 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
   const g = geld.data;
   const [venster, setVenster] = useState<Venster>(null);
   const [bezig, setBezig] = useState(false);
+  // De geldkaart van dit adres, om (wie mag afrekenen) oude maanden aan te passen.
+  const [kaartOpen, setKaartOpen] = useState(false);
+  // Omgezet naar contant (bijvoorbeeld aan de deur): geel bovenaan, met Ongedaan maken.
+  const omz = useQuery({
+    queryKey: ["geld-omzettingen", a?.id],
+    queryFn: () => fetchOmzettingen(a!.id),
+    enabled: !!a && d.prijzenZien,
+  });
+  const omzetting = (omz.data?.omzettingen ?? []).find(
+    (o) => o.soort === "adres" && !o.ongedaan_op,
+  );
 
   const gestopt = !!a?.inactief_op;
   const open = g?.open ?? 0;
@@ -323,7 +310,14 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
             </p>
           ) : (
             <>
-              <Stroken d={d} adres={a} g={g} bezig={bezig} tik={tik} />
+              <Stroken
+                d={d}
+                adres={a}
+                g={g}
+                bezig={bezig}
+                tik={tik}
+                omzetting={d.methode === "contant" ? omzetting : undefined}
+              />
               <Tegels
                 d={d}
                 adres={a}
@@ -331,13 +325,25 @@ export function DossierGeldTab({ d }: { d: Dossier }) {
                 onAnderBedrag={d.magAfrekenen ? () => setVenster("bedrag") : undefined}
               />
               <WatErOpenstaat g={g} />
-              <Kaart d={d} adres={a} />
+              <Kaart d={d} adres={a} onOpenen={() => setKaartOpen(true)} />
               <Betalingen d={d} adres={a} g={g} vernieuw={vernieuw} />
               <VasteKortingen d={d} g={g} vernieuw={vernieuw} />
             </>
           )}
         </div>
       </div>
+
+      {a && kaartOpen && (
+        <KlantKaart
+          adresId={a.id}
+          titel={d.adresTekst(a)}
+          onSluit={() => setKaartOpen(false)}
+          onVeranderd={() => {
+            vernieuw();
+            void qc.invalidateQueries({ queryKey: ["geld-omzettingen", a.id] });
+          }}
+        />
+      )}
 
       {d.magAfrekenen && deurAdres && g && (
         <>
@@ -406,6 +412,7 @@ function Stroken({
   g,
   bezig,
   tik,
+  omzetting,
 }: {
   d: Dossier;
   adres: Customer;
@@ -415,7 +422,10 @@ function Stroken({
     t: Omit<Tik, "id" | "op" | "adres" | "bron" | "getoond_open">,
     melding: string,
   ) => Promise<boolean>;
+  /** Omgezet naar contant, en dat geldt nog. */
+  omzetting?: Omzetting | undefined;
 }) {
+  const bevestig = useBevestig();
   const qc = useQueryClient();
   const [wisselBezig, setWisselBezig] = useState(false);
   const gestopt = !!adres.inactief_op;
@@ -446,9 +456,56 @@ function Stroken({
     }
   }
 
-  if (!wisselTonen && !terugTonen) return null;
+  const omzettingTonen =
+    !!omzetting && Date.now() - Date.parse(omzetting.op) < WISSEL_ZICHTBAAR_DAGEN * 86_400_000;
+
+  async function omzettingTerug() {
+    if (!omzetting) return;
+    const ja = await bevestig({
+      titel: "Omzetten ongedaan maken?",
+      tekst:
+        "Dan maakt dit adres weer over, zoals eerst. De maanden die daarna naar contant zijn gezet, gaan ook terug naar overmaken.",
+      bevestigLabel: "Ongedaan maken",
+    });
+    if (!ja) return;
+    setWisselBezig(true);
+    try {
+      toast.success(terugNaarOvermakenTekst(await draaiOmzettingTerug(omzetting.id)));
+      void qc.invalidateQueries({ queryKey: ["geld-omzettingen", adres.id] });
+      void qc.invalidateQueries({ queryKey: ["geld-adres", adres.id] });
+      void qc.invalidateQueries({ queryKey: ["geld-kaart"] });
+      void qc.invalidateQueries({ queryKey: ["geld-pof"] });
+      void qc.invalidateQueries({ queryKey: ["customers"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setWisselBezig(false);
+    }
+  }
+
+  if (!wisselTonen && !terugTonen && !omzettingTonen) return null;
   return (
     <div className="flex flex-col gap-2">
+      {omzettingTonen && omzetting && (
+        <div className="flex items-start gap-3 rounded-[14px] bg-tint-amber px-3.5 py-2.5 text-[13px] text-tint-amber-ink">
+          <span className="min-w-0 flex-1">
+            {`Op ${new Date(omzetting.op).toLocaleDateString("nl-NL", {
+              day: "numeric",
+              month: "short",
+            })} omgezet van overmaken naar contant door ${omzetting.door_naam || "?"}.`}
+          </span>
+          {d.magAfrekenen && (
+            <button
+              type="button"
+              className="shrink-0 font-medium underline-offset-2 hover:underline disabled:opacity-50"
+              disabled={wisselBezig}
+              onClick={() => void omzettingTerug()}
+            >
+              Ongedaan maken
+            </button>
+          )}
+        </div>
+      )}
       {wisselTonen && wissel && (
         <div className="flex items-start gap-3 rounded-[14px] bg-tint-amber px-3.5 py-2.5 text-[13px] text-tint-amber-ink">
           <span className="min-w-0 flex-1">
@@ -744,7 +801,7 @@ function VasteKortingDialoog({
 // De geldkaart van dit adres
 // ---------------------------------------------------------------------------
 
-function Kaart({ d, adres }: { d: Dossier; adres: Customer }) {
+function Kaart({ d, adres, onOpenen }: { d: Dossier; adres: Customer; onOpenen: () => void }) {
   const [jaar, setJaar] = useState(d.jaar);
   // Dezelfde opvraging (en sleutel) als de geldkaart bij Betalingen: wat daar
   // al geladen is, staat hier meteen, en een boeking ververst ze allebei.
@@ -781,6 +838,11 @@ function Kaart({ d, adres }: { d: Dossier; adres: Customer }) {
             onClick={() => setJaar((j) => j + 1)}
           >
             <ChevronRight className="size-4" />
+          </button>
+          {/* Dezelfde kaart groot, met de maanden die als overmaken zijn
+              afgemeld; wie mag afrekenen past daar oude maanden aan. */}
+          <button type="button" className={cn(dossierLink, "ml-2")} onClick={onOpenen}>
+            {d.magAfrekenen ? "Aanpassen" : "Openen"}
           </button>
         </div>
         <div className="text-[12px] text-muted-foreground">

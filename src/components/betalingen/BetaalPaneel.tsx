@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   IconAlertTriangle as AlertTriangle,
@@ -9,6 +9,7 @@ import {
   IconDiscount as Discount,
   IconDoorOff as DoorOff,
   IconFolder as Folder,
+  IconLayoutGrid as Raster,
   IconLoader2 as Loader2,
   IconWalletOff as WalletOff,
   IconX as Kruis,
@@ -24,20 +25,25 @@ import {
 } from "@/components/betalingen/DeurDialogen";
 import { Eerder } from "@/components/betalingen/Eerder";
 import { GeldloopDossier } from "@/components/betalingen/GeldloopDossier";
+import { KlantKaart } from "@/components/betalingen/KlantKaart";
 import { useBevestig } from "@/components/Bevestig";
 import { KlantgegevensDialog } from "@/components/KlantgegevensDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   beurtenTekst,
+  draaiOmzettingTerug,
+  fetchOmzettingen,
   frequentieZin,
   keerOpen,
   maandVanNu,
   rekening,
   volgendeMaand,
   vooruitNieuweMaanden,
+  terugNaarOvermakenTekst,
+  zetNaarContant,
 } from "@/lib/betalingen";
 import { useAuth } from "@/lib/auth";
-import { useRecht } from "@/lib/rechten";
+import { useMagAfrekenen, useRecht } from "@/lib/rechten";
 import {
   boek,
   geldloopNietGewassen,
@@ -148,7 +154,23 @@ export function BetaalPaneel({
   const magDossier = useRecht("klanten_bekijken", "klanten_bewerken");
   // Korting, vooruit en de vaste kortingen: niet voor de wasser overdag.
   const kantoorGeld = kantoor?.bron === "kantoor";
+  // Omzetten naar contant en de kaart aanpassen: de eigenaar en wie mag afrekenen.
+  const magAfrekenen = useMagAfrekenen();
   const [bezig, setBezig] = useState(false);
+  // De geldkaart van alleen deze klant.
+  const [kaartOpen, setKaartOpen] = useState(false);
+  // Net omgezet naar contant, hier in dit venster: geel, met Ongedaan maken.
+  const [omgezet, setOmgezet] = useState<{ id: string; adres: string } | null>(null);
+  // Of die omzetting nog geldt: wie hem in de kaart terugdraait, ziet de gele
+  // melding hier ook verdwijnen.
+  const omzettingen = useQuery({
+    queryKey: ["geld-omzettingen", omgezet?.adres],
+    queryFn: () => fetchOmzettingen(omgezet!.adres),
+    enabled: !!omgezet,
+  });
+  const omgezetGeldt =
+    !!omgezet &&
+    !(omzettingen.data?.omzettingen ?? []).some((o) => o.id === omgezet.id && o.ongedaan_op);
   /** Een boeking op kantoor die misging (bijv. geen bereik): nog eens met
    *  hetzelfde id, zodat hij niet dubbel telt als hij toch binnenkwam. */
   const vorige = useRef<{ sleutel: string; tik: Tik } | null>(null);
@@ -348,6 +370,65 @@ export function BetaalPaneel({
     else onVeranderd();
   }
 
+  /**
+   * Dit adres maakt over, maar betaalt eigenlijk contant: blijvend omzetten,
+   * net als de betaalwijze in het dossier. Daarna meteen de kaart van deze
+   * klant, om de maanden die nog open stonden op 0 te zetten.
+   */
+  async function omzettenNaarContant() {
+    if (!a) return;
+    const nummer = `${a.house_number}${a.addition}`;
+    const ja = await bevestig({
+      titel: `Nummer ${nummer} omzetten naar contant?`,
+      tekst:
+        "Dan betaalt dit adres voortaan contant, net als wanneer je het in het dossier verandert. Daarna zie je de geldkaart van deze klant: daar zet je de maanden die nog open stonden op 0.",
+      bevestigLabel: "Omzetten",
+    });
+    if (!ja) return;
+    setBezig(true);
+    try {
+      const id = await zetNaarContant(a.id);
+      setOmgezet({ id, adres: a.id });
+    } catch (e) {
+      toast.error((e as Error).message);
+      return;
+    } finally {
+      setBezig(false);
+    }
+    void qc.invalidateQueries({ queryKey: ["customers"] });
+    void qc.invalidateQueries({ queryKey: ["geld-omzettingen", a.id] });
+    ververs();
+    toast.success(`Nr ${nummer} betaalt nu contant`);
+    setKaartOpen(true);
+  }
+
+  async function omzettenTerug() {
+    if (!a || !omgezet) return;
+    const ja = await bevestig({
+      titel: "Omzetten ongedaan maken?",
+      tekst:
+        "Dan maakt dit adres weer over, zoals eerst. De maanden die je daarna in de geldkaart naar contant zette, gaan ook terug naar overmaken.",
+      bevestigLabel: "Ongedaan maken",
+    });
+    if (!ja) return;
+    let methode: Awaited<ReturnType<typeof draaiOmzettingTerug>> = null;
+    setBezig(true);
+    try {
+      methode = await draaiOmzettingTerug(omgezet.id);
+    } catch (e) {
+      toast.error((e as Error).message);
+      return;
+    } finally {
+      setBezig(false);
+    }
+    setOmgezet(null);
+    void qc.invalidateQueries({ queryKey: ["customers"] });
+    void qc.invalidateQueries({ queryKey: ["geld-omzettingen", a.id] });
+    void qc.invalidateQueries({ queryKey: ["geld-kaart"] });
+    ververs();
+    toast(`Nr ${a.house_number}${a.addition}: ${terugNaarOvermakenTekst(methode).toLowerCase()}`);
+  }
+
   function betaalAlles() {
     if (!a || !open || !kanTikken || bezig || kantoor?.melding) return;
     void tik({ soort: "betaald", bedrag: a.open }, `Betaald ${formatPrice(a.open)}`, true);
@@ -441,15 +522,42 @@ export function BetaalPaneel({
           <div className="mt-3">{kantoor.melding}</div>
         ) : (
           <>
-            {a.methode === "overmaken" && (
-              <p className="mt-3 rounded-[14px] bg-tint-blauw px-3 py-2 text-[13px] text-tint-blauw-ink">
-                Deze klant maakt over.
-                {open
-                  ? " Er staat nog iets contant open van eerder."
-                  : kantoor
-                    ? ""
-                    : " Hier hoef je niet aan te bellen."}
-              </p>
+            {omgezet?.adres === a.id && omgezetGeldt ? (
+              <div className="mt-3 flex items-center gap-2 rounded-[14px] bg-tint-amber px-3 py-2 text-[13px] text-tint-amber-ink">
+                <span className="min-w-0 flex-1">Omgezet naar contant.</span>
+                <button
+                  type="button"
+                  className="min-h-9 shrink-0 font-medium underline-offset-2 hover:underline disabled:opacity-50"
+                  disabled={bezig}
+                  onClick={() => void omzettenTerug()}
+                >
+                  Ongedaan maken
+                </button>
+              </div>
+            ) : (
+              a.methode === "overmaken" && (
+                <div className="mt-3 rounded-[14px] bg-tint-blauw px-3 py-2 text-[13px] text-tint-blauw-ink">
+                  <p>
+                    Deze klant maakt over.
+                    {open
+                      ? " Er staat nog iets contant open van eerder."
+                      : kantoor
+                        ? ""
+                        : " Hier hoef je niet aan te bellen."}
+                  </p>
+                  {/* Betaalt hij eigenlijk contant: blijvend omzetten. */}
+                  {magAfrekenen && !a.gestopt && (
+                    <button
+                      type="button"
+                      className="mt-1.5 min-h-9 rounded-full bg-tint-blauw-ink/10 px-3.5 font-medium disabled:opacity-50"
+                      disabled={bezig}
+                      onClick={() => void omzettenNaarContant()}
+                    >
+                      Omzetten naar contant
+                    </button>
+                  )}
+                </div>
+              )
             )}
 
             {a.vanavond && (
@@ -551,6 +659,19 @@ export function BetaalPaneel({
                 </>
               )}
             </div>
+
+            {/* De geldkaart van alleen deze klant: kijken, en (wie mag
+                afrekenen) oude maanden aanpassen. */}
+            {magBedragen && (
+              <button
+                type="button"
+                className="mt-2 flex min-h-9 items-center gap-1.5 text-[13px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                onClick={() => setKaartOpen(true)}
+              >
+                <Raster className="size-4" />
+                Geldkaart van deze klant
+              </button>
+            )}
 
             {/* Vooruit: wat er nog staat. De knop om te boeken staat onderin. */}
             {vooruitOver > 0 && (
@@ -840,6 +961,14 @@ export function BetaalPaneel({
             />
           )}
         </>
+      )}
+      {a && kaartOpen && (
+        <KlantKaart
+          adresId={a.id}
+          titel={`${kantoor?.adresTekst ?? `${a.straat} ${a.house_number}${a.addition}`}${a.naam ? ` · ${a.naam}` : ""}`}
+          onSluit={() => setKaartOpen(false)}
+          onVeranderd={ververs}
+        />
       )}
       {volDossier && (
         <KlantgegevensDialog
