@@ -1965,6 +1965,7 @@ function DagPagina() {
         adresTekst={
           betalen.customer ? `${betalen.straat} ${formatNumber(betalen.customer)}`.trim() : ""
         }
+        straat={betalen.straat}
         vandaag={datum === vandaag()}
         wijk={
           betalen.customer

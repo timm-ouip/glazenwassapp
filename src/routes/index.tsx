@@ -2909,6 +2909,8 @@ function Index() {
         onOpenChange={(open) => setBetalen((b) => ({ ...b, open }))}
         customer={betalen.customer}
         adresTekst={betalen.customer ? adresLabel(betalen.customer.id) : ""}
+        straat={streets.find((s) => s.id === betalen.customer?.street_id)?.name}
+        naam={betalen.customer?.klant_id ? klantNamen.get(betalen.customer.klant_id) : undefined}
         wijk={districts.find((d) => d.id === actieveWijk)}
         // Wat er openstaat zoals bij Betalingen, zonder de beurt van vandaag:
         // die hangt af van het team van wie kijkt, en hoort bij de dag.

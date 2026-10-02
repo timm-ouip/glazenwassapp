@@ -32,8 +32,8 @@ function telt(a: Adres): boolean {
  * Afrekenen zonder vrijgave: de eigenaar, of wie het recht "afrekenen" heeft,
  * kiest een wijk en tikt een betaling in, zonder dat er een avond loopt. De
  * straten staan als uitklaplijst, zoals op het loopscherm, met dezelfde rijen
- * en kleuren; een adres aantikken opent het betaalvenster van de dag, dat op
- * kantoor boekt. Wat er openstaat komt uit de database (geld_afrekenlijst).
+ * en kleuren; een adres aantikken opent hetzelfde betaalvenster als op straat
+ * (zonder Niet thuis en Geen geld), dat op kantoor boekt. Wat er openstaat komt uit de database (geld_afrekenlijst).
  */
 export function Afrekenen({
   wijkId,
@@ -53,7 +53,7 @@ export function Afrekenen({
   const [openStraat, setOpenStraat] = useState<string | null>(null);
   const [uitgeklapt, setUitgeklapt] = useState<Set<string>>(new Set());
   const [zoeken, setZoeken] = useState("");
-  const [gekozen, setGekozen] = useState<Adres | null>(null);
+  const [gekozenId, setGekozenId] = useState<string | null>(null);
   const [betalenOpen, setBetalenOpen] = useState(false);
 
   const wijken = lijst.data?.wijken ?? [];
@@ -83,10 +83,17 @@ export function Afrekenen({
       }));
   }, [adressen]);
   const openTotaal = straten.reduce((t, s) => t + s.openBedrag, 0);
+  // Uit de lijst zoals hij nu is: na een boeking ververst die, en dan ziet het
+  // betaalvenster meteen wat er vandaag gebeurde.
+  const gekozen = adressen.find((a) => a.id === gekozenId) ?? null;
+  const betaalWijk = useMemo(
+    () => (wijk ? { id: wijk.id, geld_peildatum: wijk.peildatum } : undefined),
+    [wijk],
+  );
   const zoekTerm = zoeken.trim().toLowerCase();
 
   function kies(a: Adres) {
-    setGekozen(a);
+    setGekozenId(a.id);
     setBetalenOpen(true);
   }
 
@@ -271,7 +278,7 @@ export function Afrekenen({
         onOpenChange={setBetalenOpen}
         customer={gekozen}
         adresTekst={gekozen ? `${gekozen.straat} ${gekozen.house_number}${gekozen.addition}` : ""}
-        wijk={wijk ? { id: wijk.id, geld_peildatum: wijk.peildatum } : undefined}
+        wijk={betaalWijk}
         // Wat de lijst laat zien (geld_stand), zonder de beurt van vandaag: die
         // hangt af van het team van wie kijkt, en hoort bij de dag.
         vandaag={false}

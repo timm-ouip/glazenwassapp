@@ -139,8 +139,12 @@ export function KlantgegevensDialog(props: Props) {
         onOpenChange={(o) => !o && d.setDialoog(null)}
         customer={adres}
         adresTekst={d.titel}
+        straat={d.adresStraat?.name}
+        naam={klant?.naam}
         wijk={d.wijk}
         vandaag={d.opRouteVandaag}
+        // Het venster komt al uit het dossier.
+        metDossier={false}
       />
       <KlusDialog
         open={d.dialoog === "klus"}

@@ -67,12 +67,16 @@ export function KortingDialoog({
   onKorting,
   onVeranderd,
   meerDanOpen = false,
+  grens,
 }: {
   open: boolean;
   adres: DeurAdres;
   onSluit: () => void;
   onKorting: (bedrag: number, reden: string) => Promise<boolean>;
   onVeranderd: () => void;
+  /** De korting mag minder zijn dan het totaal dat je ziet: waarom. Dan geen
+   *  "Nieuw totaal", want dat zou van een ander bedrag uitgaan. */
+  grens?: string | undefined;
   /** Op kantoor mag de korting hoger zijn dan wat er openstaat (ook als er
    *  niets openstaat): het verschil wordt tegoed. Aan de deur niet. */
   meerDanOpen?: boolean;
@@ -181,7 +185,7 @@ export function KortingDialoog({
                 </label>
                 {/* Staat er op kantoor niets open, dan is er ook geen nieuw totaal:
                     de korting wordt tegoed. */}
-                {(!meerDanOpen || adres.open > 0.005) && (
+                {!grens && (!meerDanOpen || adres.open > 0.005) && (
                   <>
                     <span className="pb-4 text-[18px] text-muted-foreground">→</span>
                     <label className="flex min-w-0 flex-1 flex-col gap-1">
@@ -198,6 +202,7 @@ export function KortingDialoog({
                   </>
                 )}
               </div>
+              {grens && <p className="text-[12.5px] text-muted-foreground">{grens}</p>}
               {meerDanOpen && waarde !== null && waarde > Math.max(0, adres.open) + 0.005 && (
                 <p className="text-[12.5px] text-muted-foreground">
                   {formatPrice(waarde - Math.max(0, adres.open))} hiervan wordt tegoed voor de
@@ -624,11 +629,14 @@ export function KlachtDialoog({
   adres,
   onSluit,
   onVeranderd,
+  opslaan = (tekst) => klachtAanDeDeur(adres.id, tekst),
 }: {
   open: boolean;
   adres: GeldloopAdres;
   onSluit: () => void;
   onVeranderd: () => void;
+  /** Op kantoor gaat de klacht anders de database in dan aan de deur. */
+  opslaan?: (tekst: string) => Promise<void>;
 }) {
   const [tekst, setTekst] = useState("");
   const [bezig, setBezig] = useState(false);
@@ -643,7 +651,7 @@ export function KlachtDialoog({
     }
     setBezig(true);
     try {
-      await klachtAanDeDeur(adres.id, tekst.trim());
+      await opslaan(tekst.trim());
       onVeranderd();
       toast.success(`Klacht genoteerd · nr ${adres.house_number}${adres.addition}`);
       onSluit();

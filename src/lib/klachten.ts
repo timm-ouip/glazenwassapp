@@ -141,6 +141,34 @@ export async function nieuweKlacht(k: {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Een klacht bij een adres, vanuit het betaalvenster op kantoor: hij komt bij
+ * de klant die er nu woont. Zonder klant op het adres kan het niet; een
+ * klacht hoort bij een persoon.
+ */
+export async function klachtBijAdres(
+  adres: string,
+  omschrijving: string,
+  bron: KlachtBron,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("customers")
+    .select("klant_id")
+    .eq("id", adres)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.klant_id) {
+    throw new Error("Op dit adres staat geen klant; een klacht hoort bij een klant.");
+  }
+  await nieuweKlacht({
+    klant_id: data.klant_id,
+    customer_id: adres,
+    omschrijving,
+    bron,
+    ontvangen_op: new Date().toISOString(),
+  });
+}
+
 export async function zetKlachtStatus(id: string, status: KlachtStatus): Promise<void> {
   const { error } = await supabase.from("klachten").update({ status }).eq("id", id);
   if (error) throw new Error(error.message);
