@@ -6,6 +6,7 @@ import { useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconChevronDown as ChevronDown,
+  IconInfoCircle as Info,
   IconLoader2 as Loader2,
   IconPlus as Plus,
   IconTrash as Trash2,
@@ -15,6 +16,7 @@ import { toast } from "sonner";
 import { useBevestig } from "@/components/Bevestig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { bewaarRol, fetchRollen, RECHTEN, verwijderRol, type Recht, type Rol } from "@/lib/rechten";
 
 export function RollenBeheer({
@@ -211,8 +213,11 @@ function RolKaart({
                 });
               }}
             />
-            <span>
-              <span className="block text-[13px] font-medium leading-tight">{r.label}</span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1 text-[13px] font-medium leading-tight">
+                {r.label}
+                <RechtUitleg recht={r} />
+              </span>
               <span className="block text-[11.5px] text-muted-foreground">{r.uitleg}</span>
             </span>
           </label>
@@ -223,14 +228,94 @@ function RolKaart({
 }
 
 /**
- * Rechten die op elkaar bouwen: oude avonden herstellen vraagt afrekenen, en
- * afrekenen vraagt prijzen zien (zonder bedragen kun je niet afrekenen). Aan
- * zetten trekt wat eronder ligt mee aan; uitzetten haalt wat erop bouwt mee weg.
+ * Rechten die op elkaar bouwen: klanten bewerken vraagt klanten bekijken,
+ * afrekenen vraagt prijzen zien (zonder bedragen kun je niet afrekenen), en
+ * oude avonden herstellen vraagt afrekenen. Aanzetten trekt mee aan wat
+ * eronder ligt; uitzetten haalt weg wat erop bouwt.
  */
+const VRAAGT: Partial<Record<Recht, Recht[]>> = {
+  klanten_bewerken: ["klanten_bekijken"],
+  afrekenen: ["prijzen_zien"],
+  herstellen: ["afrekenen"],
+};
+
 function samenhang(rechten: Recht[], veranderd: Recht, aan: boolean): Recht[] {
-  const keten: Recht[] = ["prijzen_zien", "afrekenen", "herstellen"];
-  const plek = keten.indexOf(veranderd);
-  if (plek < 0) return rechten;
-  if (aan) return [...new Set([...rechten, ...keten.slice(0, plek)])];
-  return rechten.filter((x) => !keten.slice(plek + 1).includes(x));
+  const uit = new Set(rechten);
+  if (aan) {
+    const rij = [veranderd];
+    while (rij.length > 0) {
+      for (const r of VRAAGT[rij.pop()!] ?? []) {
+        if (!uit.has(r)) {
+          uit.add(r);
+          rij.push(r);
+        }
+      }
+    }
+  } else {
+    let weg = true;
+    while (weg) {
+      weg = false;
+      for (const r of uit) {
+        if ((VRAAGT[r] ?? []).some((x) => !uit.has(x))) {
+          uit.delete(r);
+          weg = true;
+        }
+      }
+    }
+  }
+  return [...uit];
+}
+
+/**
+ * Het ⓘ-knopje naast een recht: wat je ermee kunt, wat niet, en wat er
+ * vanzelf bij hoort. Een venster dat je aantikt, geen tooltip: zweven kan
+ * niet op een telefoon. Een knop in een <label> zet het vinkje niet om.
+ */
+function RechtUitleg({ recht }: { recht: (typeof RECHTEN)[number] }) {
+  const m: { kan: readonly string[]; niet: readonly string[]; nodig?: string } = recht.meer;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Uitleg bij ${recht.label}`}
+          className="-m-1.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <Info className="size-[15px]" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        collisionPadding={16}
+        className="w-[min(320px,calc(100vw-32px))] space-y-2.5 text-[13px]"
+      >
+        <div className="font-medium">{recht.label}</div>
+        <div>
+          <div className="text-[11.5px] font-medium uppercase tracking-wide text-muted-foreground">
+            Hiermee kan hij
+          </div>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            {m.kan.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <div className="text-[11.5px] font-medium uppercase tracking-wide text-muted-foreground">
+            Niet
+          </div>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-muted-foreground">
+            {m.niet.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        </div>
+        {m.nodig && (
+          <p className="rounded-[10px] bg-tint-amber px-2.5 py-1.5 text-[12.5px] text-tint-amber-ink">
+            {m.nodig}
+          </p>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 }

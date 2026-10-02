@@ -11,52 +11,158 @@ export const RECHTEN = [
     sleutel: "planning",
     label: "Planning & wijken",
     uitleg: "Wijken, planning en de dag bekijken en bijwerken",
+    meer: {
+      kan: [
+        "De Wijken-pagina, de kalender en de dagplanning bekijken",
+        "Adressen op een dag zetten, verplaatsen en teams indelen",
+        "Notities, frequentie, kleur en overslaan van een adres aanpassen",
+        "Overdag contant geld intikken bij een contant adres op zijn route van vandaag (hij ziet dan wat dat adres open heeft)",
+        "Klantnamen zien (de wijklijst toont ze)",
+      ],
+      niet: [
+        "Naam, telefoon en e-mail van een klant wijzigen (daarvoor: Klanten bewerken)",
+        "Andere bedragen zien zonder Prijzen zien",
+      ],
+    },
   },
   {
     sleutel: "klanten_bekijken",
     label: "Klanten bekijken",
     uitleg: "Klanten en hun adressen zien",
+    meer: {
+      kan: [
+        "De klantenlijst en het dossier van een klant openen",
+        "Adressen, telefoon en e-mail lezen",
+      ],
+      niet: ["Iets wijzigen, toevoegen of weggooien (daarvoor: Klanten bewerken)"],
+    },
   },
   {
     sleutel: "klanten_bewerken",
     label: "Klanten bewerken",
     uitleg: "Klanten toevoegen, wijzigen en weggooien; aanmeldingen",
+    meer: {
+      kan: [
+        "Klanten en adressen toevoegen, wijzigen en weggooien (naar de prullenbak)",
+        "Aanmeldingen afhandelen en klanten importeren uit Excel",
+        "Een linkje maken waarmee de klant zelf zijn gegevens invult",
+      ],
+      niet: ["Bedragen zien zonder Prijzen zien"],
+      nodig:
+        "Klanten bekijken gaat automatisch mee aan: zonder kan hij de klantenpagina niet openen.",
+    },
   },
   {
     sleutel: "prijzen_zien",
     label: "Prijzen zien",
     uitleg: "Prijzen en omzet; zonder dit recht ziet hij nergens een bedrag",
+    meer: {
+      kan: [
+        "Prijzen, omzet en openstaande bedragen overal in de app zien",
+        "Het geld-deel van het dossier",
+        "Samen met Klanten bewerken: de prijs van een adres wijzigen",
+        "Samen met Planning: de prijs van een dag of een klus wijzigen",
+      ],
+      niet: ["Betalingen intikken zonder vrijgave (daarvoor: Afrekenen zonder vrijgave)"],
+    },
   },
-  { sleutel: "mail_lezen", label: "Mail lezen", uitleg: "Het postvak en wat Paaltje klaarzette" },
+  {
+    sleutel: "mail_lezen",
+    label: "Mail lezen",
+    uitleg: "Het postvak en wat Paaltje klaarzette",
+    meer: {
+      kan: [
+        "Het postvak en WhatsApp-gesprekken lezen",
+        "Zien wat Paaltje uit de mail haalde en klaarzette",
+        "Mail weggooien, verplaatsen en als spam markeren (ook in de echte mailbox)",
+      ],
+      niet: ["Zelf mail of WhatsApp versturen (daarvoor: Mail versturen)"],
+    },
+  },
   {
     sleutel: "mail_versturen",
     label: "Mail versturen",
     uitleg: "Antwoorden en aankondigingen versturen",
+    meer: {
+      kan: [
+        "Aankondigingen per mail en WhatsApp versturen",
+        "WhatsApp-berichten naar klanten sturen",
+        "Samen met Mail lezen: mail beantwoorden, nieuwe mail sturen en mappen in de mailbox beheren",
+      ],
+      niet: ["Het postvak lezen zonder Mail lezen"],
+    },
   },
-  { sleutel: "instellingen_team", label: "Team bekijken", uitleg: "Zien wie er in het team zit" },
+  {
+    sleutel: "instellingen_team",
+    label: "Team bekijken",
+    uitleg: "Zien wie er in het team zit",
+    meer: {
+      kan: ["Zien wie er in het team zit en welke rol ze hebben"],
+      niet: ["Mensen uitnodigen of rollen wijzigen: dat doet alleen de eigenaar"],
+    },
+  },
   {
     sleutel: "facturen",
     label: "Facturen",
     uitleg:
       "Facturen nakijken, versturen en afvinken; een bedrag zien is iets anders dan namens het bedrijf post sturen",
+    meer: {
+      kan: [
+        "Facturen nakijken, versturen en als betaald afvinken",
+        "Crediteren, een losse factuur maken (ook met een eigen bedrag) en herinneringen sturen",
+      ],
+      niet: ["Contant geld teruggeven, of de vaste prijs van een adres wijzigen"],
+    },
   },
   {
     sleutel: "geldlopen",
     label: "Geld lopen",
     uitleg:
       "Contant geld ophalen in een wijk die de eigenaar voor die avond vrijgeeft; alleen dan ziet hij adressen en bedragen",
+    meer: {
+      kan: [
+        "Op een avond die de eigenaar vrijgeeft de straat in: Betaald, Niet thuis, Geen geld, korting en beurten vooruit",
+        'Bij een adres onder "Eerder" zien wie wat eerder intikte',
+        "Zijn eigen tik van die avond terugdraaien",
+      ],
+      niet: [
+        "Iets intikken zonder vrijgave",
+        "Een boeking van een eerdere avond of van een ander terugdraaien",
+      ],
+    },
   },
   {
     sleutel: "afrekenen",
     label: "Afrekenen zonder vrijgave",
     uitleg:
       "Betalingen intikken via Betalingen en de wijklijst, zonder dat er een wijk is vrijgegeven. Gaat samen met Prijzen zien; geld teruggeven blijft bij de eigenaar",
+    meer: {
+      kan: [
+        "Het vak Afrekenen op Betalingen, en (met Planning) Betalen… bij een adres op de Wijken-pagina",
+        "Betalingen, korting en vooruit intikken zonder dat er een wijk is vrijgegeven",
+        'Met "Klopt niet" een boeking terugdraaien, ook van een collega of de eigenaar: alles wat op kantoor is geboekt (ook ouder), en wat vandaag op straat of overdag is opgehaald',
+      ],
+      niet: [
+        "Geld teruggeven, omrekenen naar een nieuwe prijs of iets op een eerdere datum boeken",
+        "Korting geven die hoger is dan wat er openstaat",
+        "Terugdraaien wat op straat of overdag op een eerdere dag is opgehaald (daarvoor: Oude avonden herstellen)",
+      ],
+      nodig: "Prijzen zien gaat automatisch mee aan.",
+    },
   },
   {
     sleutel: "herstellen",
     label: "Oude avonden herstellen",
     uitleg:
       "Een betaling terugdraaien die op een eerdere dag is opgehaald, op straat of overdag. Gaat samen met Afrekenen zonder vrijgave",
+    meer: {
+      kan: [
+        'Met "Klopt niet" ook een betaling terugdraaien die op een eerdere avond of dag is opgehaald',
+      ],
+      niet: ["Geld teruggeven of omrekenen: dat blijft bij de eigenaar"],
+      nodig:
+        "Afrekenen zonder vrijgave en Prijzen zien gaan automatisch mee aan. Let op: dat geld kan al bij jou zijn ingeleverd.",
+    },
   },
 ] as const;
 
