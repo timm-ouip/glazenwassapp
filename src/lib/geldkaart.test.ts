@@ -257,15 +257,15 @@ describe("vakjes in woorden", () => {
   const lang = (vak: Parameters<typeof vakWoorden>[0]) => plat(vakWoorden(vak).lang);
 
   test("betaald, korting, niet aan de beurt en leeg", () => {
-    expect(kort({ soort: "betaald", aantal: 1, korting: false })).toEqual(["Betaald"]);
-    expect(kort({ soort: "betaald", aantal: 2, korting: false })).toEqual(["2×", "betaald"]);
+    expect(kort({ soort: "betaald", aantal: 1, korting: false })).toEqual(["1"]);
+    expect(kort({ soort: "betaald", aantal: 2, korting: false })).toEqual(["2"]);
     expect(lang({ soort: "betaald", aantal: 1, korting: true })).toBe("Met korting afgeboekt");
     expect(lang({ soort: "niet_aan_de_beurt" })).toBe("Niet aan de beurt");
     expect(vakWoorden({ soort: "leeg" })).toEqual({ kort: [], lang: "" });
   });
 
   test("open, met het bedrag", () => {
-    expect(kort({ soort: "open", nogOpen: true, bedrag: 30 })).toEqual(["Open", "€ 30"]);
+    expect(kort({ soort: "open", nogOpen: true, bedrag: 30 })).toEqual(["0"]);
     expect(lang({ soort: "open", nogOpen: true, bedrag: 12.5 })).toBe("Open · € 12,50");
     expect(lang({ soort: "open", nogOpen: false, bedrag: 30 })).toBe(
       "Stond open (€ 30), later betaald",
@@ -280,7 +280,7 @@ describe("vakjes in woorden", () => {
     expect(lang({ soort: "open", nogOpen: true, kaart: q })).toBe("Deels gewassen · € 8 open");
     const plus = { maand: "2026-07", teken: "+", bedrag: 5 };
     expect(lang({ soort: "open", nogOpen: true, kaart: plus })).toBe("€ 5 te weinig betaald");
-    expect(kort({ soort: "overgeslagen", kaart: true })).toEqual(["Niet", "gewassen"]);
+    expect(kort({ soort: "overgeslagen", kaart: true })).toEqual(["x"]);
     expect(lang({ soort: "vooruit", gepland: true, kaart: true })).toBe(
       "Al betaald, van de papieren kaart",
     );

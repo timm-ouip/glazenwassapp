@@ -391,9 +391,12 @@ export function vakWoorden(vak: Vak): { kort: string[]; lang: string } {
   switch (vak.soort) {
     case "betaald": {
       if (vak.korting) return { kort: ["Korting"], lang: "Met korting afgeboekt" };
+      // De eenvoudige tekens blijven tekens, zoals op de papieren kaart:
+      // 1 (of 2) betaald, 0 open, x niet gewassen. Alleen wat ingewikkelder
+      // is krijgt korte tekst (Timmie, 02-10-2026).
       return vak.aantal > 1
-        ? { kort: [`${vak.aantal}×`, "betaald"], lang: `${vak.aantal} beurten betaald` }
-        : { kort: ["Betaald"], lang: "Betaald" };
+        ? { kort: [String(vak.aantal)], lang: `${vak.aantal} beurten betaald` }
+        : { kort: ["1"], lang: "Betaald" };
     }
     case "open": {
       const k = vak.kaart;
@@ -412,10 +415,9 @@ export function vakWoorden(vak: Vak): { kort: string[]; lang: string } {
         // Het rood zegt al dat het open staat; zo blijft het bedrag heel.
         return { kort: [letterVan(k.teken).kort, geld], lang: vakjeWoorden(k) };
       }
-      return {
-        kort: geld ? ["Open", geld] : ["Open"],
-        lang: k?.ingetypt ? vakjeWoorden(k) : geld ? `Open · ${geld}` : "Open",
-      };
+      // Een ingetypte beginstand is meer dan een gewone 0: met bedrag.
+      if (k?.ingetypt) return { kort: geld ? ["Begin", geld] : ["Begin"], lang: vakjeWoorden(k) };
+      return { kort: ["0"], lang: geld ? `Open · ${geld}` : "Open" };
     }
     case "vooruit":
       if (vak.kaart) {
@@ -432,8 +434,8 @@ export function vakWoorden(vak: Vak): { kort: string[]; lang: string } {
         : { kort: ["Vooruit", "betaald"], lang: "Vooruit betaald" };
     case "overgeslagen":
       return vak.kaart
-        ? { kort: ["Niet", "gewassen"], lang: "Niet gewassen" }
-        : { kort: ["Over-", "geslagen"], lang: "Overgeslagen" };
+        ? { kort: ["x"], lang: "Niet gewassen" }
+        : { kort: ["x"], lang: "Overgeslagen" };
     case "niet_aan_de_beurt":
       return { kort: ["Niet aan", "de beurt"], lang: "Niet aan de beurt" };
     case "leeg":

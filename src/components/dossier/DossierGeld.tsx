@@ -883,6 +883,13 @@ function Kaart({
                 : kaartVak;
             const isVolgende =
               maand === volgende && (vak.soort === "leeg" || vak.soort === "vooruit");
+            const uitleg = [
+              `${toonMaand(maand)} ${jaar}`,
+              vakWoorden(vak).lang,
+              isVolgende ? "volgende beurt" : "",
+            ]
+              .filter(Boolean)
+              .join(" · ");
             return (
               <div key={maand} className="flex flex-col gap-1">
                 <span className="text-[12px] text-muted-foreground">{naam}</span>
@@ -892,13 +899,10 @@ function Kaart({
                   <button
                     type="button"
                     onClick={() => onOpenen(maand)}
-                    title={[
-                      `${toonMaand(maand)} ${jaar}`,
-                      vakWoorden(vak).lang,
-                      isVolgende ? "volgende beurt" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    title={uitleg}
+                    // In het vakje staat soms alleen een teken (1, 0, x):
+                    // voorlezen doen we de hele zin.
+                    aria-label={uitleg}
                     className={cn(
                       "flex h-11 items-center justify-center rounded-[10px] border-2 border-transparent px-0.5 text-[11px] tabular-nums",
                       vakKleur(vak, isVolgende),

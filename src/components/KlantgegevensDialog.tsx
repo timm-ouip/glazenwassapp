@@ -108,7 +108,10 @@ export function KlantgegevensDialog(props: Props) {
           "bg-background [&>button:last-child]:hidden",
           d.mobiel
             ? "h-[92dvh] max-h-[92dvh]"
-            : "h-[min(840px,92dvh)] max-h-[92dvh] w-[calc(100vw-2rem)] leading-[normal] max-w-[1380px] flex-row rounded-[24px] sm:max-w-[1380px] sm:rounded-[24px]",
+            : // Bijna schermvullend (Timmie, 02-10-2026): zo past het Overzicht
+              // zonder scrollen, en Escape brengt je terug zonder dat de
+              // pagina eronder opnieuw laadt.
+              "h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none leading-[normal] flex-row rounded-[24px] sm:max-w-none sm:rounded-[24px]",
         )}
       >
         <DialogTitle className="sr-only">{d.titel}</DialogTitle>
