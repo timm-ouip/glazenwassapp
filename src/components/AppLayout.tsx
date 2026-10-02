@@ -51,6 +51,10 @@ type Props = {
   /** Geen titelbalk bovenaan: de pagina zet zelf een kop neer (Home, met
    *  de begroeting). `titel` blijft nodig, maar wordt dan niet getoond. */
   zonderTitelbalk?: boolean;
+  /** De cijferkaarten en de knoppenbalk vormen samen één wit vak (de
+   *  wijkenpagina): die tekenen het vak zelf, dus hier komt er geen lucht
+   *  tussen. De titel staat dan los op de pagina, zonder balk of lijn. */
+  witVak?: boolean;
   children: ReactNode;
 };
 
@@ -63,6 +67,7 @@ export function AppLayout({
   verbergBijScrollen = false,
   onderbalk,
   zonderTitelbalk = false,
+  witVak = false,
   children,
 }: Props) {
   // De knoppenbalk plakt onder de titelbalk vast. Hoe hoog die is hangt af
@@ -113,7 +118,11 @@ export function AppLayout({
   const balk = mag && acties && (
     <div
       ref={balkRef}
-      className="sticky z-10 flex flex-wrap items-center gap-2 bg-background/95 px-3 pb-2 pt-3 backdrop-blur transition-transform duration-200 group-data-[weg]/layout:-translate-y-full md:px-6 md:pt-3.5 print:hidden"
+      className={
+        witVak
+          ? "sticky z-10 bg-background px-3 pb-3 transition-transform duration-200 group-data-[weg]/layout:-translate-y-full md:px-6 print:hidden"
+          : "sticky z-10 flex flex-wrap items-center gap-2 bg-background/95 px-3 pb-2 pt-3 backdrop-blur transition-transform duration-200 group-data-[weg]/layout:-translate-y-full md:px-6 md:pt-3.5 print:hidden"
+      }
       style={{ top: kopHoogte }}
     >
       {acties}
@@ -139,31 +148,37 @@ export function AppLayout({
         <header
           ref={kopRef}
           hidden={zonderTitelbalk}
-          className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur print:hidden"
+          className={`sticky top-0 z-20 print:hidden ${
+            witVak ? "bg-background" : "border-b border-border bg-card/95 backdrop-blur"
+          }`}
         >
-          <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 md:px-6 md:py-3.5">
-            <div className="mr-auto min-w-0">
-              {/* Een kruimelpad dat zegt wat het menu links al aanwijst, en een
+          {witVak ? (
+            <div className="flex px-3 pb-3 pt-3 md:px-6 md:pb-4 md:pt-5">{titel}</div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 md:px-6 md:py-3.5">
+              <div className="mr-auto min-w-0">
+                {/* Een kruimelpad dat zegt wat het menu links al aanwijst, en een
                   onderschrift dat vertelt wat je op het scherm ziet: samen
                   kostten die een halve balk op elke pagina. Alleen de naam dus.
                   Een titel die geen tekst is (de wijkkiezer) blijft staan. */}
-              <div className="flex min-w-0 items-baseline gap-2">
-                {typeof titel === "string" ? (
-                  <h1 className={TITEL_KLASSEN}>{titel}</h1>
-                ) : (
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">{titel}</div>
-                )}
-                {naastTitel && (
-                  <span className="hidden min-w-0 truncate text-[12px] text-muted-foreground md:block">
-                    {naastTitel}
-                  </span>
-                )}
+                <div className="flex min-w-0 items-baseline gap-2">
+                  {typeof titel === "string" ? (
+                    <h1 className={TITEL_KLASSEN}>{titel}</h1>
+                  ) : (
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">{titel}</div>
+                  )}
+                  {naastTitel && (
+                    <span className="hidden min-w-0 truncate text-[12px] text-muted-foreground md:block">
+                      {naastTitel}
+                    </span>
+                  )}
+                </div>
               </div>
+              {acties && actiePositie === "titelbalk" && (
+                <div className="flex flex-wrap items-center gap-2">{acties}</div>
+              )}
             </div>
-            {acties && actiePositie === "titelbalk" && (
-              <div className="flex flex-wrap items-center gap-2">{acties}</div>
-            )}
-          </div>
+          )}
         </header>
         {actiePositie === "boven" && balk}
         {/* Komt er een knoppenbalk onder de cijferkaarten, dan zorgt die voor
@@ -171,7 +186,11 @@ export function AppLayout({
             plakken: erboven lucht, eronder niets. */}
         {kop && (
           <div
-            className={`px-3 pt-3 md:px-6 md:pt-4 ${acties && actiePositie === "onder" ? "" : "pb-4"}`}
+            className={
+              witVak
+                ? `px-3 md:px-6 ${acties ? "" : "pb-3"}`
+                : `px-3 pt-3 md:px-6 md:pt-4 ${acties && actiePositie === "onder" ? "" : "pb-4"}`
+            }
           >
             {kop}
           </div>

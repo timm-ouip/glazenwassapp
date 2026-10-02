@@ -24,6 +24,8 @@ import { toast } from "sonner";
 import {
   IconCash as Cash,
   IconCheck as Check,
+  IconChevronLeft as ChevronLeft,
+  IconChevronRight as ChevronRight,
   IconMap as Map,
   IconMapPin as MapPin,
   IconDots as MoreHorizontal,
@@ -64,7 +66,7 @@ interface Props {
   /** "balk" is de gewone keuzelijst tussen de knoppen. "titel" maakt de
    *  naam van de wijk zelf de kop: groot, met een pijltje erachter om te
    *  wisselen, en de knopjes voor maken, hernoemen en weggooien klein ernaast. */
-  variant?: "balk" | "titel";
+  variant?: "balk" | "titel" | "groot";
   /** Hoeveel straten van deze wijk nog geen volledige naam hebben. Alleen de
    *  wijkenpagina weet dat; zonder onStraatnamen staat het item er niet. */
   straatnamenNodig?: number;
@@ -124,101 +126,142 @@ export function WijkKiezer({
     }
   }
 
+  const groot = variant === "groot";
+
+  const opties = actief && (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="icon"
+          variant="ghost"
+          className={`relative rounded-full ${groot ? "size-11 bg-card shadow-card hover:bg-card/80" : variant === "titel" ? "size-7" : "size-9"}`}
+          aria-label="Wijkopties"
+        >
+          <MoreHorizontal className={variant === "titel" ? "size-4" : "size-5"} />
+          {/* Een stipje zolang er nog straatnamen aan te vullen zijn:
+              anders zit dat werk verstopt in een menu dat je nooit opent. */}
+          {straatnamenNodig > 0 && onStraatnamen && (
+            <span className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-tint-amber-ink" />
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align={groot ? "end" : "start"} className="w-56">
+        <DropdownMenuItem onSelect={() => setHernoemOpen(true)}>
+          <Pencil className="size-4" /> Wijkinstellingen…
+        </DropdownMenuItem>
+        {onStraatnamen &&
+          (straatnamenNodig > 0 ? (
+            <DropdownMenuItem onSelect={onStraatnamen}>
+              <Wand2 className="size-4" /> Straatnamen aanvullen
+              <span className="ml-auto text-xs text-muted-foreground">{straatnamenNodig}</span>
+            </DropdownMenuItem>
+          ) : (
+            // Niet weghalen als het klaar is: dan lijkt de app iets kwijt
+            // te zijn. Een vinkje zegt dat er niets meer te doen is.
+            <DropdownMenuItem disabled>
+              <Check className="size-4" /> Straatnamen zijn compleet
+            </DropdownMenuItem>
+          ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={verwijder}>
+          <Trash2 className="size-4" /> Wijk verwijderen…
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  const venster = actief && (
+    <WijkDialoog
+      open={hernoemOpen}
+      onOpenChange={setHernoemOpen}
+      wijk={actief}
+      onOpgeslagen={onChanged}
+    />
+  );
+
   // Als kop: de knopjes klein naast de naam, zodat de naam het grootst blijft.
   const klein = variant === "titel";
 
-  return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-      <Select
-        value={activeId ?? ""}
-        onValueChange={onSelect}
-        {...(onKiezerOpen ? { open: kiezerOpen ?? false, onOpenChange: onKiezerOpen } : {})}
-      >
-        <SelectTrigger
-          className={
-            klein
+  const kiezer = (
+    <Select
+      value={activeId ?? ""}
+      onValueChange={onSelect}
+      {...(onKiezerOpen ? { open: kiezerOpen ?? false, onOpenChange: onKiezerOpen } : {})}
+    >
+      <SelectTrigger
+        className={
+          groot
+            ? // De naam is de kop van de pagina; het pijltje staat in een
+              // eigen rondje erachter.
+              "h-auto w-auto min-w-0 gap-3 border-0 bg-transparent p-0 font-display text-[30px] font-bold leading-[1.25] tracking-[-0.03em] shadow-none focus:ring-0 md:text-[52px] [&>span]:truncate [&>span]:pb-1 [&>svg]:size-10 [&>svg]:shrink-0 [&>svg]:rounded-full [&>svg]:bg-card [&>svg]:p-2.5 [&>svg]:opacity-100 [&>svg]:shadow-card md:[&>svg]:size-11"
+            : klein
               ? // Het gewone lettertype, niet het koplettertype: de wijk is geen
                 // paginanaam maar de inhoud zelf.
                 "mr-1 h-auto w-auto gap-1.5 border-0 bg-transparent p-0 font-sans text-[26px] font-medium leading-tight tracking-[-0.02em] shadow-none focus:ring-0 [&>svg]:size-5 [&>svg]:opacity-40"
               : "h-9 w-52 rounded-full bg-card"
-          }
-          aria-label="Wijk kiezen"
-        >
-          <SelectValue placeholder="Kies een wijk" />
-        </SelectTrigger>
-        <SelectContent
-          // De focus niet terug naar de kiezer: die springt anders bij elke
-          // letter naar een wijk met die beginletter, en de sneltoetsen van
-          // de wijkenpagina (e, o, m…) zouden je zo van wijk laten wisselen.
-          onCloseAutoFocus={(e) => e.preventDefault()}
-        >
-          {districts.map((d, i) => (
-            <SelectItem key={d.id} value={d.id}>
-              <span className="flex items-center gap-2">
-                {/* Dezelfde kleur als op de planningskalender, zodat je daar
+        }
+        aria-label="Wijk kiezen"
+      >
+        <SelectValue placeholder="Kies een wijk" />
+      </SelectTrigger>
+      <SelectContent
+        // De focus niet terug naar de kiezer: die springt anders bij elke
+        // letter naar een wijk met die beginletter, en de sneltoetsen van
+        // de wijkenpagina (e, o, m…) zouden je zo van wijk laten wisselen.
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
+        {districts.map((d, i) => (
+          <SelectItem key={d.id} value={d.id}>
+            <span className="flex items-center gap-2">
+              {/* Dezelfde kleur als op de planningskalender, zodat je daar
                     aan de stip ziet welke wijk er die dag aan de beurt is. */}
-                <span
-                  className="size-2 shrink-0 rounded-full"
-                  style={{ background: wijkKleur(i) }}
-                />
-                {d.name}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+              <span className="size-2 shrink-0 rounded-full" style={{ background: wijkKleur(i) }} />
+              {d.name}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  if (groot) {
+    // Vorige en volgende wijk, in de volgorde van het menu. Rond: na de
+    // laatste komt de eerste weer, en vóór de eerste de laatste.
+    const plek = districts.findIndex((d) => d.id === activeId);
+    const n = districts.length;
+    const vorige = plek >= 0 && n > 1 ? districts[(plek - 1 + n) % n] : undefined;
+    const volgende = plek >= 0 && n > 2 ? districts[(plek + 1) % n] : undefined;
+    const buur =
+      "hidden h-11 items-center gap-1.5 rounded-full bg-card px-4 text-[13px] font-semibold shadow-card transition-colors hover:bg-card/80 md:inline-flex";
+    return (
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="min-w-0">{kiezer}</div>
+        <div className="flex-1" />
+        {vorige && (
+          <button type="button" className={buur} onClick={() => onSelect(vorige.id)}>
+            <ChevronLeft className="size-4" />
+            {vorige.name}
+          </button>
+        )}
+        {volgende && (
+          <button type="button" className={buur} onClick={() => onSelect(volgende.id)}>
+            {volgende.name}
+            <ChevronRight className="size-4" />
+          </button>
+        )}
+        {opties}
+        {venster}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      {kiezer}
       {/* Een wijk toevoegen staat niet meer hier: dat doe je bijna alleen bij
           het begin, en dan via Importeren of Instellingen → Wijken. */}
-      {actief && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="icon"
-              variant="ghost"
-              className={`relative ${klein ? "size-7 rounded-full" : "size-9 rounded-full"}`}
-              aria-label="Wijkopties"
-            >
-              <MoreHorizontal className={klein ? "size-4" : "size-5"} />
-              {/* Een stipje zolang er nog straatnamen aan te vullen zijn:
-                  anders zit dat werk verstopt in een menu dat je nooit opent. */}
-              {straatnamenNodig > 0 && onStraatnamen && (
-                <span className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-tint-amber-ink" />
-              )}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuItem onSelect={() => setHernoemOpen(true)}>
-              <Pencil className="size-4" /> Wijkinstellingen…
-            </DropdownMenuItem>
-            {onStraatnamen &&
-              (straatnamenNodig > 0 ? (
-                <DropdownMenuItem onSelect={onStraatnamen}>
-                  <Wand2 className="size-4" /> Straatnamen aanvullen
-                  <span className="ml-auto text-xs text-muted-foreground">{straatnamenNodig}</span>
-                </DropdownMenuItem>
-              ) : (
-                // Niet weghalen als het klaar is: dan lijkt de app iets kwijt
-                // te zijn. Een vinkje zegt dat er niets meer te doen is.
-                <DropdownMenuItem disabled>
-                  <Check className="size-4" /> Straatnamen zijn compleet
-                </DropdownMenuItem>
-              ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={verwijder}>
-              <Trash2 className="size-4" /> Wijk verwijderen…
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-
-      {actief && (
-        <WijkDialoog
-          open={hernoemOpen}
-          onOpenChange={setHernoemOpen}
-          wijk={actief}
-          onOpgeslagen={onChanged}
-        />
-      )}
+      {opties}
+      {venster}
     </div>
   );
 }

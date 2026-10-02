@@ -116,7 +116,8 @@ function Betalingen() {
     <AppLayout titel={titel}>
       {tab === "vanavond" && (
         <Avondoverzicht
-          onPof={() => naarTab("pof")}
+          // Zonder wijk: de tegel hier telt alle wijken samen, dus de lijst ook.
+          onPof={() => void navigate({ to: "/betalingen", search: { tab: "pof" }, replace: true })}
           onLopen={() => naarTab("lopen")}
           onKaarten={() => naarTab("kaart")}
           onFacturen={magFacturen ? () => naarTab("facturen") : undefined}
@@ -125,7 +126,9 @@ function Betalingen() {
           onVrijgeefVenster={setVrijgeefVenster}
         />
       )}
-      {tab === "pof" && <PofLijst onKaart={kiesStraat} onTerug={() => naarTab("vanavond")} />}
+      {tab === "pof" && (
+        <PofLijst onKaart={kiesStraat} onTerug={() => naarTab("vanavond")} beginWijk={wijk} />
+      )}
       {tab === "kaart" && <GeldKaart straatId={straat} wijkId={wijk} onStraat={kiesStraat} />}
       {tab === "facturen" &&
         (magFacturen ? (

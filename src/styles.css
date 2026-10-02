@@ -1260,10 +1260,14 @@
 /* De schuifbalken. De grijze systeembalk met zijn bak eromheen past niet bij
    panelen die zweven, dus: geen bak, een dun afgerond duimpje in de kleur van
    het thema, en pas als je de muis in dat vlak hebt. Op de telefoon tekent
-   het systeem toch zijn eigen zwevende balkje; daar verandert dit niets. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--schuifduim) transparent;
+   het systeem toch zijn eigen zwevende balkje; daar verandert dit niets.
+   In de laag base: dan wint een strook die zijn balk helemaal verbergt
+   ([scrollbar-width:none], de maandrij op Wijken) er nog van. */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--schuifduim) transparent;
+  }
 }
 
 ::-webkit-scrollbar {

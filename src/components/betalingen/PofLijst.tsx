@@ -22,13 +22,16 @@ function datumVan(iso: string): string {
 export function PofLijst({
   onKaart,
   onTerug,
+  beginWijk,
 }: {
   onKaart: (straat: string) => void;
   /** Terug naar het overzicht; pof is geen tabblad meer. */
   onTerug?: () => void;
+  /** Kom je van de pof-tegel van een wijk, dan staat die wijk al gekozen. */
+  beginWijk?: string | undefined;
 }) {
   const districts = useQuery({ queryKey: ["districts"], queryFn: fetchDistricts });
-  const [wijk, setWijk] = useState<string | null>(null);
+  const [wijk, setWijk] = useState<string | null>(beginWijk ?? null);
   const pof = useQuery({
     queryKey: ["geld-pof", wijk],
     queryFn: () => fetchPof(wijk ? [wijk] : null),

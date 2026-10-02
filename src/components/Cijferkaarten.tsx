@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from "react";
 import type { TablerIcon as LucideIcon } from "@tabler/icons-react";
 
 import { Bedrag } from "@/components/Bedrag";
@@ -54,22 +55,28 @@ export interface Cijfer {
   icon: LucideIcon;
   kleur: Kaartkleur;
   verberg?: boolean;
+  /** Extra klassen op de kaart, bv. een andere ondergrond in een wit vak. */
+  klasse?: string;
+  /** Maakt van de kaart een link: krijgt de kaart en geeft hem ingepakt terug. */
+  omhul?: (kaart: ReactNode) => ReactNode;
 }
 
 export function Cijferkaarten({ cijfers }: { cijfers: Cijfer[] }) {
   const zichtbaar = cijfers.filter((c) => !c.verberg);
   return (
     // Op de telefoon drie kleine tegels naast elkaar: het getal telt, de uitleg
-    // eronder en het icoon passen daar niet meer.
-    <div className="grid grid-cols-3 gap-2 sm:gap-3">
+    // eronder en het icoon passen daar niet meer. Vier passen daar niet naast
+    // elkaar: dan twee bij twee.
+    <div
+      className={`grid gap-2 sm:gap-3 ${zichtbaar.length === 4 ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-3"}`}
+    >
       {zichtbaar.map((c) => {
         const kleur = KLEUREN[c.kleur];
-        return (
+        const kaart = (
           <div
-            key={c.label}
             // @container: het bedrag erin kijkt naar de breedte van deze kaart
             // en niet naar die van het scherm — zie Bedrag.tsx.
-            className={`@container min-w-0 rounded-[14px] px-2.5 py-2 sm:rounded-[18px] sm:px-4 sm:py-3.5 zak:border zak:border-border fel:flex fel:min-h-[112px] fel:flex-col fel:rounded-[22px] fel:px-3.5 fel:py-3 fel:sm:min-h-[132px] fel:sm:rounded-[24px] fel:sm:px-5 fel:sm:py-4 ${kleur.vlak}`}
+            className={`@container min-w-0 rounded-[14px] px-2.5 py-2 sm:rounded-[18px] sm:px-4 sm:py-3.5 zak:border zak:border-border fel:flex fel:min-h-[112px] fel:flex-col fel:rounded-[22px] fel:px-3.5 fel:py-3 fel:sm:min-h-[132px] fel:sm:rounded-[24px] fel:sm:px-5 fel:sm:py-4 ${kleur.vlak} ${c.omhul ? "h-full" : ""} ${c.klasse ?? ""}`}
           >
             <div
               className={`mb-2.5 hidden size-8 items-center sm:flex justify-center rounded-[10px] fel:sm:hidden ${kleur.chip}`}
@@ -92,6 +99,13 @@ export function Cijferkaarten({ cijfers }: { cijfers: Cijfer[] }) {
               </p>
             )}
           </div>
+        );
+        return c.omhul ? (
+          <div key={c.label} className="min-w-0">
+            {c.omhul(kaart)}
+          </div>
+        ) : (
+          <Fragment key={c.label}>{kaart}</Fragment>
         );
       })}
     </div>

@@ -65,6 +65,7 @@ import {
   IconDots as MoreHorizontal,
   IconX as X,
   IconKeyboard as Keyboard,
+  IconCoins as Coins,
 } from "@tabler/icons-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLangIndrukken } from "@/hooks/use-lang-indrukken";
@@ -121,6 +122,8 @@ import { OverslaanKnop } from "@/components/OverslaanKnop";
 import { slaSelectieOver, wisOverslaanVanSelectie } from "@/lib/overslaan-keuze";
 import { NotitieCel } from "@/components/NotitieCel";
 import { ZoekBalk } from "@/components/ZoekBalk";
+import { TEGEL_KLIKBAAR } from "@/components/Tegel";
+import { fetchPof } from "@/lib/overzichten";
 import { HoekadresDialog } from "@/components/HoekadresDialog";
 import { KlusDialog } from "@/components/KlusDialog";
 import { DagBetalen } from "@/components/betalingen/DagBetalen";
@@ -255,6 +258,11 @@ type MaandFilter = string;
  *  datum onthouden we niet: dat is bijna altijd vandaag. */
 const PLANMODUS_OPSLAG = "glazenwasapp.dagplanning-aan";
 
+/** Een keuze in de maandrij bovenin het witte vak: een streep eronder als hij aan staat. */
+const ONDERSTREEP =
+  "flex h-11 shrink-0 items-center border-b-[3px] border-transparent text-[14px] font-semibold text-muted-foreground transition-colors hover:text-foreground";
+const ONDERSTREEP_AAN = "border-primary text-foreground";
+
 /** Wat er in het sneltoetsen-venster staat (toets ?). */
 const WIJK_SNELTOETSEN: [string, string][] = [
   ["/", "Zoek straat"],
@@ -327,6 +335,16 @@ function Index() {
   // Standaard de maand die je nu loopt, net als op de printlijst.
   const [filter, setFilter] = useState<MaandFilter>(() => maandSleutel(new Date()));
   const ronde = isKalendermaand(filter) ? filter : maandSleutel(new Date());
+  /** Een maand terug of verder (toetsen [ en ]).
+   *  Stond er even/oneven/alles, dan eerst de maand van nu. */
+  function maandTerug() {
+    if (!isKalendermaand(filter)) return setFilter(ronde);
+    const [jaar, maand] = ronde.split("-").map(Number);
+    setFilter(maandSleutel(new Date(jaar!, maand! - 2, 1)));
+  }
+  function maandVerder() {
+    setFilter(isKalendermaand(filter) ? volgendeMaand(ronde) : ronde);
+  }
   const [zoektermen, setZoektermen] = useState<string[]>([]);
   const [prijzenTonen, setPrijzenTonen] = useState(true);
   // Standaard uit: de kolom kost ruimte van de notitie, en je zet hem aan
@@ -451,6 +469,20 @@ function Index() {
     (id) => void navigate({ to: "/", search: (oud) => ({ ...oud, wijk: id }), replace: true }),
   );
   const wijkPlaats = districts.find((d) => d.id === actieveWijk)?.plaats ?? "";
+
+  // Wat er in deze wijk nog aan pof openstaat. Dezelfde sleutel als de
+  // pof-lijst bij Betalingen, zodat die het meteen heeft.
+  const pofQuery = useQuery({
+    queryKey: ["geld-pof", actieveWijk],
+    queryFn: () => fetchPof([actieveWijk!]),
+    enabled: prijzenZien && !!actieveWijk,
+    staleTime: 2 * 60_000,
+  });
+  const pof = useMemo(() => {
+    if (!pofQuery.data) return null;
+    const open = pofQuery.data.filter((r) => r.open > 0.005);
+    return { bedrag: open.reduce((som, r) => som + r.open, 0), adressen: open.length };
+  }, [pofQuery.data]);
 
   const alleStraten = useMemo(() => streetsQuery.data ?? [], [streetsQuery.data]);
   // Ook deze twee met een vaste identiteit: ze zijn de invoer van `groepen`,
@@ -2204,7 +2236,12 @@ function Index() {
         if (selecteren && bewerktDag && nietOpgeslagen) doe(() => void planIn(bewerktDag));
         return;
       case "m":
-        return doe(() => setMaandOpen(true));
+        // De maandkeuze staat bovenin het vak en scrollt weg: eerst terug
+        // naar boven, anders gaat het menu open waar je het niet ziet.
+        return doe(() => {
+          window.scrollTo({ top: 0 });
+          setMaandOpen(true);
+        });
       case "e":
         return doe(() => setFilter("even"));
       case "o":
@@ -2225,15 +2262,9 @@ function Index() {
         }
         return;
       case "[":
-        // Net als ]: stond er even/oneven/alles, dan eerst de maand van nu.
-        return doe(() => {
-          if (!isKalendermaand(filter)) return setFilter(ronde);
-          const [jaar, maand] = ronde.split("-").map(Number);
-          setFilter(maandSleutel(new Date(jaar!, maand! - 2, 1)));
-        });
+        return doe(maandTerug);
       case "]":
-        // Stond er even/oneven/alles, dan eerst naar de maand van nu.
-        return doe(() => setFilter(isKalendermaand(filter) ? volgendeMaand(ronde) : ronde));
+        return doe(maandVerder);
       case "p":
         if (prijzenZien) doe(() => setPrijzenTonen((v) => !v));
         return;
@@ -2399,10 +2430,12 @@ function Index() {
   return (
     <AppLayout
       // De titel ís de wijkkiezer: de naam groot, met het pijltje erachter om
-      // te wisselen en de wijkknopjes ernaast.
+      // te wisselen, en de vorige en volgende wijk ernaast. Daaronder één wit
+      // vak met de maandkeuze, de tegels en de knoppen.
+      witVak
       titel={
         <WijkKiezer
-          variant="titel"
+          variant="groot"
           districts={districts}
           activeId={actieveWijk}
           onSelect={(id) =>
@@ -2424,13 +2457,6 @@ function Index() {
           onKiezerOpen={setWijkOpen}
         />
       }
-      naastTitel={
-        actieveWijk
-          ? wijkPlaats && wijkPlaats !== districts.find((d) => d.id === actieveWijk)?.name
-            ? wijkPlaats
-            : undefined
-          : "Kies een wijk om zijn straten te zien."
-      }
       actiePositie="onder"
       verbergBijScrollen
       kruimel="Overzicht / Wijken"
@@ -2447,24 +2473,30 @@ function Index() {
       // van deze knoppen zit in dat ⋯-menu.
       acties={
         mobiel ? undefined : (
-          <>
-            <ZoekBalk placeholder="Zoek straat" onTermen={setZoektermen} />
-            <div className="contents">
+          // Het onderste stuk van het witte vak: een bakje met de zoekbalk en
+          // de knoppen er vlak naast. Blijft staan als je scrolt.
+          <PlakVak>
+            <div className="flex flex-wrap items-center gap-1 rounded-[18px] bg-card-header p-1.5 group-data-[plakt]/plak:bg-card group-data-[plakt]/plak:shadow-[0_10px_30px_-12px_oklch(0.3_0.02_70/35%)]">
+              <ZoekBalk
+                placeholder="Zoek straat"
+                onTermen={setZoektermen}
+                // Krimpt als het krap wordt, zodat Klant op dezelfde regel blijft.
+                className="min-h-10 shadow-none group-data-[plakt]/plak:bg-background sm:w-auto sm:min-w-[160px] sm:max-w-[340px] sm:flex-1"
+              />
               {magPlannen && (
                 <Button
-                  size="sm"
-                  variant={selecteren ? "default" : "outline"}
-                  className="rounded-full"
+                  variant="ghost"
+                  className={`h-10 rounded-[12px] ${selecteren ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
                   onClick={wisselSelecteren}
+                  aria-pressed={selecteren}
                   title="Adressen aanvinken om daarna in te plannen"
                 >
                   <CheckSquare className="size-4" /> Selecteren
                 </Button>
               )}
               <Button
-                size="sm"
-                variant="outline"
-                className="rounded-full"
+                variant="ghost"
+                className="h-10 rounded-[12px]"
                 onClick={klapAlles}
                 disabled={groepen.length === 0}
                 title={allesIngeklapt ? "Alle straten uitklappen" : "Alle straten inklappen"}
@@ -2477,16 +2509,15 @@ function Index() {
                 {allesIngeklapt ? "Uitklappen" : "Inklappen"}
               </Button>
               <Button
-                size="sm"
-                variant="outline"
-                className="rounded-full"
+                variant="ghost"
+                className="h-10 rounded-[12px]"
                 disabled={!undoLabel}
                 onClick={() => void doeUndo()}
                 title={undoLabel ? `Ongedaan maken: ${undoLabel}` : "Niets om terug te draaien"}
               >
                 <Undo2 className="size-4" /> Ongedaan
               </Button>
-              <Button size="sm" variant="outline" className="rounded-full" asChild>
+              <Button variant="ghost" className="h-10 rounded-[12px]" asChild>
                 <Link
                   to="/printen"
                   search={{
@@ -2499,26 +2530,35 @@ function Index() {
                   <Printer className="size-4" /> Printlijst
                 </Link>
               </Button>
-              {magKlanten && (
-                <Button
-                  size="sm"
-                  className="rounded-full"
-                  onClick={() => setKlantDialog({ open: true, customer: null })}
-                >
-                  <Plus className="size-4" /> Klant
-                </Button>
+              {/* Zolang je selecteert: de week, om naar een andere dag te gaan
+                  zonder eerst terug naar de planning. */}
+              {selecteren && magPlannen && (
+                <WeekStrook
+                  gekozen={bewerktDag}
+                  onKies={(d) => void naarDag(d)}
+                  prijzenZien={prijzenZien}
+                />
               )}
+              <div className="flex-1" />
               <button
                 type="button"
                 onClick={() => setHulpOpen(true)}
                 aria-label="Sneltoetsen"
                 title="Sneltoetsen (?)"
-                className="hidden size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
+                className="hidden size-10 shrink-0 items-center justify-center rounded-[12px] text-muted-foreground hover:bg-card hover:text-foreground lg:flex"
               >
                 <Keyboard className="size-4" />
               </button>
+              {magKlanten && (
+                <Button
+                  className="h-10 rounded-[12px] px-5"
+                  onClick={() => setKlantDialog({ open: true, customer: null })}
+                >
+                  <Plus className="size-4" /> Klant
+                </Button>
+              )}
             </div>
-          </>
+          </PlakVak>
         )
       }
       onderbalk={
@@ -2558,116 +2598,141 @@ function Index() {
         ) : undefined
       }
       kop={
-        <Cijferkaarten
-          cijfers={[
-            {
-              label: "Adressen in beeld",
-              waarde: String(totaal),
-              onder: `van ${customers.length} in de kaartenbak`,
-              icon: Users,
-              kleur: "blauw",
-            },
-            {
-              label: "Straten",
-              waarde: String(groepen.length),
-              onder: `${secties.length} in een groep`,
-              icon: Route2,
-              kleur: "amber",
-            },
-            {
-              label: "Omzet per ronde",
-              waarde: formatPrice(omzet),
-              onder: isKalendermaand(filter) ? toonMaand(filter) : "alle maanden",
-              icon: Euro,
-              kleur: "groen",
-              verberg: !toonPrijzen,
-            },
-          ]}
-        />
-      }
-    >
-      {/* @container: of er twee straten naast elkaar passen hangt af van de
-          ruimte voor de lijst, niet van het scherm — met de zijbalk open is
-          dat op een 13-inch MacBook een stuk minder. */}
-      <div className="@container space-y-3">
-        <div className="sticky top-[var(--plakrand)] z-[9] -mx-3 flex flex-wrap items-center gap-2 border-b border-border/70 bg-background/85 px-3 py-2 backdrop-blur transition-transform duration-200 group-data-[weg]/layout:translate-y-[calc(-100%-var(--balkhoogte))] md:-mx-6 md:gap-3 md:px-6">
-          {/* Op de telefoon veeg je deze rij opzij als hij niet past. */}
-          <div className="inline-flex max-w-full gap-0.5 overflow-x-auto rounded-full bg-card p-[3px] shadow-card [scrollbar-width:none]">
-            {/* Dezelfde keuze als op de printlijst: wat je hier ziet is wat je
-                straks meeneemt. */}
-            <DropdownMenu open={maandOpen} onOpenChange={setMaandOpen}>
-              <DropdownMenuTrigger asChild>
+        // Het bovenste stuk van het witte vak: welke adressen je ziet, en de
+        // tegels. Op de telefoon is dit het hele vak; de zoekbalk staat daar
+        // onderin.
+        <div className="space-y-3 rounded-[24px] bg-card px-3 pb-3 md:space-y-4 md:rounded-b-none md:px-[22px] md:pb-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/60">
+            {/* Op de telefoon veeg je deze rij opzij als hij niet past. */}
+            <div className="flex min-w-0 max-w-full items-center gap-5 overflow-x-auto [scrollbar-width:none] md:gap-6">
+              {/* Dezelfde keuze als op de printlijst: wat je hier ziet is wat
+                  je straks meeneemt. */}
+              <DropdownMenu open={maandOpen} onOpenChange={setMaandOpen}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className={`${ONDERSTREEP} gap-1 capitalize ${isKalendermaand(filter) ? ONDERSTREEP_AAN : ""}`}
+                  >
+                    {isKalendermaand(filter) ? toonMaand(filter) : "Maand"}
+                    <ChevronDown className="size-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="max-h-72 w-48 overflow-y-auto">
+                  {komendeMaanden().map((m, i) => (
+                    <Fragment key={m}>
+                      {i > 0 && m.endsWith("-01") && <DropdownMenuSeparator />}
+                      <DropdownMenuItem onSelect={() => setFilter(m)}>
+                        <span className="capitalize">{toonMaand(m)}</span>
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {m.slice(0, 4)}
+                        </span>
+                      </DropdownMenuItem>
+                    </Fragment>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {(["alles", "even", "oneven"] as MaandFilter[]).map((f) => (
                 <button
-                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] capitalize transition-colors md:px-4 ${
-                    isKalendermaand(filter)
-                      ? "bg-primary font-medium text-primary-foreground"
-                      : "text-foreground/80 hover:text-foreground"
-                  }`}
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`${ONDERSTREEP} ${filter === f ? ONDERSTREEP_AAN : ""}`}
                 >
-                  {isKalendermaand(filter) ? toonMaand(filter) : "Maand"}
-                  <ChevronDown className="size-3.5" />
+                  {f === "alles" ? (
+                    "Alles"
+                  ) : (
+                    <>
+                      {f === "even" ? "Even" : "Oneven"}
+                      <span className="hidden md:inline">&nbsp;maand</span>
+                    </>
+                  )}
                 </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="max-h-72 w-48 overflow-y-auto">
-                {komendeMaanden().map((m, i) => (
-                  <Fragment key={m}>
-                    {i > 0 && m.endsWith("-01") && <DropdownMenuSeparator />}
-                    <DropdownMenuItem onSelect={() => setFilter(m)}>
-                      <span className="capitalize">{toonMaand(m)}</span>
-                      <span className="ml-auto text-xs text-muted-foreground">{m.slice(0, 4)}</span>
-                    </DropdownMenuItem>
-                  </Fragment>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {(["alles", "even", "oneven"] as MaandFilter[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-[13px] transition-colors md:px-4 ${
-                  filter === f
-                    ? "bg-primary font-medium text-primary-foreground"
-                    : "text-foreground/80 hover:text-foreground"
-                }`}
-              >
-                {f === "alles" ? (
-                  "Alles"
-                ) : (
-                  <>
-                    {f === "even" ? "Even" : "Oneven"}
-                    <span className="hidden md:inline"> maand</span>
-                  </>
-                )}
-              </button>
-            ))}
+              ))}
+            </div>
+            {/* Op de telefoon staan Prijzen en Duur in het ⋯-menu. */}
+            <div className="ml-auto hidden items-center gap-5 md:flex">
+              {prijzenZien && (
+                <div className="flex items-center gap-2">
+                  <Switch id="prijzen" checked={prijzenTonen} onCheckedChange={setPrijzenTonen} />
+                  <Label htmlFor="prijzen" className="text-sm font-semibold">
+                    Prijzen
+                  </Label>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Switch id="duur" checked={duurTonen} onCheckedChange={setDuurTonen} />
+                <Label htmlFor="duur" className="text-sm font-semibold">
+                  Duur
+                </Label>
+              </div>
+            </div>
           </div>
-          {/* Zolang je selecteert: de week, om naar een andere dag te gaan
-              zonder eerst terug naar de planning. Naast het maandfilter. */}
-          {selecteren && magPlannen && (
+          {/* Op de telefoon: de week tijdens het selecteren, hier in het vak. */}
+          {mobiel && selecteren && magPlannen && (
             <WeekStrook
               gekozen={bewerktDag}
               onKies={(d) => void naarDag(d)}
               prijzenZien={prijzenZien}
             />
           )}
-          {prijzenZien && (
-            // Op de telefoon staat dit in het ⋯-menu: zo past het maandfilter
-            // op één regel.
-            <div className="hidden items-center gap-2 md:flex">
-              <Switch id="prijzen" checked={prijzenTonen} onCheckedChange={setPrijzenTonen} />
-              <Label htmlFor="prijzen" className="text-sm text-muted-foreground">
-                Prijzen
-              </Label>
-            </div>
-          )}
-          <div className="hidden items-center gap-2 md:flex">
-            <Switch id="duur" checked={duurTonen} onCheckedChange={setDuurTonen} />
-            <Label htmlFor="duur" className="text-sm text-muted-foreground">
-              Duur
-            </Label>
-          </div>
+          <Cijferkaarten
+            cijfers={[
+              {
+                label: "Adressen in beeld",
+                waarde: String(totaal),
+                onder: `van ${customers.length} in de kaartenbak`,
+                icon: Users,
+                kleur: "blauw",
+              },
+              {
+                label: "Straten",
+                waarde: String(groepen.length),
+                onder: `${secties.length} in een groep`,
+                icon: Route2,
+                kleur: "amber",
+                // Wit op wit valt weg: in het witte vak de kleur van de pagina.
+                // In Fel donker is deze tegel licht, en dat mag hij blijven.
+                klasse: "fel:bg-background fel:dark:bg-kaart-amber",
+              },
+              {
+                label: "Omzet per ronde",
+                waarde: formatPrice(omzet),
+                onder: isKalendermaand(filter) ? toonMaand(filter) : "alle maanden",
+                icon: Euro,
+                kleur: "groen",
+                verberg: !toonPrijzen,
+              },
+              {
+                label: "Pof",
+                waarde: pof ? formatPrice(pof.bedrag) : pofQuery.isError ? "–" : "…",
+                onder: !pof
+                  ? pofQuery.isError
+                    ? "kon niet laden"
+                    : " "
+                  : pof.adressen > 0
+                    ? `open bij ${pof.adressen} ${pof.adressen === 1 ? "adres" : "adressen"}`
+                    : "geen pof open",
+                icon: Coins,
+                kleur: "roze",
+                verberg: !toonPrijzen,
+                // Doorklikken naar de pof-lijst van deze wijk.
+                omhul: (kaart) => (
+                  <Link
+                    to="/betalingen"
+                    search={{ tab: "pof", ...(actieveWijk ? { wijk: actieveWijk } : {}) }}
+                    className={`${TEGEL_KLIKBAAR} block h-full rounded-[14px] sm:rounded-[18px] fel:rounded-[22px] fel:sm:rounded-[24px]`}
+                  >
+                    {kaart}
+                  </Link>
+                ),
+              },
+            ]}
+          />
         </div>
-
+      }
+    >
+      {/* @container: of er twee straten naast elkaar passen hangt af van de
+          ruimte voor de lijst, niet van het scherm — met de zijbalk open is
+          dat op een 13-inch MacBook een stuk minder. */}
+      <div className="@container space-y-3">
         {selectie.length > 1 && (
           <p className="text-xs text-muted-foreground">
             {selectie.length} regels geselecteerd — sleep er één om ze samen te verplaatsen.{" "}
@@ -4681,5 +4746,47 @@ function NieuweRegel({ onSubmit, rowText }: { onSubmit: (nr: string) => void; ro
         }
       }}
     />
+  );
+}
+
+/**
+ * Het onderste stuk van het witte vak op de wijkenpagina. Zolang de tegels
+ * erboven staan, sluit het daar recht op aan; blijft het bij het scrollen
+ * plakken, dan valt het witte vak weg en zweeft alleen het bakje, wit, onder
+ * de kop. Anders hangt er een recht afgesneden stuk vak tegen de kop aan.
+ */
+function PlakVak({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [plakt, setPlakt] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    const balk = el?.parentElement;
+    if (!el || !balk) return;
+    const meet = () => {
+      const rand = parseFloat(getComputedStyle(balk).top) || 0;
+      setPlakt(window.scrollY > 0 && balk.getBoundingClientRect().top <= rand + 0.5);
+    };
+    meet();
+    window.addEventListener("scroll", meet, { passive: true });
+    window.addEventListener("resize", meet);
+    return () => {
+      window.removeEventListener("scroll", meet);
+      window.removeEventListener("resize", meet);
+    };
+  }, []);
+  return (
+    // Plakt hij, dan valt de witte rand onder het bakje weg, en ook bijna
+    // alle lucht eronder: anders ligt er een brede strook over de lijst. Dat
+    // kan geen heen-en-weer geven: waar hij gaat plakken hangt af van wat
+    // erboven staat, niet van zijn eigen hoogte.
+    <div
+      ref={ref}
+      data-plakt={plakt ? "" : undefined}
+      className={`group/plak rounded-b-[24px] px-4 md:px-[22px] ${
+        plakt ? "-mb-2 pb-0" : "bg-card pb-4 md:pb-[22px]"
+      }`}
+    >
+      {children}
+    </div>
   );
 }
