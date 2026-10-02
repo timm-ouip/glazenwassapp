@@ -98,6 +98,7 @@ interface Post {
  */
 export function WeekWeergave({
   dagen,
+  omzet,
   afmeldstand,
   afmeldstatus,
   instellingen,
@@ -121,6 +122,9 @@ export function WeekWeergave({
   staatOp,
 }: {
   dagen: WeekDag[];
+  /** Wat elke dag opbrengt, uit dezelfde telling als de maand: zo staat er
+   *  in de week en de maand voor dezelfde dag hetzelfde bedrag. */
+  omzet: Map<string, { bedrag: number }>;
   /** Hoe ver elke dag is met "Dag klaar": het vinkje bij de datum. */
   afmeldstand: Map<string, DagAfmeldstand>;
   /** Dezelfde status per team, voor het vinkje bij elk team. */
@@ -187,7 +191,13 @@ export function WeekWeergave({
             berekenTijden(blokken.get(pl.nr) ?? [], opzetVan(instellingen, pl)),
           ]),
         );
-        return { ...d, blokken, los, losTijdlijn, tijdlijnen };
+        // Voor de kop van de dag: welke wijken erop staan.
+        const alles = [...blokken.values()].flat();
+        const wijken = [...new Set(alles.filter((b) => b.soort !== "klus").map((b) => b.wijk_id))]
+          .map((id) => bouwstenen.wijken.get(id))
+          .filter((w): w is NonNullable<typeof w> => w !== undefined)
+          .sort((a, b) => a.index - b.index);
+        return { ...d, blokken, los, losTijdlijn, tijdlijnen, wijken };
       }),
     [dagen, bouwstenen, instellingen],
   );
@@ -224,34 +234,89 @@ export function WeekWeergave({
         >
           {perDag.map((d) => (
             <div key={d.datum} className="flex flex-col gap-2">
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  // Klikken kiest de dag (rechts zie je wat er staat), dubbelklikken
-                  // opent de dagweergave — net als in de maand.
-                  onClick={() => onKiesDag(d.datum)}
-                  onDoubleClick={() => onOpenDag(d.datum)}
-                  aria-pressed={d.datum === gekozenDag}
-                  title="Klik om te bekijken, dubbelklik voor de dagweergave"
-                  className={`min-w-0 flex-1 truncate rounded-[10px] px-1 py-1 text-[12.5px] font-medium ${
-                    d.datum === gekozenDag ? "bg-foreground text-background" : "hover:bg-accent"
-                  }`}
-                >
-                  {new Date(`${d.datum}T12:00:00`).toLocaleDateString("nl-NL", {
-                    weekday: "short",
-                    day: "numeric",
-                  })}
-                </button>
-                <AfmeldTeken stand={afmeldstand.get(d.datum)} datum={d.datum} />
+              {/* De kop van de dag: datum, wat de dag opbrengt en welke wijken
+                  erop staan. Klikken kiest de dag (rechts zie je wat er staat),
+                  dubbelklikken opent de dagweergave — net als in de maand. */}
+              <div
+                // Klikken op een knopje erin (de datum, teams indelen) doet
+                // alleen wat dat knopje doet; de datum zelf geeft zijn klik
+                // door, zodat dubbelklikken daar ook naar de dag gaat.
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest("button")) return;
+                  onKiesDag(d.datum);
+                }}
+                onDoubleClick={(e) => {
+                  const knop = (e.target as HTMLElement).closest("button");
+                  if (knop && !knop.dataset["datum"]) return;
+                  onOpenDag(d.datum);
+                }}
+                title="Klik om te bekijken, dubbelklik voor de dagweergave"
+                className={`cursor-pointer rounded-[14px] border bg-card px-2.5 py-2 transition-colors hover:bg-card/80 ${
+                  d.datum === gekozenDag
+                    ? "border-primary shadow-[0_0_0_1.5px_var(--primary)]"
+                    : "border-border"
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    data-datum={d.datum}
+                    onClick={() => onKiesDag(d.datum)}
+                    aria-pressed={d.datum === gekozenDag}
+                    className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate rounded-[8px] text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span className="text-[12px] font-semibold text-muted-foreground">
+                      {new Date(`${d.datum}T12:00:00`).toLocaleDateString("nl-NL", {
+                        weekday: "short",
+                      })}
+                    </span>
+                    <span className="font-display text-[16px] font-bold tracking-[-0.01em]">
+                      {new Date(`${d.datum}T12:00:00`).toLocaleDateString("nl-NL", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </span>
+                  </button>
+                  <AfmeldTeken stand={afmeldstand.get(d.datum)} datum={d.datum} />
+                </div>
+                {prijzenZien && (omzet.get(d.datum)?.bedrag ?? 0) > 0 && (
+                  <p className="mt-1 font-display text-[20px] font-bold leading-none tracking-[-0.02em] tabular-nums">
+                    {formatPrice(Math.round(omzet.get(d.datum)!.bedrag))}
+                  </p>
+                )}
+                {d.wijken.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1">
+                    {d.wijken.map((w) => (
+                      <span
+                        key={w.id}
+                        className="flex min-w-0 items-center gap-1 text-[11.5px] font-semibold"
+                      >
+                        <span
+                          className="size-2 shrink-0 rounded-full"
+                          style={{
+                            background: wijkVlak([w.index]),
+                            boxShadow: `inset 0 0 0 1.5px ${wijkInkt(w.index)}`,
+                          }}
+                        />
+                        <span className="truncate">{w.naam}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {/* Een echte knop met tekst: een los poppetje naast de datum
+                    viel niet op. Alleen met een muis, net als slepen; op de
+                    telefoon deel je teams in vanuit de dag. */}
                 {sleepbaar && (
                   <button
                     type="button"
                     onClick={() => onPloegen(d.datum)}
-                    aria-label={`Teams indelen voor ${d.datum}`}
-                    title="Teams indelen"
-                    className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    title={`Teams indelen voor ${new Date(`${d.datum}T12:00:00`).toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" })}`}
+                    className="mt-2 inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 text-[11.5px] font-semibold text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
                   >
                     <Users className="size-3.5" />
+                    {d.ploegen.length > 0
+                      ? `${d.ploegen.length} ${d.ploegen.length === 1 ? "team" : "teams"}`
+                      : "Teams indelen"}
                   </button>
                 )}
               </div>
@@ -412,11 +477,14 @@ function Kaart({
   return (
     <div
       ref={setRef}
-      className={`rounded-[14px] border p-1.5 text-left transition-colors ${
+      className={`rounded-[16px] border p-2 text-left transition-colors ${
         ploeg ? "min-h-24" : "min-h-14 border-dashed"
       } ${erboven ? "border-primary bg-accent/60" : "border-border bg-card"}`}
     >
-      <p className="mb-1 flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground">
+      <p
+        className={`mb-1.5 flex items-center gap-1.5 px-0.5 text-[12.5px] ${ploeg ? "font-bold" : "font-medium text-muted-foreground"}`}
+      >
+        {ploeg && <Users className="size-3.5 shrink-0" />}
         <span className="min-w-0 truncate">{ploeg ? ploegNaam(ploeg) : "Nog niet ingedeeld"}</span>
         {klaar && (
           <CircleCheck
@@ -428,13 +496,18 @@ function Kaart({
             className="size-3.5 shrink-0 text-tint-groen-ink"
           />
         )}
+        {ploeg && prijzenZien && !leeg && (
+          <span className="ml-auto shrink-0 font-display font-bold tabular-nums">
+            {formatPrice(Math.round(blokken.reduce((som, b) => som + b.bedrag, 0)))}
+          </span>
+        )}
       </p>
 
       {leeg && !ploeg && (
         <p className="px-1 text-[10.5px] text-muted-foreground">sleep hier werk naartoe</p>
       )}
 
-      <ul className="space-y-0.5">
+      <ul className="space-y-1">
         {/* Uit de tijdlijn, zodat de begintijd er meteen bij staat. Pauze en
             rijtijd laten we hier weg: in een kolom van deze breedte zeggen ze
             weinig, en in de dagweergave staan ze wel. */}
@@ -492,26 +565,26 @@ function Kaart({
 
       {!leeg && ploeg && (
         <>
-          <div className="mt-1.5 flex items-center gap-1">
-            <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+          <div className="mt-2 flex items-center gap-1.5">
+            <div className="h-[5px] flex-1 overflow-hidden rounded-full bg-muted">
               <div
-                className={`h-full rounded-full ${tijdlijn.teVol ? "bg-tint-amber-ink/70" : "bg-tint-blauw-ink/70"}`}
+                className={`h-full rounded-full ${tijdlijn.teVol ? "bg-tint-amber-ink/70" : "bg-foreground"}`}
                 style={{ width: `${Math.min(100, vol)}%` }}
               />
             </div>
             <span
-              className={`shrink-0 text-[10.5px] tabular-nums ${tijdlijn.teVol ? "text-tint-amber-ink" : "text-muted-foreground"}`}
+              className={`shrink-0 text-[11px] tabular-nums ${tijdlijn.teVol ? "text-tint-amber-ink" : "text-muted-foreground"}`}
             >
               {duurTekst(tijdlijn.werkMin)}/{duurTekst(tijdlijn.capaciteitMin)}
             </span>
           </div>
           {instellingen.tijdlijn && (
-            <div className="mt-1 flex items-baseline justify-between border-t border-border/60 pt-1 text-[10.5px]">
+            <div className="mt-1.5 flex items-baseline justify-between border-t border-border/60 pt-1.5 text-[11px]">
               <span className="text-muted-foreground">
                 {tijdlijn.teVol ? "loopt tot" : "klaar om"}
               </span>
               <span
-                className={`tabular-nums ${tijdlijn.teVol ? "text-tint-amber-ink" : "font-medium"}`}
+                className={`font-bold tabular-nums ${tijdlijn.teVol ? "text-tint-amber-ink" : ""}`}
               >
                 {tijdVan(tijdlijn.klaarOm)}
               </span>
@@ -623,7 +696,7 @@ function BlokRegel({
           })}
       // bg-tint-geel naast de inline kleur: daaraan ziet het thema Fel dat
       // hier een fel vlak ligt, en zet het de tekst erop donker.
-      className={`rounded-[8px] px-1.5 py-0.5 text-[11.5px] ${klus ? "bg-tint-geel" : ""} ${isDragging ? "opacity-40" : ""} ${
+      className={`rounded-[10px] px-2 py-1.5 text-[12.5px] ${klus ? "bg-tint-geel" : ""} ${isDragging ? "opacity-40" : ""} ${
         aangewezen ? "outline outline-2 -outline-offset-2 outline-primary" : ""
       } ${isOver ? "border-t-2 border-primary" : ""}`}
       style={{ background: vlak ?? "var(--muted)", color: inkt }}
@@ -632,17 +705,19 @@ function BlokRegel({
         {selecteren && sleepbaar && aangewezen && (
           <SelectieGreep sleutel={`${datum}:${blok.sleutel}`} datum={datum} gekozen={gekozen} />
         )}
-        <span className="min-w-0 flex-1 truncate font-medium">{blok.titel}</span>
-        {prijzenZien && <span className="shrink-0 tabular-nums">{formatPrice(blok.bedrag)}</span>}
+        <span className="min-w-0 flex-1 truncate font-semibold">{blok.titel}</span>
+        {prijzenZien && (
+          <span className="shrink-0 font-display font-bold tabular-nums">
+            {formatPrice(blok.bedrag)}
+          </span>
+        )}
       </div>
-      <div className="flex items-center gap-1 text-[10.5px] opacity-80">
+      <div className="mt-0.5 flex items-center gap-2 text-[11px] opacity-85">
         {tijd && <span className="tabular-nums">{tijd}</span>}
         <span className="tabular-nums">{duurTekst(minuten)}</span>
-        {blok.soort === "straat" && <span>· {blok.adressen.length}</span>}
-        {mail && (
-          <span className="ml-auto">
-            <MailStatus status={mail} klein />
-          </span>
+        {mail && <MailStatus status={mail} klein />}
+        {blok.soort === "straat" && (
+          <span className="ml-auto tabular-nums">{blok.adressen.length}×</span>
         )}
       </div>
     </li>

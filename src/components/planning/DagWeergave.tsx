@@ -6,6 +6,7 @@ import {
   IconSquareCheck as CheckSquare,
   IconDots as MoreHorizontal,
   IconTruck as Truck,
+  IconUsers as Users,
 } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
@@ -723,6 +724,7 @@ export function DagWeergave(p: DagWeergaveProps) {
               instellingen={p.instellingen}
               magPlannen={p.magPlannen}
               selecteren={selecteren && p.magPlannen}
+              prijzenZien={p.prijzenZien}
               onAlles={() => kiesKolom(k)}
               onWerktijd={p.onWerktijd}
             />
@@ -773,6 +775,7 @@ function KolomKop({
   instellingen,
   magPlannen,
   selecteren,
+  prijzenZien,
   onAlles,
   onWerktijd,
 }: {
@@ -781,6 +784,7 @@ function KolomKop({
   instellingen: PlanInstellingen;
   magPlannen: boolean;
   selecteren: boolean;
+  prijzenZien: boolean;
   onAlles: () => void;
   onWerktijd: (ploegNr: number, begin: string, eind: string) => void;
 }) {
@@ -789,16 +793,22 @@ function KolomKop({
   const vol = volPercentage(tijdlijn);
   return (
     <div
-      className={`rounded-[12px] border p-2 ${
+      className={`rounded-[16px] border p-3 ${
         ploeg ? "border-border bg-card" : "border-dashed border-border bg-card/50"
       }`}
     >
-      <div className="flex flex-wrap items-baseline gap-1.5">
-        <h3 className="font-display text-[13.5px] font-semibold">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {ploeg && <Users className="size-4 shrink-0" />}
+        <h3 className="text-[14.5px] font-bold">
           {ploeg ? ploegNaam(ploeg) : meerderePloegen ? "Nog niet ingedeeld" : "Deze dag"}
         </h3>
         {ploeg && ploeg.leden.length > 1 && (
           <span className="text-[11.5px] text-muted-foreground">{ploeg.leden.length} man</span>
+        )}
+        {prijzenZien && kolom.blokken.length > 0 && !selecteren && (
+          <span className="ml-auto font-display text-[19px] font-bold leading-none tracking-[-0.02em] tabular-nums">
+            {formatPrice(Math.round(kolom.blokken.reduce((som, b) => som + b.bedrag, 0)))}
+          </span>
         )}
         {selecteren && kolom.blokken.length > 0 && (
           <button
@@ -812,9 +822,9 @@ function KolomKop({
       </div>
       {kolom.metKlok ? (
         <>
-          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
             <div
-              className={`h-full rounded-full ${tijdlijn.teVol ? "bg-tint-amber-ink/70" : "bg-tint-blauw-ink/70"}`}
+              className={`h-full rounded-full ${tijdlijn.teVol ? "bg-tint-amber-ink/70" : "bg-foreground"}`}
               style={{ width: `${Math.min(100, vol)}%` }}
             />
           </div>
@@ -826,7 +836,10 @@ function KolomKop({
               <span
                 className={`ml-auto tabular-nums ${tijdlijn.teVol ? "text-tint-amber-ink" : ""}`}
               >
-                {tijdlijn.teVol ? "loopt tot" : "klaar om"} {tijdVan(tijdlijn.klaarOm)}
+                {tijdlijn.teVol ? "loopt tot" : "klaar om"}{" "}
+                <b className={tijdlijn.teVol ? "" : "text-foreground"}>
+                  {tijdVan(tijdlijn.klaarOm)}
+                </b>
               </span>
             )}
           </div>
@@ -1190,8 +1203,10 @@ function Eenheidkaart({
           })}
       // bg-tint-geel naast de inline kleur: daaraan ziet het thema Fel dat
       // hier een fel vlak ligt, en zet het de tekst erop donker.
-      className={`absolute overflow-hidden rounded-[7px] px-1.5 py-0.5 text-left ${
-        losAdres ? "left-3 right-1 opacity-90" : "inset-x-1 border border-border/60"
+      className={`absolute overflow-hidden text-left ${
+        losAdres
+          ? "left-3 right-1 rounded-[7px] px-1.5 py-0.5 opacity-90"
+          : `inset-x-1 rounded-[12px] px-2.5 ${plek.hoogte < 48 ? "py-0.5" : "py-1.5"}`
       } ${blok.soort === "klus" ? "bg-tint-geel" : ""} ${isDragging ? "opacity-40" : ""} ${
         aangevinkt ? "outline outline-2 -outline-offset-2 outline-primary" : ""
       } ${isOver ? "border-t-2 border-primary" : ""}`}
@@ -1201,7 +1216,11 @@ function Eenheidkaart({
         {selecteren && magPlannen && aangevinkt && blok.soort !== "klus" && (
           <SelectieGreep sleutel={`${datum}:${eenheid.sleutel}`} datum={datum} gekozen={gekozen} />
         )}
-        <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{eenheid.titel}</span>
+        <span
+          className={`min-w-0 flex-1 truncate ${losAdres ? "text-[11px] font-medium" : "text-[13px] font-bold"}`}
+        >
+          {eenheid.titel}
+        </span>
         {metKlok && losAdres && (
           <span className="shrink-0 text-[10px] tabular-nums opacity-70">
             {tijdVan(eenheid.start)}
@@ -1211,14 +1230,26 @@ function Eenheidkaart({
         {!losAdres && blok.vasteStart && (
           <Clock className="size-3 shrink-0" aria-label="Vastgezet" />
         )}
+        {!losAdres && prijzenZien && (
+          <span className="shrink-0 font-display text-[15px] font-bold tabular-nums">
+            {formatPrice(blok.bedrag)}
+          </span>
+        )}
         {magPlannen && <EenheidMenu maakActies={maakActies} titel={eenheid.titel} />}
       </div>
-      {!losAdres && plek.hoogte >= 30 && (
-        <div className="flex items-center gap-1 text-[10.5px] opacity-80">
-          {metKlok && <span className="tabular-nums">{tijdVan(eenheid.start)}</span>}
+      {!losAdres && plek.hoogte >= 44 && (
+        <div className="mt-0.5 flex items-center gap-2 text-[11.5px] opacity-85">
+          {metKlok && (
+            <span className="tabular-nums">
+              {tijdVan(eenheid.start)}–{tijdVan(eenheid.start + eenheid.minuten)}
+            </span>
+          )}
           <span className="tabular-nums">{duurTekst(eenheid.minuten)}</span>
-          {blok.soort === "straat" && <span>· {blok.adressen.length}</span>}
-          {prijzenZien && <span className="ml-auto tabular-nums">{formatPrice(blok.bedrag)}</span>}
+          {blok.soort === "straat" && (
+            <span className="ml-auto tabular-nums">
+              {blok.adressen.length} {blok.adressen.length === 1 ? "adres" : "adressen"}
+            </span>
+          )}
         </div>
       )}
       {aantalGekozen > 0 && (

@@ -47,6 +47,7 @@ import {
   IconCheck as Check,
   IconPlus as Plus,
   IconTrash as Trash2,
+  IconUsers as Users,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 
@@ -2698,10 +2699,20 @@ function Planning() {
     : weekdagen;
   const zichtbareNrs = new Set(kolommen.map(weekdagNr));
   const toonDagen = mobiel ? dagen.filter((d) => zichtbareNrs.has(weekdagNr(d))) : dagen;
-  // Links een smalle kolom met het weeknummer; daarna de dagen.
+  // Links een smalle kolom met het weeknummer; daarna de dagen, en op de
+  // computer rechts het weektotaal.
+  const weektotaal = !mobiel && prijzenZien;
   const raster = {
-    gridTemplateColumns: `${mobiel ? "1.25rem" : "1.75rem"} repeat(${kolommen.length}, minmax(0, 1fr))`,
+    gridTemplateColumns: `${mobiel ? "1.25rem" : "1.75rem"} repeat(${kolommen.length}, minmax(0, 1fr))${weektotaal ? " 4.75rem" : ""}`,
   };
+  /** De wijken die deze maand op de kalender staan, voor het rijtje eronder. */
+  const wijkenInMaand = [
+    ...new Set(
+      [...perDag.entries()]
+        .filter(([k]) => isSameMonth(new Date(`${k}T12:00:00`), maand))
+        .flatMap(([, v]) => v.wijken),
+    ),
+  ].sort((a, b) => (wijkInfo.get(a)?.index ?? 0) - (wijkInfo.get(b)?.index ?? 0));
   const aantalOpdrachten = strook.lijst.length + strook.wachten.length;
 
   return (
@@ -3070,6 +3081,11 @@ function Planning() {
                       {format(d, "EEEEEE", { locale: nl })}
                     </div>
                   ))}
+                  {weektotaal && (
+                    <div className="py-2 text-right pr-2 text-[11px] font-medium text-muted-foreground/80">
+                      week
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid gap-1.5 p-1.5 max-md:gap-1" style={raster}>
@@ -3078,6 +3094,11 @@ function Planning() {
                     // Het begin van een rij: daar staat het weeknummer voor.
                     const rij =
                       i % kolommen.length === 0 ? toonDagen.slice(i, i + kolommen.length) : null;
+                    // Het eind van een rij: daar komt het weektotaal achter.
+                    const eindVanRij =
+                      weektotaal && i % kolommen.length === kolommen.length - 1
+                        ? toonDagen.slice(i - kolommen.length + 1, i + 1)
+                        : null;
                     const info = perDag.get(k);
                     const buitenMaand = !isSameMonth(d, maand);
                     const isVandaag = k === nu;
@@ -3158,29 +3179,45 @@ function Planning() {
                                     // die dag aan de beurt is; zo zie je een maand aan de
                                     // kleuren, zonder namen te lezen.
                                     style={vlak ? { background: vlak } : undefined}
-                                    className={`relative flex h-full min-h-[4.5rem] w-full flex-col rounded-[12px] p-1.5 text-left transition-colors max-md:min-h-[3.25rem] max-md:select-none max-md:[-webkit-touch-callout:none] md:min-h-[6.25rem] ${
+                                    className={`@container relative flex h-full min-h-[4.5rem] w-full flex-col rounded-[12px] p-1.5 text-left transition-colors max-md:min-h-[3.25rem] max-md:select-none max-md:[-webkit-touch-callout:none] md:min-h-[7.5rem] md:rounded-[16px] md:p-2.5 ${
                                       buitenMaand
                                         ? "bg-transparent"
                                         : vlak
                                           ? ""
                                           : "bg-surface/70 hover:bg-surface"
-                                    } ${isGekozen ? "outline outline-2 -outline-offset-2 outline-brand" : ""} ${
-                                      isGekozen && !vlak ? "bg-brand/10" : ""
-                                    } ${erboven ? "outline outline-2 -outline-offset-2 outline-brand ring-2 ring-brand/30" : ""} ${
+                                    } ${isGekozen ? "outline outline-2 -outline-offset-2 outline-foreground md:outline-[3px] md:-outline-offset-[3px]" : ""} ${erboven ? "outline outline-2 -outline-offset-2 outline-brand ring-2 ring-brand/30" : ""} ${
                                       dagSleep.isDragging ? "opacity-40" : ""
                                     }`}
                                   >
                                     <span
-                                      className={`self-start rounded-md px-1 text-[12px] font-semibold leading-5 tabular-nums ${
-                                        isVandaag
-                                          ? "bg-brand text-brand-foreground"
-                                          : buitenMaand
-                                            ? "text-muted-foreground/70"
-                                            : "text-foreground"
+                                      className={`self-start rounded-md px-1 text-[12px] font-semibold leading-5 tabular-nums md:flex md:h-7 md:min-w-7 md:items-center md:justify-center md:rounded-full md:px-1.5 md:font-display md:text-[15px] ${
+                                        isGekozen
+                                          ? "bg-foreground text-background"
+                                          : isVandaag
+                                            ? "bg-brand text-brand-foreground"
+                                            : buitenMaand
+                                              ? "text-muted-foreground/70"
+                                              : "text-foreground"
                                       }`}
                                     >
                                       {format(d, "d")}
                                     </span>
+                                    {/* Rechtsboven hoeveel teams er die dag zijn. Gaat
+                                        weg als je erover beweegt: daar komen dan de
+                                        knopjes Inplannen en Dagplanning. */}
+                                    {!mobiel &&
+                                      !buitenMaand &&
+                                      info &&
+                                      (ploegenQuery.data?.get(k)?.length ?? 0) > 0 && (
+                                        <span
+                                          style={inkt ? { color: inkt } : undefined}
+                                          className="absolute right-2.5 top-3 flex items-center gap-1 text-[12px] font-semibold tabular-nums transition-opacity group-hover/dag:opacity-0"
+                                          title={`${ploegenQuery.data!.get(k)!.length} ${ploegenQuery.data!.get(k)!.length === 1 ? "team" : "teams"}`}
+                                        >
+                                          <Users className="size-3.5" />
+                                          {ploegenQuery.data!.get(k)!.length}
+                                        </span>
+                                      )}
                                     {/* Een deel van de teams klaar: dan zegt het
                                         pilletje "1/2" op dezelfde plek het al. */}
                                     {k < nu &&
@@ -3188,7 +3225,7 @@ function Planning() {
                                       nietAfgemeld.has(k) &&
                                       !afmeldstand.get(k)?.klaar && (
                                         <span
-                                          className="absolute left-8 top-[13px] size-1.5 rounded-full bg-tint-oranje-ink"
+                                          className="absolute left-8 top-[13px] size-1.5 rounded-full bg-tint-oranje-ink md:left-11 md:top-[22px]"
                                           title="Nog niet afgemeld met Dag klaar: dit werk staat nog niet open bij de klant"
                                           aria-label="Nog niet afgemeld"
                                         />
@@ -3201,7 +3238,7 @@ function Planning() {
                                         stand={afmeldstand.get(k)}
                                         datum={k}
                                         kortOpTelefoon
-                                        className="absolute left-8 top-2"
+                                        className="absolute left-8 top-2 md:left-11 md:top-[16px]"
                                       />
                                     )}
 
@@ -3214,41 +3251,37 @@ function Planning() {
                                           <span
                                             style={inkt ? { color: inkt } : undefined}
                                             // Op de telefoon zegt de kleur van het vakje al welke wijk het is.
-                                            className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] font-medium max-md:hidden"
+                                            className="mt-auto flex w-full items-center gap-1 truncate text-[10.5px] font-medium max-md:hidden md:text-[12.5px] md:font-semibold"
                                           >
-                                            <span
-                                              className="size-1.5 shrink-0 rounded-full"
-                                              style={{
-                                                background: wijkInfo.get(info.wijken[0]!)?.kleur,
-                                              }}
-                                            />
                                             <span className="truncate">
-                                              {wijkInfo.get(info.wijken[0]!)?.naam ??
-                                                "Onbekende wijk"}
-                                              {info.wijken.length > 1 &&
-                                                ` +${info.wijken.length - 1}`}
+                                              {info.wijken
+                                                .map(
+                                                  (id) =>
+                                                    wijkInfo.get(id)?.naam ?? "Onbekende wijk",
+                                                )
+                                                .join(" + ")}
                                             </span>
                                           </span>
                                         )}
                                         {prijzenZien && (
                                           <span
                                             style={inkt ? { color: inkt } : undefined}
-                                            className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.03em] tabular-nums max-md:mt-auto md:text-[15px] ${
+                                            className={`w-full truncate font-display text-[12px] font-semibold leading-none tracking-[-0.03em] tabular-nums max-md:mt-auto md:text-[min(28px,30cqw)] md:font-bold ${
                                               info.wijken.length > 0 ? "mt-0.5" : "mt-auto"
                                             }`}
                                           >
-                                            {/* Op de telefoon zonder centen: "€ 593,50" past niet. */}
+                                            {/* Zonder centen: "€ 593,50" past niet in een
+                                                vakje, en per dag gaat het om de euro's. */}
                                             {mobiel
                                               ? `€${Math.round(info.bedrag)}`
-                                              : formatPrice(info.bedrag)}
+                                              : formatPrice(Math.round(info.bedrag))}
                                           </span>
                                         )}
-                                        <span className="mt-1 hidden truncate text-[10.5px] text-muted-foreground md:block">
-                                          {info.straten.size > 0
-                                            ? `${info.straten.size} ${info.straten.size === 1 ? "straat" : "straten"} · ${info.aantal}×`
-                                            : `${info.aantal}×`}
-                                        </span>
-                                        <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
+                                        {/* Op de telefoon een balkje voor hoe druk de dag is;
+                                            op de computer zegt het grote bedrag dat al. */}
+                                        <span
+                                          className={`mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted ${prijzenZien ? "md:hidden" : ""}`}
+                                        >
                                           <span
                                             className={`block h-full rounded-full ${
                                               inkt
@@ -3408,10 +3441,45 @@ function Planning() {
                             </div>
                           )}
                         </DagDrop>
+                        {eindVanRij && (
+                          <div className="flex items-center justify-end pr-2 font-display text-[17px] font-semibold tracking-[-0.03em] tabular-nums">
+                            {(() => {
+                              const som = eindVanRij.reduce(
+                                (t, x) => t + (perDag.get(sleutel(x))?.bedrag ?? 0),
+                                0,
+                              );
+                              return som > 0 ? (
+                                formatPrice(Math.round(som))
+                              ) : (
+                                <span className="text-muted-foreground/50">–</span>
+                              );
+                            })()}
+                          </div>
+                        )}
                       </Fragment>
                     );
                   })}
                 </div>
+                {/* Welke kleur bij welke wijk hoort, en wat het vinkje betekent. */}
+                {wijkenInMaand.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 pb-3.5 pt-1.5 text-[12px] font-medium max-md:hidden">
+                    {wijkenInMaand.map((id) => (
+                      <span key={id} className="flex items-center gap-1.5">
+                        <span
+                          className="size-2.5 rounded-full"
+                          style={{ background: wijkInfo.get(id)?.kleur }}
+                        />
+                        {wijkInfo.get(id)?.naam ?? "Onbekende wijk"}
+                      </span>
+                    ))}
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-tint-groen text-tint-groen-ink ring-1 ring-tint-groen-ink/25">
+                        <Check className="size-3" stroke={3} />
+                      </span>
+                      dag klaar
+                    </span>
+                  </div>
+                )}
               </>
             )}
 
@@ -3441,6 +3509,7 @@ function Planning() {
             {weergave === "week" && !mobiel && (
               <div className="p-2">
                 <WeekWeergave
+                  omzet={perDag}
                   selecteren={selecteren}
                   gekozen={gekozen}
                   onKies={kiesIds}
