@@ -1,23 +1,39 @@
-# GlazenwassApp
+# Wooshy (glazenwassapp)
 
+De app voor glazenwassers: klanten en adressen, de planning per wijk, de
+geldloop voor wie contant betaalt en facturen voor wie overmaakt.
 
-This project was built with [Lovable](https://lovable.dev).
+- **App:** React met TanStack Start en TanStack Query, gebouwd met Vite.
+- **Database:** Supabase (Postgres met RLS, Edge Functions in Deno), in
+  `supabase/`.
+- **Online:** een Cloudflare Worker (`paaltjesystems`, zie `wrangler.jsonc`).
 
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/3015831f-701a-4d07-85d6-00b70719c284).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+## Lokaal draaien
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+bun install
+cp .env.example .env   # en vul de Supabase-gegevens in
+bun run dev            # http://localhost:8080
 ```
+
+## Controleren
+
+```sh
+bunx tsc --noEmit
+bun run lint
+bun run build
+```
+
+De proeven voor de database staan in `supabase/tests/` en draaien als
+postgres; elke proef rolt zichzelf terug.
+
+## Uitrollen
+
+- **App:** `bun run build`, daarna
+  `bunx wrangler deploy -c .output/server/wrangler.json`.
+- **Database:** `supabase db push`.
+- **Edge Functions:** `supabase functions deploy <naam>`.
+- Na een migratie de types opnieuw maken met `./scripts/types.sh` (zie
+  `docs/types-opnieuw-genereren.md`).
+
+Achtergrond en eerdere keuzes staan in `docs/`.
