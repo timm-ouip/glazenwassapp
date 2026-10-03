@@ -10,6 +10,11 @@
  * waar je het dichtst bij klikt. Een punt versleep je, en met een klik erop
  * haal je het weg. Vanaf drie punten krijgt `onChange` de ring in [lon, lat],
  * daaronder `null`.
+ *
+ * Twee ondergronden, te wisselen rechtsboven: de straatkaart van
+ * OpenStreetMap (straatnamen, winkels, zoals je het van je telefoon kent) en
+ * de luchtfoto van het Kadaster, waarop je de huizen zelf ziet. Voor allebei
+ * is geen sleutel of account nodig.
  */
 import "leaflet/dist/leaflet.css";
 
@@ -19,8 +24,19 @@ import type * as Leaflet from "leaflet";
 import { Button } from "@/components/ui/button";
 import { zoekKaartMidden } from "@/lib/postcode";
 
-const TEGELS =
-  "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png";
+type Ondergrond = "kaart" | "foto";
+const ONDERGRONDEN: Record<Ondergrond, { label: string; url: string; bron: string }> = {
+  kaart: {
+    label: "Kaart",
+    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    bron: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
+  },
+  foto: {
+    label: "Luchtfoto",
+    url: "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/{z}/{x}/{y}.jpeg",
+    bron: "Luchtfoto © Kadaster / Beeldmateriaal Nederland",
+  },
+};
 /** Als de plaats niet te vinden is: Den Haag, [lat, lon]. */
 const DEN_HAAG: [number, number] = [52.0721, 4.293];
 
@@ -53,6 +69,8 @@ export default function Kaart({
   const kaart = useRef<Leaflet.Map | null>(null);
   const laag = useRef<Leaflet.LayerGroup | null>(null);
   const lib = useRef<typeof Leaflet | null>(null);
+  const tegels = useRef<Leaflet.TileLayer | null>(null);
+  const [ondergrond, setOndergrond] = useState<Ondergrond>("kaart");
   /** De hoeken in [lon, lat]. */
   const [punten, setPunten] = useState<Punt[]>([]);
   const [geladen, setGeladen] = useState(false);
@@ -75,10 +93,6 @@ export default function Kaart({
         if (weg || !houder.current) return;
         lib.current = L;
         const k = L.map(houder.current, { center: DEN_HAAG, zoom: 13, maxZoom: 19 });
-        L.tileLayer(TEGELS, {
-          maxZoom: 19,
-          attribution: "Kaartgegevens © Kadaster",
-        }).addTo(k);
         laag.current = L.layerGroup().addTo(k);
         k.on("click", (e: Leaflet.LeafletMouseEvent) => {
           // Sommige browsers sturen na het loslaten van een versleept punt
@@ -118,8 +132,19 @@ export default function Kaart({
       kaart.current?.remove();
       kaart.current = null;
       laag.current = null;
+      tegels.current = null;
     };
   }, []);
+
+  // De gekozen ondergrond neerleggen, onder de getekende lijn.
+  useEffect(() => {
+    const L = lib.current;
+    const k = kaart.current;
+    if (!L || !k) return;
+    tegels.current?.remove();
+    const keuze = ONDERGRONDEN[ondergrond];
+    tegels.current = L.tileLayer(keuze.url, { maxZoom: 19, attribution: keuze.bron }).addTo(k);
+  }, [ondergrond, geladen]);
 
   // Eén keer per plaats (of straat) daarheen, en alleen zolang er nog niets
   // getekend is: na Opnieuw blijft de kaart staan waar je was.
@@ -209,16 +234,42 @@ export default function Kaart({
         }
         .loopkaart-hoek:active { cursor: grabbing; }
       `}</style>
-      <div
-        ref={houder}
-        className="relative z-0 h-[380px] w-full cursor-crosshair overflow-hidden rounded-xl border border-border bg-muted"
-        aria-label="Kaart: klik de hoeken van het gebied aan"
-        role="application"
-      >
-        {!geladen && (
-          <p className="absolute inset-0 grid place-items-center text-[13px] text-muted-foreground">
-            {fout ? "De kaart kon niet geladen worden. Probeer het opnieuw." : "Kaart laden…"}
-          </p>
+      <div className="relative">
+        <div
+          ref={houder}
+          className="relative z-0 h-[min(60dvh,560px)] min-h-[380px] w-full cursor-crosshair overflow-hidden rounded-xl border border-border bg-muted"
+          aria-label="Kaart: klik de hoeken van het gebied aan"
+          role="application"
+        >
+          {!geladen && (
+            <p className="absolute inset-0 grid place-items-center text-[13px] text-muted-foreground">
+              {fout ? "De kaart kon niet geladen worden. Probeer het opnieuw." : "Kaart laden…"}
+            </p>
+          )}
+        </div>
+        {geladen && (
+          // Naast de kaart en niet erin: een klik hier mag geen punt zetten.
+          <div
+            role="group"
+            aria-label="Ondergrond"
+            className="absolute right-2.5 top-2.5 z-10 flex gap-0.5 rounded-full bg-card p-0.5 shadow-card"
+          >
+            {(Object.keys(ONDERGRONDEN) as Ondergrond[]).map((o) => (
+              <button
+                key={o}
+                type="button"
+                aria-pressed={ondergrond === o}
+                onClick={() => setOndergrond(o)}
+                className={`min-h-9 rounded-full px-3 text-[12.5px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  ondergrond === o
+                    ? "bg-primary text-primary-foreground"
+                    : "text-foreground hover:bg-accent"
+                }`}
+              >
+                {ONDERGRONDEN[o].label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
