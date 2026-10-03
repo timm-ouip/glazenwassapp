@@ -7,13 +7,16 @@
  * - Buur: de rand van A ligt binnen 0,3 m van de rand van B over minstens
  *   2 m, als B een adres heeft. Een pand zonder adres (garage, schuur) telt
  *   pas als buur bij minstens 4 m gedeelde muur.
+ * - Vaste buur: een buur waarvan de gedeelde muur voor allebei minstens half
+ *   zo lang is als hun langste gedeelde muur. Een korte schakel (een garage
+ *   tussen twee blokken) telt voor het type niet mee.
  * - Type: meer dan één verblijfsobject → appartement; geen buren →
- *   vrijstaand; twee of meer → tussen; precies één buur B: heeft B nog een
- *   andere buur → hoek, anders twee_onder_een_kap.
+ *   vrijstaand; twee of meer vaste buren → tussen; precies één vaste buur B:
+ *   heeft B nog een andere vaste buur → hoek, anders twee_onder_een_kap.
  * - Alleen een pand met een woonfunctie krijgt een type.
  *
  * Het blijft een schatting: een hoekhuis in een gesloten bouwblok wordt
- * "tussen", en een 2-onder-1-kap met een lange aangebouwde garage "hoek".
+ * "tussen", en een rijtjeshuis met een steegje ernaast "hoek".
  * Daarom staat er op het scherm "geschat" en is het met één tik te verbeteren.
  */
 
@@ -62,6 +65,8 @@ const STAP = 0.5;
 const MUUR_MET_ADRES = 2;
 /** Zoveel gedeelde muur maakt een pand zonder adres (garage, schuur) een buur. */
 const MUUR_ZONDER_ADRES = 4;
+/** Een buur zit er echt aan vast als de muur minstens dit deel van de langste is. */
+const DEEL_VAST = 0.5;
 /** Afronding van de bemonstering: 2 m moet echt 2 m zijn. */
 const SPELING = 1e-6;
 
@@ -173,6 +178,11 @@ function muurTussen(a: Rand[], b: Rand[]): number {
 
 /** Per pand de id's van zijn buren (zie de regels bovenaan). */
 export function burenVan(panden: PandVorm[]): Map<string, string[]> {
+  return new Map([...murenVan(panden)].map(([id, muren]) => [id, [...muren.keys()]]));
+}
+
+/** Per pand zijn buren, met de lengte van de gedeelde muur in meters. */
+function murenVan(panden: PandVorm[]): Map<string, Map<string, number>> {
   const vormen = panden
     .map((pand) => {
       const randen = randenVan(pand.ringen);
@@ -181,7 +191,7 @@ export function burenVan(panden: PandVorm[]): Map<string, string[]> {
     .filter((v) => v.randen.length > 0)
     .sort((a, b) => a.kader[0] - b.kader[0]);
 
-  const buren = new Map<string, string[]>(panden.map((p) => [p.id, []]));
+  const buren = new Map<string, Map<string, number>>(panden.map((p) => [p.id, new Map()]));
   const drempel = (p: PandVorm) =>
     p.aantal_verblijfsobjecten >= 1 ? MUUR_MET_ADRES : MUUR_ZONDER_ADRES;
 
@@ -192,8 +202,8 @@ export function burenVan(panden: PandVorm[]): Map<string, string[]> {
       const b = vormen[j]!;
       if (a.pand.id === b.pand.id || !overlapt(a.kader, b.kader, MARGE)) continue;
       const muur = muurTussen(a.randen, b.randen);
-      if (muur + SPELING >= drempel(b.pand)) buren.get(a.pand.id)!.push(b.pand.id);
-      if (muur + SPELING >= drempel(a.pand)) buren.get(b.pand.id)!.push(a.pand.id);
+      if (muur + SPELING >= drempel(b.pand)) buren.get(a.pand.id)!.set(b.pand.id, muur);
+      if (muur + SPELING >= drempel(a.pand)) buren.get(b.pand.id)!.set(a.pand.id, muur);
     }
   }
   return buren;
@@ -201,7 +211,21 @@ export function burenVan(panden: PandVorm[]): Map<string, string[]> {
 
 /** Het geschatte type per pand; null voor een pand zonder woning. */
 export function woningtypen(panden: PandVorm[]): Map<string, Woningtype | null> {
-  const buren = burenVan(panden);
+  const muren = murenVan(panden);
+  const langste = new Map(
+    [...muren].map(([id, m]) => [id, m.size > 0 ? Math.max(...m.values()) : 0]),
+  );
+  // De buren waar het pand echt tegenaan gebouwd is: de gedeelde muur is voor
+  // allebei minstens half zo lang als hun langste. Een korte schakel (een
+  // garage tussen twee blokken 2-onder-1-kap) valt zo af, van beide kanten.
+  const vasteBuren = (id: string): string[] =>
+    [...(muren.get(id) ?? [])]
+      .filter(
+        ([buur, m]) =>
+          m + SPELING >= (langste.get(id) ?? 0) * DEEL_VAST &&
+          m + SPELING >= (langste.get(buur) ?? 0) * DEEL_VAST,
+      )
+      .map(([buur]) => buur);
   const uit = new Map<string, Woningtype | null>();
   for (const p of panden) {
     if (!p.woon) {
@@ -212,11 +236,11 @@ export function woningtypen(panden: PandVorm[]): Map<string, Woningtype | null> 
       uit.set(p.id, "appartement");
       continue;
     }
-    const eigen = buren.get(p.id) ?? [];
+    const eigen = vasteBuren(p.id);
     if (eigen.length === 0) uit.set(p.id, "vrijstaand");
     else if (eigen.length >= 2) uit.set(p.id, "tussen");
     else {
-      const andere = (buren.get(eigen[0]!) ?? []).filter((id) => id !== p.id);
+      const andere = vasteBuren(eigen[0]!).filter((id) => id !== p.id);
       uit.set(p.id, andere.length > 0 ? "hoek" : "twee_onder_een_kap");
     }
   }

@@ -121,6 +121,46 @@ describe("woningtypen", () => {
       "hoek",
     ]);
   });
+
+  test("twee blokken 2-onder-1-kap met een korte schakel ertussen blijven 2-onder-1-kap", () => {
+    // a|b delen 10 m, c|d ook; b en c raken elkaar maar 3 m (zoals Beemsterhof 4–8).
+    const uit = woningtypen([
+      pand("a", blok(X, Y, 6, 10)),
+      pand("b", blok(X + 6, Y, 6, 10)),
+      pand("c", blok(X + 12, Y + 7, 6, 10)),
+      pand("d", blok(X + 18, Y + 7, 6, 10)),
+    ]);
+    expect(["a", "b", "c", "d"].map((id) => uit.get(id))).toEqual([
+      "twee_onder_een_kap",
+      "twee_onder_een_kap",
+      "twee_onder_een_kap",
+      "twee_onder_een_kap",
+    ]);
+  });
+
+  test("een los huis met een korte schakel aan een blok is geen hoekwoning", () => {
+    const uit = woningtypen([
+      pand("a", blok(X, Y, 6, 10)),
+      pand("b", blok(X + 6, Y, 6, 10)),
+      pand("c", blok(X + 12, Y + 7, 6, 10)),
+    ]);
+    expect(["a", "b", "c"].map((id) => uit.get(id))).toEqual([
+      "twee_onder_een_kap",
+      "twee_onder_een_kap",
+      "vrijstaand",
+    ]);
+  });
+
+  test("een rij die 3 m verspringt blijft hoek, tussen, tussen, hoek", () => {
+    const rij = [0, 1, 2, 3].map((i) => pand(`h${i}`, blok(X + i * 5.5, Y + (i % 2) * 3, 5.5, 9)));
+    const uit = woningtypen(rij);
+    expect(["h0", "h1", "h2", "h3"].map((id) => uit.get(id))).toEqual([
+      "hoek",
+      "tussen",
+      "tussen",
+      "hoek",
+    ]);
+  });
 });
 
 describe("labels", () => {
