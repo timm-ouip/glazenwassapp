@@ -13,7 +13,7 @@ geldloop voor wie contant betaalt en facturen voor wie overmaakt.
 ```sh
 bun install
 cp .env.example .env   # en vul de Supabase-gegevens in
-bun run dev            # http://localhost:8080
+bun run dev            # http://localhost:8080 (bun leest .env zelf in)
 ```
 
 ## Controleren

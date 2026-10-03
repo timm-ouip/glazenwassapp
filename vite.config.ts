@@ -8,7 +8,7 @@
  * die editor, de bronverwijzingen voor aanklikken-en-bewerken) is weg.
  *
  * Uitrollen gaat zoals altijd: `bun run build`, daarna
- * `wrangler deploy -c .output/server/wrangler.json`.
+ * `bunx wrangler deploy -c .output/server/wrangler.json`.
  */
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
@@ -19,7 +19,10 @@ import tsConfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig(({ command, mode }) => {
   // De VITE_-variabelen uit .env ook in de serverkant van de build zetten,
-  // niet alleen in de browserkant.
+  // niet alleen in de browserkant. De andere (SUPABASE_URL, de service-role-
+  // sleutel) leest de server uit process.env: start lokaal daarom met
+  // `bun run dev`, dat .env zelf inleest. Online staan ze als secret bij
+  // Cloudflare.
   const env = loadEnv(mode, process.cwd(), "VITE_");
   const define = Object.fromEntries(
     Object.entries(env).map(([k, v]) => [`import.meta.env.${k}`, JSON.stringify(v)]),
@@ -51,6 +54,9 @@ export default defineConfig(({ command, mode }) => {
       ],
       ignoreOutdatedRequests: true,
     },
+    // Bewust op alle netwerkadressen ("::"), zoals het altijd was: dan kun je
+    // de ontwikkelversie ook op je telefoon openen, via het adres van je
+    // computer in hetzelfde wifi-netwerk.
     server: { host: "::", port: 8080 },
     plugins: [
       tailwindcss(),
