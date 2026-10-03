@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
 import { nummerSleutel } from "./postcode";
-import { klantMatchSleutel, leesPrijs, looplijstVolgorde, type LoopAdres } from "./lopen";
+import {
+  adresOmschrijving,
+  klantMatchSleutel,
+  leesPrijs,
+  looplijstVolgorde,
+  voorstelUitleg,
+  woningtypeTekst,
+  type LoopAdres,
+} from "./lopen";
 
 type Rij = Pick<
   LoopAdres,
@@ -122,5 +130,54 @@ describe("leesPrijs", () => {
     expect(leesPrijs("9.5")).toBe(9.5);
     expect(leesPrijs("")).toBeNull();
     expect(leesPrijs("abc")).toBeUndefined();
+  });
+});
+
+describe("adresOmschrijving", () => {
+  const woning = {
+    oppervlakte: 96,
+    gebruiksdoel: "woonfunctie",
+    woningtype: "tussen",
+    woningtype_zelf: null,
+    bouwlagen: 3,
+  };
+  test("geschat type, m² en lagen", () => {
+    expect(adresOmschrijving(woning)).toBe("tussenwoning (geschat) · 96 m² · 3 lagen");
+  });
+  test("een eigen keuze is niet geschat", () => {
+    expect(woningtypeTekst({ woningtype: "tussen", woningtype_zelf: "hoek" })).toBe("hoekwoning");
+  });
+  test("zonder type vooraan, voor naast de typeknop", () => {
+    expect(adresOmschrijving(woning, { zonderType: true })).toBe("96 m² · 3 lagen");
+  });
+  test("één laag, en niets wat ontbreekt", () => {
+    expect(
+      adresOmschrijving({ ...woning, woningtype: null, oppervlakte: null, bouwlagen: 1 }),
+    ).toBe("1 laag");
+  });
+  test("een bedrijf krijgt nooit een woningtype", () => {
+    expect(
+      adresOmschrijving({
+        ...woning,
+        gebruiksdoel: "winkelfunctie",
+        woningtype: "tussen",
+        bouwlagen: null,
+        oppervlakte: 80,
+      }),
+    ).toBe("bedrijf · winkel · 80 m²");
+  });
+});
+
+describe("voorstelUitleg", () => {
+  test("aantal, type en niveau", () => {
+    expect(voorstelUitleg({ voorstel: 14.5, n: 3, niveau: "straat" }, "tussen")).toBe(
+      "3 tussenwoningen in deze straat",
+    );
+    expect(voorstelUitleg({ voorstel: 20, n: 2, niveau: "buurt" }, "twee_onder_een_kap")).toBe(
+      "2 twee-onder-een-kapwoningen in de buurt",
+    );
+    expect(voorstelUitleg({ voorstel: 9, n: 4, niveau: "wijk" }, "appartement")).toBe(
+      "4 appartementen in de wijk",
+    );
   });
 });

@@ -6,8 +6,11 @@ import {
   haalStraatAdressen,
   houdStatus,
   isVerblijfsobjectId,
+  naarRd,
   ontdubbel,
+  pandRef,
   soortVanGebruik,
+  vulPandgegevens,
   type BagAdres,
 } from "@/lib/bag";
 
@@ -81,6 +84,37 @@ describe("soortVanGebruik", () => {
   });
 });
 
+describe("naarRd", () => {
+  // Paren uit de Locatieserver (centroide_ll en centroide_rd van hetzelfde adres).
+  const paren: [string, number, number, number, number][] = [
+    ["Rozenstraat 1, Den Haag", 4.25962215, 52.07280745, 77694.699, 454436.329],
+    ["16 Aprillaan 1, Groningen", 6.55646991, 53.20046122, 233134.011, 579947],
+    ["13 septemberstraat 1, Maastricht", 5.72160693, 50.84582431, 178553.3, 317385.3],
+  ];
+  for (const [naam, lon, lat, x, y] of paren) {
+    test(`binnen 2 m: ${naam}`, () => {
+      const [rx, ry] = naarRd(lon, lat);
+      expect(Math.abs(rx - x) < 2).toBe(true);
+      expect(Math.abs(ry - y) < 2).toBe(true);
+    });
+  }
+  test("Amersfoort (de oorsprong) is 155000, 463000", () => {
+    const [x, y] = naarRd(5.38720621, 52.1551744);
+    expect(Math.round(x)).toBe(155000);
+    expect(Math.round(y)).toBe(463000);
+  });
+});
+
+describe("pandRef", () => {
+  test("de UUID aan het eind van pand.href", () => {
+    expect(
+      pandRef(
+        "https://api.pdok.nl/kadaster/bag/ogc/v2/collections/pand/items/9a46dd63-faaa-5941-9e34-bdd39ce78e59",
+      ),
+    ).toBe("9a46dd63-faaa-5941-9e34-bdd39ce78e59");
+  });
+});
+
 describe("celSleutel", () => {
   test("punten dicht bij elkaar delen een cel", () => {
     expect(celSleutel(4.2596, 52.0728)).toBe(celSleutel(4.2599, 52.0729));
@@ -104,6 +138,10 @@ function rij(vbo_id: string, extra: Partial<BagAdres> = {}): BagAdres {
     gebruiksdoel: "woonfunctie",
     lon: 4.2596,
     lat: 52.0728,
+    pand_refs: [],
+    pand_id: null,
+    woningtype: null,
+    bouwlagen: null,
     ...extra,
   };
 }
@@ -203,9 +241,18 @@ const vbo = (
   status: string,
   gebruiksdoel: string,
   oppervlakte: number | null = 80,
+  pand?: string,
 ) => ({
   type: "Feature",
-  properties: { identificatie: id, status, gebruiksdoel, oppervlakte },
+  properties: {
+    identificatie: id,
+    status,
+    gebruiksdoel,
+    oppervlakte,
+    ...(pand
+      ? { "pand.href": [`https://api.pdok.nl/kadaster/bag/ogc/v2/collections/pand/items/${pand}`] }
+      : {}),
+  },
 });
 
 function maakFetch(locatie: unknown[], bag: (url: URL) => Response) {
@@ -273,6 +320,10 @@ describe("haalStraatAdressen", () => {
         gebruiksdoel: "woonfunctie",
         lon: 4.2597,
         lat: 52.07280745,
+        pand_refs: [],
+        pand_id: null,
+        woningtype: null,
+        bouwlagen: null,
       });
       expect(uit![2]!.gebruiksdoel).toBe("winkelfunctie");
       expect(verzoeken.filter((u) => u.includes("verblijfsobject")).length).toBe(2);
@@ -321,5 +372,197 @@ describe("haalStraatAdressen", () => {
     metFetch(async () => {
       maakFetch([], () => Response.json({ features: [], links: [] }));
       expect(await haalStraatAdressen("Nergensstraat", "'s-Gravenhage")).toEqual([]);
+    }));
+});
+
+// ---------------------------------------------------------------------------
+// vulPandgegevens: panden (BAG, in RD) en bouwlagen (3D BAG), nagemaakt
+// ---------------------------------------------------------------------------
+
+/** Een rechthoek in RD als GeoJSON-Polygon. */
+const rdBlok = (x: number, y: number, b: number, d: number) => ({
+  type: "Polygon",
+  coordinates: [
+    [
+      [x, y],
+      [x + b, y],
+      [x + b, y + d],
+      [x, y + d],
+      [x, y],
+    ],
+  ],
+});
+
+const pandFeature = (
+  uuid: string,
+  identificatie: string,
+  x: number,
+  extra: Record<string, unknown> = {},
+) => ({
+  type: "Feature",
+  id: uuid,
+  properties: {
+    identificatie,
+    aantal_verblijfsobjecten: 1,
+    status: "Pand in gebruik",
+    gebruiksdoel: "woonfunctie",
+    ...extra,
+  },
+  geometry: rdBlok(x, 454430, 6, 10),
+});
+
+const drieD = (identificatie: string, bouwlagen: number) => ({
+  type: "CityJSONFeature",
+  id: `NL.IMBAG.Pand.${identificatie}`,
+  CityObjects: {
+    [`NL.IMBAG.Pand.${identificatie}`]: {
+      type: "Building",
+      attributes: { b3_bouwlagen: bouwlagen },
+    },
+    [`NL.IMBAG.Pand.${identificatie}-0`]: { type: "BuildingPart", attributes: {} },
+  },
+});
+
+/** Drie adressen: twee halve 2-onder-1-kap en een winkel in een eigen pand. */
+const gebied = () => [
+  rij("0518010000000001", { huisnummer: 1, pand_refs: ["p-1"] }),
+  rij("0518010000000003", { huisnummer: 3, pand_refs: ["p-3"] }),
+  rij("0518010000000005", { huisnummer: 5, pand_refs: ["p-5"], gebruiksdoel: "winkelfunctie" }),
+];
+
+const panden = {
+  features: [
+    pandFeature("p-1", "0518100000000001", 77690),
+    pandFeature("p-3", "0518100000000003", 77696),
+    // De winkel staat los, 20 m verder.
+    pandFeature("p-5", "0518100000000005", 77716, { gebruiksdoel: "winkelfunctie" }),
+    // Gesloopt: telt niet als buur, ook al staat hij er precies tegenaan.
+    pandFeature("p-weg", "0518100000000009", 77702, { status: "Pand gesloopt" }),
+  ],
+  links: [],
+};
+
+function maakPandFetch(drieDAntwoord: (url: URL) => Response, pandAntwoord?: () => Response) {
+  const verzoeken: URL[] = [];
+  globalThis.fetch = (async (invoer: URL | string) => {
+    const url = new URL(invoer.toString());
+    verzoeken.push(url);
+    if (url.hostname === "api.3dbag.nl") return drieDAntwoord(url);
+    if (url.pathname.endsWith("/pand/items")) {
+      return pandAntwoord ? pandAntwoord() : Response.json(panden);
+    }
+    return new Response("onverwacht", { status: 404 });
+  }) as unknown as typeof fetch;
+  return verzoeken;
+}
+
+describe("vulPandgegevens", () => {
+  test("koppelt pand, rekent het woningtype uit en haalt de bouwlagen (met next)", () =>
+    metFetch(async () => {
+      const verzoeken = maakPandFetch((url) =>
+        url.searchParams.get("offset")
+          ? Response.json({
+              features: [drieD("0518100000000003", 3), drieD("0518100000000005", 1)],
+              links: [],
+            })
+          : Response.json({
+              features: [drieD("0518100000000001", 2), drieD("0518100000000099", 7)],
+              links: [
+                {
+                  rel: "next",
+                  href: `${url.origin}${url.pathname}?bbox=1,2,3,4&offset=101&limit=100`,
+                },
+              ],
+            }),
+      );
+      const voortgang: string[] = [];
+      const uit = await vulPandgegevens(gebied(), { onVoortgang: (t) => voortgang.push(t) });
+
+      expect(uit.map((a) => [a.pand_id, a.woningtype, a.bouwlagen])).toEqual([
+        ["0518100000000001", "twee_onder_een_kap", 2],
+        ["0518100000000003", "twee_onder_een_kap", 3],
+        // Een bedrijf krijgt geen woningtype, wel het pand en de lagen.
+        ["0518100000000005", null, 1],
+      ]);
+
+      // De panden in RD opgevraagd, met de RD-naam voluit.
+      const pandUrl = verzoeken.find((u) => u.pathname.endsWith("/pand/items"))!;
+      const rd = "http://www.opengis.net/def/crs/EPSG/0/28992";
+      expect(pandUrl.searchParams.get("bbox-crs")).toBe(rd);
+      expect(pandUrl.searchParams.get("crs")).toBe(rd);
+      const [minX, minY, maxX, maxY] = pandUrl.searchParams.get("bbox")!.split(",").map(Number);
+      // Om het punt, met 30 m rand (alle drie de adressen staan op hetzelfde punt).
+      const [px, py] = naarRd(4.2596, 52.0728);
+      expect(Math.abs(minX! - (px - 30)) < 0.1 && Math.abs(maxX! - (px + 30)) < 0.1).toBe(true);
+      expect(Math.abs(minY! - (py - 30)) < 0.1 && Math.abs(maxY! - (py + 30)) < 0.1).toBe(true);
+
+      expect(verzoeken.filter((u) => u.hostname === "api.3dbag.nl").length).toBe(2);
+      expect(voortgang[0]).toBe("Panden: cel 1 van 1");
+      expect(voortgang).toContain("Verdiepingen uit de 3D BAG: 3 van 3 panden");
+    }));
+
+  test("de 3D BAG stopt zodra alle panden er zijn", () =>
+    metFetch(async () => {
+      const verzoeken = maakPandFetch((url) =>
+        Response.json({
+          features: [
+            drieD("0518100000000001", 2),
+            drieD("0518100000000003", 2),
+            drieD("0518100000000005", 2),
+          ],
+          links: [{ rel: "next", href: `${url.origin}${url.pathname}?offset=101&limit=100` }],
+        }),
+      );
+      await vulPandgegevens(gebied());
+      expect(verzoeken.filter((u) => u.hostname === "api.3dbag.nl").length).toBe(1);
+    }));
+
+  test("mislukt de 3D BAG, dan blijven alleen de bouwlagen leeg", () =>
+    metFetch(async () => {
+      maakPandFetch(() => new Response("kapot", { status: 400 }));
+      const uit = await vulPandgegevens(gebied());
+      expect(uit.map((a) => [a.pand_id, a.woningtype, a.bouwlagen])).toEqual([
+        ["0518100000000001", "twee_onder_een_kap", null],
+        ["0518100000000003", "twee_onder_een_kap", null],
+        ["0518100000000005", null, null],
+      ]);
+    }));
+
+  test("mislukken de panden, dan blijven pand, type en lagen leeg (en geen 3D BAG)", () =>
+    metFetch(async () => {
+      const verzoeken = maakPandFetch(
+        () => Response.json({ features: [], links: [] }),
+        () => new Response("kapot", { status: 400 }),
+      );
+      const uit = await vulPandgegevens(gebied());
+      expect(uit.map((a) => [a.vbo_id, a.pand_id, a.woningtype, a.bouwlagen])).toEqual([
+        ["0518010000000001", null, null, null],
+        ["0518010000000003", null, null, null],
+        ["0518010000000005", null, null, null],
+      ]);
+      expect(verzoeken.some((u) => u.hostname === "api.3dbag.nl")).toBe(false);
+    }));
+
+  test("een adres zonder bekend pand houdt lege velden", () =>
+    metFetch(async () => {
+      maakPandFetch(() => Response.json({ features: [], links: [] }));
+      const uit = await vulPandgegevens([rij("0518010000000007", { pand_refs: ["onbekend"] })]);
+      expect([uit[0]!.pand_id, uit[0]!.woningtype, uit[0]!.bouwlagen]).toEqual([null, null, null]);
+    }));
+});
+
+describe("haalStraatAdressen + pand.href", () => {
+  test("neemt de pand-UUID's van het verblijfsobject over", () =>
+    metFetch(async () => {
+      maakFetch([doc("0518010000000001", 1, 4.2596)], () =>
+        Response.json({
+          features: [
+            vbo("0518010000000001", "Verblijfsobject in gebruik", "woonfunctie", 80, "p-1"),
+          ],
+          links: [],
+        }),
+      );
+      const uit = await haalStraatAdressen("Rozenstraat", "'s-Gravenhage");
+      expect(uit![0]!.pand_refs).toEqual(["p-1"]);
     }));
 });

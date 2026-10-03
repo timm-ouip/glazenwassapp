@@ -51,6 +51,7 @@ import type { BagAdres } from "@/lib/bag";
 import { fetchDistricts, fetchStreets } from "@/lib/klanten";
 import {
   LOOP_TELLINGEN,
+  LOOP_VOORSTELLEN,
   bagPlaats,
   foutTekst,
   haalGebiedAdressen,
@@ -275,6 +276,7 @@ export function GebiedMaken({
         onVoortgang: setVoortgang,
         signal: ac.signal,
         onthoud: onthoud.current,
+        stopBijNietGevonden: true,
       });
 
       if (weg.length > 0) {
@@ -339,6 +341,7 @@ export function GebiedMaken({
       afbreken.current = null;
       void qc.invalidateQueries({ queryKey: LOOP_TELLINGEN });
       void qc.invalidateQueries({ queryKey: ["loop-lijst"] });
+      void qc.invalidateQueries({ queryKey: LOOP_VOORSTELLEN });
     }
   }
 

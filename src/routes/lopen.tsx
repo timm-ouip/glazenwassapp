@@ -31,6 +31,7 @@ import { requireSession, useAuth, useRequireAuth } from "@/lib/auth";
 import { fetchStreets } from "@/lib/klanten";
 import {
   LOOP_TELLINGEN,
+  LOOP_VOORSTELLEN,
   fetchLoopLijst,
   fetchLoopTellingen,
   foutTekst,
@@ -40,6 +41,7 @@ import {
   looplijstVolgorde,
   nogTeLopen,
   useLoopLive,
+  useLoopVoorstellen,
   vulGebied,
   wijkstraatVoor,
   zetLoopAdres,
@@ -142,6 +144,7 @@ function useOpnieuwOphalen() {
       setBezig(null);
       void qc.invalidateQueries({ queryKey: LOOP_TELLINGEN });
       void qc.invalidateQueries({ queryKey: ["loop-lijst"] });
+      void qc.invalidateQueries({ queryKey: LOOP_VOORSTELLEN });
     }
   }
 
@@ -323,6 +326,7 @@ function Looplijst({
     queryFn: () => fetchLoopLijst(gebiedId),
     enabled: mag,
   });
+  const voorstellen = useLoopVoorstellen(gebiedId, mag);
   const [jaId, setJaId] = useState<string | null>(null);
 
   const straten = useMemo(() => looplijstVolgorde(lijst.data ?? []), [lijst.data]);
@@ -351,6 +355,10 @@ function Looplijst({
       );
       await zetLoopAdres(id, patch);
       void qc.invalidateQueries({ queryKey: LOOP_TELLINGEN });
+      // Alleen een prijs of type verschuift een voorstel; een uitkomst niet.
+      if (patch.prijs !== undefined || patch.woningtype_zelf !== undefined) {
+        void qc.invalidateQueries({ queryKey: LOOP_VOORSTELLEN });
+      }
     },
     [qc, gebiedId, employee?.naam],
   );
@@ -400,6 +408,12 @@ function Looplijst({
           </div>
         )}
 
+        {voorstellen.error && (
+          <p role="status" className="px-1 text-[12.5px] text-muted-foreground">
+            De prijsvoorstellen konden niet geladen worden: {foutTekst(voorstellen.error)}
+          </p>
+        )}
+
         {lijst.error ? (
           <Leeg tekst={foutTekst(lijst.error)} />
         ) : lijst.isLoading ? (
@@ -425,11 +439,23 @@ function Looplijst({
                 </h2>
                 {s.heen.length > 0 && s.terug.length > 0 && <Kant tekst="Heen · oneven" />}
                 {s.heen.map((r) => (
-                  <LoopAdresRij key={r.id} rij={r} onBewaar={bewaar} onJa={ja} />
+                  <LoopAdresRij
+                    key={r.id}
+                    rij={r}
+                    voorstel={voorstellen.data?.[r.id] ?? null}
+                    onBewaar={bewaar}
+                    onJa={ja}
+                  />
                 ))}
                 {s.terug.length > 0 && s.heen.length > 0 && <Kant tekst="Terug · even" />}
                 {s.terug.map((r) => (
-                  <LoopAdresRij key={r.id} rij={r} onBewaar={bewaar} onJa={ja} />
+                  <LoopAdresRij
+                    key={r.id}
+                    rij={r}
+                    voorstel={voorstellen.data?.[r.id] ?? null}
+                    onBewaar={bewaar}
+                    onJa={ja}
+                  />
                 ))}
               </section>
             );
@@ -439,6 +465,7 @@ function Looplijst({
 
       <JaDialog
         rij={jaRij}
+        voorstel={jaRij ? (voorstellen.data?.[jaRij.id] ?? null) : null}
         gebiedWijk={gebied?.district_id ?? null}
         onOpenChange={(o) => !o && setJaId(null)}
       />

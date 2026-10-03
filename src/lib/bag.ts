@@ -7,11 +7,21 @@
  * of niets: mislukt één verzoek na de herhalingen, dan geeft `haalStraatAdressen`
  * `null` terug en wordt er niets half bewaard.
  *
- * Fase 2 voegt pand-id, woningtype en bouwlagen toe aan `BagAdres`.
+ * Daarna (`vulPandgegevens`, voor het hele gebied in één keer) de panden in
+ * RD rond de adressen, voor het pand-id en het geschatte woningtype
+ * (src/lib/woningtype.ts), en als laatste de 3D BAG voor het aantal
+ * bouwlagen. Mislukt dat deel, dan blijven die velden leeg; de adressen zelf
+ * gaan gewoon door (de database wist met een lege waarde nooit iets).
  */
+
+import { woningtypen, type PandVorm, type Punt, type Woningtype } from "@/lib/woningtype";
 
 const LOCATIESERVER = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/free";
 const BAG_VBO = "https://api.pdok.nl/kadaster/bag/ogc/v2/collections/verblijfsobject/items";
+const BAG_PAND = "https://api.pdok.nl/kadaster/bag/ogc/v2/collections/pand/items";
+const DRIE_D_BAG = "https://api.3dbag.nl/collections/pand/items";
+/** De BAG-API wil de RD-naam voluit; "EPSG:28992" geeft een 400. */
+const RD_CRS = "http://www.opengis.net/def/crs/EPSG/0/28992";
 
 /** Na zoveel milliseconden geven we één verzoek op. */
 const TIMEOUT_MS = 20000;
@@ -39,6 +49,14 @@ export interface BagAdres {
   gebruiksdoel: string;
   lon: number;
   lat: number;
+  /** De feature-id's (UUID) van de panden uit `pand.href`; nog niet de pand-identificatie. */
+  pand_refs: string[];
+  /** BAG pand.identificatie, na `vulPandgegevens`. */
+  pand_id: string | null;
+  /** Alleen bij een woonfunctie, na `vulPandgegevens`. */
+  woningtype: Woningtype | null;
+  /** Uit de 3D BAG (b3_bouwlagen), na `vulPandgegevens`. */
+  bouwlagen: number | null;
 }
 
 export interface BagOpties {
@@ -66,15 +84,36 @@ interface VboEigenschappen {
   /** Eén tekst, bij meer doelen kommagescheiden: "winkelfunctie,woonfunctie". */
   gebruiksdoel?: string | string[] | null;
   oppervlakte?: number | null;
+  "pand.href"?: string[] | null;
 }
 
 interface VboFeature {
   properties?: VboEigenschappen;
 }
 
-interface VboPagina {
-  features?: VboFeature[];
+interface Links {
   links?: { rel?: string; href?: string }[];
+}
+
+/** Een pand uit de BAG OGC API v2, met `crs` = RD. */
+interface PandFeature {
+  /** De UUID waar `pand.href` van een verblijfsobject naar wijst. */
+  id?: string;
+  properties?: {
+    identificatie?: string;
+    aantal_verblijfsobjecten?: number;
+    status?: string;
+  };
+  geometry?: {
+    type?: string;
+    coordinates?: unknown;
+  } | null;
+}
+
+/** Eén gebouw uit de 3D BAG (CityJSON-feature); `id` = "NL.IMBAG.Pand.<identificatie>". */
+interface DrieDFeature {
+  id?: string;
+  CityObjects?: Record<string, { attributes?: { b3_bouwlagen?: number | null } }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +224,85 @@ function leesPunt(wkt: string | undefined): [number, number] | null {
   return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
 }
 
+/**
+ * WGS84 (lengte, breedte) naar RD (EPSG:28992), in meters. De benadering van
+ * Schreutelkamp en Strang van Hees: binnen ~1 m nauwkeurig in heel Nederland,
+ * ruim genoeg voor een bbox.
+ */
+export function naarRd(lon: number, lat: number): Punt {
+  const f = 0.36 * (lat - 52.1551744);
+  const l = 0.36 * (lon - 5.38720621);
+  const x =
+    155000 +
+    190094.945 * l -
+    11832.228 * f * l -
+    114.221 * f * f * l -
+    32.391 * l ** 3 -
+    0.705 * f -
+    2.34 * f ** 3 * l -
+    0.608 * f * l ** 3 -
+    0.008 * l * l +
+    0.148 * f * f * l ** 3;
+  const y =
+    463000 +
+    309056.544 * f +
+    3638.893 * l * l +
+    73.077 * f * f -
+    157.984 * f * l * l +
+    59.788 * f ** 3 +
+    0.433 * l -
+    6.439 * f * f * l * l -
+    0.032 * f * l +
+    0.092 * l ** 4 -
+    0.054 * f * l ** 4;
+  return [x, y];
+}
+
+/** "https://…/pand/items/9a46dd63-…" naar "9a46dd63-…". */
+export function pandRef(href: string): string {
+  return href.replace(/\/+$/, "").split("/").pop() ?? "";
+}
+
+/** Panden die er niet (meer) staan doen niet mee als buur. */
+const PAND_WEG = new Set([
+  "Pand gesloopt",
+  "Niet gerealiseerd pand",
+  "Pand ten onrechte opgevoerd",
+]);
+
+/** De ringen van een Polygon of MultiPolygon in RD, alleen x en y. */
+function ringenVan(geometrie: PandFeature["geometry"]): Punt[][] {
+  const ring = (r: unknown): Punt[] =>
+    Array.isArray(r)
+      ? r
+          .filter(
+            (p): p is [number, number] =>
+              Array.isArray(p) && typeof p[0] === "number" && typeof p[1] === "number",
+          )
+          .map((p): Punt => [p[0], p[1]])
+      : [];
+  const c = geometrie?.coordinates;
+  if (!Array.isArray(c)) return [];
+  if (geometrie?.type === "Polygon") return c.map(ring);
+  if (geometrie?.type === "MultiPolygon") {
+    return c.flatMap((poly: unknown) => (Array.isArray(poly) ? poly.map(ring) : []));
+  }
+  return [];
+}
+
+/** Een RD-cel van 200 m, voor de panden en de 3D BAG. */
+const RD_CEL = 200;
+/** Rond de adressen ook de panden tot 30 m verder: het buurhuis net buiten het gebied telt mee. */
+const RD_RAND = 30;
+
+function rdCelSleutel([x, y]: Punt): string {
+  return `${Math.floor(x / RD_CEL)}_${Math.floor(y / RD_CEL)}`;
+}
+
+function rdBboxTekst(b: [number, number, number, number]): string {
+  return b.map((n) => n.toFixed(1)).join(",");
+}
+
 // ---------------------------------------------------------------------------
 // Ophalen
 // ---------------------------------------------------------------------------
@@ -271,6 +389,33 @@ async function haalLocatieDocs(
   return uit;
 }
 
+/**
+ * Alle features van een lijst die met `next`-links doorloopt. `genoeg` mag
+ * na elke pagina zeggen dat we klaar zijn. `null` = een pagina mislukte.
+ */
+async function haalPaginas<F>(
+  eerste: string,
+  signal: AbortSignal | undefined,
+  opties: { maxPaginas?: number; genoeg?: (features: F[]) => boolean } = {},
+): Promise<F[] | null> {
+  const uit: F[] = [];
+  let volgende: string | null = eerste;
+  // Een vangnet tegen een `next`-keten die nooit ophoudt.
+  for (let pagina = 0; volgende && pagina < (opties.maxPaginas ?? 50); pagina++) {
+    const json: (Links & { features?: F[] }) | null = await haalOp<Links & { features?: F[] }>(
+      volgende,
+      signal,
+    );
+    if (!json) return null;
+    const features: F[] = json.features ?? [];
+    uit.push(...features);
+    if (opties.genoeg?.(features)) break;
+    volgende =
+      features.length > 0 ? (json.links?.find((l) => l.rel === "next")?.href ?? null) : null;
+  }
+  return uit;
+}
+
 /** Alle verblijfsobjecten in één bbox uit de BAG, `next`-links volgend. */
 async function haalCel(
   bbox: [number, number, number, number],
@@ -280,19 +425,7 @@ async function haalCel(
   eerste.searchParams.set("bbox", bbox.map((n) => n.toFixed(6)).join(","));
   eerste.searchParams.set("limit", "1000");
   eerste.searchParams.set("f", "json");
-
-  const uit: VboFeature[] = [];
-  let volgende: string | null = eerste.toString();
-  // Een vangnet tegen een `next`-keten die nooit ophoudt.
-  for (let pagina = 0; volgende && pagina < 50; pagina++) {
-    const json: VboPagina | null = await haalOp<VboPagina>(volgende, signal);
-    if (!json) return null;
-    const features: VboFeature[] = json.features ?? [];
-    uit.push(...features);
-    volgende =
-      features.length > 0 ? (json.links?.find((l) => l.rel === "next")?.href ?? null) : null;
-  }
-  return uit;
+  return haalPaginas<VboFeature>(eerste.toString(), signal);
 }
 
 /**
@@ -358,6 +491,10 @@ export async function haalStraatAdressen(
         gebruiksdoel: gebruiksdoelLabel(p.gebruiksdoel),
         lon: punt[0],
         lat: punt[1],
+        pand_refs: (p["pand.href"] ?? []).map(pandRef).filter(Boolean),
+        pand_id: null,
+        woningtype: null,
+        bouwlagen: null,
       });
     }
   }
@@ -365,4 +502,182 @@ export async function haalStraatAdressen(
   return ontdubbel(rijen).sort(
     (a, b) => a.huisnummer - b.huisnummer || a.toevoeging.localeCompare(b.toevoeging),
   );
+}
+
+/** Een pand zoals we het hieronder gebruiken. */
+interface Pand {
+  identificatie: string;
+  ringen: Punt[][];
+  aantal_verblijfsobjecten: number;
+}
+
+/**
+ * Alle panden rond de adressen (cellen van 200 m in RD, met 30 m rand), op
+ * feature-id (de UUID uit `pand.href`). `null` = het ophalen mislukte.
+ */
+async function haalPanden(
+  adressen: BagAdres[],
+  { onVoortgang, signal }: BagOpties,
+): Promise<Map<string, Pand> | null> {
+  // Per cel van 200 m de bbox om de adrespunten, plus 30 m rand: zo blijft
+  // een straat een smalle strook en geen blok van 260 × 260 m.
+  const cellen = new Map<string, [number, number, number, number]>();
+  for (const a of adressen) {
+    const punt = naarRd(a.lon, a.lat);
+    const sleutel = rdCelSleutel(punt);
+    const b = cellen.get(sleutel);
+    if (!b) cellen.set(sleutel, [punt[0], punt[1], punt[0], punt[1]]);
+    else {
+      b[0] = Math.min(b[0], punt[0]);
+      b[1] = Math.min(b[1], punt[1]);
+      b[2] = Math.max(b[2], punt[0]);
+      b[3] = Math.max(b[3], punt[1]);
+    }
+  }
+  const panden = new Map<string, Pand>();
+  let nr = 0;
+  for (const b of cellen.values()) {
+    nr++;
+    onVoortgang?.(`Panden: cel ${nr} van ${cellen.size}`);
+    const url = new URL(BAG_PAND);
+    url.searchParams.set(
+      "bbox",
+      rdBboxTekst([b[0] - RD_RAND, b[1] - RD_RAND, b[2] + RD_RAND, b[3] + RD_RAND]),
+    );
+    url.searchParams.set("bbox-crs", RD_CRS);
+    url.searchParams.set("crs", RD_CRS);
+    url.searchParams.set("limit", "1000");
+    url.searchParams.set("f", "json");
+    const features = await haalPaginas<PandFeature>(url.toString(), signal);
+    if (!features) return null;
+    for (const f of features) {
+      const p = f.properties;
+      if (!f.id || !p?.identificatie || (p.status && PAND_WEG.has(p.status))) continue;
+      const ringen = ringenVan(f.geometry);
+      if (ringen.length === 0 || panden.has(f.id)) continue;
+      panden.set(f.id, {
+        identificatie: p.identificatie,
+        ringen,
+        // Onbekend: als één adres, dan wordt het in elk geval geen appartement.
+        aantal_verblijfsobjecten:
+          typeof p.aantal_verblijfsobjecten === "number" ? p.aantal_verblijfsobjecten : 1,
+      });
+    }
+  }
+  return panden;
+}
+
+/**
+ * Het aantal bouwlagen per pand-identificatie uit de 3D BAG. Die is traag
+ * (~50 panden per pagina), dus per RD-cel alleen de bbox om de panden die we
+ * nodig hebben, en een cel stopt zodra ze er allemaal zijn. Mislukt een
+ * verzoek, dan houden we wat er al was.
+ */
+async function haalBouwlagen(
+  nodig: Map<string, Pand>,
+  { onVoortgang, signal }: BagOpties,
+): Promise<Map<string, number>> {
+  const perCel = new Map<string, Pand[]>();
+  for (const p of nodig.values()) {
+    const eerste = p.ringen[0]?.[0];
+    if (!eerste) continue;
+    const sleutel = rdCelSleutel(eerste);
+    const lijst = perCel.get(sleutel);
+    if (lijst) lijst.push(p);
+    else perCel.set(sleutel, [p]);
+  }
+
+  const lagen = new Map<string, number>();
+  const gezien = new Set<string>();
+  const totaal = nodig.size;
+  for (const panden of perCel.values()) {
+    const open = new Set(panden.map((p) => p.identificatie).filter((id) => !gezien.has(id)));
+    if (open.size === 0) continue;
+    const box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const p of panden) {
+      for (const ring of p.ringen) {
+        for (const [x, y] of ring) {
+          box[0] = Math.min(box[0], x);
+          box[1] = Math.min(box[1], y);
+          box[2] = Math.max(box[2], x);
+          box[3] = Math.max(box[3], y);
+        }
+      }
+    }
+    onVoortgang?.(`Verdiepingen uit de 3D BAG: ${gezien.size} van ${totaal} panden`);
+    const url = new URL(DRIE_D_BAG);
+    url.searchParams.set("bbox", rdBboxTekst([box[0] - 1, box[1] - 1, box[2] + 1, box[3] + 1]));
+    url.searchParams.set("limit", "100");
+    const features = await haalPaginas<DrieDFeature>(url.toString(), signal, {
+      maxPaginas: 200,
+      genoeg: (pagina) => {
+        for (const f of pagina) {
+          const id = f.id?.replace(/^NL\.IMBAG\.Pand\./, "");
+          if (!id || !nodig.has(id)) continue;
+          gezien.add(id);
+          open.delete(id);
+          const n = f.CityObjects?.[f.id!]?.attributes?.b3_bouwlagen;
+          if (typeof n === "number" && n > 0) lagen.set(id, Math.round(n));
+        }
+        onVoortgang?.(`Verdiepingen uit de 3D BAG: ${gezien.size} van ${totaal} panden`);
+        return open.size === 0;
+      },
+    });
+    if (!features) break;
+  }
+  return lagen;
+}
+
+/**
+ * Vult bij de adressen van een heel gebied het pand-id, het geschatte
+ * woningtype (alleen bij een woonfunctie) en het aantal bouwlagen in.
+ *
+ * Geeft altijd de adressen terug: mislukken de panden, dan blijven pand-id en
+ * woningtype leeg; mislukt de 3D BAG, dan alleen de bouwlagen. Afbreken
+ * (`signal`) geeft ook de adressen terug; de aanroeper kijkt zelf of hij
+ * moet stoppen.
+ */
+export async function vulPandgegevens(
+  adressen: BagAdres[],
+  opties: BagOpties = {},
+): Promise<BagAdres[]> {
+  if (adressen.length === 0) return adressen;
+  const panden = await haalPanden(adressen, opties);
+  if (!panden) return adressen;
+
+  // Per adres het eerste pand dat we kennen.
+  const pandVan = (a: BagAdres) => a.pand_refs.find((ref) => panden.has(ref));
+  const woonPanden = new Set<string>();
+  for (const a of adressen) {
+    const ref = pandVan(a);
+    if (ref && a.gebruiksdoel === "woonfunctie") woonPanden.add(ref);
+  }
+  const vormen: PandVorm[] = [...panden].map(([ref, p]) => ({
+    id: ref,
+    ringen: p.ringen,
+    aantal_verblijfsobjecten: p.aantal_verblijfsobjecten,
+    woon: woonPanden.has(ref),
+  }));
+  const typen = woningtypen(vormen);
+
+  const nodig = new Map<string, Pand>();
+  for (const a of adressen) {
+    const ref = pandVan(a);
+    if (ref) nodig.set(panden.get(ref)!.identificatie, panden.get(ref)!);
+  }
+  const lagen = opties.signal?.aborted
+    ? new Map<string, number>()
+    : await haalBouwlagen(nodig, opties);
+
+  return adressen.map((a) => {
+    const ref = pandVan(a);
+    if (!ref) return a;
+    const pand = panden.get(ref)!;
+    return {
+      ...a,
+      pand_id: pand.identificatie,
+      woningtype: a.gebruiksdoel === "woonfunctie" ? (typen.get(ref) ?? null) : null,
+      bouwlagen: lagen.get(pand.identificatie) ?? null,
+    };
+  });
 }

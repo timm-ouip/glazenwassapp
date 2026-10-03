@@ -1,6 +1,9 @@
 /**
  * Ja aan de deur: van een BAG-adres een klant maken, met prijs en frequentie.
  *
+ * De prijs staat al ingevuld: de prijs die bij het lopen genoteerd is, anders
+ * het prijsvoorstel (dan staat erbij dat het een voorstel is).
+ *
  * De uitkomst "ja" is dan al bewaard (zie LoopAdresRij), zodat een collega
  * het meteen ziet. Hier komen de prijs (verplicht), naam en telefoon (mag
  * leeg) en de frequentie bij, en de straat in een wijk:
@@ -52,12 +55,16 @@ import {
   LOOP_TELLINGEN,
   foutTekst,
   leesPrijs,
+  LOOP_VOORSTELLEN,
   loopNummer,
   maakKlantVanAdres,
   officieleNaam,
   prijsTekst,
+  voorstelUitleg,
+  woningtypeVan,
   zetLoopAdres,
   type LoopAdres,
+  type LoopVoorstel,
 } from "@/lib/lopen";
 import { startMaandVoorNieuw } from "@/lib/nieuwAdres";
 
@@ -69,11 +76,14 @@ const KIES_STIJL = "h-auto border-0 bg-transparent p-0 shadow-none focus:ring-0"
 
 export function JaDialog({
   rij,
+  voorstel,
   gebiedWijk,
   onOpenChange,
 }: {
   /** Het adres; leeg = dicht. */
   rij: LoopAdres | null;
+  /** Het prijsvoorstel voor dit adres, als er een is. */
+  voorstel: LoopVoorstel | null;
   /** De wijk van het gebied, of leeg bij een los gebied. */
   gebiedWijk: string | null;
   onOpenChange: (open: boolean) => void;
@@ -84,6 +94,8 @@ export function JaDialog({
   const straten = useQuery({ queryKey: ["streets"], queryFn: fetchStreets, enabled: open });
 
   const [prijs, setPrijs] = useState("");
+  /** De prijs komt uit het voorstel (en is nog niet aangepast). */
+  const [uitVoorstel, setUitVoorstel] = useState(false);
   const [naam, setNaam] = useState("");
   const [telefoon, setTelefoon] = useState("");
   const [frequentie, setFrequentie] = useState("");
@@ -97,7 +109,9 @@ export function JaDialog({
   // Bij elk nieuw adres opnieuw beginnen.
   useEffect(() => {
     if (!rij) return;
-    setPrijs(prijsTekst(rij.prijs));
+    const metVoorstel = rij.prijs === null && voorstel !== null;
+    setPrijs(prijsTekst(metVoorstel ? voorstel.voorstel : rij.prijs));
+    setUitVoorstel(metVoorstel);
     setNaam("");
     setTelefoon("");
     setFrequentie("");
@@ -185,6 +199,7 @@ export function JaDialog({
       // je voor) moet de rij grijs maken.
       void qc.invalidateQueries({ queryKey: ["loop-lijst"] });
       void qc.invalidateQueries({ queryKey: LOOP_TELLINGEN });
+      void qc.invalidateQueries({ queryKey: LOOP_VOORSTELLEN });
       void qc.invalidateQueries({ queryKey: ["customers"] });
       void qc.invalidateQueries({ queryKey: ["klanten"] });
       void qc.invalidateQueries({ queryKey: ["streets"] });
@@ -218,10 +233,19 @@ export function JaDialog({
                     className={popupInvoer}
                     placeholder="14,50"
                     value={prijs}
-                    onChange={(e) => setPrijs(e.target.value)}
+                    onChange={(e) => {
+                      setPrijs(e.target.value);
+                      setUitVoorstel(false);
+                    }}
                     aria-label="Prijs per beurt"
                   />
                 </PopupVeld>
+                {uitVoorstel && voorstel && rij && (
+                  <PopupHint>
+                    Voorstel, uit {voorstelUitleg(voorstel, woningtypeVan(rij))}. Pas het aan als je
+                    iets anders afspreekt.
+                  </PopupHint>
+                )}
               </PopupBlok>
 
               <PopupBlok label="Frequentie">

@@ -4862,6 +4862,15 @@ export type Database = {
           wijk: string;
         }[];
       };
+      loop_voorstellen: {
+        Args: { gebied: string };
+        Returns: {
+          adres_id: string;
+          n: number;
+          niveau: string;
+          voorstel: number;
+        }[];
+      };
       maak_standaard_categorieen: {
         Args: { bedrijf: string };
         Returns: undefined;
