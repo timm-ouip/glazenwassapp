@@ -318,7 +318,13 @@ export async function factuurWeggooien(id: string) {
   if (error) throw error;
 }
 
-export async function factuurBetaald(id: string, bedrag: number, op?: string) {
+/**
+ * Een betaling boeken. Zonder bedrag (`null`) boekt de database precies wat er
+ * op dat moment openstaat -- nooit meer, ook niet bij twee keer klikken of als
+ * er intussen via de betaallink betaald is. Met een bedrag mag het ook meer
+ * zijn: dan wordt het verschil tegoed bij de klant.
+ */
+export async function factuurBetaald(id: string, bedrag: number | null, op?: string) {
   const { data, error } = await supabase.rpc("factuur_betaald", {
     factuur: id,
     bedrag,

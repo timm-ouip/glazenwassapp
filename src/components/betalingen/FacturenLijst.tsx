@@ -523,6 +523,12 @@ export function FactuurDetail({
   // Een ander bedrag boeken dan wat er openstaat: een deel, of juist meer
   // (dan wordt het verschil tegoed). Als tekst, zodat het veld even leeg mag.
   const [anderBedrag, setAnderBedrag] = useState<string | null>(null);
+  // Zolang er geboekt wordt, staan de knoppen uit: twee keer klikken zou
+  // anders twee keer boeken, en het tweede deel wordt dan tegoed.
+  const [boekt, setBoekt] = useState(false);
+  // Op een gecrediteerde factuur staat niets meer open: alles wat er nog
+  // binnenkomt, wordt tegoed voor de klant.
+  const openVoorBoeken = gecrediteerd ? 0 : nogOpen;
 
   // Standaard staat alles aan: meestal moet bijna al het werk opnieuw op de
   // factuur en vink je alleen het pand uit dat niet gedaan is.
@@ -567,7 +573,10 @@ export function FactuurDetail({
     onError: (e: Error) => toast.error("Niet gelukt: " + e.message),
   });
 
-  async function afvinken(bedrag: number) {
+  /** `null` = precies wat er nu openstaat; dat rekent de database uit. */
+  async function afvinken(bedrag: number | null) {
+    if (boekt) return;
+    setBoekt(true);
     try {
       const uit = await factuurBetaald(f.id, bedrag);
       setAnderBedrag(null);
@@ -584,6 +593,8 @@ export function FactuurDetail({
       }
     } catch (e) {
       toast.error("Afvinken mislukt: " + (e as Error).message);
+    } finally {
+      setBoekt(false);
     }
   }
 
@@ -774,7 +785,12 @@ export function FactuurDetail({
         )}
         {f.status === "verstuurd" && (
           <>
-            <Button size="sm" variant="secondary" onClick={() => void afvinken(nogOpen)}>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={boekt}
+              onClick={() => void afvinken(null)}
+            >
               Betaald ({formatPrice(nogOpen)})
             </Button>
             <Button size="sm" variant="ghost" onClick={() => void metRust()}>
@@ -789,7 +805,9 @@ export function FactuurDetail({
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => setAnderBedrag(nogOpen > 0 ? String(nogOpen).replace(".", ",") : "")}
+            onClick={() =>
+              setAnderBedrag(openVoorBoeken > 0 ? String(openVoorBoeken).replace(".", ",") : "")
+            }
           >
             {f.status === "verstuurd" ? "Ander bedrag…" : "Betaling boeken…"}
           </Button>
@@ -829,16 +847,23 @@ export function FactuurDetail({
             onChange={(e) => setAnderBedrag(e.target.value)}
             className="w-24 rounded-lg border border-input bg-background/70 px-2 py-1 text-right tabular-nums"
           />
-          <Button type="submit" size="sm" variant="secondary" disabled={!anderKlopt}>
+          <Button type="submit" size="sm" variant="secondary" disabled={!anderKlopt || boekt}>
             Boeken
           </Button>
           <Button type="button" size="sm" variant="ghost" onClick={() => setAnderBedrag(null)}>
             Annuleren
           </Button>
-          {anderKlopt && anderGetal - nogOpen > 0.005 && (
+          {gecrediteerd ? (
             <span className="text-muted-foreground">
-              {formatPrice(anderGetal - nogOpen)} daarvan wordt tegoed voor de klant.
+              Deze factuur is gecrediteerd: het hele bedrag wordt tegoed voor de klant.
             </span>
+          ) : (
+            anderKlopt &&
+            anderGetal - openVoorBoeken > 0.005 && (
+              <span className="text-muted-foreground">
+                {formatPrice(anderGetal - openVoorBoeken)} daarvan wordt tegoed voor de klant.
+              </span>
+            )
           )}
         </form>
       )}

@@ -4489,7 +4489,7 @@ export type Database = {
       };
       factuur_adres_tekst: { Args: { adres: string }; Returns: string };
       factuur_betaald: {
-        Args: { bedrag: number; factuur: string; op?: string | null };
+        Args: { bedrag?: number | null; factuur: string; op?: string | null };
         Returns: Json;
       };
       factuur_btw_inclusief: {

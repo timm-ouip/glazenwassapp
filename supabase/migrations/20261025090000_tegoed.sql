@@ -289,8 +289,13 @@ $$;
 -- anders:
 --   * een factuur die al betaald was houdt zijn betaaldatum als er nog iets
 --     bij komt (een tweede overboeking wordt tegoed, niet een nieuwe datum);
---   * het antwoord zegt hoeveel er als tegoed bij de klant terechtkwam.
-create or replace function public.factuur_betaald(factuur uuid, bedrag numeric, op date default null)
+--   * het antwoord zegt hoeveel er als tegoed bij de klant terechtkwam;
+--   * zonder bedrag boekt hij precies wat er nu openstaat. Dat is wat de knop
+--     "Betaald" doet. Stuurt het scherm zelf een bedrag mee, dan is dat het
+--     bedrag van toen het scherm werd opgehaald: is er intussen via de
+--     betaallink betaald, of klikt iemand twee keer, dan zou dat ongemerkt
+--     tegoed worden en van de volgende factuur afgaan.
+create or replace function public.factuur_betaald(factuur uuid, bedrag numeric default null, op date default null)
 returns jsonb
 language plpgsql
 security definer
@@ -322,7 +327,10 @@ begin
   tegoed_voor := public.factuur_tegoed_uit(f, totaal);
   -- Afboeken kan, maar nooit onder wat er met tegoed op betaald is: dat geld
   -- heeft de klant niet overgemaakt, dat kwam uit zijn dossier.
-  nieuw := greatest(round(coalesce(f.betaald_bedrag, 0) + bedrag, 2), f.tegoed_verrekend, 0);
+  nieuw := greatest(
+    round(coalesce(f.betaald_bedrag, 0)
+          + coalesce(bedrag, greatest(totaal - coalesce(f.betaald_bedrag, 0), 0)), 2),
+    f.tegoed_verrekend, 0);
 
   update public.facturen
     set betaald_bedrag = nieuw,
@@ -403,7 +411,9 @@ begin
       coalesce(f.factuurdatum, (f.created_at at time zone 'Europe/Amsterdam')::date) as sorteer
       from public.facturen f
       join public.klanten k on k.id = f.klant_id
-      cross join lateral (select public.factuur_totalen(f.id) as totalen) t
+      -- offset 0: zonder dat vouwt Postgres dit uit en rekent hij de totalen
+      -- per factuur twee keer (voor 'totalen' en voor 'tegoed_uit').
+      cross join lateral (select public.factuur_totalen(f.id) as totalen offset 0) t
       where f.company_id = bedrijf and f.deleted_at is null
         and (klant is null or f.klant_id = klant)
         and (vanaf is null or coalesce(f.factuurdatum, (f.created_at at time zone 'Europe/Amsterdam')::date) >= vanaf)

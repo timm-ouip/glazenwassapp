@@ -160,6 +160,16 @@ begin
     raise exception 'f1: een extra 5 op een betaalde factuur hoort tegoed te zijn, kreeg %', uit;
   end if;
 
+  -- 6b. Zonder bedrag boekt hij precies wat er openstaat, ook twee keer.
+  uit := public.factuur_betaald(f3);
+  if (uit ->> 'tegoed')::numeric <> 0 or (uit ->> 'open')::numeric <> 0 then
+    raise exception 'f3: betalen zonder bedrag hoort het restant te boeken, kreeg %', uit;
+  end if;
+  uit := public.factuur_betaald(f3);
+  if (uit ->> 'tegoed')::numeric <> 0 or (uit ->> 'betaald')::numeric <> 5 then
+    raise exception 'f3: nog een keer betalen zonder bedrag hoort niets te doen, kreeg %', uit;
+  end if;
+
   -- 7. Vereffenen zet het saldo op nul (2 + 5 = 7).
   saldo := public.tegoed_vereffenen(k, 'Teruggestort');
   if saldo <> 7 then
@@ -180,7 +190,7 @@ begin
   end if;
 
   -- 8. Mollie betaalt het restant van een factuur waar tegoed op verrekend is.
-  perform public.factuur_betaald(f3, 15);          -- 10 te veel op f3 (totaal 5)
+  perform public.factuur_betaald(f3, 10);          -- 10 te veel op f3 (totaal 5, al betaald)
   uit := public.factuur_vastzetten(f5);            -- 20, daar gaat 10 af
   if (uit ->> 'tegoed')::numeric <> 10 then
     raise exception 'f5: hoort 10 tegoed te verrekenen, kreeg %', uit;
