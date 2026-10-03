@@ -232,6 +232,126 @@ export type Database = {
           },
         ];
       };
+      bank_koppelingen: {
+        Row: {
+          bedrag: number;
+          company_id: string;
+          created_at: string;
+          factuur_id: string;
+          id: string;
+          transactie_id: string;
+        };
+        Insert: {
+          bedrag: number;
+          company_id?: string;
+          created_at?: string;
+          factuur_id: string;
+          id?: string;
+          transactie_id: string;
+        };
+        Update: {
+          bedrag?: number;
+          company_id?: string;
+          created_at?: string;
+          factuur_id?: string;
+          id?: string;
+          transactie_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "bank_koppelingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "bank_koppelingen_factuur_id_company_id_fkey";
+            columns: ["factuur_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "facturen";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "bank_koppelingen_transactie_id_company_id_fkey";
+            columns: ["transactie_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "bank_transacties";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      bank_transacties: {
+        Row: {
+          afgehandeld_op: string | null;
+          bedrag: number;
+          bestand: string;
+          bron: string;
+          company_id: string;
+          created_at: string;
+          datum: string;
+          door_app: boolean;
+          id: string;
+          ingelezen_door: string | null;
+          kenmerk: string;
+          omschrijving: string;
+          reden: string;
+          sleutel: string;
+          status: string;
+          tegen_iban: string;
+          tegen_naam: string;
+          voorstel: string[];
+        };
+        Insert: {
+          afgehandeld_op?: string | null;
+          bedrag: number;
+          bestand?: string;
+          bron: string;
+          company_id?: string;
+          created_at?: string;
+          datum: string;
+          door_app?: boolean;
+          id?: string;
+          ingelezen_door?: string | null;
+          kenmerk?: string;
+          omschrijving?: string;
+          reden?: string;
+          sleutel: string;
+          status?: string;
+          tegen_iban?: string;
+          tegen_naam?: string;
+          voorstel?: string[];
+        };
+        Update: {
+          afgehandeld_op?: string | null;
+          bedrag?: number;
+          bestand?: string;
+          bron?: string;
+          company_id?: string;
+          created_at?: string;
+          datum?: string;
+          door_app?: boolean;
+          id?: string;
+          ingelezen_door?: string | null;
+          kenmerk?: string;
+          omschrijving?: string;
+          reden?: string;
+          sleutel?: string;
+          status?: string;
+          tegen_iban?: string;
+          tegen_naam?: string;
+          voorstel?: string[];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "bank_transacties_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       bericht_categorieen: {
         Row: {
           bericht_id: string;
@@ -1447,6 +1567,7 @@ export type Database = {
           pdf_pad: string | null;
           soort: string;
           status: string;
+          tegoed_verrekend: number;
           termijn_dagen: number | null;
           verstuurd_naar: string;
           verstuurd_op: string | null;
@@ -1479,6 +1600,7 @@ export type Database = {
           pdf_pad?: string | null;
           soort?: string;
           status?: string;
+          tegoed_verrekend?: number;
           termijn_dagen?: number | null;
           verstuurd_naar?: string;
           verstuurd_op?: string | null;
@@ -1511,6 +1633,7 @@ export type Database = {
           pdf_pad?: string | null;
           soort?: string;
           status?: string;
+          tegoed_verrekend?: number;
           termijn_dagen?: number | null;
           verstuurd_naar?: string;
           verstuurd_op?: string | null;
@@ -2286,6 +2409,42 @@ export type Database = {
           },
           {
             foreignKeyName: "klant_emails_klant_id_company_id_fkey";
+            columns: ["klant_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      klant_ibans: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          iban: string;
+          klant_id: string;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          iban: string;
+          klant_id: string;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          iban?: string;
+          klant_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "klant_ibans_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "klant_ibans_klant_id_company_id_fkey";
             columns: ["klant_id", "company_id"];
             isOneToOne: false;
             referencedRelation: "klanten";
@@ -3888,6 +4047,60 @@ export type Database = {
           },
         ];
       };
+      tegoed_boekingen: {
+        Row: {
+          bedrag: number;
+          company_id: string;
+          created_at: string;
+          door: string | null;
+          door_naam: string;
+          id: string;
+          klant_id: string;
+          op: string;
+          opmerking: string;
+          soort: string;
+        };
+        Insert: {
+          bedrag: number;
+          company_id?: string;
+          created_at?: string;
+          door?: string | null;
+          door_naam?: string;
+          id?: string;
+          klant_id: string;
+          op?: string;
+          opmerking?: string;
+          soort?: string;
+        };
+        Update: {
+          bedrag?: number;
+          company_id?: string;
+          created_at?: string;
+          door?: string | null;
+          door_naam?: string;
+          id?: string;
+          klant_id?: string;
+          op?: string;
+          opmerking?: string;
+          soort?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tegoed_boekingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tegoed_boekingen_klant_id_company_id_fkey";
+            columns: ["klant_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
       vaste_kortingen: {
         Row: {
           bedrag: number;
@@ -4352,6 +4565,27 @@ export type Database = {
         Returns: undefined;
       };
       adres_heeft_prijs: { Args: { adres: string }; Returns: boolean };
+      bank_automatisch: { Args: { transactie: string }; Returns: string };
+      bank_boeken: {
+        Args: {
+          door_app_: boolean;
+          ids: string[];
+          t: Database["public"]["Tables"]["bank_transacties"]["Row"];
+        };
+        Returns: undefined;
+      };
+      bank_factuurnummers: { Args: { t: string }; Returns: string[] };
+      bank_iban: { Args: { t: string }; Returns: string };
+      bank_inlezen: {
+        Args: { bestand: string; bron: string; regels: Json };
+        Returns: Json;
+      };
+      bank_koppelen: {
+        Args: { facturen: string[]; transactie: string };
+        Returns: undefined;
+      };
+      bank_negeren: { Args: { transactie: string }; Returns: undefined };
+      bank_terugzetten: { Args: { transactie: string }; Returns: undefined };
       bekend_adres_overnemen: {
         Args: { aanmelding: string; met_vorige_klant: boolean };
         Returns: string;
@@ -4432,7 +4666,7 @@ export type Database = {
       };
       factuur_adres_tekst: { Args: { adres: string }; Returns: string };
       factuur_betaald: {
-        Args: { bedrag: number; factuur: string; op?: string | null };
+        Args: { bedrag?: number | null; factuur: string; op?: string | null };
         Returns: Json;
       };
       factuur_btw_inclusief: {
@@ -4491,8 +4725,19 @@ export type Database = {
         Args: { bedrijf: string; voor_jaar: number };
         Returns: number;
       };
+      factuur_open: {
+        Args: { f: Database["public"]["Tables"]["facturen"]["Row"] };
+        Returns: number;
+      };
       factuur_opnieuw: {
         Args: { factuur: string; keuzes?: Json | null };
+        Returns: number;
+      };
+      factuur_tegoed_uit: {
+        Args: {
+          f: Database["public"]["Tables"]["facturen"]["Row"];
+          totaal: number;
+        };
         Returns: number;
       };
       factuur_termijn: {
@@ -4771,6 +5016,11 @@ export type Database = {
       };
       heeft_recht: { Args: { recht: string }; Returns: boolean };
       is_eigenaar: { Args: never; Returns: boolean };
+      klant_tegoed: { Args: { klant: string }; Returns: Json };
+      klant_tegoed_saldo: {
+        Args: { bedrijf: string; klant: string };
+        Returns: number;
+      };
       klant_van_bericht: {
         Args: {
           aan: Json;
@@ -4948,6 +5198,10 @@ export type Database = {
         Returns: number;
       };
       straten_volgorde: { Args: { ids: string[] }; Returns: number };
+      tegoed_vereffenen: {
+        Args: { klant: string; opmerking?: string | null };
+        Returns: number;
+      };
       telefoon_sleutel: { Args: { tekst: string }; Returns: string };
       vooruit_beurten_open: { Args: { adres: string }; Returns: number };
       vooruit_prijs: { Args: { adres: string }; Returns: number };

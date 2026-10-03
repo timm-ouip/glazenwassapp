@@ -334,7 +334,9 @@ Deno.serve(async (req) => {
 
       const { data: f, error: fFout } = await beheerder
         .from("facturen")
-        .select("id,soort,klantgegevens,klant_id,mollie_link,onderwerp,kenmerk,opmerking")
+        .select(
+          "id,soort,klantgegevens,klant_id,mollie_link,onderwerp,kenmerk,opmerking,tegoed_verrekend",
+        )
         .eq("id", id)
         .eq("company_id", bedrijf.id)
         .maybeSingle();
@@ -400,6 +402,11 @@ Deno.serve(async (req) => {
       });
       if (lijst.length === 0) throw new Error("Deze factuur heeft geen regels.");
       const totaal = lijst.reduce((t, r) => t + r.bedrag_incl, 0);
+      // Tegoed van de klant dat bij het vastzetten op deze factuur verrekend
+      // is. De factuur zelf blijft het hele bedrag; alleen wat er nog betaald
+      // moet worden is minder.
+      const tegoed = f.soort === "factuur" ? Number(f.tegoed_verrekend ?? 0) : 0;
+      const nogTeBetalen = Math.max(0, Math.round((totaal - tegoed) * 100) / 100);
 
       // De betaallink hoort hier en niet eerder: hij moet het factuurnummer op
       // het bankafschrift kunnen zetten en het bedrag kennen.
@@ -409,12 +416,12 @@ Deno.serve(async (req) => {
       // erger maken dan de kwaal: de IBAN en het betaalkenmerk staan er toch
       // al op, en met de hand afvinken blijft gewoon werken.
       let betaallink = String(f.mollie_link ?? "");
-      const sleutel = f.soort === "credit" || totaal <= 0 || betaallink ? "" : await mollie();
+      const sleutel = f.soort === "credit" || nogTeBetalen <= 0 || betaallink ? "" : await mollie();
       if (sleutel) {
         try {
           const kenmerk = await meldingKenmerk(id);
           const link = await maakBetaallink(sleutel, {
-            bedrag: totaal,
+            bedrag: nogTeBetalen,
             omschrijving: `Factuur ${kaart.nummer} - ${bedrijf.name}`,
             meldingUrl: `${url}/functions/v1/mollie-webhook?factuur=${id}&kenmerk=${kenmerk}`,
           });
@@ -486,6 +493,7 @@ Deno.serve(async (req) => {
         kenmerk: String(f.kenmerk ?? ""),
         opmerking: String(f.opmerking ?? ""),
         ...(betaallink ? { betaallink } : {}),
+        ...(tegoed > 0 ? { tegoed } : {}),
         vormgeving: await vormgeving(),
       });
 
@@ -504,12 +512,20 @@ Deno.serve(async (req) => {
 
       // 3. De mail.
       const naam = String(kg.bedrijfsnaam ?? "").trim() || String(kg.naam ?? "");
+      const vervaldatum = kaart.vervaldatum.split("-").reverse().join("-");
       const tekst =
         `Beste ${naam},\n\n` +
         `In de bijlage vind je factuur ${kaart.nummer} van ${euro(totaal)}.\n` +
-        `Wij zien de betaling graag tegemoet vóór ${kaart.vervaldatum.split("-").reverse().join("-")}.\n` +
-        (betaallink ? `\nDirect online betalen kan hier: ${betaallink}\n` : "") +
-        (bedrijf.iban ? `\nOvermaken kan naar ${bedrijf.iban} o.v.v. ${kaart.nummer}.\n` : "") +
+        (tegoed > 0 && nogTeBetalen <= 0
+          ? `Dit bedrag is helemaal betaald uit je tegoed bij ons. Je hoeft niets te betalen.\n`
+          : (tegoed > 0
+              ? `Daarvan is ${euro(tegoed)} al betaald uit je tegoed bij ons; er staat nog ${euro(nogTeBetalen)} open.\n`
+              : "") +
+            `Wij zien de betaling graag tegemoet vóór ${vervaldatum}.\n` +
+            (betaallink ? `\nDirect online betalen kan hier: ${betaallink}\n` : "") +
+            (bedrijf.iban
+              ? `\nOvermaken kan naar ${bedrijf.iban} o.v.v. ${kaart.nummer}.\n`
+              : "")) +
         `\nMet vriendelijke groet,\n${bedrijf.name}`;
 
       const knop = betaallink

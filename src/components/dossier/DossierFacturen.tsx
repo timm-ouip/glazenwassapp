@@ -8,7 +8,7 @@
  * klanten_bewerken; de lijst en een losse factuur alleen met facturen.
  */
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useBevestig } from "@/components/Bevestig";
@@ -24,7 +24,9 @@ import {
 } from "@/components/dossier/DossierVelden";
 import { LosseFactuurDialog } from "@/components/facturen/LosseFactuurDialog";
 import { Pillen } from "@/components/Pillen";
-import { korteDatum } from "@/lib/dossier";
+import { Button } from "@/components/ui/button";
+import { fetchKlantIbans, ibanTonen, klantIbanWeghalen } from "@/lib/bank";
+import { korteDatum, regelDatum } from "@/lib/dossier";
 import {
   BTW_TARIEVEN,
   exclusiefVoorop,
@@ -32,7 +34,10 @@ import {
   fetchFactuurOver,
   fetchFacturen,
   fetchFactuurStandaard,
+  fetchTegoed,
+  tegoedVereffenen,
   type Factuur,
+  type TegoedRegel,
 } from "@/lib/facturen";
 import { FACTUUR_PER, formatPrice } from "@/lib/klanten";
 import { useRecht } from "@/lib/rechten";
@@ -52,6 +57,8 @@ export function DossierFacturen({ d }: { d: Dossier }) {
 
   function ververs() {
     void qc.invalidateQueries({ queryKey: ["facturen"] });
+    void qc.invalidateQueries({ queryKey: ["tegoed"] });
+    void qc.invalidateQueries({ queryKey: ["bank"] });
     void qc.invalidateQueries({ queryKey: ["factuur-over"] });
     void qc.invalidateQueries({ queryKey: ["factuurregels-los"] });
     void qc.invalidateQueries({ queryKey: ["herinneringen-straks"] });
@@ -85,6 +92,8 @@ export function DossierFacturen({ d }: { d: Dossier }) {
         >
           <div className="flex flex-col gap-[14px]">
             <HoeFactureren d={d} />
+            {magFacturen && d.klantId && <TegoedKaart klantId={d.klantId} onVeranderd={ververs} />}
+            {magFacturen && d.klantId && <BetaaltVanaf klantId={d.klantId} />}
           </div>
           <FacturenVanKlant d={d} magFacturen={magFacturen} onVeranderd={ververs} />
         </div>
@@ -98,6 +107,202 @@ export function DossierFacturen({ d }: { d: Dossier }) {
         />
       )}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tegoed
+// ---------------------------------------------------------------------------
+
+/** Wat een regel in het tegoed betekent, in de woorden van het scherm. */
+function tegoedTekst(r: TegoedRegel): string {
+  const nr = r.nummer ?? "";
+  switch (r.soort) {
+    case "te_veel":
+      return `Te veel betaald op ${nr}`;
+    case "gecrediteerd":
+      return `Al betaald op ${nr}, daarna gecrediteerd`;
+    case "verrekend":
+      return `Verrekend op ${nr}`;
+    case "vereffend":
+      return "Vereffend" + (r.opmerking ? `: ${r.opmerking}` : "");
+  }
+}
+
+/**
+ * Het tegoed van deze klant: wat hij te veel betaalde, of al betaald had op
+ * een factuur die gecrediteerd is. Het gaat vanzelf af van de volgende
+ * factuur. Alleen zichtbaar als er ooit iets met tegoed gebeurd is.
+ */
+function TegoedKaart({ klantId, onVeranderd }: { klantId: string; onVeranderd: () => void }) {
+  const tegoed = useQuery({
+    queryKey: ["tegoed", klantId],
+    queryFn: () => fetchTegoed(klantId),
+  });
+  // De opmerking bij het vereffenen; null = het vakje is dicht.
+  const [opmerking, setOpmerking] = useState<string | null>(null);
+  const vereffenen = useMutation({
+    mutationFn: () => tegoedVereffenen(klantId, opmerking ?? ""),
+    onSuccess: (bedrag) => {
+      setOpmerking(null);
+      onVeranderd();
+      toast.success(`${formatPrice(Math.abs(bedrag))} vereffend. Het tegoed staat op nul.`);
+    },
+    onError: (e: Error) => toast.error("Vereffenen mislukt: " + e.message),
+  });
+
+  if (tegoed.isError) {
+    return (
+      <DossierKaart>
+        <KolomKop>Tegoed</KolomKop>
+        <p className="text-[14px] text-tint-rood-ink">Het tegoed kon niet opgehaald worden.</p>
+      </DossierKaart>
+    );
+  }
+  const t = tegoed.data;
+  if (!t || t.regels.length === 0) return null;
+  const saldo = t.saldo;
+  const iets = Math.abs(saldo) >= 0.005;
+
+  return (
+    <DossierKaart>
+      <KolomKop>Tegoed</KolomKop>
+      <div className="flex flex-col">
+        <div className="font-display text-[30px] font-semibold leading-tight tabular-nums">
+          {formatPrice(saldo)}
+        </div>
+        <div className="text-[12.5px] text-muted-foreground">
+          {saldo > 0.005
+            ? "Gaat vanzelf af van de volgende factuur, als “reeds betaald”."
+            : saldo < -0.005
+              ? "Er is meer verrekend dan er nu binnen is, bijvoorbeeld door een terugboeking. Vereffen het als het geregeld is."
+              : "Niets te goed."}
+        </div>
+      </div>
+      <div className="flex flex-col gap-1">
+        {t.regels.map((r, i) => (
+          <div key={i} className="flex gap-3 text-[12.5px]">
+            <span className="w-16 shrink-0 tabular-nums text-muted-foreground">
+              {r.datum ? regelDatum(r.datum) : ""}
+            </span>
+            <span className="min-w-0 flex-1">
+              {tegoedTekst(r)}
+              {r.door && <span className="text-muted-foreground"> · {r.door}</span>}
+            </span>
+            <span className="shrink-0 tabular-nums">
+              {r.bedrag > 0 ? "+" : "−"}
+              {formatPrice(Math.abs(r.bedrag))}
+            </span>
+          </div>
+        ))}
+      </div>
+      {iets &&
+        (opmerking === null ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="self-start"
+            onClick={() => setOpmerking("")}
+          >
+            Tegoed vereffend…
+          </Button>
+        ) : (
+          <form
+            className="flex flex-col gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              vereffenen.mutate();
+            }}
+          >
+            <VeldLabel label="Hoe is het geregeld? (bijvoorbeeld: teruggestort)">
+              <input
+                className={dossierInvoer}
+                value={opmerking}
+                maxLength={300}
+                autoFocus
+                onChange={(e) => setOpmerking(e.target.value)}
+              />
+            </VeldLabel>
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" variant="secondary" disabled={vereffenen.isPending}>
+                {vereffenen.isPending ? "Bezig…" : `${formatPrice(Math.abs(saldo))} vereffenen`}
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setOpmerking(null)}>
+                Annuleren
+              </Button>
+            </div>
+          </form>
+        ))}
+    </DossierKaart>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Betaalt vanaf
+// ---------------------------------------------------------------------------
+
+/**
+ * De rekeningen waarvan deze klant betaalt. De app leert ze bij het inlezen
+ * van bankbestanden, zodra er een betaling op een factuur van deze klant
+ * geboekt is; daarna herkent hij een overmaking van die rekening ook zonder
+ * factuurnummer. Weghalen kan hier, toevoegen niet: dat gaat alleen via een
+ * echte betaling. Gaat de klant in de prullenbak, dan gaan ze vanzelf mee.
+ */
+function BetaaltVanaf({ klantId }: { klantId: string }) {
+  const qc = useQueryClient();
+  const ibans = useQuery({
+    queryKey: ["bank", "ibans", klantId],
+    queryFn: () => fetchKlantIbans(klantId),
+  });
+  const weghalen = useMutation({
+    mutationFn: (iban: string) => klantIbanWeghalen(klantId, iban),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["bank", "ibans", klantId] });
+      toast.success("Rekening vergeten.");
+    },
+    onError: (e: Error) => toast.error("Weghalen mislukt: " + e.message),
+  });
+
+  if (ibans.isError) {
+    return (
+      <DossierKaart>
+        <KolomKop>Betaalt vanaf</KolomKop>
+        <p className="text-[14px] text-tint-rood-ink">
+          De rekeningen konden niet opgehaald worden.
+        </p>
+      </DossierKaart>
+    );
+  }
+  const lijst = ibans.data ?? [];
+  if (lijst.length === 0) return null;
+
+  return (
+    <DossierKaart>
+      <KolomKop>Betaalt vanaf</KolomKop>
+      <p className="text-[12.5px] text-muted-foreground">
+        Een overmaking van deze rekening komt bij het inlezen van de bank vanzelf bij deze klant,
+        als het bedrag op een openstaande factuur past.
+      </p>
+      <div className="flex flex-col gap-1">
+        {lijst.map((r) => (
+          <div key={r.iban} className="flex items-center gap-3 text-[13px]">
+            <span className="min-w-0 flex-1 tabular-nums">{ibanTonen(r.iban)}</span>
+            <span className="shrink-0 text-[12px] text-muted-foreground">
+              sinds {regelDatum(r.sinds)}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={weghalen.isPending}
+              onClick={() => weghalen.mutate(r.iban)}
+              aria-label={`${ibanTonen(r.iban)} weghalen`}
+            >
+              Weghalen
+            </Button>
+          </div>
+        ))}
+      </div>
+    </DossierKaart>
   );
 }
 

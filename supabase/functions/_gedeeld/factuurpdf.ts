@@ -102,6 +102,12 @@ export interface FactuurGegevens {
   /** Vrije tekst onder de regels, alleen voor deze factuur. */
   opmerking?: string;
   betaallink?: string;
+  /**
+   * Tegoed van de klant dat op deze factuur is verrekend. Komt onder het
+   * totaal als "Reeds betaald", met daaronder wat er nog betaald moet worden.
+   * Het is een betaling, geen korting: de regels en de btw blijven heel.
+   */
+  tegoed?: number;
   vormgeving?: Partial<FactuurVormgeving>;
 }
 
@@ -429,11 +435,14 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
   const excl = f.regels.reduce((t, r) => t + r.bedrag_excl, 0);
   const btw = f.regels.reduce((t, r) => t + r.btw_bedrag, 0);
   const incl = f.regels.reduce((t, r) => t + r.bedrag_incl, 0);
+  const tegoed = f.soort === "factuur" && (f.tegoed ?? 0) > 0.005 ? (f.tegoed ?? 0) : 0;
+  const nogTeBetalen = Math.max(0, Math.round((incl - tegoed) * 100) / 100);
 
   // Het slot (subtotaal, een btw-regel per tarief, te betalen en het
   // betaalblok) moet in zijn geheel op het blad passen.
   const aantalTarieven = new Set(f.regels.map((r) => r.btw_procent)).size;
-  if (y < onder + 130 + 14 * Math.max(0, aantalTarieven - 1)) nieuwBlad();
+  const tegoedRuimte = tegoed ? 32 : 0;
+  if (y < onder + 130 + tegoedRuimte + 14 * Math.max(0, aantalTarieven - 1)) nieuwBlad();
   y -= 8;
   blad.drawLine({
     start: { x: kolomBtw - 60, y },
@@ -464,8 +473,27 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
     y -= 14;
   }
   y -= 4;
-  schrijf("Te betalen", 0, y, { vet: true, groot: 11, rechts: kolomBtw });
-  schrijf(euro(incl), 0, y, { vet: true, groot: 11, kleur: accent, rechts: kolomBedrag });
+  if (tegoed) {
+    // Eerst het echte totaal, dan wat er al uit het tegoed is betaald. Zo
+    // staat de factuur zelf er onveranderd, en ziet de klant waar het
+    // lagere bedrag vandaan komt.
+    schrijf("Totaal", 0, y, { vet: true, rechts: kolomBtw });
+    schrijf(euro(incl), 0, y, { vet: true, rechts: kolomBedrag });
+    y -= 16;
+    schrijf("Reeds betaald (tegoed)", 0, y, { kleur: grijs, rechts: kolomBtw });
+    schrijf(`- ${euro(tegoed)}`, 0, y, { rechts: kolomBedrag });
+    y -= 16;
+    schrijf("Nog te betalen", 0, y, { vet: true, groot: 11, rechts: kolomBtw });
+    schrijf(euro(nogTeBetalen), 0, y, {
+      vet: true,
+      groot: 11,
+      kleur: accent,
+      rechts: kolomBedrag,
+    });
+  } else {
+    schrijf("Te betalen", 0, y, { vet: true, groot: 11, rechts: kolomBtw });
+    schrijf(euro(incl), 0, y, { vet: true, groot: 11, kleur: accent, rechts: kolomBedrag });
+  }
 
   // --- Een opmerking bij alleen deze factuur -----------------------------
   if (f.opmerking?.trim()) {
@@ -482,10 +510,18 @@ export async function maakFactuurPdf(f: FactuurGegevens): Promise<Uint8Array> {
 
   // --- Hoe te betalen ---------------------------------------------------
   y -= 34;
-  const termijn = `Graag betalen vóór ${datum(f.vervaldatum)}`;
-  schrijf(termijn, KANTLIJN, y, { vet: true });
-  y -= 13;
-  if (f.bedrijf.iban) {
+  if (tegoed && nogTeBetalen <= 0) {
+    // Helemaal uit het tegoed betaald: geen termijn, geen rekeningnummer.
+    schrijf("Deze factuur is voldaan uit je tegoed. Je hoeft niets te betalen.", KANTLIJN, y, {
+      vet: true,
+    });
+    y -= 13;
+  } else {
+    const termijn = `Graag betalen vóór ${datum(f.vervaldatum)}`;
+    schrijf(termijn, KANTLIJN, y, { vet: true });
+    y -= 13;
+  }
+  if (f.bedrijf.iban && !(tegoed && nogTeBetalen <= 0)) {
     schrijf(`Overmaken naar ${f.bedrijf.iban} onder vermelding van ${f.nummer}.`, KANTLIJN, y, {
       kleur: grijs,
     });
