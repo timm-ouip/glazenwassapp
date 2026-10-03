@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconArrowLeft as ArrowLeft,
+  IconBuildingBank as Bank,
   IconReceipt as Bon,
   IconSend as Send,
 } from "@tabler/icons-react";
@@ -10,8 +11,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useBevestig } from "@/components/Bevestig";
+import { BankInlezen, BankVak } from "@/components/betalingen/BankInlezen";
 import { VangnetLijst, VangnetVak } from "@/components/betalingen/Vangnet";
 import { LosseFactuurDialog } from "@/components/facturen/LosseFactuurDialog";
+import { fetchBankOpenAantal } from "@/lib/bank";
 import { formatPrice } from "@/lib/klanten";
 import { cn } from "@/lib/utils";
 import { datumSleutel, toonDatum, vandaag } from "@/lib/wasdag";
@@ -69,6 +72,8 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
   const [open, setOpen] = useState<string | null>(null);
   /** Staat de lijst met adressen die geen factuur opleveren open? */
   const [vangnetOpen, setVangnetOpen] = useState(false);
+  /** Staat het blad met de bijschrijvingen van de bank open? */
+  const [bankOpen, setBankOpen] = useState(false);
 
   const facturen = useQuery({ queryKey: ["facturen"], queryFn: () => fetchFacturen() });
   const los = useQuery({ queryKey: ["factuurregels-los"], queryFn: fetchLosseRegels });
@@ -81,6 +86,8 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
   });
   const [straksOpen, setStraksOpen] = useState(false);
   const [losOpen, setLosOpen] = useState(false);
+  // Bijschrijvingen die de app niet zeker bij een factuur kon zetten.
+  const bankAantal = useQuery({ queryKey: ["bank", "aantal"], queryFn: fetchBankOpenAantal });
 
   const alles = useMemo(() => facturen.data ?? [], [facturen.data]);
   const lijst = useMemo(() => alles.filter((f) => past(f, filter)), [alles, filter]);
@@ -93,6 +100,7 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
   function ververs() {
     void qc.invalidateQueries({ queryKey: ["facturen"] });
     void qc.invalidateQueries({ queryKey: ["tegoed"] });
+    void qc.invalidateQueries({ queryKey: ["bank"] });
     void qc.invalidateQueries({ queryKey: ["factuurregels-los"] });
     // Ook het gele vak: vink je een factuur af als betaald of laat je hem met
     // rust, dan zou het anders blijven beloven dat er een herinnering naartoe
@@ -182,6 +190,11 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
   if (vangnetOpen) {
     return <VangnetLijst rijen={vangnet.data ?? []} onTerug={() => setVangnetOpen(false)} />;
   }
+  if (bankOpen) {
+    return (
+      <BankInlezen facturen={alles} onTerug={() => setBankOpen(false)} onVeranderd={ververs} />
+    );
+  }
 
   return (
     <div className="space-y-3 pb-24">
@@ -220,6 +233,14 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
         >
           <Bon className="size-4" /> Losse factuur
         </button>
+        {/* Overmakingen van de bank vanzelf bij de goede factuur. */}
+        <button
+          type="button"
+          onClick={() => setBankOpen(true)}
+          className="flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-[13px] font-medium text-muted-foreground shadow-card hover:text-foreground"
+        >
+          <Bank className="size-4" /> Bank inlezen
+        </button>
         <span className="text-[13px] text-muted-foreground">
           <span className="font-medium text-foreground tabular-nums">
             {formatPrice(openTotaal)}
@@ -227,6 +248,8 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
           nog niet binnen
         </span>
       </div>
+
+      <BankVak aantal={bankAantal.data ?? 0} onBekijk={() => setBankOpen(true)} />
 
       {/* De por. De concepten staan klaar, maar iemand moet op versturen
           drukken -- en dat is precies wat je vergeet. */}
