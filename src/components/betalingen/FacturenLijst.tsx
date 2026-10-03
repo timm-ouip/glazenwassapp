@@ -239,7 +239,7 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
           onClick={() => setBankOpen(true)}
           className="flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-[13px] font-medium text-muted-foreground shadow-card hover:text-foreground"
         >
-          <Bank className="size-4" /> Bank inlezen
+          <Bank className="size-4" /> Betalingen importeren
         </button>
         <span className="text-[13px] text-muted-foreground">
           <span className="font-medium text-foreground tabular-nums">

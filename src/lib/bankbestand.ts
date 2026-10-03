@@ -414,7 +414,14 @@ function ingOmschrijving(mededelingen: string): { omschrijving: string; iban: st
     "(?=\\s+(?:Naam|IBAN|BIC|Kenmerk|Machtiging ID|Incassant ID|Valutadatum|Datum/Tijd|Pasvolgnr|Transactie|Term|Apple Pay|Google Pay):|$)";
   const om = new RegExp(`Omschrijving:\\s*(.*?)${volgende}`).exec(t);
   const ib = /IBAN:\s*([A-Z]{2}\d{2}[A-Z0-9 ]{10,40}?)(?=\s+[A-Z][a-z]|$)/.exec(t);
-  return { omschrijving: om ? om[1]!.trim() : t, iban: ib ? iban(ib[1]!) : "" };
+  // Geen "Omschrijving:" maar wel andere kopjes ("Naam: … Kenmerk: …"): dan
+  // gaf de klant geen omschrijving, en de rest van de tekst is niet van hem
+  // maar van de bank -- met het Kenmerk erin. Liever leeg dan dat.
+  const gelabeld = /(?:^|\s)(?:Naam|IBAN|Kenmerk|Valutadatum):/.test(t);
+  return {
+    omschrijving: om ? om[1]!.trim() : gelabeld ? "" : t,
+    iban: ib ? iban(ib[1]!) : "",
+  };
 }
 
 /**

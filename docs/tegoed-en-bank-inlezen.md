@@ -32,7 +32,7 @@ Migratie `20261025090000_tegoed.sql`, proef `supabase/tests/tegoed.sql`.
 
 ## Bankbestanden inlezen
 
-Betalingen › Facturen › **Bank inlezen**. Het bestand wordt in de browser
+Betalingen › Facturen › **Betalingen importeren**. Het bestand wordt in de browser
 gelezen (`src/lib/bankbestand.ts`): CAMT.053, MT940 (gestructureerd zoals
 ING/Rabobank/ABN AMRO, en vrije tekst zoals de Volksbank), de CSV van ASN
 (zonder kopregel) en de CSV van ING (met kopregel, kolommen op naam; uit
