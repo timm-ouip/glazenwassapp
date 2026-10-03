@@ -146,3 +146,39 @@ export async function bankTerugzetten(transactie: string) {
   const { error } = await supabase.rpc("bank_terugzetten", { transactie });
   if (error) throw error;
 }
+
+/** Een rekening van een klant: geleerd bij een betaling die op hem geboekt is. */
+export interface KlantIban {
+  iban: string;
+  /** Wanneer de app hem leerde. */
+  sinds: string;
+}
+
+/** Van welke rekeningen deze klant betaalt. */
+export async function fetchKlantIbans(klantId: string): Promise<KlantIban[]> {
+  const { data, error } = await supabase
+    .from("klant_ibans")
+    .select("iban,created_at")
+    .eq("klant_id", klantId)
+    .order("created_at");
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ iban: r.iban, sinds: r.created_at }));
+}
+
+/**
+ * Een rekening bij deze klant vergeten. Komt er later weer een betaling van
+ * die rekening op een factuur van deze klant, dan leert de app hem opnieuw.
+ */
+export async function klantIbanWeghalen(klantId: string, iban: string) {
+  const { error } = await supabase
+    .from("klant_ibans")
+    .delete()
+    .eq("klant_id", klantId)
+    .eq("iban", iban);
+  if (error) throw error;
+}
+
+/** "NL12ABCD0123456789" → "NL12 ABCD 0123 4567 89", zoals op een bankpas. */
+export function ibanTonen(iban: string): string {
+  return iban.replace(/(.{4})/g, "$1 ").trim();
+}

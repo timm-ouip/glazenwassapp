@@ -232,6 +232,22 @@ begin
     raise exception 'De tweede tweeling in een volgend stuk hoort nieuw te zijn, gaf %', uit;
   end if;
 
+  -- Een rekening met de hand weghalen mag.
+  delete from public.klant_ibans where iban = 'NL01TEST0000000001';
+  if exists (select 1 from public.klant_ibans where iban = 'NL01TEST0000000001') then
+    raise exception 'Een rekening weghalen hoort te kunnen.';
+  end if;
+
+  -- In de prullenbak: de rekeningen gaan mee. Mollie de Vries (NL05) betaalde
+  -- op f1 van Jansen, dus Jansen kent NL05 nu.
+  if not exists (select 1 from public.klant_ibans where iban = 'NL05TEST0000000005') then
+    raise exception 'NL05 hoort bij Jansen onthouden te zijn.';
+  end if;
+  update public.klanten set deleted_at = now() where id = 'aaaaaaaa-0000-4000-8000-0000000000c1';
+  if exists (select 1 from public.klant_ibans where klant_id = 'aaaaaaaa-0000-4000-8000-0000000000c1') then
+    raise exception 'Een klant in de prullenbak hoort geen rekeningen meer te hebben.';
+  end if;
+
   -- Rechtstreeks schrijven mag niet.
   begin
     insert into public.bank_transacties (sleutel, datum, bedrag, bron)
@@ -260,6 +276,17 @@ begin
      or exists (select 1 from public.klant_ibans) then
     raise exception 'B hoort niets van de bank van A te zien.';
   end if;
+  -- En kan er ook niets van weghalen.
+  reset role;
+  insert into public.klant_ibans (company_id, iban, klant_id)
+  values ('aaaaaaaa-0000-4000-8000-000000000000', 'NL07TEST0000000007', 'aaaaaaaa-0000-4000-8000-0000000000c2');
+  set local role authenticated;
+  delete from public.klant_ibans;
+  reset role;
+  if not exists (select 1 from public.klant_ibans) then
+    raise exception 'B hoort de rekeningen van A niet te kunnen weghalen.';
+  end if;
+  set local role authenticated;
   -- Een id van A raden helpt niet.
   reset role;
   select id into a from public.bank_transacties where status = 'open' limit 1;

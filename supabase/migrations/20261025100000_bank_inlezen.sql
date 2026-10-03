@@ -105,6 +105,32 @@ create policy "Bankkoppelingen lezen" on public.bank_koppelingen for select to a
 create policy "Rekeningen van klanten lezen" on public.klant_ibans for select to authenticated
   using (company_id = (select public.current_company_id())
     and (select public.heeft_recht('facturen')));
+-- Weghalen mag met de hand, in het dossier ("Betaalt vanaf"). Toevoegen niet:
+-- dat leert de app alleen van een echte betaling.
+create policy "Rekening van een klant weghalen" on public.klant_ibans for delete to authenticated
+  using (company_id = (select public.current_company_id())
+    and (select public.heeft_recht('facturen')));
+
+-- Een rekeningnummer is een persoonsgegeven. Gaat een klant in de prullenbak
+-- (ook bij een verhuizing: zet_adressen_inactief legt de klant dan weg), dan
+-- gaan zijn rekeningen mee. Komt hij terug uit de prullenbak, dan leert de
+-- app ze opnieuw bij de volgende betaling.
+create or replace function public.klant_ibans_wissen()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.klant_ibans where klant_id = new.id and company_id = new.company_id;
+  return null;
+end
+$$;
+revoke execute on function public.klant_ibans_wissen() from public, anon, authenticated;
+
+create trigger klanten_ibans_wissen after update of deleted_at on public.klanten
+  for each row when (old.deleted_at is null and new.deleted_at is not null)
+  execute function public.klant_ibans_wissen();
 
 -- ---------------------------------------------------------------------
 -- 2. Hulpjes
@@ -219,11 +245,13 @@ begin
     set status = 'gekoppeld', door_app = door_app_, reden = '', voorstel = '{}', afgehandeld_op = now()
     where id = t.id;
 
-  -- Onthouden van welke rekening deze klant(en) betalen.
+  -- Onthouden van welke rekening deze klant(en) betalen. Niet voor een klant
+  -- in de prullenbak: die rekeningen zijn juist gewist.
   if public.bank_iban(t.tegen_iban) <> '' then
     insert into public.klant_ibans (company_id, iban, klant_id)
     select distinct t.company_id, public.bank_iban(t.tegen_iban), fa.klant_id
     from public.facturen fa
+    join public.klanten kl on kl.id = fa.klant_id and kl.deleted_at is null
     where fa.id = any(ids) and fa.company_id = t.company_id
     on conflict do nothing;
   end if;
@@ -308,6 +336,7 @@ begin
   if public.bank_iban(t.tegen_iban) <> '' then
     select coalesce(array_agg(ki.klant_id), '{}') into klanten
     from public.klant_ibans ki
+    join public.klanten kl on kl.id = ki.klant_id and kl.deleted_at is null
     where ki.company_id = t.company_id and ki.iban = public.bank_iban(t.tegen_iban);
   end if;
   if cardinality(klanten) > 0 then

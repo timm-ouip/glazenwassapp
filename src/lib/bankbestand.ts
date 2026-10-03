@@ -6,7 +6,8 @@
  *   CAMT.053  XML, de opvolger van MT940. Alle Nederlandse banken kunnen dit.
  *   MT940     het oude tekstformaat. Sommige banken stoppen ermee.
  *   CSV       de CSV van ASN (en de andere banken van de Volksbank: SNS,
- *             RegioBank). Geen kopregel, negentien kolommen.
+ *             RegioBank): geen kopregel, negentien kolommen. En de CSV van
+ *             ING: met kopregel, de kolommen worden op naam gezocht.
  *
  * Het lezen gebeurt hier, in de browser: het bestand zelf gaat nergens heen.
  * Alleen de bijschrijvingen (geld dat binnenkwam) gaan naar de database
@@ -90,6 +91,8 @@ function leesSoort(tekst: string): BankBestand {
     );
   }
   if (/^:20:/m.test(t) && /^:61:/m.test(t)) return leesMt940(t);
+  const ing = leesIngCsv(t);
+  if (ing) return ing;
   const csv = leesAsnCsv(t);
   if (csv) return csv;
   throw new BankbestandFout(
@@ -387,6 +390,84 @@ function asnKolommen(v: string[]): string[] | null {
     v[v.length - 1]!,
   ];
   return uit.length === 19 ? uit.map(zonderEnkele) : null;
+}
+
+// ---------------------------------------------------------------------------
+// CSV van ING
+// ---------------------------------------------------------------------------
+
+/** 20261005 → 2026-10-05; 05-10-2026 kan ook. */
+function ingDatum(t: string): string | null {
+  const m = /^(\d{4})(\d{2})(\d{2})$/.exec(t.trim());
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : nlDatum(t);
+}
+
+/**
+ * Uit de kolom Mededelingen ("Naam: … Omschrijving: Factuur 2026-0042 IBAN:
+ * NL… Kenmerk: … Valutadatum: …") alleen wat er achter Omschrijving staat.
+ * Niet het Kenmerk: dat is vaak de eigen verwijzing van de betaler, en die
+ * kan op het factuurnummer van een ander lijken.
+ */
+function ingOmschrijving(mededelingen: string): { omschrijving: string; iban: string } {
+  const t = schoon(mededelingen);
+  const volgende =
+    "(?=\\s+(?:Naam|IBAN|BIC|Kenmerk|Machtiging ID|Incassant ID|Valutadatum|Datum/Tijd|Pasvolgnr|Transactie|Term|Apple Pay|Google Pay):|$)";
+  const om = new RegExp(`Omschrijving:\\s*(.*?)${volgende}`).exec(t);
+  const ib = /IBAN:\s*([A-Z]{2}\d{2}[A-Z0-9 ]{10,40}?)(?=\s+[A-Z][a-z]|$)/.exec(t);
+  return { omschrijving: om ? om[1]!.trim() : t, iban: ib ? iban(ib[1]!) : "" };
+}
+
+/**
+ * De ING-export: een kopregel met onder meer "Datum", "Naam / Omschrijving",
+ * "Tegenrekening", "Af Bij", "Bedrag (EUR)" en "Mededelingen". Met komma's
+ * (oud) of puntkomma's (nieuw). Geeft null als de kopregel er niet op lijkt.
+ */
+function leesIngCsv(tekst: string): BankBestand | null {
+  const regels = tekst.split(/\r?\n/).filter((r) => r.trim() !== "");
+  const kop = regels[0] ?? "";
+  if (!/af\s*bij/i.test(kop) || !/bedrag/i.test(kop)) return null;
+  const scheiding = (kop.match(/;/g)?.length ?? 0) > (kop.match(/,/g)?.length ?? 0) ? ";" : ",";
+  const namen = csvVelden(kop, scheiding).map((n) => n.toLowerCase());
+  const kolom = (...zoek: string[]) => namen.findIndex((n) => zoek.some((z) => n.startsWith(z)));
+  const k = {
+    datum: kolom("datum"),
+    naam: kolom("naam"),
+    tegen: kolom("tegenrekening"),
+    afBij: kolom("af bij", "af/bij"),
+    bedrag: kolom("bedrag"),
+    mededelingen: kolom("mededelingen"),
+  };
+  if (k.datum < 0 || k.afBij < 0 || k.bedrag < 0) return null;
+
+  const uit: BankRegel[] = [];
+  let afschrijvingen = 0;
+  let onleesbaar = 0;
+  for (const regel of regels.slice(1)) {
+    const v = csvVelden(regel, scheiding);
+    const datum = ingDatum(v[k.datum] ?? "");
+    const bedrag = bedragUit(v[k.bedrag] ?? "");
+    if (!datum || !Number.isFinite(bedrag)) {
+      onleesbaar += 1;
+      continue;
+    }
+    if (!/^bij$/i.test(v[k.afBij] ?? "") || bedrag <= 0) {
+      afschrijvingen += 1;
+      continue;
+    }
+    const med = ingOmschrijving(k.mededelingen >= 0 ? (v[k.mededelingen] ?? "") : "");
+    uit.push({
+      datum,
+      bedrag,
+      tegen_iban: iban(k.tegen >= 0 ? (v[k.tegen] ?? "") : "") || med.iban,
+      tegen_naam: schoon(k.naam >= 0 ? (v[k.naam] ?? "") : ""),
+      omschrijving: med.omschrijving,
+      kenmerk: "",
+      // ING geeft geen eigen referentie per regel; de dubbelherkenning leunt
+      // dan op datum, bedrag, rekening en omschrijving, plus het volgnummer.
+      ref: "",
+    });
+  }
+  return { bron: "csv", regels: uit, afschrijvingen, onleesbaar };
 }
 
 /** 15-03-2026 → 2026-03-15 */

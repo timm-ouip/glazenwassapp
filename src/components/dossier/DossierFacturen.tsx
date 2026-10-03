@@ -25,6 +25,7 @@ import {
 import { LosseFactuurDialog } from "@/components/facturen/LosseFactuurDialog";
 import { Pillen } from "@/components/Pillen";
 import { Button } from "@/components/ui/button";
+import { fetchKlantIbans, ibanTonen, klantIbanWeghalen } from "@/lib/bank";
 import { korteDatum, regelDatum } from "@/lib/dossier";
 import {
   BTW_TARIEVEN,
@@ -57,6 +58,7 @@ export function DossierFacturen({ d }: { d: Dossier }) {
   function ververs() {
     void qc.invalidateQueries({ queryKey: ["facturen"] });
     void qc.invalidateQueries({ queryKey: ["tegoed"] });
+    void qc.invalidateQueries({ queryKey: ["bank"] });
     void qc.invalidateQueries({ queryKey: ["factuur-over"] });
     void qc.invalidateQueries({ queryKey: ["factuurregels-los"] });
     void qc.invalidateQueries({ queryKey: ["herinneringen-straks"] });
@@ -91,6 +93,7 @@ export function DossierFacturen({ d }: { d: Dossier }) {
           <div className="flex flex-col gap-[14px]">
             <HoeFactureren d={d} />
             {magFacturen && d.klantId && <TegoedKaart klantId={d.klantId} onVeranderd={ververs} />}
+            {magFacturen && d.klantId && <BetaaltVanaf klantId={d.klantId} />}
           </div>
           <FacturenVanKlant d={d} magFacturen={magFacturen} onVeranderd={ververs} />
         </div>
@@ -230,6 +233,75 @@ function TegoedKaart({ klantId, onVeranderd }: { klantId: string; onVeranderd: (
             </div>
           </form>
         ))}
+    </DossierKaart>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Betaalt vanaf
+// ---------------------------------------------------------------------------
+
+/**
+ * De rekeningen waarvan deze klant betaalt. De app leert ze bij het inlezen
+ * van bankbestanden, zodra er een betaling op een factuur van deze klant
+ * geboekt is; daarna herkent hij een overmaking van die rekening ook zonder
+ * factuurnummer. Weghalen kan hier, toevoegen niet: dat gaat alleen via een
+ * echte betaling. Gaat de klant in de prullenbak, dan gaan ze vanzelf mee.
+ */
+function BetaaltVanaf({ klantId }: { klantId: string }) {
+  const qc = useQueryClient();
+  const ibans = useQuery({
+    queryKey: ["bank", "ibans", klantId],
+    queryFn: () => fetchKlantIbans(klantId),
+  });
+  const weghalen = useMutation({
+    mutationFn: (iban: string) => klantIbanWeghalen(klantId, iban),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["bank", "ibans", klantId] });
+      toast.success("Rekening vergeten.");
+    },
+    onError: (e: Error) => toast.error("Weghalen mislukt: " + e.message),
+  });
+
+  if (ibans.isError) {
+    return (
+      <DossierKaart>
+        <KolomKop>Betaalt vanaf</KolomKop>
+        <p className="text-[14px] text-tint-rood-ink">
+          De rekeningen konden niet opgehaald worden.
+        </p>
+      </DossierKaart>
+    );
+  }
+  const lijst = ibans.data ?? [];
+  if (lijst.length === 0) return null;
+
+  return (
+    <DossierKaart>
+      <KolomKop>Betaalt vanaf</KolomKop>
+      <p className="text-[12.5px] text-muted-foreground">
+        Een overmaking van deze rekening komt bij het inlezen van de bank vanzelf bij deze klant,
+        als het bedrag op een openstaande factuur past.
+      </p>
+      <div className="flex flex-col gap-1">
+        {lijst.map((r) => (
+          <div key={r.iban} className="flex items-center gap-3 text-[13px]">
+            <span className="min-w-0 flex-1 tabular-nums">{ibanTonen(r.iban)}</span>
+            <span className="shrink-0 text-[12px] text-muted-foreground">
+              sinds {regelDatum(r.sinds)}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={weghalen.isPending}
+              onClick={() => weghalen.mutate(r.iban)}
+              aria-label={`${ibanTonen(r.iban)} weghalen`}
+            >
+              Weghalen
+            </Button>
+          </div>
+        ))}
+      </div>
     </DossierKaart>
   );
 }

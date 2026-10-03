@@ -34,7 +34,9 @@ Migratie `20261025090000_tegoed.sql`, proef `supabase/tests/tegoed.sql`.
 
 Betalingen › Facturen › **Bank inlezen**. Het bestand wordt in de browser
 gelezen (`src/lib/bankbestand.ts`): CAMT.053, MT940 (gestructureerd zoals
-ING/Rabobank/ABN AMRO, en vrije tekst zoals de Volksbank) en de CSV van ASN.
+ING/Rabobank/ABN AMRO, en vrije tekst zoals de Volksbank), de CSV van ASN
+(zonder kopregel) en de CSV van ING (met kopregel, kolommen op naam; uit
+Mededelingen alleen wat achter "Omschrijving:" staat).
 Alleen bijschrijvingen gaan naar de database (`bank_inlezen`), die per stuk:
 
 1. Mollie-uitbetalingen overslaat (die staan al via de Mollie-melding bij de
@@ -48,7 +50,14 @@ Alleen bijschrijvingen gaan naar de database (`bank_inlezen`), die per stuk:
 4. de rest op het lijstje "Om na te kijken" zet, met een voorstel.
 
 Elke boeking staat per factuur in `bank_koppelingen` en is met "Ongedaan
-maken" precies terug te draaien. Hetzelfde bestand twee keer inlezen maakt
+maken" precies terug te draaien.
+
+**Rekeningnummers** (`klant_ibans`) leert de app alleen van een betaling die
+op een factuur van die klant geboekt is. In het dossier (tab Facturen) staan
+ze onder "Betaalt vanaf", met een knop om er een weg te halen; toevoegen met
+de hand kan niet. Gaat een klant in de prullenbak (ook bij een verhuizing),
+dan wist een trigger op `klanten.deleted_at` zijn rekeningen: het is een
+persoonsgegeven. Hetzelfde bestand twee keer inlezen maakt
 niets dubbel; twee echt gelijke overmakingen in één bestand blijven er twee.
 
 Migratie `20261025100000_bank_inlezen.sql`, proef
@@ -76,9 +85,9 @@ creditnota gaf altijd de fout `column g.ordinality does not exist`.
 - De drie proeven in `supabase/tests/` (`tegoed`, `bank_inlezen` en de
   bestaande `loop_*`) op een lokale Postgres 16 met alle migraties.
 - De parser met zelfgemaakte voorbeeldbestanden in elk formaat. **Nog niet met
-  een echt bestand van ASN**: de kolommen van de ASN-CSV en de opbouw van het
-  MT940-omschrijvingsveld komen uit de beschrijving van de Volksbank, niet
-  uit een echt afschrift. Het eerste echte bestand is de proef.
+  een echt bestand van ASN of ING**: de kolommen van beide CSV's en de opbouw
+  van het MT940-omschrijvingsveld komen uit wat er over die formaten bekend
+  is, niet uit een echt afschrift. Het eerste echte bestand is de proef.
 - De PDF met tegoed (deels en helemaal gedekt) bekeken.
 - Niet in de draaiende app geklikt: daar was hier geen database voor.
 
@@ -88,5 +97,5 @@ creditnota gaf altijd de fout `column g.ordinality does not exist`.
   Enable Banking) kan de bestand-upload vervangen; `bank_inlezen` en alles
   erachter blijft dan hetzelfde. Voor zover bekend heeft ASN geen eigen
   koppeling voor ondernemers zoals bunq die heeft; nagaan vóór je eraan begint.
-- SnelStart heeft een API; daar kunnen de banktransacties ook vandaan komen
-  als de bank daar al gekoppeld is.
+- SnelStart en e-Boekhouden hebben allebei een API; daar kunnen de
+  banktransacties ook vandaan komen als de bank daar al gekoppeld is.
