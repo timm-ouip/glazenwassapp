@@ -3,11 +3,15 @@ import { describe, expect, test } from "bun:test";
 import { nummerSleutel } from "./postcode";
 import {
   adresOmschrijving,
+  filterLooplijst,
   klantMatchSleutel,
   leesPrijs,
   looplijstVolgorde,
+  sorteerLoopStraten,
+  straatStand,
   voorstelUitleg,
   woningtypeTekst,
+  zoekInLooplijst,
   type LoopAdres,
 } from "./lopen";
 
@@ -179,5 +183,145 @@ describe("voorstelUitleg", () => {
     expect(voorstelUitleg({ voorstel: 9, n: 4, niveau: "wijk" }, "appartement")).toBe(
       "4 appartementen in de wijk",
     );
+  });
+});
+
+describe("sorteren en zoeken in de looplijst", () => {
+  type Z = Pick<LoopAdres, "huisnummer" | "toevoeging" | "postcode" | "klant_status" | "uitkomst">;
+  const adres = (huisnummer: number, extra: Partial<Z> = {}): Z => ({
+    huisnummer,
+    toevoeging: "",
+    postcode: "2512AB",
+    klant_status: null,
+    uitkomst: null,
+    ...extra,
+  });
+  const straten = [
+    {
+      straat: "Rozenstraat",
+      straat_volgorde: 1,
+      heen: [adres(1), adres(3, { uitkomst: "nee" })],
+      terug: [adres(2, { klant_status: "actief" })],
+    },
+    {
+      straat: "Anjerlaan",
+      straat_volgorde: 2,
+      heen: [adres(12), adres(12, { toevoeging: "A" }), adres(120)],
+      terug: [],
+    },
+    {
+      straat: "2e Klaverstraat",
+      straat_volgorde: 3,
+      heen: [adres(5, { postcode: "2533 XK", uitkomst: "ja" })],
+      terug: [],
+    },
+  ];
+  const namen = (lijst: { straat: string }[]) => lijst.map((s) => s.straat);
+
+  test("de stand van een straat telt klanten niet mee", () => {
+    expect(straatStand(straten[0]!)).toEqual({ totaal: 3, open: 1, teDoen: 2, gedaan: 1 });
+  });
+
+  test("looproute, A–Z en meeste te lopen", () => {
+    expect(sorteerLoopStraten(straten, "route")).toBe(straten);
+    expect(namen(sorteerLoopStraten(straten, "az"))).toEqual([
+      "2e Klaverstraat",
+      "Anjerlaan",
+      "Rozenstraat",
+    ]);
+    expect(namen(sorteerLoopStraten(straten, "open"))).toEqual([
+      "Anjerlaan",
+      "Rozenstraat",
+      "2e Klaverstraat",
+    ]);
+  });
+
+  test("zonder zoekterm blijft de lijst zoals hij is", () => {
+    expect(zoekInLooplijst(straten, [])).toBe(straten);
+    expect(zoekInLooplijst(straten, ["  "])).toBe(straten);
+  });
+
+  test("een stukje straatnaam geeft de hele straat", () => {
+    const [s, ...rest] = zoekInLooplijst(straten, ["rozen"]);
+    expect(rest).toHaveLength(0);
+    expect(s!.heen).toHaveLength(2);
+    expect(s!.terug).toHaveLength(1);
+  });
+
+  test("straat met huisnummer: 12 vindt ook 12 A, maar niet 120", () => {
+    const [s] = zoekInLooplijst(straten, ["anjer 12"]);
+    expect(s!.heen.map((r) => `${r.huisnummer}${r.toevoeging}`)).toEqual(["12", "12A"]);
+    const [precies] = zoekInLooplijst(straten, ["12a"]);
+    expect(precies!.heen).toHaveLength(1);
+  });
+
+  test("de toevoeging los getypt, zoals hij op het scherm staat", () => {
+    const b = [
+      {
+        straat: "Molenweg",
+        straat_volgorde: 1,
+        heen: [adres(12), adres(12, { toevoeging: "B" })],
+        terug: [],
+      },
+    ];
+    const [s] = zoekInLooplijst(b, ["molen 12 b"]);
+    expect(s!.heen.map((r) => `${r.huisnummer}${r.toevoeging}`)).toEqual(["12B"]);
+  });
+
+  test("postcode met of zonder spatie, en een straat die met een cijfer begint", () => {
+    expect(namen(zoekInLooplijst(straten, ["2533 xk"]))).toEqual(["2e Klaverstraat"]);
+    expect(namen(zoekInLooplijst(straten, ["2512"]))).toEqual(["Rozenstraat", "Anjerlaan"]);
+    expect(namen(zoekInLooplijst(straten, ["2e klaver"]))).toEqual(["2e Klaverstraat"]);
+  });
+
+  test("meerdere termen staan naast elkaar", () => {
+    expect(namen(zoekInLooplijst(straten, ["rozen", "klaver"]))).toEqual([
+      "Rozenstraat",
+      "2e Klaverstraat",
+    ]);
+  });
+});
+
+describe("filterLooplijst", () => {
+  type F = Pick<LoopAdres, "id" | "klant_status" | "uitkomst">;
+  const straten: { straat: string; heen: F[]; terug: F[] }[] = [
+    {
+      straat: "Rozenstraat",
+      heen: [
+        { id: "a", klant_status: null, uitkomst: null },
+        { id: "b", klant_status: null, uitkomst: "niet_thuis" },
+      ],
+      terug: [{ id: "c", klant_status: "actief", uitkomst: null }],
+    },
+    {
+      straat: "Anjerlaan",
+      heen: [
+        { id: "d", klant_status: null, uitkomst: "ja" },
+        { id: "e", klant_status: "actief", uitkomst: "ja" },
+        { id: "f", klant_status: "actief", uitkomst: "niet_thuis" },
+      ],
+      terug: [],
+    },
+  ];
+  const ids = (lijst: typeof straten) =>
+    lijst.flatMap((s) => [...s.heen, ...s.terug].map((r) => r.id));
+
+  test("zonder tabje de hele lijst", () => {
+    expect(filterLooplijst(straten, null)).toBe(straten);
+  });
+  test("te lopen: geen uitkomst en geen klant", () => {
+    expect(ids(filterLooplijst(straten, "open"))).toEqual(["a"]);
+  });
+  test("een uitkomst, en een straat zonder treffers valt weg", () => {
+    const uit = filterLooplijst(straten, "niet_thuis");
+    expect(uit.map((s) => s.straat)).toEqual(["Rozenstraat"]);
+    expect(ids(uit)).toEqual(["b"]);
+  });
+  test("een ja die klant werd blijft een ja, een andere uitkomst niet", () => {
+    expect(ids(filterLooplijst(straten, "ja"))).toEqual(["d", "e"]);
+    expect(ids(filterLooplijst(straten, "niet_thuis"))).toEqual(["b"]);
+  });
+  test("wat er stond toen je het tabje koos blijft staan", () => {
+    expect(ids(filterLooplijst(straten, "niet_thuis", new Set(["d"])))).toEqual(["b", "d"]);
   });
 });

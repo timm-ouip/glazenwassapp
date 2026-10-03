@@ -670,6 +670,130 @@ export function nogTeLopen(r: Pick<LoopAdres, "klant_status" | "uitkomst">): boo
 }
 
 // ---------------------------------------------------------------------------
+// Sorteren en zoeken in de looplijst
+// ---------------------------------------------------------------------------
+
+/** Hoe de straten onder elkaar staan. Binnen een straat blijft het altijd de
+ *  looprichting. */
+export type LoopSortering = "route" | "az" | "open";
+
+export const LOOP_SORTERINGEN: { waarde: LoopSortering; label: string }[] = [
+  { waarde: "route", label: "Looproute" },
+  { waarde: "az", label: "A–Z" },
+  { waarde: "open", label: "Meeste te lopen" },
+];
+
+type TelStraat = {
+  straat: string;
+  straat_volgorde: number;
+  heen: Pick<LoopAdres, "klant_status" | "uitkomst">[];
+  terug: Pick<LoopAdres, "klant_status" | "uitkomst">[];
+};
+
+/** Hoe ver een straat is: wat er nog te lopen valt, en hoeveel van de
+ *  adressen die geen klant zijn al een uitkomst hebben. */
+export function straatStand(s: Pick<TelStraat, "heen" | "terug">): {
+  totaal: number;
+  open: number;
+  teDoen: number;
+  gedaan: number;
+} {
+  const alle = [...s.heen, ...s.terug];
+  const teDoen = alle.filter((r) => r.klant_status === null).length;
+  const open = alle.filter(nogTeLopen).length;
+  return { totaal: alle.length, open, teDoen, gedaan: teDoen - open };
+}
+
+/** De straten in de gekozen volgorde; bij gelijke stand beslist de looproute. */
+export function sorteerLoopStraten<S extends TelStraat>(straten: S[], hoe: LoopSortering): S[] {
+  if (hoe === "route") return straten;
+  const route = (a: S, b: S) => a.straat_volgorde - b.straat_volgorde;
+  if (hoe === "az") {
+    return [...straten].sort((a, b) => a.straat.localeCompare(b.straat, "nl") || route(a, b));
+  }
+  const open = new Map(straten.map((s) => [s, straatStand(s).open]));
+  return [...straten].sort((a, b) => open.get(b)! - open.get(a)! || route(a, b));
+}
+
+/** Waar de tabjes boven de looplijst op filteren: nog te lopen, of een uitkomst. */
+export type LoopFilter = "open" | Uitkomst;
+
+/** Hoort dit adres bij het tabje? Zelfde regel als de tellers (loop_tellingen):
+ *  een "ja" die klant werd blijft een "ja", de rest telt alleen zonder klant. */
+export function pastInFilter(
+  r: Pick<LoopAdres, "klant_status" | "uitkomst">,
+  filter: LoopFilter,
+): boolean {
+  if (filter === "open") return nogTeLopen(r);
+  return r.uitkomst === filter && (filter === "ja" || r.klant_status === null);
+}
+
+/**
+ * Alleen de adressen van één tabje. `vast` zijn de adressen die er stonden
+ * toen het tabje werd gekozen: die blijven staan, ook als je er net een
+ * andere uitkomst aan gaf, zodat een adres niet onder je vinger verdwijnt
+ * terwijl je de prijs nog wilt intikken.
+ */
+export function filterLooplijst<
+  T extends Pick<LoopAdres, "id" | "klant_status" | "uitkomst">,
+  S extends { heen: T[]; terug: T[] },
+>(straten: S[], filter: LoopFilter | null, vast: ReadonlySet<string> = new Set()): S[] {
+  if (!filter) return straten;
+  const past = (r: T) => pastInFilter(r, filter) || vast.has(r.id);
+  return straten
+    .map((s) => ({ ...s, heen: s.heen.filter(past), terug: s.terug.filter(past) }))
+    .filter((s) => s.heen.length + s.terug.length > 0);
+}
+
+type ZoekRij = Pick<LoopAdres, "huisnummer" | "toevoeging" | "postcode">;
+
+/**
+ * Past dit adres op één zoekterm? Elk woord moet passen. Een woord met alleen
+ * letters zoekt in de straatnaam, of is de toevoeging ("12 b", zoals het
+ * nummer op het scherm staat). Een woord dat met een cijfer begint is een
+ * huisnummer ("12" vindt ook 12 A, "12a" alleen die), het begin van een
+ * postcode ("2512" of "2512ab"), of een stukje straatnaam als "2e".
+ */
+function pastOpTerm(straat: string, r: ZoekRij, term: string): boolean {
+  const naam = straat.toLowerCase();
+  const nummer = String(r.huisnummer);
+  const metToevoeging = (nummer + r.toevoeging).toLowerCase().replace(/\s/g, "");
+  const postcode = r.postcode.toLowerCase().replace(/\s/g, "");
+  const toevoeging = r.toevoeging.toLowerCase().replace(/\s/g, "");
+  return (
+    term
+      .toLowerCase()
+      // "2512 ab" is één postcode, geen nummer plus een straat "ab".
+      .replace(/\b(\d{4})\s+([a-z]{2})\b/g, "$1$2")
+      .split(/\s+/)
+      .filter(Boolean)
+      .every((w) => {
+        if (!/^\d/.test(w)) return naam.includes(w) || (toevoeging !== "" && w === toevoeging);
+        if (w === nummer || w === metToevoeging) return true;
+        if (w.length >= 4 && postcode.startsWith(w)) return true;
+        return /[a-z]/.test(w) && naam.split(/\s+/).some((deel) => deel.startsWith(w));
+      })
+  );
+}
+
+/**
+ * Alleen de straten en adressen die op een van de zoektermen passen (meerdere
+ * termen staan naast elkaar, zoals op de Wijken-pagina). Zonder termen komt
+ * de lijst ongewijzigd terug.
+ */
+export function zoekInLooplijst<
+  T extends ZoekRij,
+  S extends { straat: string; heen: T[]; terug: T[] },
+>(straten: S[], termen: string[]): S[] {
+  const echte = termen.map((t) => t.trim()).filter(Boolean);
+  if (echte.length === 0) return straten;
+  const past = (s: S) => (r: T) => echte.some((t) => pastOpTerm(s.straat, r, t));
+  return straten
+    .map((s) => ({ ...s, heen: s.heen.filter(past(s)), terug: s.terug.filter(past(s)) }))
+    .filter((s) => s.heen.length + s.terug.length > 0);
+}
+
+// ---------------------------------------------------------------------------
 // Live
 // ---------------------------------------------------------------------------
 

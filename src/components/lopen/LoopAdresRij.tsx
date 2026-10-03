@@ -13,7 +13,7 @@
  * prijsvoorstel staat er alleen als grijze tekst, en wordt pas met "Neem
  * over" de prijs.
  */
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useState } from "react";
 import {
   IconArrowBackUp as Terug,
   IconCheck as Vink,
@@ -51,36 +51,22 @@ import {
   type Uitkomst,
 } from "@/lib/lopen";
 import { cn } from "@/lib/utils";
+import {
+  KNOP_AAN,
+  NOTITIE_HINT,
+  UITKOMST_VLAK,
+  useLoopRij,
+  type LoopRijProps,
+} from "@/components/lopen/useLoopRij";
 import { WONINGTYPEN } from "@/lib/woningtype";
 
-const KNOP_AAN: Record<Uitkomst, string> = {
-  niet_thuis: "border-transparent bg-tint-amber text-tint-amber-ink",
-  interesse: "border-transparent bg-tint-blauw text-tint-blauw-ink",
-  ja: "border-transparent bg-tint-groen text-tint-groen-ink",
-  nee: "border-transparent bg-tint-rood text-tint-rood-ink",
-};
-
-const PIL: Record<Uitkomst, string> = {
-  niet_thuis: "bg-tint-amber text-tint-amber-ink",
-  interesse: "bg-tint-blauw text-tint-blauw-ink",
-  ja: "bg-tint-groen text-tint-groen-ink",
-  nee: "bg-muted text-muted-foreground",
-};
-
-const NOTITIE_HINT =
-  "Schrijf over het huis, niet over de bewoner. Niets over gezondheid, geloof of andere gevoelige zaken.";
-
-interface Props {
-  rij: LoopAdres;
-  /** Het prijsvoorstel voor dit adres, als er een is. */
-  voorstel: LoopVoorstel | null;
-  /** Bewaart en gooit bij een fout; de lijst zet de nieuwe stand alvast neer. */
-  onBewaar: (id: string, patch: LoopPatch) => Promise<void>;
-  /** Ja: eerst bewaren, dan het venster voor de nieuwe klant. */
-  onJa: (rij: LoopAdres) => Promise<void>;
-}
-
-export const LoopAdresRij = memo(function LoopAdresRij({ rij, voorstel, onBewaar, onJa }: Props) {
+export const LoopAdresRij = memo(function LoopAdresRij({
+  rij,
+  voorstel,
+  onBewaar,
+  onJa,
+  kaal,
+}: LoopRijProps) {
   if (rij.klant_status) {
     const omschrijving = adresOmschrijving(rij);
     return (
@@ -96,64 +82,26 @@ export const LoopAdresRij = memo(function LoopAdresRij({ rij, voorstel, onBewaar
     );
   }
 
-  return <OpenRij rij={rij} voorstel={voorstel} onBewaar={onBewaar} onJa={onJa} />;
+  return <OpenRij rij={rij} voorstel={voorstel} onBewaar={onBewaar} onJa={onJa} kaal={!!kaal} />;
 });
 
-function OpenRij({ rij, voorstel, onBewaar, onJa }: Props) {
-  const [fout, setFout] = useState<{ melding: string; opnieuw?: () => void } | null>(null);
-  const [prijs, setPrijs] = useState(prijsTekst(rij.prijs));
-  const prijsBezig = useRef(false);
+function OpenRij({ rij, voorstel, onBewaar, onJa, kaal }: LoopRijProps) {
+  const {
+    fout,
+    bewaar,
+    tik,
+    prijs,
+    setPrijs,
+    prijsFocus,
+    prijsKlaar,
+    neemOver,
+    notitie,
+    setNotitie,
+    notitieFocus,
+    notitieKlaar,
+    wisNotitie,
+  } = useLoopRij({ rij, onBewaar, onJa });
   const [notitieOpen, setNotitieOpen] = useState(false);
-  const [notitie, setNotitie] = useState(rij.notitie);
-  const notitieBezig = useRef(false);
-
-  // Wat een collega intikte overnemen, maar niet terwijl jij zelf typt.
-  useEffect(() => {
-    if (!prijsBezig.current) setPrijs(prijsTekst(rij.prijs));
-  }, [rij.prijs]);
-  useEffect(() => {
-    if (!notitieBezig.current) setNotitie(rij.notitie);
-  }, [rij.notitie]);
-
-  async function bewaar(patch: LoopPatch) {
-    setFout(null);
-    try {
-      await onBewaar(rij.id, patch);
-    } catch (e) {
-      setFout({ melding: foutTekst(e), opnieuw: () => void bewaar(patch) });
-    }
-  }
-
-  async function tik(u: Uitkomst) {
-    if (u === "ja") {
-      setFout(null);
-      try {
-        await onJa(rij);
-      } catch (e) {
-        setFout({ melding: foutTekst(e), opnieuw: () => void tik("ja") });
-      }
-      return;
-    }
-    if (rij.uitkomst === u) return;
-    await bewaar({ uitkomst: u });
-  }
-
-  function prijsKlaar() {
-    prijsBezig.current = false;
-    const waarde = leesPrijs(prijs);
-    if (waarde === undefined) {
-      setFout({ melding: "Dit is geen bedrag. Typ bijvoorbeeld 14,50." });
-      return;
-    }
-    if (waarde === rij.prijs) return;
-    void bewaar({ prijs: waarde });
-  }
-
-  function notitieKlaar() {
-    notitieBezig.current = false;
-    if (notitie === rij.notitie) return;
-    void bewaar({ notitie });
-  }
 
   const nee = rij.uitkomst === "nee";
   const datum = korteDatum(rij.uitkomst_op);
@@ -166,6 +114,7 @@ function OpenRij({ rij, voorstel, onBewaar, onJa }: Props) {
       className={cn(
         "rounded-[16px] border border-border bg-card p-3 shadow-card",
         nee && "bg-muted/40 shadow-none",
+        kaal && "border-0 shadow-none",
       )}
     >
       <div className="flex items-start gap-3">
@@ -199,7 +148,7 @@ function OpenRij({ rij, voorstel, onBewaar, onJa }: Props) {
             title={rij.uitkomst_door_naam ? `door ${rij.uitkomst_door_naam}` : undefined}
             className={cn(
               "shrink-0 rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold",
-              PIL[rij.uitkomst],
+              UITKOMST_VLAK[rij.uitkomst],
             )}
           >
             {uitkomstLabel(rij.uitkomst)}
@@ -248,7 +197,7 @@ function OpenRij({ rij, voorstel, onBewaar, onJa }: Props) {
             aria-label={`Prijs voor ${rij.straat} ${loopNummer(rij)}`}
             placeholder="prijs"
             value={prijs}
-            onFocus={() => (prijsBezig.current = true)}
+            onFocus={prijsFocus}
             onChange={(e) => setPrijs(e.target.value)}
             onBlur={prijsKlaar}
             onKeyDown={(e) => {
@@ -287,10 +236,7 @@ function OpenRij({ rij, voorstel, onBewaar, onJa }: Props) {
             variant="outline"
             size="sm"
             className="h-9 shrink-0 rounded-full"
-            onClick={() => {
-              setPrijs(prijsTekst(voorstel.voorstel));
-              void bewaar({ prijs: voorstel.voorstel });
-            }}
+            onClick={() => neemOver(voorstel)}
           >
             Neem over
           </Button>
@@ -308,7 +254,7 @@ function OpenRij({ rij, voorstel, onBewaar, onJa }: Props) {
             value={notitie}
             rows={2}
             maxLength={1000}
-            onFocus={() => (notitieBezig.current = true)}
+            onFocus={notitieFocus}
             onChange={(e) => setNotitie(e.target.value)}
             onBlur={notitieKlaar}
             className="rounded-xl text-[14px]"
@@ -324,11 +270,7 @@ function OpenRij({ rij, voorstel, onBewaar, onJa }: Props) {
                 className="h-11 shrink-0 rounded-full"
                 // Niet eerst het veld laten loslaten: dan bewaart hij de oude tekst nog.
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  notitieBezig.current = false;
-                  setNotitie("");
-                  void bewaar({ notitie: "" });
-                }}
+                onClick={wisNotitie}
               >
                 Notitie wissen
               </Button>
@@ -363,7 +305,7 @@ function OpenRij({ rij, voorstel, onBewaar, onJa }: Props) {
  * Het woningtype als knop: een tik geeft de vijf typen en "Terug naar
  * schatting". Zonder type (nog niets geschat) staat er "type kiezen".
  */
-function TypeKiezer({
+export function TypeKiezer({
   rij,
   onKies,
 }: {
