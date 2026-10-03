@@ -6,9 +6,10 @@
  * Leaflet raakt bij het laden `window` aan en de server heeft dat niet. Zo
  * zit de kaart ook in een eigen stukje JavaScript en niet in de rest van de app.
  *
- * Tekenen: klik de hoeken aan; Punt terug, Opnieuw en Klaar (vanaf 3 punten).
- * Bij Klaar krijgt `onChange` de ring in [lon, lat]; verandert er daarna iets,
- * dan `null`.
+ * Tekenen: klik op de kaart voor een punt; een nieuw punt komt in de lijn
+ * waar je het dichtst bij klikt. Een punt versleep je, en met een klik erop
+ * haal je het weg. Vanaf drie punten krijgt `onChange` de ring in [lon, lat],
+ * daaronder `null`.
  */
 import "leaflet/dist/leaflet.css";
 
@@ -23,6 +24,18 @@ const TEGELS =
 /** Als de plaats niet te vinden is: Den Haag, [lat, lon]. */
 const DEN_HAAG: [number, number] = [52.0721, 4.293];
 
+type Punt = [number, number];
+
+/** De afstand van p tot het lijnstuk a–b, in schermpunten. */
+function afstandTotLijn(p: Leaflet.Point, a: Leaflet.Point, b: Leaflet.Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengte2 = dx * dx + dy * dy;
+  const t =
+    lengte2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengte2));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
 export default function Kaart({
   plaats,
   straat = "",
@@ -34,22 +47,23 @@ export default function Kaart({
   /** Een straat uit de wijk: dan opent hij daar, dichterbij. */
   straat?: string;
   disabled?: boolean;
-  onChange: (ring: [number, number][] | null) => void;
+  onChange: (ring: Punt[] | null) => void;
 }) {
   const houder = useRef<HTMLDivElement>(null);
   const kaart = useRef<Leaflet.Map | null>(null);
   const laag = useRef<Leaflet.LayerGroup | null>(null);
   const lib = useRef<typeof Leaflet | null>(null);
   /** De hoeken in [lon, lat]. */
-  const [punten, setPunten] = useState<[number, number][]>([]);
-  const [klaar, setKlaar] = useState(false);
+  const [punten, setPunten] = useState<Punt[]>([]);
   const [geladen, setGeladen] = useState(false);
   const [fout, setFout] = useState(false);
   // De klik op de kaart leest deze, niet de state van het moment van aanmaken.
   const vast = useRef(false);
   useEffect(() => {
-    vast.current = klaar || disabled;
-  }, [klaar, disabled]);
+    vast.current = disabled;
+  }, [disabled]);
+  /** Wanneer er voor het laatst een punt is losgelaten (ms). */
+  const gesleeptOp = useRef(0);
 
   // De kaart maken, één keer.
   useEffect(() => {
@@ -67,8 +81,27 @@ export default function Kaart({
         }).addTo(k);
         laag.current = L.layerGroup().addTo(k);
         k.on("click", (e: Leaflet.LeafletMouseEvent) => {
-          if (vast.current) return;
-          setPunten((oud) => [...oud, [e.latlng.lng, e.latlng.lat]]);
+          // Sommige browsers sturen na het loslaten van een versleept punt
+          // nog een klik naar de kaart: dat is geen nieuw punt.
+          if (vast.current || Date.now() - gesleeptOp.current < 300) return;
+          const nieuw: Punt = [e.latlng.lng, e.latlng.lat];
+          setPunten((oud) => {
+            if (oud.length < 3) return [...oud, nieuw];
+            // In de lijn waar je het dichtst bij klikt: de volgorde van
+            // klikken maakt dan niet uit en de lijn kruist zichzelf niet.
+            const klik = k.latLngToLayerPoint(e.latlng);
+            const opScherm = oud.map(([lon, lat]) => k.latLngToLayerPoint([lat, lon]));
+            let beste = 0;
+            let kleinste = Infinity;
+            for (let i = 0; i < opScherm.length; i++) {
+              const d = afstandTotLijn(klik, opScherm[i]!, opScherm[(i + 1) % opScherm.length]!);
+              if (d < kleinste) {
+                kleinste = d;
+                beste = i;
+              }
+            }
+            return [...oud.slice(0, beste + 1), nieuw, ...oud.slice(beste + 1)];
+          });
         });
         kaart.current = k;
         // In een venster dat nog opengaat klopt de maat eerst niet.
@@ -112,6 +145,15 @@ export default function Kaart({
     };
   }, [geladen, plaats, straat]);
 
+  // Vanaf drie punten is het een gebied.
+  const meld = useRef(onChange);
+  useEffect(() => {
+    meld.current = onChange;
+  }, [onChange]);
+  useEffect(() => {
+    meld.current(punten.length >= 3 ? punten : null);
+  }, [punten]);
+
   // De hoeken en de lijn tekenen.
   useEffect(() => {
     const L = lib.current;
@@ -120,47 +162,52 @@ export default function Kaart({
     groep.clearLayers();
     const ll = punten.map(([lon, lat]) => L.latLng(lat, lon));
     const stijl = { className: "loopkaart-lijn", weight: 3, interactive: false };
-    if (ll.length >= 3) L.polygon(ll, { ...stijl, fillOpacity: klaar ? 0.2 : 0.1 }).addTo(groep);
-    else if (ll.length === 2) L.polyline(ll, stijl).addTo(groep);
-    for (const p of ll) {
-      L.circleMarker(p, {
-        className: "loopkaart-punt",
-        radius: 5,
-        weight: 2,
-        fillOpacity: 1,
-        interactive: false,
+    const vlak =
+      ll.length >= 3
+        ? L.polygon(ll, { ...stijl, fillOpacity: 0.15 }).addTo(groep)
+        : ll.length === 2
+          ? L.polyline(ll, stijl).addTo(groep)
+          : null;
+    const icoon = L.divIcon({ className: "loopkaart-hoek", iconSize: [22, 22] });
+    ll.forEach((p, i) => {
+      const hoek = L.marker(p, {
+        icon: icoon,
+        draggable: !disabled,
+        keyboard: false,
+        title: "Sleep om te verplaatsen, klik om weg te halen",
       }).addTo(groep);
-    }
-  }, [punten, klaar, geladen]);
-
-  function puntTerug() {
-    setPunten((oud) => oud.slice(0, -1));
-    if (klaar) {
-      setKlaar(false);
-      onChange(null);
-    }
-  }
-
-  function opnieuw() {
-    setPunten([]);
-    if (klaar) {
-      setKlaar(false);
-      onChange(null);
-    }
-  }
-
-  function afronden() {
-    if (punten.length < 3) return;
-    setKlaar(true);
-    onChange(punten);
-  }
+      // Tijdens het slepen alleen de lijn mee laten lopen; pas bij loslaten
+      // de punten vastleggen, anders breekt het slepen af.
+      hoek.on("drag", () => {
+        const tijdelijk = [...ll];
+        tijdelijk[i] = hoek.getLatLng();
+        vlak?.setLatLngs(tijdelijk);
+      });
+      hoek.on("dragend", () => {
+        gesleeptOp.current = Date.now();
+        const { lat, lng } = hoek.getLatLng();
+        setPunten((oud) => oud.map((punt, j) => (j === i ? [lng, lat] : punt)));
+      });
+      hoek.on("click", () => {
+        if (vast.current) return;
+        setPunten((oud) => oud.filter((_, j) => j !== i));
+      });
+    });
+  }, [punten, geladen, disabled]);
 
   return (
     <div className="flex flex-col gap-2">
       {/* De kleuren van de app, ook in het donkere thema. */}
       <style>{`
         .loopkaart-lijn { stroke: var(--primary); fill: var(--primary); }
-        .loopkaart-punt { stroke: var(--primary); fill: var(--card); }
+        .loopkaart-hoek {
+          border-radius: 9999px;
+          border: 3px solid var(--primary);
+          background: var(--card);
+          box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+          cursor: grab;
+        }
+        .loopkaart-hoek:active { cursor: grabbing; }
       `}</style>
       <div
         ref={houder}
@@ -174,42 +221,23 @@ export default function Kaart({
           </p>
         )}
       </div>
-      <p className="text-[12.5px] text-muted-foreground" aria-live="polite">
-        {klaar
-          ? `Omcirkeld met ${punten.length} punten. Kies Maken en ophalen.`
-          : punten.length < 3
-            ? "Klik op de kaart de hoeken van het gebied aan, rondom."
-            : `${punten.length} punten. Klaar sluit de lijn.`}
-      </p>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="min-w-0 flex-1 text-[12.5px] text-muted-foreground" aria-live="polite">
+          {punten.length === 0
+            ? "Klik op de kaart de hoeken van het gebied aan."
+            : punten.length < 3
+              ? `${punten.length} ${punten.length === 1 ? "punt" : "punten"}. Zet er minstens drie.`
+              : `${punten.length} punten. Sleep een punt om het te verplaatsen, klik erop om het weg te halen.`}
+        </p>
         <Button
           type="button"
           variant="outline"
           size="sm"
           className="h-10 rounded-full"
           disabled={disabled || punten.length === 0}
-          onClick={puntTerug}
-        >
-          Punt terug
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-10 rounded-full"
-          disabled={disabled || punten.length === 0}
-          onClick={opnieuw}
+          onClick={() => setPunten([])}
         >
           Opnieuw
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="h-10 rounded-full"
-          disabled={disabled || klaar || punten.length < 3}
-          onClick={afronden}
-        >
-          Klaar
         </Button>
       </div>
     </div>

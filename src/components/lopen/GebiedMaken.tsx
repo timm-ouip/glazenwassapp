@@ -119,8 +119,16 @@ export function GebiedMaken({
   const [fout, setFout] = useState<string | null>(null);
   const [bezig, setBezig] = useState(false);
   const [manier, setManier] = useState<Manier>("straten");
-  /** De omcirkelde ring in [lon, lat], na Klaar op de kaart. */
+  /** De omcirkelde ring in [lon, lat]: vanaf drie punten op de kaart. */
   const [ring, setRing] = useState<[number, number][] | null>(null);
+  // De melding staat onderaan, onder de kaart: schuif hem in beeld, anders
+  // lijkt het of de knop niets doet.
+  const foutRegel = useRef<HTMLParagraphElement>(null);
+  // Bij elke druk op de knop opnieuw, ook als de melding dezelfde blijft.
+  const [poging, setPoging] = useState(0);
+  useEffect(() => {
+    if (fout) foutRegel.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [fout, poging]);
   const telefoon = useIsMobile();
   const opKaart = manier === "kaart" && !telefoon && !gebied;
   // Verdwijnt de kaart (Straten gekozen, venster smaller), dan ook de lijn:
@@ -274,7 +282,7 @@ export function GebiedMaken({
     setFout(null);
     if (!naam.trim()) return setFout("Geef het gebied een naam.");
     if (soort === "wijk" && !wijk) return setFout("Kies een wijk.");
-    if (!ring) return setFout("Omcirkel het gebied op de kaart en kies Klaar.");
+    if (!ring) return setFout("Zet minstens drie punten op de kaart, rondom het gebied.");
 
     const ac = new AbortController();
     afbreken.current = ac;
@@ -316,6 +324,7 @@ export function GebiedMaken({
   }
 
   async function opslaan() {
+    setPoging((n) => n + 1);
     if (opKaart) return maakOpKaart();
     setFout(null);
     if (!naam.trim()) return setFout("Geef het gebied een naam.");
@@ -634,6 +643,7 @@ export function GebiedMaken({
           )}
           {fout && (
             <p
+              ref={foutRegel}
               role="alert"
               className="rounded-xl bg-tint-rood px-3 py-2 text-[13px] text-tint-rood-ink"
             >
