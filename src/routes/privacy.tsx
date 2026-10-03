@@ -60,6 +60,10 @@ function Privacy() {
               spraakberichten die je meestuurt.
             </li>
             <li>Klachten en notities over het werk.</li>
+            <li>
+              Gaan we langs de deur, dan noteren we per adres of er interesse was en soms een korte
+              notitie; die notitie wissen we na 24 maanden.
+            </li>
             <li>Van medewerkers: naam, mailadres en wat ze in de app mogen.</li>
           </ul>
         </Blok>

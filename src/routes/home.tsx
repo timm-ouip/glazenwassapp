@@ -42,6 +42,7 @@ import {
   formatPrice,
 } from "@/lib/klanten";
 import { fetchKlussen, telDagVan } from "@/lib/klussen";
+import { LOOP_TELLINGEN, fetchLoopTellingen } from "@/lib/lopen";
 import { fetchMappen } from "@/lib/mailbox";
 import { fetchPof } from "@/lib/overzichten";
 import { useRecht } from "@/lib/rechten";
@@ -104,6 +105,7 @@ function Home() {
   const magMailLezen = useRecht("mail_lezen");
   const magMail = useRecht("mail_lezen", "mail_versturen");
   const magGeld = useRecht("geldlopen", "prijzen_zien");
+  const magLopen = useRecht("klanten_lopen");
   // De omzet komt uit de planning: zonder dat recht geeft de database niets
   // terug (en is de planningspagina achter het vak dicht).
   const magOmzet = prijzenZien && magPlannen;
@@ -218,6 +220,14 @@ function Home() {
     queryFn: aantalOpenAanmeldingen,
     enabled: magKlanten,
   });
+  // Dezelfde aanroep als de gebiedenlijst op /lopen: één bron voor de tellers.
+  const lopenQuery = useQuery({
+    queryKey: LOOP_TELLINGEN,
+    queryFn: fetchLoopTellingen,
+    enabled: magLopen,
+    staleTime: MINUUT,
+  });
+  const teLopen = lopenQuery.data?.reduce((som, g) => som + g.te_lopen, 0);
 
   // --- Vandaag -------------------------------------------------------------
   const dag = useMemo(() => {
@@ -630,6 +640,35 @@ function Home() {
                     : aanmeldQuery.data > 0
                       ? "nog na te kijken"
                       : "alles nagekeken"}
+                </span>
+              </span>
+            </Link>
+          )}
+
+          {magLopen && (
+            <Link
+              to="/lopen"
+              className={cn(
+                VAK,
+                KLEUR.ijsblauw,
+                "h-[116px] px-4 py-3.5 md:h-[128px] md:px-5 md:py-4",
+              )}
+            >
+              <Vorm
+                naam="vlek"
+                plek="-bottom-6 -right-5 size-[90px] md:-bottom-8 md:-right-7 md:size-[120px]"
+              />
+              <TegelKop label="Klanten lopen" />
+              <span className="mt-auto flex min-w-0 flex-col md:flex-row md:items-baseline md:gap-2">
+                <span className="font-display text-[38px] font-semibold leading-none tracking-[-0.04em] tabular-nums md:text-[40px]">
+                  {teLopen === undefined ? (
+                    leeg
+                  ) : (
+                    <TelGetal waarde={teLopen} onthoud="home-lopen" />
+                  )}
+                </span>
+                <span className="mt-1 truncate text-[12px] opacity-80 md:mt-0 md:text-[13px]">
+                  {teLopen === undefined ? " " : `${teLopen === 1 ? "adres" : "adressen"} te lopen`}
                 </span>
               </span>
             </Link>

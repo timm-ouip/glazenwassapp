@@ -16,6 +16,7 @@ import {
   IconSettings as Settings,
   IconUpload as Upload,
   IconUsers as Users,
+  IconWalk as Walk,
   type TablerIcon as LucideIcon,
 } from "@tabler/icons-react";
 
@@ -59,6 +60,7 @@ const WERK: Pagina[] = [
   { label: "Planning", to: "/planning", icon: CalendarDays, recht: ["planning"] },
   { label: "Klanten", to: "/klanten", icon: Users, recht: ["klanten_bekijken"] },
   { label: "Aanmeldingen", to: "/aanmeldingen", icon: Inbox, recht: ["klanten_bewerken"] },
+  { label: "Klanten lopen", to: "/lopen", icon: Walk, recht: ["klanten_lopen"] },
   { label: "Mailing", to: "/mailing", icon: Mail, recht: ["mail_lezen", "mail_versturen"] },
   // Geldlopers zien hier alleen iets als de eigenaar hun wijk vrijgaf.
   { label: "Betalingen", to: "/betalingen", icon: Cash, recht: ["geldlopen", "prijzen_zien"] },

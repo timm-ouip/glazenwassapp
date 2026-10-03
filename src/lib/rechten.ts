@@ -164,6 +164,19 @@ export const RECHTEN = [
         "Afrekenen zonder vrijgave en Prijzen zien gaan automatisch mee aan. Let op: dat geld kan al bij jou zijn ingeleverd.",
     },
   },
+  {
+    sleutel: "klanten_lopen",
+    label: "Klanten lopen",
+    uitleg: "Langs de deur voor nieuwe klanten: per adres noteren wat er gezegd is",
+    meer: {
+      kan: [
+        "Gebieden maken en de adressen uit het adressenregister ophalen",
+        "Per adres de reactie, een prijs en een notitie invullen",
+        "Bij Ja een klant met prijs maken (ook zonder Klanten bewerken)",
+      ],
+      niet: ["De prijs van één klant zien", "Klanten wijzigen of weggooien"],
+    },
+  },
 ] as const;
 
 export type Recht = (typeof RECHTEN)[number]["sleutel"];
@@ -233,6 +246,8 @@ export function rechtenVoorPad(pad: string): Recht[] | null {
   if (pad.startsWith("/mailing")) return ["mail_lezen", "mail_versturen"];
   if (pad.startsWith("/berichten")) return ["mail_lezen"];
   if (pad.startsWith("/betalingen")) return ["geldlopen", "prijzen_zien", "facturen"];
+  // Niet onder /klanten: dat zou Klanten bekijken vragen.
+  if (pad.startsWith("/lopen")) return ["klanten_lopen"];
   return null;
 }
 

@@ -22,6 +22,7 @@ import { Route as ImporterenRouteImport } from './routes/importeren'
 import { Route as InstellingenRouteImport } from './routes/instellingen'
 import { Route as KlantenRouteImport } from './routes/klanten'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LopenRouteImport } from './routes/lopen'
 import { Route as MailingRouteImport } from './routes/mailing'
 import { Route as PlanningRouteImport } from './routes/planning'
 import { Route as PrintenRouteImport } from './routes/printen'
@@ -98,6 +99,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LopenRoute = LopenRouteImport.update({
+  id: '/lopen',
+  path: '/lopen',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MailingRoute = MailingRouteImport.update({
   id: '/mailing',
   path: '/mailing',
@@ -163,6 +169,7 @@ export interface FileRoutesByFullPath {
   '/instellingen': typeof InstellingenRoute
   '/klanten': typeof KlantenRoute
   '/login': typeof LoginRoute
+  '/lopen': typeof LopenRoute
   '/mailing': typeof MailingRoute
   '/planning': typeof PlanningRoute
   '/printen': typeof PrintenRoute
@@ -188,6 +195,7 @@ export interface FileRoutesByTo {
   '/instellingen': typeof InstellingenRoute
   '/klanten': typeof KlantenRoute
   '/login': typeof LoginRoute
+  '/lopen': typeof LopenRoute
   '/mailing': typeof MailingRoute
   '/planning': typeof PlanningRoute
   '/printen': typeof PrintenRoute
@@ -214,6 +222,7 @@ export interface FileRoutesById {
   '/instellingen': typeof InstellingenRoute
   '/klanten': typeof KlantenRoute
   '/login': typeof LoginRoute
+  '/lopen': typeof LopenRoute
   '/mailing': typeof MailingRoute
   '/planning': typeof PlanningRoute
   '/printen': typeof PrintenRoute
@@ -241,6 +250,7 @@ export interface FileRouteTypes {
     | '/instellingen'
     | '/klanten'
     | '/login'
+    | '/lopen'
     | '/mailing'
     | '/planning'
     | '/printen'
@@ -266,6 +276,7 @@ export interface FileRouteTypes {
     | '/instellingen'
     | '/klanten'
     | '/login'
+    | '/lopen'
     | '/mailing'
     | '/planning'
     | '/printen'
@@ -291,6 +302,7 @@ export interface FileRouteTypes {
     | '/instellingen'
     | '/klanten'
     | '/login'
+    | '/lopen'
     | '/mailing'
     | '/planning'
     | '/printen'
@@ -317,6 +329,7 @@ export interface RootRouteChildren {
   InstellingenRoute: typeof InstellingenRoute
   KlantenRoute: typeof KlantenRoute
   LoginRoute: typeof LoginRoute
+  LopenRoute: typeof LopenRoute
   MailingRoute: typeof MailingRoute
   PlanningRoute: typeof PlanningRoute
   PrintenRoute: typeof PrintenRoute
@@ -422,6 +435,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lopen': {
+      id: '/lopen'
+      path: '/lopen'
+      fullPath: '/lopen'
+      preLoaderRoute: typeof LopenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mailing': {
       id: '/mailing'
       path: '/mailing'
@@ -509,6 +529,7 @@ const rootRouteChildren: RootRouteChildren = {
   InstellingenRoute: InstellingenRoute,
   KlantenRoute: KlantenRoute,
   LoginRoute: LoginRoute,
+  LopenRoute: LopenRoute,
   MailingRoute: MailingRoute,
   PlanningRoute: PlanningRoute,
   PrintenRoute: PrintenRoute,

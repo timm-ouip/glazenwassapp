@@ -2598,6 +2598,214 @@ export type Database = {
           },
         ];
       };
+      loop_adressen: {
+        Row: {
+          bouwlagen: number | null;
+          company_id: string;
+          customer_id: string | null;
+          gebruiksdoel: string;
+          huisnummer: number;
+          id: string;
+          notitie: string;
+          notitie_op: string | null;
+          oppervlakte: number | null;
+          pand_id: string | null;
+          postcode: string;
+          prijs: number | null;
+          straat: string;
+          street_id: string | null;
+          toevoeging: string;
+          uitkomst: string | null;
+          uitkomst_door: string | null;
+          uitkomst_op: string | null;
+          vbo_id: string;
+          woningtype: string | null;
+          woningtype_zelf: string | null;
+          woonplaats: string;
+        };
+        Insert: {
+          bouwlagen?: number | null;
+          company_id?: string;
+          customer_id?: string | null;
+          gebruiksdoel?: string;
+          huisnummer: number;
+          id?: string;
+          notitie?: string;
+          notitie_op?: string | null;
+          oppervlakte?: number | null;
+          pand_id?: string | null;
+          postcode?: string;
+          prijs?: number | null;
+          straat: string;
+          street_id?: string | null;
+          toevoeging?: string;
+          uitkomst?: string | null;
+          uitkomst_door?: string | null;
+          uitkomst_op?: string | null;
+          vbo_id: string;
+          woningtype?: string | null;
+          woningtype_zelf?: string | null;
+          woonplaats: string;
+        };
+        Update: {
+          bouwlagen?: number | null;
+          company_id?: string;
+          customer_id?: string | null;
+          gebruiksdoel?: string;
+          huisnummer?: number;
+          id?: string;
+          notitie?: string;
+          notitie_op?: string | null;
+          oppervlakte?: number | null;
+          pand_id?: string | null;
+          postcode?: string;
+          prijs?: number | null;
+          straat?: string;
+          street_id?: string | null;
+          toevoeging?: string;
+          uitkomst?: string | null;
+          uitkomst_door?: string | null;
+          uitkomst_op?: string | null;
+          vbo_id?: string;
+          woningtype?: string | null;
+          woningtype_zelf?: string | null;
+          woonplaats?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "loop_adressen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loop_adressen_customer_id_company_id_fkey";
+            columns: ["customer_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "loop_adressen_street_id_company_id_fkey";
+            columns: ["street_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "streets";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "loop_adressen_uitkomst_door_company_id_fkey";
+            columns: ["uitkomst_door", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      loopgebied_adressen: {
+        Row: {
+          adres_id: string;
+          company_id: string;
+          gebied_id: string;
+        };
+        Insert: {
+          adres_id: string;
+          company_id?: string;
+          gebied_id: string;
+        };
+        Update: {
+          adres_id?: string;
+          company_id?: string;
+          gebied_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "loopgebied_adressen_adres_id_company_id_fkey";
+            columns: ["adres_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "loop_adressen";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "loopgebied_adressen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loopgebied_adressen_gebied_id_company_id_fkey";
+            columns: ["gebied_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "loopgebieden";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
+      loopgebieden: {
+        Row: {
+          company_id: string;
+          created_at: string;
+          created_by: string | null;
+          deleted_at: string | null;
+          district_id: string | null;
+          id: string;
+          naam: string;
+          opgehaald_op: string | null;
+          plaats: string;
+          straten: string[];
+          veelhoek: Json | null;
+        };
+        Insert: {
+          company_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+          deleted_at?: string | null;
+          district_id?: string | null;
+          id?: string;
+          naam: string;
+          opgehaald_op?: string | null;
+          plaats?: string;
+          straten?: string[];
+          veelhoek?: Json | null;
+        };
+        Update: {
+          company_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+          deleted_at?: string | null;
+          district_id?: string | null;
+          id?: string;
+          naam?: string;
+          opgehaald_op?: string | null;
+          plaats?: string;
+          straten?: string[];
+          veelhoek?: Json | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "loopgebieden_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loopgebieden_created_by_company_id_fkey";
+            columns: ["created_by", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id", "company_id"];
+          },
+          {
+            foreignKeyName: "loopgebieden_district_id_company_id_fkey";
+            columns: ["district_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "districts";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
       mail_categorieen: {
         Row: {
           company_id: string;
@@ -4577,6 +4785,83 @@ export type Database = {
         Returns: undefined;
       };
       lege_concepten_opruimen: { Args: { bedrijf: string }; Returns: undefined };
+      loop_gebied_vullen: {
+        Args: {
+          adressen: Json;
+          eerste: boolean;
+          gebied: string;
+          laatste: boolean;
+          straat_weg?: string | null;
+        };
+        Returns: number;
+      };
+      loop_lijst: {
+        Args: { gebied: string };
+        Returns: {
+          bouwlagen: number;
+          doorlopend: boolean;
+          gebruiksdoel: string;
+          huisnummer: number;
+          id: string;
+          klant_adres_id: string;
+          klant_hoek_kant: string;
+          klant_status: string;
+          notitie: string;
+          oppervlakte: number;
+          postcode: string;
+          prijs: number;
+          sort_desc: boolean;
+          straat: string;
+          straat_volgorde: number;
+          street_id: string;
+          toevoeging: string;
+          uitkomst: string;
+          uitkomst_door_naam: string;
+          uitkomst_op: string;
+          vbo_id: string;
+          woningtype: string;
+          woningtype_zelf: string;
+          woonplaats: string;
+        }[];
+      };
+      loop_maak_klant: {
+        Args: {
+          adres: string;
+          interval_maanden: number;
+          naam: string;
+          prijs: number;
+          ritme: number;
+          start_maand: string;
+          straat: string | null;
+          telefoon: string;
+          wijk: string;
+        };
+        Returns: {
+          bestond: boolean;
+          customer_id: string;
+        }[];
+      };
+      loop_tellingen: {
+        Args: never;
+        Returns: {
+          created_at: string;
+          district_id: string;
+          gebied_id: string;
+          interesse: number;
+          ja: number;
+          klanten: number;
+          naam: string;
+          nee: number;
+          niet_thuis: number;
+          onvolledig: boolean;
+          opgehaald_op: string;
+          plaats: string;
+          straten: string[];
+          te_lopen: number;
+          totaal: number;
+          wijk: string;
+        }[];
+      };
       maak_standaard_categorieen: {
         Args: { bedrijf: string };
         Returns: undefined;

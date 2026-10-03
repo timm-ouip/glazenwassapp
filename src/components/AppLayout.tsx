@@ -55,6 +55,9 @@ type Props = {
    *  wijkenpagina): die tekenen het vak zelf, dus hier komt er geen lucht
    *  tussen. De titel staat dan los op de pagina, zonder balk of lijn. */
   witVak?: boolean;
+  /** Geen zwevende Paaltje-knop: op de looplijst ligt die anders over de
+   *  knoppen van een rij. */
+  zonderPaaltje?: boolean;
   children: ReactNode;
 };
 
@@ -68,6 +71,7 @@ export function AppLayout({
   onderbalk,
   zonderTitelbalk = false,
   witVak = false,
+  zonderPaaltje = false,
   children,
 }: Props) {
   // De knoppenbalk plakt onder de titelbalk vast. Hoe hoog die is hangt af
@@ -230,7 +234,7 @@ export function AppLayout({
       {/* Vóór Paaltje: gaat diens paneel open, dan ligt dat eroverheen. */}
       {dagKnop && <NaarDagKnop />}
       {lopenKnop && <NaarLopenKnop />}
-      {employee && <PaaltjeKnop />}
+      {employee && !zonderPaaltje && <PaaltjeKnop />}
       {/* Tikken van een geldloper die nog op de telefoon staan: overal versturen. */}
       {employee && <WachtrijVerzender />}
     </div>
