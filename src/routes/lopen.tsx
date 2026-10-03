@@ -36,10 +36,12 @@ import {
   fetchLoopTellingen,
   foutTekst,
   gooiGebiedWeg,
+  haalVeelhoekGebied,
   korteDatum,
   loopLijstSleutel,
   looplijstVolgorde,
   nogTeLopen,
+  schrijfGebied,
   useLoopLive,
   useLoopVoorstellen,
   vulGebied,
@@ -108,14 +110,15 @@ function Lopen() {
 // De gebieden
 // ---------------------------------------------------------------------------
 
-/** Opnieuw ophalen: de straten van het gebied, met de wijkstraat erbij. */
+/** Opnieuw ophalen: de straten van het gebied (of de omcirkelde veelhoek),
+ *  met de wijkstraat erbij. */
 function useOpnieuwOphalen() {
   const qc = useQueryClient();
   const [bezig, setBezig] = useState<{ id: string; tekst: string } | null>(null);
 
   async function ophalen(g: LoopGebied) {
     if (bezig) return;
-    if (g.straten.length === 0) {
+    if (!g.veelhoek && g.straten.length === 0) {
       toast.error("Dit gebied heeft geen straten om op te halen.");
       return;
     }
@@ -126,11 +129,18 @@ function useOpnieuwOphalen() {
             (s) => s.district_id === g.district_id,
           )
         : [];
+      const voortgang = (tekst: string) => setBezig({ id: g.gebied_id, tekst });
+      if (g.veelhoek) {
+        const { rijen } = await haalVeelhoekGebied(g.veelhoek, straten, { onVoortgang: voortgang });
+        const aantal = await schrijfGebied(g.gebied_id, rijen, { onVoortgang: voortgang });
+        toast.success(`${g.naam}: ${aantal} ${aantal === 1 ? "adres" : "adressen"}`);
+        return;
+      }
       const { aantal, nietGevonden } = await vulGebied(
         g.gebied_id,
         g.straten.map((naam) => ({ naam, street_id: wijkstraatVoor(naam, straten)?.id ?? null })),
         g.plaats,
-        { onVoortgang: (tekst) => setBezig({ id: g.gebied_id, tekst }) },
+        { onVoortgang: voortgang },
       );
       if (nietGevonden.length > 0) {
         toast.warning(
@@ -262,7 +272,13 @@ function Gebieden({
                     size="sm"
                     className="h-10 rounded-full"
                     disabled={!!bezig}
-                    onClick={() => setBewerken(g)}
+                    onClick={() =>
+                      g.veelhoek
+                        ? toast.info(
+                            "Dit gebied is op de kaart omcirkeld. Zo'n gebied aanpassen kan nog niet; maak een nieuw gebied op de kaart.",
+                          )
+                        : setBewerken(g)
+                    }
                   >
                     <Weg className="size-4" /> Straten
                   </Button>

@@ -12,8 +12,12 @@
  *
  * Straten aanpassen: een straat erbij haalt alleen die straat op; een straat
  * eraf haalt alleen de koppelingen weg (wat je noteerde blijft bewaard).
+ *
+ * Op de computer kan een nieuw gebied ook "Op de kaart": omcirkelen in plaats
+ * van straten kiezen (Kaart.tsx, pas geladen als je dat kiest). Zo'n
+ * veelhoek aanpassen kan nog niet; dan maak je een nieuw gebied.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconMap as Kaart,
@@ -47,6 +51,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { BagAdres } from "@/lib/bag";
 import { fetchDistricts, fetchStreets } from "@/lib/klanten";
 import {
@@ -56,6 +61,7 @@ import {
   foutTekst,
   haalGebiedAdressen,
   haalStraatUitGebied,
+  haalVeelhoekGebied,
   maakGebied,
   officieleNaam,
   schrijfGebied,
@@ -67,6 +73,9 @@ import {
 import { zoekStraten, zoekWoonplaatsen } from "@/lib/postcode";
 
 type Soort = "wijk" | "los";
+type Manier = "straten" | "kaart";
+
+const KaartTekenen = lazy(() => import("@/components/lopen/Kaart"));
 
 /** Een straat in de vinklijst. */
 interface Keuze {
@@ -109,6 +118,16 @@ export function GebiedMaken({
   const [voortgang, setVoortgang] = useState("");
   const [fout, setFout] = useState<string | null>(null);
   const [bezig, setBezig] = useState(false);
+  const [manier, setManier] = useState<Manier>("straten");
+  /** De omcirkelde ring in [lon, lat], na Klaar op de kaart. */
+  const [ring, setRing] = useState<[number, number][] | null>(null);
+  const telefoon = useIsMobile();
+  const opKaart = manier === "kaart" && !telefoon && !gebied;
+  // Verdwijnt de kaart (Straten gekozen, venster smaller), dan ook de lijn:
+  // een nieuwe kaart begint leeg.
+  useEffect(() => {
+    if (!opKaart) setRing(null);
+  }, [opKaart]);
   const onthoud = useRef(new Map<string, BagAdres[]>());
   const afbreken = useRef<AbortController | null>(null);
 
@@ -136,6 +155,8 @@ export function GebiedMaken({
     setNietGevonden(new Map());
     setVoortgang("");
     setFout(null);
+    setManier("straten");
+    setRing(null);
     onthoud.current = new Map();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -249,7 +270,53 @@ export function GebiedMaken({
 
   const gekozen = keuzes.filter((k) => aan.has(k.sleutel));
 
+  async function maakOpKaart() {
+    setFout(null);
+    if (!naam.trim()) return setFout("Geef het gebied een naam.");
+    if (soort === "wijk" && !wijk) return setFout("Kies een wijk.");
+    if (!ring) return setFout("Omcirkel het gebied op de kaart en kies Klaar.");
+
+    const ac = new AbortController();
+    afbreken.current = ac;
+    setBezig(true);
+    try {
+      const { rijen, straten } = await haalVeelhoekGebied(
+        ring,
+        soort === "wijk" ? wijkStraten : [],
+        { onVoortgang: setVoortgang, signal: ac.signal },
+      );
+      if (rijen.length === 0) return setFout("Binnen deze lijn liggen geen adressen.");
+      const id = await maakGebied({
+        naam,
+        district_id: soort === "wijk" ? wijkId : null,
+        // Zonder plaats bij de wijk: die van de adressen zelf.
+        plaats: plaats.trim() || rijen[0]!.woonplaats,
+        straten,
+        veelhoek: ring,
+      });
+      try {
+        const aantal = await schrijfGebied(id, rijen, { onVoortgang: setVoortgang });
+        toast.success(`${naam.trim()}: ${aantal} ${aantal === 1 ? "adres" : "adressen"}`);
+      } catch (e) {
+        toast.error(
+          `${naam.trim()} is nog niet compleet: ${foutTekst(e)} Kies in de lijst "Opnieuw ophalen".`,
+        );
+      }
+      onOpenChange(false);
+    } catch (e) {
+      setFout(foutTekst(e));
+    } finally {
+      setBezig(false);
+      setVoortgang("");
+      afbreken.current = null;
+      void qc.invalidateQueries({ queryKey: LOOP_TELLINGEN });
+      void qc.invalidateQueries({ queryKey: ["loop-lijst"] });
+      void qc.invalidateQueries({ queryKey: LOOP_VOORSTELLEN });
+    }
+  }
+
   async function opslaan() {
+    if (opKaart) return maakOpKaart();
     setFout(null);
     if (!naam.trim()) return setFout("Geef het gebied een naam.");
     if (soort === "wijk" && !wijk) return setFout("Kies een wijk.");
@@ -349,7 +416,7 @@ export function GebiedMaken({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !bezig && onOpenChange(o)}>
-      <PopupKader className="sm:max-w-lg">
+      <PopupKader className={opKaart ? "sm:max-w-3xl" : "sm:max-w-lg"}>
         <PopupKop
           icoon={<Walk className="size-[22px]" />}
           titel={gebied ? "Straten aanpassen" : "Nieuw gebied"}
@@ -425,7 +492,39 @@ export function GebiedMaken({
             </PopupBlok>
           )}
 
-          {(soort === "los" || wijk) && (
+          {!gebied && (soort === "los" || wijk) && (
+            <PopupBlok label="Adressen kiezen">
+              {telefoon ? (
+                <PopupHint>Omcirkelen kan op de computer.</PopupHint>
+              ) : (
+                <Pillen<Manier>
+                  label="Adressen kiezen"
+                  keuzes={[
+                    { waarde: "straten", label: "Straten" },
+                    { waarde: "kaart", label: "Op de kaart" },
+                  ]}
+                  waarde={manier}
+                  onChange={setManier}
+                  disabled={bezig}
+                />
+              )}
+            </PopupBlok>
+          )}
+
+          {opKaart && (soort === "los" || wijk) && (
+            <PopupBlok label="Op de kaart">
+              <Suspense fallback={<PopupHint>Kaart laden…</PopupHint>}>
+                <KaartTekenen
+                  plaats={bagPlaats(plaats)}
+                  straat={wijkStraten[0] ? officieleNaam(wijkStraten[0]) : ""}
+                  disabled={bezig}
+                  onChange={setRing}
+                />
+              </Suspense>
+            </PopupBlok>
+          )}
+
+          {!opKaart && (soort === "los" || wijk) && (
             <PopupBlok
               label="Straten"
               terzijde={gekozen.length > 0 ? `${gekozen.length} gekozen` : undefined}

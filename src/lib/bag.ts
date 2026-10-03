@@ -12,6 +12,9 @@
  * (src/lib/woningtype.ts), en als laatste de 3D BAG voor het aantal
  * bouwlagen. Mislukt dat deel, dan blijven die velden leeg; de adressen zelf
  * gaan gewoon door (de database wist met een lege waarde nooit iets).
+ *
+ * Kaartmodus (`haalVeelhoekAdressen`): cellen over een getekende veelhoek,
+ * met het adres en het punt uit het verblijfsobject zelf.
  */
 
 import { woningtypen, type PandVorm, type Punt, type Woningtype } from "@/lib/woningtype";
@@ -85,10 +88,20 @@ interface VboEigenschappen {
   gebruiksdoel?: string | string[] | null;
   oppervlakte?: number | null;
   "pand.href"?: string[] | null;
+  // Het adres staat er zelf in; dat gebruikt de kaartmodus (geen Locatieserver).
+  openbare_ruimte_naam?: string | null;
+  openbare_ruimte_naam_kort?: string | null;
+  woonplaats_naam?: string | null;
+  huisnummer?: number | null;
+  huisletter?: string | null;
+  toevoeging?: string | null;
+  postcode?: string | null;
 }
 
 interface VboFeature {
   properties?: VboEigenschappen;
+  /** Een Point in WGS84: [lon, lat]. */
+  geometry?: { type?: string; coordinates?: unknown } | null;
 }
 
 interface Links {
@@ -502,6 +515,123 @@ export async function haalStraatAdressen(
   return ontdubbel(rijen).sort(
     (a, b) => a.huisnummer - b.huisnummer || a.toevoeging.localeCompare(b.toevoeging),
   );
+}
+
+/** ~30 m rond de veelhoek, in graden op 52°N. */
+const VEELHOEK_RAND_LON = 0.00045;
+const VEELHOEK_RAND_LAT = 0.00027;
+/** Groter dan dit (bbox van de veelhoek, of aantal adressen) halen we niet op. */
+const MAX_VEELHOEK_KM2 = 2;
+const MAX_VEELHOEK_ADRESSEN = 6000;
+const MAX_VEELHOEK_CELLEN = 100;
+export const TE_GROOT = "Dit gebied is te groot; maak het kleiner.";
+
+/** Het punt van een verblijfsobject: een Point, of het midden van een vlak. */
+function vboPunt(geometrie: VboFeature["geometry"]): [number, number] | null {
+  const c = geometrie?.coordinates;
+  if (geometrie?.type === "Point" && Array.isArray(c)) {
+    const [lon, lat] = c as unknown[];
+    return typeof lon === "number" && typeof lat === "number" ? [lon, lat] : null;
+  }
+  if (geometrie?.type === "Polygon" && Array.isArray(c) && Array.isArray(c[0])) {
+    const ring = (c[0] as unknown[]).filter(
+      (p): p is [number, number] =>
+        Array.isArray(p) && typeof p[0] === "number" && typeof p[1] === "number",
+    );
+    if (ring.length === 0) return null;
+    const som = ring.reduce((t, p) => [t[0] + p[0], t[1] + p[1]], [0, 0]);
+    return [som[0] / ring.length, som[1] / ring.length];
+  }
+  return null;
+}
+
+/**
+ * Alle woningen en bedrijfspanden binnen een op de kaart getekende veelhoek
+ * (`ring` in [lon, lat], WGS84), met pand, woningtype en bouwlagen erbij.
+ *
+ * Cellen van ~200 m over de bbox van de veelhoek (+ ~30 m); een adres doet
+ * mee als zijn BAG-punt binnen de veelhoek ligt. Het adres zelf komt uit het
+ * verblijfsobject, er is hier geen Locatieserver nodig.
+ *
+ * `null` = het ophalen mislukte (ook bij afbreken). Is het gebied te groot
+ * (bbox > 2 km², meer dan 100 cellen of meer dan 6000 adressen), dan een
+ * fout met {@link TE_GROOT}.
+ */
+export async function haalVeelhoekAdressen(
+  ring: [number, number][],
+  opties: BagOpties = {},
+): Promise<BagAdres[] | null> {
+  const { onVoortgang, signal } = opties;
+  if (ring.length < 3) return [];
+
+  let [minLon, minLat, maxLon, maxLat] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [lon, lat] of ring) {
+    minLon = Math.min(minLon, lon);
+    minLat = Math.min(minLat, lat);
+    maxLon = Math.max(maxLon, lon);
+    maxLat = Math.max(maxLat, lat);
+  }
+  const breedteM = (maxLon - minLon) * 111320 * Math.cos((((minLat + maxLat) / 2) * Math.PI) / 180);
+  const hoogteM = (maxLat - minLat) * 110574;
+  if ((breedteM * hoogteM) / 1e6 > MAX_VEELHOEK_KM2) throw new Error(TE_GROOT);
+
+  const cellen: string[] = [];
+  const [x0, x1] = [minLon - VEELHOEK_RAND_LON, maxLon + VEELHOEK_RAND_LON];
+  const [y0, y1] = [minLat - VEELHOEK_RAND_LAT, maxLat + VEELHOEK_RAND_LAT];
+  for (let ix = Math.floor(x0 / CEL_LON); ix <= Math.floor(x1 / CEL_LON); ix++) {
+    for (let iy = Math.floor(y0 / CEL_LAT); iy <= Math.floor(y1 / CEL_LAT); iy++) {
+      cellen.push(`${ix}_${iy}`);
+    }
+  }
+  // Een lange smalle lijn heeft bijna geen oppervlakte, maar wel veel cellen.
+  if (cellen.length > MAX_VEELHOEK_CELLEN) throw new Error(TE_GROOT);
+
+  const binnen = new Map<string, BagAdres>();
+  let nr = 0;
+  for (const sleutel of cellen) {
+    nr++;
+    onVoortgang?.(`Cel ${nr} van ${cellen.length}`);
+    const features = await haalCel(celBbox(sleutel), signal);
+    if (!features) return null;
+
+    for (const f of features) {
+      const p = f.properties;
+      const id = p?.identificatie;
+      if (!p || !isVerblijfsobjectId(id) || binnen.has(id!)) continue;
+      if (typeof p.huisnummer !== "number") continue;
+      if (!houdStatus(p.status) || !soortVanGebruik(p.gebruiksdoel)) continue;
+      const punt = vboPunt(f.geometry);
+      if (!punt || !binnenVeelhoek(punt, ring)) continue;
+
+      binnen.set(id!, {
+        vbo_id: id!,
+        straat: (p.openbare_ruimte_naam ?? "").trim(),
+        straat_verkort: (p.openbare_ruimte_naam_kort ?? "").trim(),
+        woonplaats: (p.woonplaats_naam ?? "").trim(),
+        huisnummer: p.huisnummer,
+        toevoeging: `${p.huisletter ?? ""}${p.toevoeging ?? ""}`.replace(/\s+/g, "").toUpperCase(),
+        postcode: (p.postcode ?? "").replace(/\s+/g, "").toUpperCase(),
+        oppervlakte: typeof p.oppervlakte === "number" ? p.oppervlakte : null,
+        gebruiksdoel: gebruiksdoelLabel(p.gebruiksdoel),
+        lon: punt[0],
+        lat: punt[1],
+        pand_refs: (p["pand.href"] ?? []).map(pandRef).filter(Boolean),
+        pand_id: null,
+        woningtype: null,
+        bouwlagen: null,
+      });
+    }
+    if (binnen.size > MAX_VEELHOEK_ADRESSEN) throw new Error(TE_GROOT);
+  }
+
+  const adressen = [...binnen.values()].sort(
+    (a, b) =>
+      a.straat.localeCompare(b.straat, "nl") ||
+      a.huisnummer - b.huisnummer ||
+      a.toevoeging.localeCompare(b.toevoeging),
+  );
+  const uit = await vulPandgegevens(adressen, opties);
+  return signal?.aborted ? null : uit;
 }
 
 /** Een pand zoals we het hieronder gebruiken. */

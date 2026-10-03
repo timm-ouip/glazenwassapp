@@ -246,6 +246,34 @@ export async function zoekWoonplaatsen(zoekterm: string, signal?: AbortSignal): 
   return [...new Set(namen)];
 }
 
+/**
+ * Het midden van een straat (als die er is) of anders van een woonplaats, als
+ * [lat, lon] voor de kaart. `null` als de Locatieserver hem niet kent of het
+ * liet afweten.
+ */
+export async function zoekKaartMidden(
+  plaats: string,
+  straat = "",
+  signal?: AbortSignal,
+): Promise<[number, number] | null> {
+  if (!plaats.trim()) return null;
+  const url = new URL(BASIS);
+  url.searchParams.set("q", "*:*");
+  url.searchParams.append("fq", straat.trim() ? "type:weg" : "type:woonplaats");
+  if (straat.trim()) url.searchParams.append("fq", `straatnaam:${quote(straat.trim())}`);
+  url.searchParams.append("fq", `woonplaatsnaam:${quote(plaats.trim())}`);
+  url.searchParams.set("fl", "centroide_ll");
+  url.searchParams.set("rows", "1");
+
+  const json = await haalOp<{ response?: { docs?: { centroide_ll?: string }[] } }>(url, signal);
+  const m = json?.response?.docs?.[0]?.centroide_ll?.match(
+    /POINT\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s*\)/,
+  );
+  if (m) return [Number(m[2]), Number(m[1])];
+  // De straat niet gevonden (een afkorting): dan de plaats.
+  return straat.trim() ? zoekKaartMidden(plaats, "", signal) : null;
+}
+
 /** Sleutel waarop een huisnummer met toevoeging te herkennen is: "12a". */
 export function nummerSleutel(huisnummer: number | string, toevoeging = ""): string {
   return `${huisnummer}${toevoeging}`.replace(/[\s-]/g, "").toLowerCase();

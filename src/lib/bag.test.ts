@@ -4,12 +4,14 @@ import {
   binnenVeelhoek,
   celSleutel,
   haalStraatAdressen,
+  haalVeelhoekAdressen,
   houdStatus,
   isVerblijfsobjectId,
   naarRd,
   ontdubbel,
   pandRef,
   soortVanGebruik,
+  TE_GROOT,
   vulPandgegevens,
   type BagAdres,
 } from "@/lib/bag";
@@ -564,5 +566,150 @@ describe("haalStraatAdressen + pand.href", () => {
       );
       const uit = await haalStraatAdressen("Rozenstraat", "'s-Gravenhage");
       expect(uit![0]!.pand_refs).toEqual(["p-1"]);
+    }));
+});
+
+// ---------------------------------------------------------------------------
+// haalVeelhoekAdressen: kaartmodus, het adres en punt uit het verblijfsobject
+// ---------------------------------------------------------------------------
+
+/** Een verblijfsobject zoals de BAG het in een bbox teruggeeft (ingekort). */
+const kaartVbo = (
+  id: string,
+  nr: number,
+  lon: number,
+  lat: number,
+  extra: Record<string, unknown> = {},
+) => ({
+  type: "Feature",
+  properties: {
+    identificatie: id,
+    status: "Verblijfsobject in gebruik",
+    gebruiksdoel: "woonfunctie",
+    oppervlakte: 90,
+    openbare_ruimte_naam: "Rozenstraat",
+    openbare_ruimte_naam_kort: null,
+    woonplaats_naam: "'s-Gravenhage",
+    huisnummer: nr,
+    huisletter: null,
+    toevoeging: null,
+    postcode: "2565 SG",
+    ...extra,
+  },
+  geometry: { type: "Point", coordinates: [lon, lat] },
+});
+
+/** Een rechthoek van ~140 × 110 m in de Bloemenbuurt. */
+const vak: [number, number][] = [
+  [4.258, 52.072],
+  [4.26, 52.072],
+  [4.26, 52.073],
+  [4.258, 52.073],
+];
+
+/** De foutmelding van een belofte die mislukt, of "" als hij slaagt. */
+async function foutVan(belofte: Promise<unknown>): Promise<string> {
+  try {
+    await belofte;
+    return "";
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
+function maakKaartFetch(features: unknown[]) {
+  const verzoeken: URL[] = [];
+  globalThis.fetch = (async (invoer: URL | string) => {
+    const url = new URL(invoer.toString());
+    verzoeken.push(url);
+    if (url.pathname.endsWith("/verblijfsobject/items"))
+      return Response.json({ features, links: [] });
+    if (url.pathname.endsWith("/pand/items")) return Response.json({ features: [], links: [] });
+    return new Response("onverwacht", { status: 404 });
+  }) as unknown as typeof fetch;
+  return verzoeken;
+}
+
+describe("haalVeelhoekAdressen", () => {
+  test("alleen binnen de lijn, gefilterd, en één keer ook al geven alle cellen alles", () =>
+    metFetch(async () => {
+      const verzoeken = maakKaartFetch([
+        kaartVbo("0518010000000001", 1, 4.259, 52.0725),
+        // ~2 m ten oosten van de rand: valt af.
+        kaartVbo("0518010000000002", 2, 4.26003, 52.0725),
+        kaartVbo("0518010000000003", 3, 4.2591, 52.0725, {
+          status: "Verblijfsobject ingetrokken",
+        }),
+        kaartVbo("0518010000000004", 4, 4.2592, 52.0725, {
+          gebruiksdoel: "overige gebruiksfunctie",
+        }),
+        kaartVbo("0518010000000005", 5, 4.2593, 52.0726, { huisletter: "a", toevoeging: "2" }),
+        kaartVbo("0518010000000006", 6, 4.2594, 52.0726, { gebruiksdoel: "winkelfunctie" }),
+      ]);
+      const voortgang: string[] = [];
+      const uit = await haalVeelhoekAdressen(vak, { onVoortgang: (t) => voortgang.push(t) });
+
+      expect(uit!.map((r) => r.vbo_id)).toEqual([
+        "0518010000000001",
+        "0518010000000005",
+        "0518010000000006",
+      ]);
+      const r = uit![1]!;
+      expect([
+        r.straat,
+        r.woonplaats,
+        r.huisnummer,
+        r.toevoeging,
+        r.postcode,
+        r.oppervlakte,
+      ]).toEqual(["Rozenstraat", "'s-Gravenhage", 5, "A2", "2565SG", 90]);
+      expect([r.lon, r.lat]).toEqual([4.2593, 52.0726]);
+      expect(uit![2]!.gebruiksdoel).toBe("winkelfunctie");
+      // Meer dan één cel, en toch elk adres één keer.
+      const cellen = verzoeken.filter((u) => u.pathname.endsWith("/verblijfsobject/items"));
+      expect(cellen.length > 1).toBe(true);
+      expect(voortgang).toContain(`Cel ${cellen.length} van ${cellen.length}`);
+    }));
+
+  test("een te groot gebied wordt geweigerd, zonder één verzoek", () =>
+    metFetch(async () => {
+      const verzoeken = maakKaartFetch([]);
+      const groot: [number, number][] = [
+        [4.25, 52.05],
+        [4.3, 52.05],
+        [4.3, 52.1],
+        [4.25, 52.1],
+      ];
+      expect(await foutVan(haalVeelhoekAdressen(groot))).toBe(TE_GROOT);
+      expect(verzoeken.length).toBe(0);
+    }));
+
+  test("een lange smalle lijn (veel cellen, bijna geen oppervlakte) wordt geweigerd", () =>
+    metFetch(async () => {
+      const verzoeken = maakKaartFetch([]);
+      const streep: [number, number][] = [
+        [4.0, 52.07],
+        [4.5, 52.07],
+        [4.5, 52.07001],
+      ];
+      expect(await foutVan(haalVeelhoekAdressen(streep))).toBe(TE_GROOT);
+      expect(verzoeken.length).toBe(0);
+    }));
+
+  test("meer dan 6000 adressen binnen de lijn wordt ook geweigerd", () =>
+    metFetch(async () => {
+      maakKaartFetch(
+        Array.from({ length: 6001 }, (_, i) =>
+          kaartVbo(`0518010${String(i).padStart(9, "0")}`, i + 1, 4.259, 52.0725),
+        ),
+      );
+      expect(await foutVan(haalVeelhoekAdressen(vak))).toBe(TE_GROOT);
+    }));
+
+  test("een mislukte cel geeft null", () =>
+    metFetch(async () => {
+      globalThis.fetch = (async () =>
+        new Response("kapot", { status: 400 })) as unknown as typeof fetch;
+      expect(await haalVeelhoekAdressen(vak)).toBeNull();
     }));
 });

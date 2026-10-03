@@ -14,7 +14,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { haalStraatAdressen, ontdubbel, vulPandgegevens, type BagAdres } from "@/lib/bag";
+import {
+  haalStraatAdressen,
+  haalVeelhoekAdressen,
+  ontdubbel,
+  vulPandgegevens,
+  type BagAdres,
+} from "@/lib/bag";
 import { kantVan, type Kant } from "@/lib/klanten";
 import { nummerSleutel } from "@/lib/postcode";
 import { alsWoningtype, woningtypeLabel, type Woningtype } from "@/lib/woningtype";
@@ -41,6 +47,8 @@ export interface LoopGebied {
   wijk: string | null;
   plaats: string;
   straten: string[];
+  /** Op de kaart omcirkeld: de ring in [lon, lat] (open, zonder herhaald eerste punt). */
+  veelhoek: [number, number][] | null;
   opgehaald_op: string | null;
   created_at: string;
   totaal: number;
@@ -100,8 +108,18 @@ export interface LoopVoorstel {
 // ---------------------------------------------------------------------------
 
 export async function fetchLoopTellingen(): Promise<LoopGebied[]> {
-  const { data, error } = await supabase.rpc("loop_tellingen");
+  // loop_tellingen geeft de veelhoek niet mee; die halen we er los bij.
+  const [{ data, error }, kaart] = await Promise.all([
+    supabase.rpc("loop_tellingen"),
+    supabase
+      .from("loopgebieden")
+      .select("id, veelhoek")
+      .is("deleted_at", null)
+      .not("veelhoek", "is", null),
+  ]);
   if (error) throw error;
+  if (kaart.error) throw kaart.error;
+  const veelhoeken = new Map((kaart.data ?? []).map((r) => [r.id, ringUitVeelhoek(r.veelhoek)]));
   return (data ?? []).map((g) => ({
     gebied_id: g.gebied_id,
     naam: g.naam,
@@ -109,6 +127,7 @@ export async function fetchLoopTellingen(): Promise<LoopGebied[]> {
     wijk: g.wijk ?? null,
     plaats: g.plaats ?? "",
     straten: g.straten ?? [],
+    veelhoek: veelhoeken.get(g.gebied_id) ?? null,
     opgehaald_op: g.opgehaald_op ?? null,
     created_at: g.created_at,
     totaal: g.totaal ?? 0,
@@ -225,6 +244,8 @@ export async function maakGebied(gebied: {
   district_id: string | null;
   plaats: string;
   straten: string[];
+  /** Op de kaart omcirkeld: de ring in [lon, lat]. */
+  veelhoek?: [number, number][] | null;
 }): Promise<string> {
   const { data, error } = await supabase
     .from("loopgebieden")
@@ -233,6 +254,7 @@ export async function maakGebied(gebied: {
       district_id: gebied.district_id,
       plaats: gebied.plaats.trim(),
       straten: gebied.straten,
+      ...(gebied.veelhoek ? { veelhoek: veelhoekAlsGeoJson(gebied.veelhoek) as Json } : {}),
     })
     .select("id")
     .single();
@@ -436,6 +458,81 @@ export async function vulGebied(
     ...(opties.onVoortgang ? { onVoortgang: opties.onVoortgang } : {}),
   });
   return { aantal, nietGevonden };
+}
+
+/** Een ring als GeoJSON-Polygon (WGS84), met het eerste punt aan het eind herhaald. */
+export function veelhoekAlsGeoJson(ring: [number, number][]): {
+  type: "Polygon";
+  coordinates: [number, number][][];
+} {
+  const eerste = ring[0];
+  const laatste = ring[ring.length - 1];
+  const gesloten =
+    eerste && laatste && (eerste[0] !== laatste[0] || eerste[1] !== laatste[1])
+      ? [...ring, eerste]
+      : ring;
+  return { type: "Polygon", coordinates: [gesloten.map(([lon, lat]) => [lon, lat])] };
+}
+
+/** Een bewaarde GeoJSON-Polygon terug naar een open ring; `null` als het geen bruikbare is. */
+export function ringUitVeelhoek(json: unknown): [number, number][] | null {
+  if (!json || typeof json !== "object") return null;
+  const v = json as { type?: unknown; coordinates?: unknown };
+  if (v.type !== "Polygon" || !Array.isArray(v.coordinates) || !Array.isArray(v.coordinates[0])) {
+    return null;
+  }
+  const ring = (v.coordinates[0] as unknown[])
+    .filter(
+      (p): p is [number, number] =>
+        Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]),
+    )
+    .map(([lon, lat]): [number, number] => [lon, lat]);
+  const eerste = ring[0];
+  const laatste = ring[ring.length - 1];
+  if (ring.length > 1 && eerste![0] === laatste![0] && eerste![1] === laatste![1]) ring.pop();
+  return ring.length >= 3 ? ring : null;
+}
+
+/**
+ * Alle adressen binnen een op de kaart omcirkelde veelhoek, als rijen voor
+ * loop_gebied_vullen, en de straatnamen die erin liggen (op alfabet). Bij een
+ * wijk krijgt een adres de wijkstraat met dezelfde naam erbij. Mislukt het
+ * ophalen, of is het gebied te groot, dan een fout; er is dan niets bewaard.
+ */
+export async function haalVeelhoekGebied(
+  ring: [number, number][],
+  wijkStraten: { id: string; name: string; volledige_naam: string }[],
+  opties: { onVoortgang?: (tekst: string) => void; signal?: AbortSignal } = {},
+): Promise<{ rijen: LoopInvoer[]; straten: string[] }> {
+  const adressen = await haalVeelhoekAdressen(ring, opties);
+  if (adressen === null) {
+    throw new Error(
+      opties.signal?.aborted
+        ? "Ophalen afgebroken."
+        : "Ophalen mislukt. Het adressenregister reageert niet; probeer het zo opnieuw.",
+    );
+  }
+  const straatId = new Map<string, string | null>();
+  for (const a of adressen) {
+    if (!straatId.has(a.straat))
+      straatId.set(a.straat, wijkstraatVoor(a.straat, wijkStraten)?.id ?? null);
+  }
+  const rijen = adressen.map((a): LoopInvoer => ({
+    vbo_id: a.vbo_id,
+    straat: a.straat,
+    woonplaats: a.woonplaats,
+    huisnummer: a.huisnummer,
+    toevoeging: a.toevoeging,
+    postcode: a.postcode,
+    street_id: straatId.get(a.straat) ?? null,
+    pand_id: a.pand_id,
+    oppervlakte: a.oppervlakte,
+    gebruiksdoel: a.gebruiksdoel,
+    woningtype: a.woningtype,
+    bouwlagen: a.bouwlagen,
+  }));
+  const straten = [...straatId.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b, "nl"));
+  return { rijen, straten };
 }
 
 /** De officiële naam van een wijkstraat, met de werknaam als terugval. */
