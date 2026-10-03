@@ -1447,6 +1447,7 @@ export type Database = {
           pdf_pad: string | null;
           soort: string;
           status: string;
+          tegoed_verrekend: number;
           termijn_dagen: number | null;
           verstuurd_naar: string;
           verstuurd_op: string | null;
@@ -1479,6 +1480,7 @@ export type Database = {
           pdf_pad?: string | null;
           soort?: string;
           status?: string;
+          tegoed_verrekend?: number;
           termijn_dagen?: number | null;
           verstuurd_naar?: string;
           verstuurd_op?: string | null;
@@ -1511,6 +1513,7 @@ export type Database = {
           pdf_pad?: string | null;
           soort?: string;
           status?: string;
+          tegoed_verrekend?: number;
           termijn_dagen?: number | null;
           verstuurd_naar?: string;
           verstuurd_op?: string | null;
@@ -3888,6 +3891,60 @@ export type Database = {
           },
         ];
       };
+      tegoed_boekingen: {
+        Row: {
+          bedrag: number;
+          company_id: string;
+          created_at: string;
+          door: string | null;
+          door_naam: string;
+          id: string;
+          klant_id: string;
+          op: string;
+          opmerking: string;
+          soort: string;
+        };
+        Insert: {
+          bedrag: number;
+          company_id?: string;
+          created_at?: string;
+          door?: string | null;
+          door_naam?: string;
+          id?: string;
+          klant_id: string;
+          op?: string;
+          opmerking?: string;
+          soort?: string;
+        };
+        Update: {
+          bedrag?: number;
+          company_id?: string;
+          created_at?: string;
+          door?: string | null;
+          door_naam?: string;
+          id?: string;
+          klant_id?: string;
+          op?: string;
+          opmerking?: string;
+          soort?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tegoed_boekingen_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tegoed_boekingen_klant_id_company_id_fkey";
+            columns: ["klant_id", "company_id"];
+            isOneToOne: false;
+            referencedRelation: "klanten";
+            referencedColumns: ["id", "company_id"];
+          },
+        ];
+      };
       vaste_kortingen: {
         Row: {
           bedrag: number;
@@ -4495,6 +4552,13 @@ export type Database = {
         Args: { factuur: string; keuzes?: Json | null };
         Returns: number;
       };
+      factuur_tegoed_uit: {
+        Args: {
+          f: Database["public"]["Tables"]["facturen"]["Row"];
+          totaal: number;
+        };
+        Returns: number;
+      };
       factuur_termijn: {
         Args: { k: Database["public"]["Tables"]["klanten"]["Row"] };
         Returns: number;
@@ -4771,6 +4835,11 @@ export type Database = {
       };
       heeft_recht: { Args: { recht: string }; Returns: boolean };
       is_eigenaar: { Args: never; Returns: boolean };
+      klant_tegoed: { Args: { klant: string }; Returns: Json };
+      klant_tegoed_saldo: {
+        Args: { bedrijf: string; klant: string };
+        Returns: number;
+      };
       klant_van_bericht: {
         Args: {
           aan: Json;
@@ -4948,6 +5017,10 @@ export type Database = {
         Returns: number;
       };
       straten_volgorde: { Args: { ids: string[] }; Returns: number };
+      tegoed_vereffenen: {
+        Args: { klant: string; opmerking?: string | null };
+        Returns: number;
+      };
       telefoon_sleutel: { Args: { tekst: string }; Returns: string };
       vooruit_beurten_open: { Args: { adres: string }; Returns: number };
       vooruit_prijs: { Args: { adres: string }; Returns: number };

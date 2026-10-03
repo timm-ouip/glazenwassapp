@@ -92,6 +92,7 @@ export function FacturenLijst({ onTerug }: { onTerug?: () => void }) {
 
   function ververs() {
     void qc.invalidateQueries({ queryKey: ["facturen"] });
+    void qc.invalidateQueries({ queryKey: ["tegoed"] });
     void qc.invalidateQueries({ queryKey: ["factuurregels-los"] });
     // Ook het gele vak: vink je een factuur af als betaald of laat je hem met
     // rust, dan zou het anders blijven beloven dat er een herinnering naartoe
@@ -517,6 +518,11 @@ export function FactuurDetail({
     enabled: open,
   });
   const nogOpen = openBedrag(f);
+  // Wat de klant zelf betaalde, zonder het tegoed dat erop verrekend is.
+  const zelfBetaald = Math.round((f.betaald_bedrag - f.tegoed_verrekend) * 100) / 100;
+  // Een ander bedrag boeken dan wat er openstaat: een deel, of juist meer
+  // (dan wordt het verschil tegoed). Als tekst, zodat het veld even leeg mag.
+  const [anderBedrag, setAnderBedrag] = useState<string | null>(null);
 
   // Standaard staat alles aan: meestal moet bijna al het werk opnieuw op de
   // factuur en vink je alleen het pand uit dat niet gedaan is.
@@ -561,21 +567,38 @@ export function FactuurDetail({
     onError: (e: Error) => toast.error("Niet gelukt: " + e.message),
   });
 
-  async function afvinken() {
+  async function afvinken(bedrag: number) {
     try {
-      await factuurBetaald(f.id, nogOpen);
+      const uit = await factuurBetaald(f.id, bedrag);
+      setAnderBedrag(null);
       onVeranderd();
-      toast.success("Afgevinkt als betaald.");
+      if (uit.tegoed > 0.005) {
+        toast.success(`${formatPrice(uit.tegoed)} te veel betaald.`, {
+          description: "Dat staat nu als tegoed bij de klant en gaat af van de volgende factuur.",
+          duration: 8000,
+        });
+      } else if (uit.open > 0.005) {
+        toast.success(`Geboekt. Er staat nog ${formatPrice(uit.open)} open.`);
+      } else {
+        toast.success("Afgevinkt als betaald.");
+      }
     } catch (e) {
       toast.error("Afvinken mislukt: " + (e as Error).message);
     }
   }
 
+  /** Het getypte bedrag, met een komma of een punt. Leeg of nul = niets. */
+  const anderGetal = Number((anderBedrag ?? "").replace(",", "."));
+  const anderKlopt = Number.isFinite(anderGetal) && anderGetal > 0;
+
   async function crediteren() {
     const ja = await bevestig({
       titel: `Factuur ${f.nummer} crediteren?`,
       tekst:
-        "Er komt een creditfactuur met een eigen nummer die deze tegenboekt. Deze factuur zelf verandert niet — je klant heeft hem al. Daarna stuur je een aangepaste factuur met het juiste werk erop.",
+        "Er komt een creditfactuur met een eigen nummer die deze tegenboekt. Deze factuur zelf verandert niet — je klant heeft hem al. Daarna stuur je een aangepaste factuur met het juiste werk erop." +
+        (f.betaald_bedrag > 0.005
+          ? ` Wat er al op betaald is (${formatPrice(f.betaald_bedrag)}) komt als tegoed bij de klant en gaat af van de volgende factuur.`
+          : ""),
       bevestigLabel: "Crediteren",
     });
     if (!ja) return;
@@ -690,7 +713,26 @@ export function FactuurDetail({
                 : `Excl. btw ${formatPrice(f.totalen.excl)} · waarvan btw ${formatPrice(f.totalen.btw)}`}
             </span>
           </div>
+          {f.tegoed_verrekend > 0.005 && (
+            <div className="flex gap-3 text-[12.5px] text-muted-foreground">
+              <span className="min-w-0 flex-1 text-right">
+                Reeds betaald uit tegoed −{formatPrice(f.tegoed_verrekend)} · nog te betalen{" "}
+                {formatPrice(Math.max(0, f.totalen.incl - f.tegoed_verrekend))}
+              </span>
+            </div>
+          )}
         </div>
+      )}
+
+      {/* Wat deze factuur aan tegoed opleverde. Het staat bij de klant en
+          gaat vanzelf af van zijn volgende factuur. */}
+      {f.tegoed_uit > 0.005 && (
+        <p className="rounded-[14px] bg-tint-groen px-3 py-2 text-[12.5px] text-tint-groen-ink">
+          {gecrediteerd
+            ? `Er was al ${formatPrice(f.tegoed_uit)} op betaald.`
+            : `Er is ${formatPrice(f.tegoed_uit)} te veel betaald.`}{" "}
+          Dat staat als tegoed bij de klant en gaat af van de volgende factuur.
+        </p>
       )}
 
       {/* Na het crediteren: welke panden gaan er op de aangepaste factuur?
@@ -732,13 +774,25 @@ export function FactuurDetail({
         )}
         {f.status === "verstuurd" && (
           <>
-            <Button size="sm" variant="secondary" onClick={() => void afvinken()}>
+            <Button size="sm" variant="secondary" onClick={() => void afvinken(nogOpen)}>
               Betaald ({formatPrice(nogOpen)})
             </Button>
             <Button size="sm" variant="ghost" onClick={() => void metRust()}>
               {f.met_rust_tot ? "Weer oppakken" : "Even met rust"}
             </Button>
           </>
+        )}
+        {/* Een ander bedrag: een deel, of meer dan er openstond. Ook bij een
+            betaalde of gecrediteerde factuur, want juist daar komt een
+            dubbele overboeking binnen -- en die wordt tegoed. */}
+        {f.soort === "factuur" && f.nummer && f.status !== "concept" && anderBedrag === null && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setAnderBedrag(nogOpen > 0 ? String(nogOpen).replace(".", ",") : "")}
+          >
+            {f.status === "verstuurd" ? "Ander bedrag…" : "Betaling boeken…"}
+          </Button>
         )}
         {/* Ook bij een betaalde factuur. Terugbetalen ná ontvangst is
             juist het gewone geval, en het is de enige manier om een
@@ -750,12 +804,44 @@ export function FactuurDetail({
             Crediteren
           </Button>
         )}
-        {f.betaald_bedrag > 0 && f.status !== "betaald" && (
+        {zelfBetaald > 0.005 && f.status !== "betaald" && (
           <span className="self-center text-[12.5px] text-muted-foreground">
-            Al betaald: {formatPrice(f.betaald_bedrag)}
+            Al betaald: {formatPrice(zelfBetaald)}
           </span>
         )}
       </div>
+
+      {anderBedrag !== null && (
+        <form
+          className="flex flex-wrap items-center gap-2 text-[12.5px]"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (anderKlopt) void afvinken(Math.round(anderGetal * 100) / 100);
+          }}
+        >
+          <label htmlFor={`ander-bedrag-${f.id}`}>Ontvangen bedrag</label>
+          <input
+            id={`ander-bedrag-${f.id}`}
+            type="text"
+            inputMode="decimal"
+            autoFocus
+            value={anderBedrag}
+            onChange={(e) => setAnderBedrag(e.target.value)}
+            className="w-24 rounded-lg border border-input bg-background/70 px-2 py-1 text-right tabular-nums"
+          />
+          <Button type="submit" size="sm" variant="secondary" disabled={!anderKlopt}>
+            Boeken
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setAnderBedrag(null)}>
+            Annuleren
+          </Button>
+          {anderKlopt && anderGetal - nogOpen > 0.005 && (
+            <span className="text-muted-foreground">
+              {formatPrice(anderGetal - nogOpen)} daarvan wordt tegoed voor de klant.
+            </span>
+          )}
+        </form>
+      )}
     </div>
   );
 }

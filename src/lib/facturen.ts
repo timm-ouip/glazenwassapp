@@ -66,7 +66,13 @@ export interface Factuur {
   te_laat: boolean;
   met_rust_tot: string | null;
   herinnering_trap: number;
+  /** Alles wat erop betaald is, het verrekende tegoed meegeteld. */
   betaald_bedrag: number;
+  /** Tegoed van de klant dat bij het vastzetten van deze factuur afging. */
+  tegoed_verrekend: number;
+  /** Wat deze factuur aan tegoed opleverde: te veel betaald, of al betaald
+   *  op een factuur die daarna gecrediteerd is. */
+  tegoed_uit: number;
   verstuurd_op: string | null;
   verstuurd_via: "mail" | "whatsapp" | "print" | null;
   mollie_link: string | null;
@@ -99,7 +105,8 @@ export function factuurStand(f: Factuur): string {
   if (f.status === "gecrediteerd") return "Gecrediteerd";
   if (f.status === "betaald") return "Betaald";
   if (f.status === "concept") return f.nummer ? "Klaargezet" : "Concept";
-  if (f.betaald_bedrag > 0) return "Deels betaald";
+  // Verrekend tegoed telt hier niet: dan heeft de klant zelf nog niets betaald.
+  if (f.betaald_bedrag - f.tegoed_verrekend > 0.005) return "Deels betaald";
   if (f.te_laat) return "Te laat";
   return "Verstuurd";
 }
@@ -109,6 +116,8 @@ function leesFactuur(x: Factuur): Factuur {
   return {
     ...x,
     betaald_bedrag: Number(x.betaald_bedrag ?? 0),
+    tegoed_verrekend: Number(x.tegoed_verrekend ?? 0),
+    tegoed_uit: Number(x.tegoed_uit ?? 0),
     totalen: {
       regels: Number(t.regels ?? 0),
       excl: Number(t.excl ?? 0),
@@ -316,7 +325,66 @@ export async function factuurBetaald(id: string, bedrag: number, op?: string) {
     op: op ?? null,
   });
   if (error) throw error;
-  return data as unknown as { betaald: number; totaal: number; open: number };
+  return data as unknown as {
+    betaald: number;
+    totaal: number;
+    open: number;
+    /** Hoeveel er hierdoor als tegoed bij de klant terechtkwam. */
+    tegoed: number;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tegoed
+// ---------------------------------------------------------------------------
+//
+// Betaalt een klant te veel, of is er al betaald op een factuur die daarna
+// gecrediteerd wordt, dan wordt dat tegoed. Het gaat vanzelf af van de
+// volgende factuur, op het moment dat die zijn nummer krijgt, als regel
+// "Reeds betaald" onder het totaal. Het saldo rekent de database elke keer
+// uit de facturen zelf; zie de migratie tegoed.
+
+export type TegoedSoort = "te_veel" | "gecrediteerd" | "verrekend" | "vereffend";
+
+export interface TegoedRegel {
+  soort: TegoedSoort;
+  datum: string | null;
+  /** Positief = tegoed erbij, negatief = tegoed eraf. */
+  bedrag: number;
+  factuur_id: string | null;
+  nummer: string | null;
+  opmerking: string;
+  door?: string;
+}
+
+export interface Tegoed {
+  /** Positief = de klant heeft tegoed. */
+  saldo: number;
+  regels: TegoedRegel[];
+}
+
+export async function fetchTegoed(klantId: string): Promise<Tegoed> {
+  const { data, error } = await supabase.rpc("klant_tegoed", { klant: klantId });
+  if (error) throw error;
+  const t = (data ?? {}) as unknown as { saldo?: number; regels?: TegoedRegel[] };
+  return {
+    saldo: Number(t.saldo ?? 0),
+    regels: (t.regels ?? []).map((r) => ({
+      ...r,
+      bedrag: Number(r.bedrag ?? 0),
+      opmerking: r.opmerking ?? "",
+    })),
+  };
+}
+
+/** Het tegoed op nul zetten, bijvoorbeeld omdat het is teruggestort. */
+export async function tegoedVereffenen(klantId: string, opmerking: string): Promise<number> {
+  const { data, error } = await supabase.rpc("tegoed_vereffenen", {
+    klant: klantId,
+    opmerking,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
 }
 
 export async function factuurCrediteren(id: string, reden = ""): Promise<string> {
