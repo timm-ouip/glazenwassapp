@@ -99,22 +99,34 @@ export async function fetchBankVerwerkt(): Promise<BankTransactie[]> {
   return metKoppelingen((data ?? []) as Rij[]);
 }
 
-/** De bijschrijvingen uit een gelezen bestand naar de database. */
+/** Per aanroep niet meer dan dit: elke bijschrijving kost de database wat
+ *  rekenwerk, en een jaarafschrift in één keer zou over de tijdslimiet gaan. */
+const PER_KEER = 500;
+
+/** De bijschrijvingen uit een gelezen bestand naar de database, in stukken. */
 export async function bankInlezen(bestand: BankBestand, naam: string): Promise<BankUitkomst> {
-  const { data, error } = await supabase.rpc("bank_inlezen", {
-    bron: bestand.bron,
-    bestand: naam,
-    regels: bestand.regels as unknown as Json,
-  });
-  if (error) throw error;
-  const u = (data ?? {}) as Partial<BankUitkomst>;
-  return {
-    nieuw: Number(u.nieuw ?? 0),
-    al_bekend: Number(u.al_bekend ?? 0),
-    gekoppeld: Number(u.gekoppeld ?? 0),
-    genegeerd: Number(u.genegeerd ?? 0),
-    te_controleren: Number(u.te_controleren ?? 0),
+  const totaal: BankUitkomst = {
+    nieuw: 0,
+    al_bekend: 0,
+    gekoppeld: 0,
+    genegeerd: 0,
+    te_controleren: 0,
   };
+  for (let i = 0; i < bestand.regels.length; i += PER_KEER) {
+    const { data, error } = await supabase.rpc("bank_inlezen", {
+      bron: bestand.bron,
+      bestand: naam,
+      regels: bestand.regels.slice(i, i + PER_KEER) as unknown as Json,
+    });
+    if (error) throw error;
+    const u = (data ?? {}) as Partial<BankUitkomst>;
+    totaal.nieuw += Number(u.nieuw ?? 0);
+    totaal.al_bekend += Number(u.al_bekend ?? 0);
+    totaal.gekoppeld += Number(u.gekoppeld ?? 0);
+    totaal.genegeerd += Number(u.genegeerd ?? 0);
+    totaal.te_controleren += Number(u.te_controleren ?? 0);
+  }
+  return totaal;
 }
 
 /** Met de hand boeken op één of meer facturen. De rest gaat op de laatste. */

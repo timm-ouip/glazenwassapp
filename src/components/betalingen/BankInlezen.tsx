@@ -52,7 +52,7 @@ export function BankVak({ aantal, onBekijk }: { aantal: number; onBekijk: () => 
 }
 
 /** Eén zin over hoe het inlezen ging. */
-function uitkomstTekst(u: BankUitkomst, afschrijvingen: number): string {
+function uitkomstTekst(u: BankUitkomst, afschrijvingen: number, onleesbaar: number): string {
   const delen: string[] = [];
   if (u.nieuw === 0) delen.push("Niets nieuws: alles stond er al in.");
   else {
@@ -68,6 +68,10 @@ function uitkomstTekst(u: BankUitkomst, afschrijvingen: number): string {
   if (afschrijvingen > 0)
     delen.push(
       `${afschrijvingen} ${afschrijvingen === 1 ? "afschrijving" : "afschrijvingen"} overgeslagen.`,
+    );
+  if (onleesbaar > 0)
+    delen.push(
+      `Let op: ${onleesbaar} ${onleesbaar === 1 ? "regel was" : "regels waren"} niet te lezen en ${onleesbaar === 1 ? "is" : "zijn"} overgeslagen. Kijk die na in je bankieren.`,
     );
   return delen.join(" ");
 }
@@ -99,14 +103,14 @@ export function BankInlezen({
         throw new BankbestandFout("Dit bestand is te groot. Kies een kortere periode.");
       }
       const gelezen = leesBankbestand(bestandTekst(await bestand.arrayBuffer()));
-      if (gelezen.regels.length > 5000) {
-        throw new BankbestandFout("Meer dan 5000 bijschrijvingen. Kies een kortere periode.");
+      if (gelezen.regels.length > 20000) {
+        throw new BankbestandFout("Meer dan 20.000 bijschrijvingen. Kies een kortere periode.");
       }
       const u = await bankInlezen(gelezen, bestand.name);
-      return { u, afschrijvingen: gelezen.afschrijvingen };
+      return { u, afschrijvingen: gelezen.afschrijvingen, onleesbaar: gelezen.onleesbaar };
     },
-    onSuccess: ({ u, afschrijvingen }) => {
-      setUitkomst(uitkomstTekst(u, afschrijvingen));
+    onSuccess: ({ u, afschrijvingen, onleesbaar }) => {
+      setUitkomst(uitkomstTekst(u, afschrijvingen, onleesbaar));
       ververs();
     },
     onError: (e: Error) =>

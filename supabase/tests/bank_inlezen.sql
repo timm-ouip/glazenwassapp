@@ -193,10 +193,43 @@ begin
     raise exception 'Na het terugzetten hoort f1 weer open te staan, is % / %', r.status, r.betaald_bedrag;
   end if;
 
-  -- De rekening van Jansen is onthouden, in de nette vorm.
+  -- De rekening van Jansen is onthouden, in de nette vorm: de koppeling van
+  -- f2 bevestigt hem nog, dus het terugzetten van f1 laat hem staan.
   if not exists (select 1 from public.klant_ibans
                  where klant_id = 'aaaaaaaa-0000-4000-8000-0000000000c1' and iban = 'NL01TEST0000000001') then
     raise exception 'De rekening van Jansen hoort onthouden te zijn.';
+  end if;
+  -- Pietersen betaalde f3 vanaf NL03; terugzetten vergeet die rekening.
+  perform public.bank_terugzetten((select id from public.bank_transacties where omschrijving = 'betaling 2026/0003'));
+  if exists (select 1 from public.klant_ibans where iban = 'NL03TEST0000000003') then
+    raise exception 'Na het terugzetten hoort de rekening van f3 vergeten te zijn.';
+  end if;
+
+  -- Dezelfde overmaking uit een ander soort bestand wordt niet vanzelf geboekt.
+  uit := public.bank_inlezen('mt940', 'proef.sta', $json$[
+    {"datum": "2026-10-06", "bedrag": 30.00, "tegen_iban": "NL01TEST0000000001", "tegen_naam": "J JANSEN", "omschrijving": "glazenwassen oktober", "kenmerk": "", "ref": "x9"}
+  ]$json$::jsonb);
+  if (uit ->> 'te_controleren')::int <> 1 then
+    raise exception 'Een dubbele uit een ander soort bestand hoort te wachten, gaf %', uit;
+  end if;
+
+  -- Een klant die Mollie heet, is geen uitbetaling van Mollie.
+  uit := public.bank_inlezen('csv', 'proef.csv', $json$[
+    {"datum": "2026-10-09", "bedrag": 45.00, "tegen_iban": "NL05TEST0000000005", "tegen_naam": "MOLLIE DE VRIES", "omschrijving": "2026-0001", "kenmerk": "", "ref": "c1", "volg": 1}
+  ]$json$::jsonb);
+  if (uit ->> 'gekoppeld')::int <> 1 then
+    raise exception 'Mollie de Vries hoort gewoon geboekt te worden, gaf %', uit;
+  end if;
+
+  -- Tweelingen die over twee stukken verdeeld zijn, blijven er twee.
+  uit := public.bank_inlezen('csv', 'proef.csv', $json$[
+    {"datum": "2026-10-10", "bedrag": 5.00, "tegen_iban": "", "tegen_naam": "X", "omschrijving": "fooi", "kenmerk": "", "ref": "", "volg": 1}
+  ]$json$::jsonb);
+  uit := public.bank_inlezen('csv', 'proef.csv', $json$[
+    {"datum": "2026-10-10", "bedrag": 5.00, "tegen_iban": "", "tegen_naam": "X", "omschrijving": "fooi", "kenmerk": "", "ref": "", "volg": 2}
+  ]$json$::jsonb);
+  if (uit ->> 'nieuw')::int <> 1 then
+    raise exception 'De tweede tweeling in een volgend stuk hoort nieuw te zijn, gaf %', uit;
   end if;
 
   -- Rechtstreeks schrijven mag niet.

@@ -195,7 +195,7 @@ begin
   for f in
     select fa.* from unnest(ids) with ordinality as u(id, volgorde)
     join public.facturen fa on fa.id = u.id
-    where fa.company_id = t.company_id
+    where fa.company_id = t.company_id and fa.deleted_at is null
     order by u.volgorde
   loop
     i := i + 1;
@@ -251,8 +251,9 @@ declare
 begin
   select * into t from public.bank_transacties where id = transactie;
 
-  -- 1. Een uitbetaling van Mollie.
-  if t.tegen_naam ~* 'mollie' then
+  -- 1. Een uitbetaling van Mollie. Op de volledige naam, niet op "mollie"
+  --    alleen: een klant die Mollie de Vries heet, betaalt gewoon een factuur.
+  if t.tegen_naam ~* 'mollie\s*payments' then
     update public.bank_transacties
       set status = 'genegeerd', door_app = true, afgehandeld_op = now(),
           reden = 'Uitbetaling van Mollie: die betalingen staan al bij de facturen.'
@@ -260,7 +261,24 @@ begin
     return 'genegeerd';
   end if;
 
-  -- 2. Factuurnummers in de omschrijving of het kenmerk.
+  -- 1b. Dezelfde overmaking uit een ander soort bestand (eerst MT940, later
+  --     CAMT over dezelfde dagen). De herkenning bij het inlezen werkt per
+  --     soort, dus die ziet dit niet; vanzelf boeken zou dubbel boeken.
+  if exists (
+    select 1 from public.bank_transacties x
+    where x.company_id = t.company_id and x.id <> t.id and x.bron <> t.bron
+      and x.datum = t.datum and x.bedrag = t.bedrag and x.tegen_iban = t.tegen_iban
+  ) then
+    update public.bank_transacties
+      set reden = 'Lijkt dezelfde overmaking als een bijschrijving uit een eerder ingelezen bestand van een ander soort. '
+                  || 'Boek hem alleen als hij echt twee keer binnenkwam.'
+      where id = t.id;
+    return 'open';
+  end if;
+
+  -- 2. Factuurnummers in de omschrijving of het gestructureerde
+  --    betalingskenmerk. Niet in de eigen verwijzing van de betaler
+  --    (end-to-end-id): die laat de browser al weg.
   nummers := public.bank_factuurnummers(t.omschrijving || ' ' || t.kenmerk);
   if cardinality(nummers) > 0 then
     select coalesce(array_agg(fa order by array_position(nummers, fa.nummer)), '{}') into gevonden
@@ -339,8 +357,11 @@ revoke execute on function public.bank_automatisch(uuid) from public, anon, auth
 -- 4. Inlezen
 -- ---------------------------------------------------------------------
 -- `regels` is wat src/lib/bankbestand.ts uit het bestand haalde:
---   [{ datum, bedrag, tegen_iban, tegen_naam, omschrijving, kenmerk, ref }]
--- met `ref` de eigen referentie van de bank als die er is.
+--   [{ datum, bedrag, tegen_iban, tegen_naam, omschrijving, kenmerk, ref, volg }]
+-- met `ref` de eigen referentie van de bank als die er is, en `volg` de
+-- hoeveelste keer precies deze regel in het hele bestand staat. De browser
+-- stuurt een groot bestand in stukken; zonder `volg` zou een tweelingregel
+-- die in het volgende stuk valt voor "al bekend" worden aangezien.
 --
 -- Dezelfde regel twee keer inlezen (overlappende bestanden) maakt hem niet
 -- twee keer aan. Twee echt gelijke regels in één bestand -- de klant maakte
@@ -368,8 +389,8 @@ begin
   if bron not in ('camt053', 'mt940', 'csv') then
     raise exception 'Onbekend soort bankbestand.';
   end if;
-  if aantal_regels > 5000 then
-    raise exception 'Maximaal 5000 bijschrijvingen per keer.';
+  if aantal_regels > 1000 then
+    raise exception 'Maximaal 1000 bijschrijvingen per keer.';
   end if;
 
   -- Eén inlezing tegelijk per bedrijf: twee tabbladen die hetzelfde bestand
@@ -386,15 +407,16 @@ begin
       md5(concat_ws('|', g.datum, round(g.bedrag, 2), public.bank_iban(g.tegen_iban),
                     btrim(coalesce(g.omschrijving, '')), btrim(coalesce(g.kenmerk, '')),
                     btrim(coalesce(g.ref, '')))) as basis,
+      g.volg,
       g.volgorde
     from rows from (
       jsonb_to_recordset(coalesce(regels, '[]'::jsonb))
-        as (datum date, bedrag numeric, tegen_iban text, tegen_naam text, omschrijving text, kenmerk text, ref text)
-    ) with ordinality as g(datum, bedrag, tegen_iban, tegen_naam, omschrijving, kenmerk, ref, volgorde)
+        as (datum date, bedrag numeric, tegen_iban text, tegen_naam text, omschrijving text, kenmerk text, ref text, volg integer)
+    ) with ordinality as g(datum, bedrag, tegen_iban, tegen_naam, omschrijving, kenmerk, ref, volg, volgorde)
     where g.datum is not null and g.bedrag > 0
   ),
   genummerd as (
-    select r.*, r.basis || '#' || row_number() over (partition by r.basis order by r.volgorde) as sleutel
+    select r.*, r.basis || '#' || coalesce(r.volg, row_number() over (partition by r.basis order by r.volgorde)) as sleutel
     from r
   ),
   ingevoegd as (
@@ -501,6 +523,7 @@ declare
   bedrijf uuid := public.current_company_id();
   t public.bank_transacties;
   k public.bank_koppelingen;
+  klanten uuid[];
 begin
   if bedrijf is null or not public.heeft_recht('facturen') then
     raise exception 'Je rol mag geen betalingen boeken.';
@@ -515,10 +538,32 @@ begin
     return;
   end if;
 
+  select coalesce(array_agg(distinct fa.klant_id), '{}') into klanten
+  from public.bank_koppelingen bk
+  join public.facturen fa on fa.id = bk.factuur_id
+  where bk.transactie_id = t.id;
+
   for k in select * from public.bank_koppelingen where transactie_id = t.id loop
     perform public.factuur_betaald(k.factuur_id, -k.bedrag);
   end loop;
   delete from public.bank_koppelingen where transactie_id = t.id;
+
+  -- Ook vergeten dat deze rekening bij die klant hoort, tenzij een andere
+  -- boeking van dezelfde rekening het nog bevestigt. Anders boekt de app een
+  -- volgende overmaking van die rekening stil op de verkeerde klant.
+  delete from public.klant_ibans ki
+  where ki.company_id = bedrijf
+    and ki.iban = public.bank_iban(t.tegen_iban)
+    and ki.klant_id = any(klanten)
+    and not exists (
+      select 1
+      from public.bank_transacties x
+      join public.bank_koppelingen bk on bk.transactie_id = x.id
+      join public.facturen fa on fa.id = bk.factuur_id
+      where x.company_id = bedrijf and x.id <> t.id
+        and public.bank_iban(x.tegen_iban) = ki.iban
+        and fa.klant_id = ki.klant_id
+    );
 
   update public.bank_transacties
     set status = 'open', door_app = false, afgehandeld_op = null,

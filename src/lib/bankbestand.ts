@@ -26,10 +26,20 @@ export interface BankRegel {
   tegen_iban: string;
   tegen_naam: string;
   omschrijving: string;
-  /** Betalingskenmerk of end-to-end-referentie, als de klant die gaf. */
+  /**
+   * Het gestructureerde betalingskenmerk, als de klant dat gaf. Niet de
+   * end-to-end-referentie: die kiest de betaler zelf (vaak een nummer uit zijn
+   * eigen boekhouding) en de database zoekt hier factuurnummers in.
+   */
   kenmerk: string;
   /** De eigen referentie van de bank, om dubbel inlezen te herkennen. */
   ref: string;
+  /**
+   * Hoeveelste keer precies deze regel in het bestand staat (1, 2, …). Twee
+   * echt gelijke overmakingen blijven er zo twee, ook als het bestand in
+   * stukken naar de database gaat.
+   */
+  volg?: number;
 }
 
 export interface BankBestand {
@@ -37,6 +47,8 @@ export interface BankBestand {
   regels: BankRegel[];
   /** Hoeveel afschrijvingen er overgeslagen zijn. */
   afschrijvingen: number;
+  /** Regels die op een boeking leken maar niet te lezen waren. */
+  onleesbaar: number;
 }
 
 export class BankbestandFout extends Error {}
@@ -58,6 +70,18 @@ export function bestandTekst(bytes: ArrayBuffer): string {
 
 /** Herkent het soort bestand en leest het. */
 export function leesBankbestand(tekst: string): BankBestand {
+  const b = leesSoort(tekst);
+  const gezien = new Map<string, number>();
+  for (const r of b.regels) {
+    const sleutel = [r.datum, r.bedrag, r.tegen_iban, r.omschrijving, r.kenmerk, r.ref].join("|");
+    const n = (gezien.get(sleutel) ?? 0) + 1;
+    gezien.set(sleutel, n);
+    r.volg = n;
+  }
+  return b;
+}
+
+function leesSoort(tekst: string): BankBestand {
   const t = tekst.replace(/^\uFEFF/, "");
   if (/<Document[\s>]/.test(t) && /camt\.05[234]/.test(t)) return leesCamt(t);
   if (/<Document[\s>]/.test(t)) {
@@ -164,8 +188,7 @@ function leesCamt(tekst: string): BankBestand {
             .join(" ")
         : "";
       const gestructureerd = rmt ? langs(kind(rmt, "Strd"), "CdtrRefInf", "Ref") : "";
-      const e2e = langs(tx, "Refs", "EndToEndId");
-      const kenmerk = gestructureerd || (e2e && e2e !== "NOTPROVIDED" ? e2e : "");
+      const kenmerk = gestructureerd;
       const ref = langs(tx, "Refs", "AcctSvcrRef") || (ntryRef ? `${ntryRef}/${i}` : "");
 
       if (!datum || !Number.isFinite(txBedrag) || txBedrag <= 0) return;
@@ -180,7 +203,7 @@ function leesCamt(tekst: string): BankBestand {
       });
     });
   }
-  return { bron: "camt053", regels, afschrijvingen };
+  return { bron: "camt053", regels, afschrijvingen, onleesbaar: 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -220,12 +243,14 @@ function lees86(tekst: string): {
     const remi = (velden.get("REMI") ?? "")
       .replace(/^(USTD|STRD)\/+(CUR\/+)?/, "")
       .replace(/\/+$/, "");
-    const eref = (velden.get("EREF") ?? "").replace(/\/+$/, "");
+    // Geen /REMI/: dan liever geen omschrijving dan het hele veld, want daar
+    // staat /EREF/ in -- de eigen verwijzing van de betaler, die op een
+    // factuurnummer van een ander kan lijken.
     return {
       iban: iban(cntp[0] || velden.get("IBAN") || ""),
       naam: schoon(cntp[2] || (velden.get("NAME") ?? "").replace(/\/+$/, "")),
-      omschrijving: schoon(remi || plat),
-      kenmerk: schoon(eref && eref !== "NOTPROVIDED" ? eref : ""),
+      omschrijving: schoon(remi),
+      kenmerk: "",
     };
   }
   const regels = tekst.split(/\r?\n/).map((r) => r.trim());
@@ -269,6 +294,9 @@ function leesMt940(tekst: string): BankBestand {
     const bedrag = bedragUit(m[5]!);
     const volgende = velden[i + 1];
     const info = volgende?.code === "86" ? lees86(volgende.waarde) : null;
+    // De Rabobank zet de rekening van de betaler op de tweede regel van :61:.
+    const tweede = v.waarde.split("\n").slice(1).join(" ");
+    const rekeningUit61 = IBAN_PATROON.exec(tweede)?.[1] ?? "";
     if (!credit || !Number.isFinite(bedrag) || bedrag <= 0) {
       afschrijvingen += 1;
       continue;
@@ -276,7 +304,7 @@ function leesMt940(tekst: string): BankBestand {
     regels.push({
       datum: mtDatum(m[1]!),
       bedrag,
-      tegen_iban: info?.iban ?? "",
+      tegen_iban: info?.iban || iban(rekeningUit61),
       tegen_naam: info?.naam ?? "",
       omschrijving: info?.omschrijving ?? "",
       kenmerk: info?.kenmerk ?? "",
@@ -286,28 +314,33 @@ function leesMt940(tekst: string): BankBestand {
   if (regels.length === 0 && afschrijvingen === 0) {
     throw new BankbestandFout("In dit MT940-bestand staan geen boekingen.");
   }
-  return { bron: "mt940", regels, afschrijvingen };
+  return { bron: "mt940", regels, afschrijvingen, onleesbaar: 0 };
 }
 
 // ---------------------------------------------------------------------------
 // CSV van ASN (Volksbank)
 // ---------------------------------------------------------------------------
 
-/** Eén CSV-regel in velden, met "…" of '…' rond een veld. */
+/**
+ * Eén CSV-regel in velden. Alleen "…" telt als aanhalingsteken. ASN zet de
+ * omschrijving tussen enkele aanhalingstekens, maar daar kun je niet op
+ * splitsen: "'t Hart" en "Glazen 't Hoekje" hebben er zelf ook een. Zie
+ * `asnKolommen` voor hoe een komma in de tekst wordt opgevangen.
+ */
 function csvVelden(regel: string, scheiding: string): string[] {
   const uit: string[] = [];
   let veld = "";
-  let quote: string | null = null;
+  let binnen = false;
   for (let i = 0; i < regel.length; i++) {
     const c = regel[i]!;
-    if (quote) {
-      if (c === quote && regel[i + 1] === quote) {
+    if (binnen) {
+      if (c === '"' && regel[i + 1] === '"') {
         veld += c;
         i++;
-      } else if (c === quote) quote = null;
+      } else if (c === '"') binnen = false;
       else veld += c;
-    } else if ((c === '"' || c === "'") && veld.trim() === "") {
-      quote = c;
+    } else if (c === '"' && veld.trim() === "") {
+      binnen = true;
       veld = "";
     } else if (c === scheiding) {
       uit.push(veld.trim());
@@ -316,6 +349,44 @@ function csvVelden(regel: string, scheiding: string): string[] {
   }
   uit.push(veld.trim());
   return uit;
+}
+
+/** 'tekst' → tekst */
+function zonderEnkele(t: string): string {
+  const s = t.trim();
+  return s.length >= 2 && s.startsWith("'") && s.endsWith("'") ? s.slice(1, -1) : s;
+}
+
+/**
+ * De negentien kolommen van ASN, ook als er een komma in de naam of de
+ * omschrijving stond en de regel daardoor te veel velden heeft. Het vaste
+ * punt is de valuta van de rekening ("EUR", kolom 7): alles daarvoor na
+ * kolom 2 is naam en adres, alles na het betalingskenmerk tot de laatste
+ * kolom is de omschrijving.
+ */
+function asnKolommen(v: string[]): string[] | null {
+  if (v.length === 19) return v.map(zonderEnkele);
+  if (v.length < 19) return null;
+  const eur = v.findIndex(
+    (x, i) => i >= 7 && /^[A-Z]{3}$/.test(x) && /^[A-Z]{3}$/.test(v[i + 2] ?? ""),
+  );
+  if (eur < 7) return null;
+  const naam = v.slice(3, eur - 3).join(", ");
+  const vast = v.slice(eur, eur + 10);
+  const omschrijving = v.slice(eur + 10, v.length - 1).join(", ");
+  const uit = [
+    v[0]!,
+    v[1]!,
+    v[2]!,
+    naam,
+    v[eur - 3]!,
+    v[eur - 2]!,
+    v[eur - 1]!,
+    ...vast,
+    omschrijving,
+    v[v.length - 1]!,
+  ];
+  return uit.length === 19 ? uit.map(zonderEnkele) : null;
 }
 
 /** 15-03-2026 → 2026-03-15 */
@@ -338,12 +409,19 @@ function leesAsnCsv(tekst: string): BankBestand | null {
   const uit: BankRegel[] = [];
   let afschrijvingen = 0;
   let herkend = 0;
+  // Begint met een datum maar valt niet te lezen: niet stil overslaan, maar
+  // tellen, zodat het scherm het kan zeggen.
+  let onleesbaar = 0;
   for (const regel of regels) {
-    const v = csvVelden(regel, scheiding);
-    const datum = nlDatum(v[0] ?? "");
-    if (v.length < 18 || !datum) continue;
-    const bedrag = bedragUit(v[10] ?? "");
-    if (!Number.isFinite(bedrag)) continue;
+    const velden = csvVelden(regel, scheiding);
+    const datum = nlDatum(velden[0] ?? "");
+    if (!datum) continue;
+    const v = asnKolommen(velden) ?? [];
+    const bedrag = v.length === 19 ? bedragUit(v[10] ?? "") : NaN;
+    if (!Number.isFinite(bedrag)) {
+      onleesbaar += 1;
+      continue;
+    }
     herkend += 1;
     if (bedrag <= 0) {
       afschrijvingen += 1;
@@ -361,5 +439,5 @@ function leesAsnCsv(tekst: string): BankBestand | null {
   }
   // Minstens de helft van de regels moet kloppen, anders is het iets anders.
   if (herkend === 0 || herkend < regels.length / 2) return null;
-  return { bron: "csv", regels: uit, afschrijvingen };
+  return { bron: "csv", regels: uit, afschrijvingen, onleesbaar };
 }
